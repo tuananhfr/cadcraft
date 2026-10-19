@@ -278,6 +278,15 @@ pub fn read_file(path: &str) -> std::result::Result<ReadFile, String> {
     }
 }
 
+/// [`read_file`] for a drawing's contents (the web's picker and dropped files). Unlike
+/// `OPEN {data}` there is no base64 round trip, which held a large DWG in memory twice more.
+pub fn read_data(bytes: &[u8], name: &str) -> std::result::Result<ReadFile, String> {
+    match std::panic::catch_unwind(|| read_bytes(bytes, name, None)) {
+        Ok(r) => r.map_err(|e| e.to_string()),
+        Err(_) => Err(bad("open", format!("{name}: the file could not be read")).to_string()),
+    }
+}
+
 /// Add a [`read_file`] result to the session as the active drawing: the fast half of OPEN.
 pub fn finish_open(s: &mut Session, f: ReadFile) -> Result<Value> {
     let ReadFile { drawing, binary_dxf, name, path } = f;

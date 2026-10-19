@@ -62,7 +62,11 @@ fn ext(name: &str) -> String {
 pub fn read(bytes: &[u8], name: &str) -> Result<Drawing> {
     if cadcraft_dwg::is_dwg(bytes) {
         let (dxf, notes) = cadcraft_dwg::dwg_to_dxf_noted(bytes, cadcraft_dwg::Limits::DEFAULT).map_err(IoError::Format)?;
-        let mut d = dxf_read::read(&dxf).map_err(|e| IoError::Format(format!("{e} (in the DXF converted from this DWG)")))?;
+        let converted = |e: IoError| IoError::Format(format!("{e} (in the DXF converted from this DWG)"));
+        let tags = dxf_read::parse(&dxf).map_err(converted)?;
+        // The text is several times the DWG: free it before the drawing is built (wasm32 has 4 GB).
+        drop(dxf);
+        let mut d = dxf_read::read_tags(tags).map_err(converted)?;
         d.read_notes = notes;
         return Ok(d);
     }

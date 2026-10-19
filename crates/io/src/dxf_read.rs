@@ -1648,7 +1648,17 @@ fn ltype_pattern(tags: &[Tag], styles: &HashMap<String, String>) -> Vec<DashElem
 
 /// Read a DXF file into a drawing.
 pub fn read(bytes: &[u8]) -> Result<Drawing> {
-    let tags = cadcraft_dxf::parse(bytes).map_err(|e| IoError::Format(e.to_string()))?;
+    read_tags(parse(bytes)?)
+}
+
+/// The first half of [`read`]: the file's group codes.
+pub fn parse(bytes: &[u8]) -> Result<Vec<Tag>> {
+    cadcraft_dxf::parse(bytes).map_err(|e| IoError::Format(e.to_string()))
+}
+
+/// The second half of [`read`]: the drawing from [`parse`]d group codes. The file's text can be
+/// freed in between, which a DXF converted from a large DWG needs on the web.
+pub fn read_tags(tags: Vec<Tag>) -> Result<Drawing> {
     let secs = sections(&tags);
     if secs.is_empty() {
         return Err(IoError::Format("no sections found".into()));

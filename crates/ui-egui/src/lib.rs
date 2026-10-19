@@ -460,29 +460,44 @@ impl CadApp {
     /// so it is capped below the DWG reader's own limit instead of running out of memory.
     pub const MAX_OPEN_BYTES: u64 = 256 << 20;
 
-    /// Why a `len`-byte file called `name` is too large for [`Self::open_bytes`], if it is.
+    /// The largest DWG [`Self::open_bytes`] opens. Reading one peaks at about 40 times its size
+    /// (an 86 MB DWG at 3.3 GB), and past wasm32's 4 GB the browser tab crashes.
+    pub const MAX_OPEN_DWG_BYTES: u64 = 90 << 20;
+
+    /// Why a `len`-byte file called `name` is too large for [`Self::open_bytes`], if it is. A DWG
+    /// is recognised by its name here; [`Self::open_bytes`] also looks at the contents.
     pub fn open_size_error(name: &str, len: u64) -> Option<String> {
-        (len > Self::MAX_OPEN_BYTES).then(|| {
-            format!(
-                "Open: {name} is {:.1} MB, larger than the {} MB CADCraft opens in the browser",
-                len as f64 / 1048576.0,
-                Self::MAX_OPEN_BYTES >> 20
-            )
-        })
+        Self::size_error(name, len, is_dwg_name(name))
+    }
+
+    fn size_error(name: &str, len: u64, dwg: bool) -> Option<String> {
+        let mb = len as f64 / 1048576.0;
+        if dwg && len > Self::MAX_OPEN_DWG_BYTES {
+            return Some(format!(
+                "Open: {name} is {mb:.1} MB; the browser opens DWG files up to {} MB. Open it in the desktop app.",
+                Self::MAX_OPEN_DWG_BYTES >> 20
+            ));
+        }
+        (len > Self::MAX_OPEN_BYTES)
+            .then(|| format!("Open: {name} is {mb:.1} MB, larger than the {} MB CADCraft opens in the browser", Self::MAX_OPEN_BYTES >> 20))
     }
 
     /// Open a drawing from its contents where there is no path to open (on the web: the file
     /// picker, a dropped file). Runs OPEN with `{data, name}` as [`Self::open_path`] runs it with
     /// `{path}`; failures show on the command line and in the status bar.
     pub fn open_bytes(&mut self, name: &str, bytes: &[u8]) {
-        if let Some(e) = Self::open_size_error(name, bytes.len() as u64) {
+        if let Some(e) = Self::size_error(name, bytes.len() as u64, is_dwg_name(name) || is_dwg_content(bytes)) {
             return self.open_failed(e);
         }
         if is_lisp_file(name) {
             return self.load_lisp(name, &String::from_utf8_lossy(bytes));
         }
-        let data = cadcraft_engine::cmd::file::base64_encode(bytes);
-        let r = self.run("open", json!({ "data": data, "name": name }));
+        // Read directly rather than through OPEN {data}: its base64 copy of a large DWG can push
+        // the web build past wasm32's 4 GB.
+        let r = cadcraft_engine::cmd::file::read_data(bytes, name).and_then(|f| self.session.finish_open(f).map_err(|e| e.to_string()));
+        if let Err(e) = &r {
+            self.session.echo(e.clone());
+        }
         self.opened(r);
     }
 
@@ -740,6 +755,17 @@ pub fn now_ms() -> f64 {
 /// A LISP source file, by its name.
 fn is_lisp_file(name: &str) -> bool {
     std::path::Path::new(name).extension().is_some_and(|e| e.eq_ignore_ascii_case("lsp"))
+}
+
+/// A DWG or DWG template by name.
+fn is_dwg_name(name: &str) -> bool {
+    std::path::Path::new(name).extension().is_some_and(|e| e.eq_ignore_ascii_case("dwg") || e.eq_ignore_ascii_case("dwt"))
+}
+
+/// DWG contents whatever the name: the `AC10xx` magic `cadcraft_dwg::is_dwg` checks (this crate
+/// doesn't depend on the DWG bridge).
+fn is_dwg_content(bytes: &[u8]) -> bool {
+    bytes.len() > 6 && bytes.starts_with(b"AC10") && bytes.get(4..6).is_some_and(|v| v.iter().all(u8::is_ascii_digit))
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@
 //! DWG files are read with the `acadrust` crate (MPL-2.0, used unmodified as a dependency) and
 //! converted to DXF bytes, which CADCraft's own DXF reader maps to its document model; saving
 //! goes the other way. Keeping the dependency behind this byte-level API isolates it: nothing
-//! else in CADCraft depends on its types. Native targets only (it memory-maps files).
+//! else in CADCraft depends on its types. It works from bytes in memory, so the web build has it too.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
@@ -39,13 +39,11 @@ impl Limits {
 }
 
 /// A byte count in megabytes for messages ("9.9 MB", "1024 MB").
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 fn mb(n: u64) -> String {
     let m = n as f64 / f64::from(1u32 << 20);
     if m >= 100.0 { format!("{m:.0} MB") } else { format!("{m:.1} MB") }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 mod native {
     use std::io::{Cursor, Write};
     use std::panic::AssertUnwindSafe;
@@ -87,7 +85,7 @@ mod native {
         let mut doc = outcome.document;
         table_merges(&mut doc);
         table_style_rows(&mut doc, false);
-        let mut out = CappedWriter { buf: Vec::new(), limit: limits.max_dxf_bytes, exceeded: false };
+        let mut out = CappedWriter { chunks: Vec::new(), len: 0, limit: limits.max_dxf_bytes, exceeded: false };
         let written = std::panic::catch_unwind(AssertUnwindSafe(|| acadrust::DxfWriter::new(&doc).write_to_writer(&mut out)))
             .map_err(|_| "the DWG→DXF conversion failed on this file".to_string())?;
         if out.exceeded {
@@ -99,7 +97,10 @@ mod native {
             ));
         }
         written.map_err(|e| format!("DWG→DXF: {e}"))?;
-        Ok((add_header_vars(out.buf, &doc.header), notes))
+        let header = unwritten_header_vars(&doc.header);
+        // Free the drawing before joining the text: on the web both share wasm32's 4 GB.
+        drop(doc);
+        Ok((add_header_vars(out.into_text(HEADER_VARS_ROOM), &header), notes))
     }
 
     /// Most record types named in the skipped-records note.
@@ -320,7 +321,7 @@ mod native {
     /// Add the [`unwritten_header_vars`] to the HEADER section of acadrust's DXF text, before its
     /// ENDSEC; a variable the writer already wrote is left alone. Text of another layout than
     /// acadrust's (`  0\r\nSECTION\r\n  2\r\nHEADER\r\n` … `  0\r\nENDSEC\r\n`) is returned unchanged.
-    fn add_header_vars(mut dxf: Vec<u8>, h: &acadrust::document::HeaderVariables) -> Vec<u8> {
+    fn add_header_vars(mut dxf: Vec<u8>, vars: &[(&str, i32, String)]) -> Vec<u8> {
         const START: &[u8] = b"  0\r\nSECTION\r\n  2\r\nHEADER\r\n";
         const END: &[u8] = b"\r\n  0\r\nENDSEC\r\n";
         if !dxf.starts_with(START) {
@@ -329,7 +330,7 @@ mod native {
         let Some(end) = dxf.windows(END.len()).position(|w| w == END).map(|p| p + 2) else { return dxf };
         let section = dxf.get(..end).unwrap_or_default();
         let mut add = String::new();
-        for (name, code, value) in unwritten_header_vars(h) {
+        for (name, code, value) in vars {
             let written = section.windows(name.len() + 2).any(|w| w.starts_with(name.as_bytes()) && w.ends_with(b"\r\n"));
             if !written && value.parse::<f64>().is_ok_and(f64::is_finite) {
                 add.push_str(&format!("  9\r\n{name}\r\n{code:>3}\r\n{value}\r\n"));
@@ -339,21 +340,52 @@ mod native {
         dxf
     }
 
-    /// Collects the DXF text and fails the write once it would grow past `limit`.
+    /// Spare bytes left after the joined DXF text, so [`add_header_vars`] inserts without
+    /// reallocating it (the seven variables take a few hundred bytes).
+    const HEADER_VARS_ROOM: usize = 4096;
+
+    /// Size of each piece [`CappedWriter`] collects.
+    const CHUNK_BYTES: usize = 8 << 20;
+
+    /// Collects the DXF text and fails the write once it would grow past `limit`. It is kept in
+    /// fixed-size pieces: a single Vec doubling up to a large DXF needs its old and new buffer at
+    /// once, three times the text before the last copy.
     struct CappedWriter {
-        buf: Vec<u8>,
+        chunks: Vec<Vec<u8>>,
+        len: usize,
         limit: usize,
         exceeded: bool,
+    }
+
+    impl CappedWriter {
+        /// The text in one buffer with `room` spare bytes; each piece is freed once copied.
+        fn into_text(self, room: usize) -> Vec<u8> {
+            let mut text = Vec::with_capacity(self.len.saturating_add(room));
+            for chunk in self.chunks {
+                text.extend_from_slice(&chunk);
+            }
+            text
+        }
     }
 
     impl Write for CappedWriter {
         fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
             // Sticky: once over, every later write fails too.
-            if self.exceeded || self.buf.len().saturating_add(b.len()) > self.limit {
+            if self.exceeded || self.len.saturating_add(b.len()) > self.limit {
                 self.exceeded = true;
                 return Err(std::io::Error::other("DXF size limit reached"));
             }
-            self.buf.extend_from_slice(b);
+            let mut rest = b;
+            while !rest.is_empty() {
+                if self.chunks.last().is_none_or(|c| c.len() == c.capacity()) {
+                    self.chunks.push(Vec::with_capacity(CHUNK_BYTES));
+                }
+                let Some(chunk) = self.chunks.last_mut() else { break };
+                let (head, tail) = rest.split_at((chunk.capacity() - chunk.len()).min(rest.len()));
+                chunk.extend_from_slice(head);
+                rest = tail;
+            }
+            self.len += b.len();
             Ok(b.len())
         }
         fn flush(&mut self) -> std::io::Result<()> {
@@ -406,35 +438,12 @@ mod native {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub use native::{dwg_to_dxf, dwg_to_dxf_noted, dwg_to_dxf_with, dxf_to_dwg, dxf_to_dwg_as};
 
 /// The error for a DWG version CADCraft can't write.
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 fn unsupported(version: &str) -> String {
     let list: Vec<&str> = VERSIONS.iter().map(|(_, year)| *year).collect();
     format!("DWG version `{version}` can't be written (CADCraft writes {})", list.join(", "))
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn dwg_to_dxf(_bytes: &[u8]) -> Result<Vec<u8>, String> {
-    Err("DWG files can't be opened in the web build yet; save as DXF".into())
-}
-#[cfg(target_arch = "wasm32")]
-pub fn dwg_to_dxf_noted(_bytes: &[u8], _limits: Limits) -> Result<(Vec<u8>, Vec<String>), String> {
-    Err("DWG files can't be opened in the web build yet; save as DXF".into())
-}
-#[cfg(target_arch = "wasm32")]
-pub fn dwg_to_dxf_with(_bytes: &[u8], _limits: Limits) -> Result<Vec<u8>, String> {
-    Err("DWG files can't be opened in the web build yet; save as DXF".into())
-}
-#[cfg(target_arch = "wasm32")]
-pub fn dxf_to_dwg(_dxf: &[u8]) -> Result<Vec<u8>, String> {
-    Err("DWG files can't be written in the web build yet; save as DXF".into())
-}
-#[cfg(target_arch = "wasm32")]
-pub fn dxf_to_dwg_as(_dxf: &[u8], _version: &str) -> Result<Vec<u8>, String> {
-    Err("DWG files can't be written in the web build yet; save as DXF".into())
 }
 
 #[cfg(test)]
