@@ -57,11 +57,18 @@ fn ext(name: &str) -> String {
     std::path::Path::new(name).extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default()
 }
 
+/// Size limits for reading a DWG: tighter on the web, whatever path the file comes in by (the
+/// file picker, OPEN `{data}`, a script).
+#[cfg(target_arch = "wasm32")]
+const DWG_LIMITS: cadcraft_dwg::Limits = cadcraft_dwg::Limits::WEB;
+#[cfg(not(target_arch = "wasm32"))]
+const DWG_LIMITS: cadcraft_dwg::Limits = cadcraft_dwg::Limits::DEFAULT;
+
 /// Read a drawing; the format comes from the content (DXF ASCII/binary, DWG) or the name
 /// (SVG and gzip-compressed SVGZ).
 pub fn read(bytes: &[u8], name: &str) -> Result<Drawing> {
     if cadcraft_dwg::is_dwg(bytes) {
-        let (dxf, notes) = cadcraft_dwg::dwg_to_dxf_noted(bytes, cadcraft_dwg::Limits::DEFAULT).map_err(IoError::Format)?;
+        let (dxf, notes) = cadcraft_dwg::dwg_to_dxf_noted(bytes, DWG_LIMITS).map_err(IoError::Format)?;
         let converted = |e: IoError| IoError::Format(format!("{e} (in the DXF converted from this DWG)"));
         let tags = dxf_read::parse(&dxf).map_err(converted)?;
         // The text is several times the DWG: free it before the drawing is built (wasm32 has 4 GB).

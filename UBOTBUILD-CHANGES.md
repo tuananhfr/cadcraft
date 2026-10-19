@@ -8,6 +8,6 @@ This branch (`tuananhfr`) is UbotCAD, the UbotBuild build of [CADCraft](https://
 - DWG opens and saves in the web build too. Upstream builds the DWG bridge (`crates/dwg`, acadrust) for the desktop only, though it works from bytes in memory and acadrust builds for wasm32; the web build now includes it (about 1 MB more brotli-compressed wasm). To fit large DWGs in wasm32's 4 GB:
   - a picked or dropped file is read directly (`cmd::file::read_data`) instead of through OPEN's base64 `data`;
   - the DWG→DXF text is collected in 8 MB pieces and joined after acadrust's document is freed;
-  - the DXF tag list is sized from the line count up front, and the DXF text is freed before the drawing is built from the tags.
+  - the DXF tag list is sized once from a count of the tags (not the lines, so blank lines or junk after EOF reserve nothing), and the DXF text is freed before the drawing is built from the tags.
 
-  An 86 MB DWG (17,000 entities, 3,055 layers) now opens in the browser in about 70 s at a 3.3 GB peak; before these changes it crashed the tab. A DWG over 90 MB is refused with a message to use the desktop app (`MAX_OPEN_DWG_BYTES`).
+  An 86 MB DWG (17,000 entities, 3,055 layers) now opens in the browser in about 70 s at a 3.3 GB peak; before these changes it crashed the tab. A DWG over 90 MB is refused with a message to use the desktop app: by the file picker before reading (`MAX_OPEN_DWG_BYTES`), and by the reader on the web whatever the path (`cadcraft_dwg::Limits::WEB`).

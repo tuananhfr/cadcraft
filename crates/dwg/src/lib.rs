@@ -36,6 +36,9 @@ pub struct Limits {
 impl Limits {
     /// 512 MB of DWG, 1 GB of DXF (more than the DXF reader's group-code limit fills).
     pub const DEFAULT: Limits = Limits { max_dwg_bytes: 512 << 20, max_dxf_bytes: 1 << 30 };
+    /// For the web, where a whole conversion fits in wasm32's 4 GB: an 86 MB DWG (530 MB of DXF)
+    /// peaks at 3.3 GB. UbotCAD's file picker refuses the same size before reading the file.
+    pub const WEB: Limits = Limits { max_dwg_bytes: 90 << 20, max_dxf_bytes: 640 << 20 };
 }
 
 /// A byte count in megabytes for messages ("9.9 MB", "1024 MB").

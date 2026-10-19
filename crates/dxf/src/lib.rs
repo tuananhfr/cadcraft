@@ -186,7 +186,7 @@ pub fn parse_with_limit(bytes: &[u8], max_tags: usize) -> Result<Vec<Tag>> {
     if tags > max_tags {
         return Err(DxfError::TooLarge { tags, limit: max_tags });
     }
-    parse_ascii_with_limit(&codepage::decode_ascii_file(bytes), max_tags, tags)
+    parse_ascii_with_limit(&codepage::decode_ascii_file(bytes), max_tags)
 }
 
 /// The four hex digits of a `\U+XXXX` escape starting at `chars[i]`, if there is one.
@@ -258,14 +258,34 @@ fn unescape_unicode(s: &str) -> String {
 }
 
 pub fn parse_ascii(text: &str) -> Result<Vec<Tag>> {
-    parse_ascii_with_limit(text, MAX_TAGS, 0)
+    parse_ascii_with_limit(text, MAX_TAGS)
 }
 
-/// `expected` (an upper bound from the line count, or 0) sizes the list up front: growing it by
-/// doubling to tens of millions of tags briefly needs three times the final list.
+/// How many tags [`parse_ascii_with_limit`] reads from `text`, by its rules (blank code lines
+/// skipped; a bad code or EOF ends the file), so the list is sized once: growing it by doubling
+/// to tens of millions of tags briefly needs three times the final list. Counting tags rather
+/// than lines keeps a file of blank lines or trailing junk from reserving gigabytes.
+fn count_tags(text: &str, max_tags: usize) -> usize {
+    let mut n = 0;
+    let mut lines = text.lines();
+    while let Some(code_line) = lines.next() {
+        let ct = code_line.trim();
+        if ct.is_empty() {
+            continue;
+        }
+        let Ok(code) = ct.parse::<i32>() else { break };
+        let Some(val) = lines.next() else { break };
+        n += 1;
+        if n >= max_tags || (code == 0 && val.trim_end_matches(['\r', '\n']) == "EOF") {
+            break;
+        }
+    }
+    n
+}
+
 #[allow(clippy::while_let_loop)]
-fn parse_ascii_with_limit(text: &str, max_tags: usize, expected: usize) -> Result<Vec<Tag>> {
-    let mut tags = Vec::with_capacity(expected.min(max_tags));
+fn parse_ascii_with_limit(text: &str, max_tags: usize) -> Result<Vec<Tag>> {
+    let mut tags = Vec::with_capacity(count_tags(text, max_tags));
     let mut lines = text.lines().enumerate();
     loop {
         let Some((ln, code_line)) = lines.next() else { break };
@@ -593,6 +613,19 @@ mod tests {
         let recs = records(&secs[0].tags);
         assert_eq!(recs[0].0, "LINE");
         assert_eq!(recs[0].1.len(), 4);
+    }
+
+    #[test]
+    fn the_tag_list_is_sized_by_the_tags_read_not_the_lines() {
+        // Blank code lines, and anything after EOF, reserve nothing.
+        assert_eq!(count_tags(&"\n".repeat(1000), MAX_TAGS), 0);
+        let text = "\r\n  0\r\nLINE\r\n 10\r\n1.5\r\n\r\n  0\r\nEOF\r\njunk\r\njunk\r\n";
+        assert_eq!(count_tags(text, MAX_TAGS), 3);
+        let tags = parse(text.as_bytes()).unwrap();
+        assert_eq!((tags.len(), tags.capacity()), (3, 3));
+        // A bad group code ends the count where the parse fails.
+        assert_eq!(count_tags("0\nLINE\nx\ny\n0\nEOF\n", MAX_TAGS), 1);
+        assert_eq!(count_tags("0\nA\n0\nB\n0\nC\n", 2), 2);
     }
 
     #[test]
