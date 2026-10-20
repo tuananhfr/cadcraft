@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "workspace": {
+    "docking": {
+      "layout": {
+        "root": {
+          "Split": {
+            "axis": "Horizontal",
+            "size": { "FixedFirst": 260.0 },
+            "first": { "Tabs": { "panels": ["toolSets"], "active": 0 } },
+            "second": {
+              "Split": {
+                "axis": "Horizontal",
+                "size": { "FixedSecond": 320.0 },
+                "first": { "Tabs": { "panels": ["canvas"], "active": 0 } },
+                "second": {
+                  "Stack": {
+                    "entries": [
+                      { "panel": "layers", "open": true, "height": 240.0 },
+                      { "panel": "properties", "open": true, "height": null }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "floating": []
+      },
+      "hidden": []
+    },
+    "showToolsets": true,
+    "showPalettes": true,
+    "showToolbar": false,
+    "showFileTabs": true,
+    "showStatusBar": true,
+    "showCommandLine": true,
+    "showViewcube": false,
+    "showUcsIcon": true,
+    "showLayerList": false,
+    "toolsetTab": "Modeling",
+    "collapsedGroups": ["Draw", "Modify"],
+    "propertiesAll": true,
+    "inWindowMenu": false,
+    "historyLines": 5
+  }
+}

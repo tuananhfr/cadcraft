@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "profile_id": "user.aged-3y",
+  "owner_type": "user",
+  "name": "Early profile",
+  "revision": 2,
+  "layout": {
+    "ribbon": { "visible": false, "tabs": [] },
+    "toolbars": [
+      { "id": "standard", "label": "Standard", "commands": ["new", "open", "qsave"] }
+    ]
+  }
+}

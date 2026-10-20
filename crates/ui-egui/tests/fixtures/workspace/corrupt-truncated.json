@@ -1,0 +1,6 @@
+{
+  "schema_version": "1.0.0",
+  "profile_id": "user.cut",
+  "layout": {
+    "toolbars": [
+      { "id": "standard", "comm

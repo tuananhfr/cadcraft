@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.3.0",
+  "profile_id": "user.future",
+  "owner_type": "user",
+  "name": "Written by a newer build",
+  "base_id": "SIMPLE",
+  "revision": 31,
+  "future_field": { "a": 1, "list": [1, 2, 3] },
+  "layout": {
+    "panels": [
+      { "id": "properties", "mode": "dock", "side": "right", "width_ratio": 0.24, "pinned_section": "general" }
+    ],
+    "smart_dock": { "enabled": true, "edge_px": 12 }
+  }
+}

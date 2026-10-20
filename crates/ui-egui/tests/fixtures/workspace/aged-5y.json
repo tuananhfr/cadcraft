@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "profile_id": "user.aged-5y",
+  "owner_type": "user",
+  "name": "Retired palette",
+  "base_id": "SIMPLE",
+  "revision": 9,
+  "ui_scale": 1.25,
+  "layout": {
+    "panels": [
+      { "id": "layers", "mode": "dock", "side": "right", "width_ratio": 0.2 },
+      { "id": "legacyPalette", "mode": "float", "visible": true, "x_ratio": 0.3, "y_ratio": 0.2, "width_ratio": 0.25, "height_ratio": 0.4 }
+    ],
+    "favorites": ["legacypalette.open"]
+  }
+}

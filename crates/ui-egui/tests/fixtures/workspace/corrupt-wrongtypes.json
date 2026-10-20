@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0.0",
+  "profile_id": "user.wrong-types",
+  "revision": "twelve",
+  "ui_scale": "large",
+  "layout": { "toolbars": "none", "panels": [1, 2, 3] }
+}

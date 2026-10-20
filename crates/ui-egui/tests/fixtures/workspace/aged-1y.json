@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "profile_id": "user.aged-1y",
+  "owner_type": "user",
+  "name": "Renamed commands",
+  "base_id": "SIMPLE",
+  "revision": 4,
+  "created_at": "2025-10-21T00:00:00Z",
+  "updated_at": "2025-11-02T08:30:00Z",
+  "layout": {
+    "toolbars": [
+      {
+        "id": "draw",
+        "label": "Draw",
+        "dock": "left",
+        "commands": ["oldline", "circle", "pline"]
+      }
+    ],
+    "quick_access": ["oldline", "qsave"],
+    "favorites": ["oldline"],
+    "shortcuts": { "oldline": "L" },
+    "aliases": { "ln": "oldline" }
+  }
+}

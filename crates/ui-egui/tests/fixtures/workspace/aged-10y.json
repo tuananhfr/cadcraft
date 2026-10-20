@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "workspace": {
+    "docking": {
+      "layout": {
+        "root": { "Tabs": { "panels": ["canvas"], "active": 0 } },
+        "floating": []
+      },
+      "hidden": []
+    },
+    "showToolsets": false,
+    "showToolbar": true,
+    "showStatusBar": true,
+    "showRuler": true,
+    "toolsetTab": "Drafting"
+  }
+}
