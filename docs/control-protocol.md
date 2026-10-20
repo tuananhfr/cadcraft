@@ -97,15 +97,20 @@ Shift-Tab to traverse controls and Enter/Space to activate them. The observed re
 the operating system's accessibility tree and does not establish physical input or screen-reader
 acceptance. Unregistered controls still report their actual focus ID, with a null label/role.
 
-The native host restores layout choices from `workspace.json` and saves changes atomically.
-It stores palette/toolset visibility, selected toolset, collapsed groups, command-line history
-height and related chrome choices. It does not store drawings, command buffers, dialogs or the
-current Start tab. The default directory is `~/Library/Application Support/CADCraft` on macOS,
+The native host keeps the workspace profile set in `workspace/` inside the settings directory:
+`current.json` (written atomically), the newest 20 revisions in `snapshots/rev-<n>.json`, and an
+optional `policy.json`. Saving is debounced and runs in the app's frame loop; a change made just
+before closing is flushed on exit. The set holds the layout, theme, language and UI scale, never
+drawings, command buffers, dialogs or the current Start tab. A `workspace.json` from the first
+workspace feature is converted once into the first revision and renamed `workspace.v1.bak.json`.
+The default directory is `~/Library/Application Support/CADCraft` on macOS,
 `%APPDATA%/CADCraft` on Windows, and `$XDG_CONFIG_HOME/cadcraft` or `~/.config/cadcraft` elsewhere.
 Set `CADCRAFT_CONFIG_DIR` to a private directory for an isolated profile; an explicitly empty
-value disables workspace reads and writes. An invalid, oversized or newer-version file is
-reported and left untouched, with persistence disabled for that launch. Repair or move that
-file before restarting to resume saving workspace choices.
+value disables workspace reads and writes. An unreadable, oversized or newer-version
+`current.json` starts the app on the SIMPLE workspace and the damaged text is kept as snapshot 0
+(`snapshots/rev-0.json`). A `current.json` that cannot be read at all is never overwritten. The web
+build keeps the same set in `localStorage` (`cadcraft.ws.current`, `cadcraft.ws.snap:<n>`,
+`cadcraft.ws.snaps`).
 
 ## Panel docking
 

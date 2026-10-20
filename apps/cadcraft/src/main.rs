@@ -21,6 +21,7 @@ mod graphics;
 mod logging;
 #[cfg(target_os = "macos")]
 mod native_menu;
+mod profile_store;
 mod spacemouse;
 mod system_animations;
 mod workspace;
@@ -35,8 +36,6 @@ struct App {
     desktop_theme: desktop_theme::DesktopTheme,
     /// Whether the OS shows animations, for the System choice of View ▸ Accessibility ▸ Animation Effects.
     system_animations: system_animations::SystemAnimations,
-    workspace: workspace::Workspace,
-    workspace_error: Option<String>,
     /// The fonts the user added, kept in `<settings dir>/fonts`.
     fonts: Option<cadcraft_ui_egui::fontstore::FontStore>,
     #[cfg(target_os = "macos")]
@@ -51,16 +50,14 @@ impl App {
         }
     }
 
-    fn persist_workspace(&mut self, final_attempt: bool) {
-        let result = if final_attempt { self.workspace.save_on_exit(&self.cad.ui) } else { self.workspace.save_if_changed(&self.cad.ui) };
-        if let Err(error) = result {
-            if self.workspace_error.as_ref() != Some(&error) {
-                eprintln!("CADCraft workspace: {error}");
-                self.cad.set_status(format!("Workspace could not be saved: {error}"));
-                self.workspace_error = Some(error);
-            }
-        } else {
-            self.workspace_error = None;
+    /// The CadApp tick saves on its own; this keeps a change made just before closing, which is
+    /// still inside the autosave delay.
+    fn flush_workspace(&mut self) {
+        if self.cad.ws.store.is_some()
+            && self.cad.ws.autosave.pending()
+            && let Err(error) = self.cad.commit_workspace_now()
+        {
+            eprintln!("CADCraft workspace: {error}");
         }
     }
 }
@@ -87,7 +84,6 @@ impl eframe::App for App {
         self.cad.system_animations = self.system_animations.current();
         self.cad.logic(ctx);
         self.spacemouse.poll(&mut self.cad, ctx);
-        self.persist_workspace(false);
         if std::mem::take(&mut self.cad.quit_requested) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
@@ -100,12 +96,11 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.cad.ui(ui);
         self.persist_fonts();
-        self.persist_workspace(false);
     }
     /// A normal exit: the workspace is saved, and this run's autosave files are not needed (a
     /// crash leaves them for recovery).
     fn on_exit(&mut self) {
-        self.persist_workspace(true);
+        self.flush_workspace();
         self.cad.shutdown_autosave();
     }
     /// Preferences (the interface theme) survive restarts; window and egui state are not kept.
@@ -335,14 +330,6 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             let mut app = CadApp::new(Session::empty(), services());
-            let (workspace, restored, workspace_error) = workspace::Workspace::load();
-            if let Some(ui) = restored {
-                app.ui = ui;
-            }
-            if let Some(error) = &workspace_error {
-                eprintln!("CADCraft workspace: {error}");
-                app.set_status(error);
-            }
             app.system_languages = std::env::var("CADCRAFT_LOCALE").map(|s| vec![s]).unwrap_or_else(|_| sys_locale::get_locales().collect());
             // The user profile (Options): drafting settings, selection sizes, drawing-area colours.
             if let Some(profile) = cc.storage.and_then(|s| s.get_string(cadcraft_ui_egui::options::PROFILE_KEY)) {
@@ -353,6 +340,14 @@ fn main() -> eframe::Result {
             }
             if let Some(prefs) = cc.storage.and_then(|s| s.get_string(cadcraft_ui_egui::autosave::PREFS_KEY)) {
                 cadcraft_ui_egui::autosave::load_prefs(&prefs);
+            }
+            // After the preferences: a profile that names a theme or language overrides them.
+            if let Some(opened) = workspace::open_default() {
+                app.attach_profile_store(Box::new(opened.store));
+                if let Some(notice) = opened.notice {
+                    eprintln!("CADCraft workspace: {notice}");
+                    app.set_status(notice);
+                }
             }
             // Autosave files (SAVEFILEPATH) default to `<settings dir>/autosave`.
             if let Some(dir) = config_dir() {
@@ -399,8 +394,6 @@ fn main() -> eframe::Result {
                 system_animations,
                 cad: app,
                 spacemouse: spacemouse::SpaceMouse::start(cc.egui_ctx.clone()),
-                workspace,
-                workspace_error,
                 fonts,
                 #[cfg(target_os = "macos")]
                 native_menu: None,

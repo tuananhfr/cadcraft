@@ -6,7 +6,7 @@
 //! with egui shapes instead of the GPU canvas, `?sample` opens the sample drawing. Saving downloads
 //! the drawing through the browser (`download.rs`). With `?host=parent` (inside an `<iframe>`), a
 //! same-origin parent page sends the drawing to open and stores what CADCraft saves instead
-//! (`host.rs`).
+//! (`host.rs`). The workspace layout is kept in `localStorage` (`profile_store.rs`).
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 #[cfg(target_arch = "wasm32")]
@@ -137,6 +137,18 @@ mod web {
                         if let Some(prefs) = cc.storage.and_then(|s| s.get_string(cadcraft_ui_egui::PREFS_KEY)) {
                             app.load_prefs(&prefs);
                         }
+                        // After the preferences: a profile that names a theme or language overrides them.
+                        // Blocked storage still gets a store, one that reports every save as failed.
+                        match crate::profile_store::open() {
+                            Some(store) => app.attach_profile_store(Box::new(store)),
+                            None => {
+                                log::warn!("workspace: localStorage is not available; the layout will not be saved");
+                                app.attach_profile_store(Box::new(cadcraft_ui_egui::wsprofile::store::MemoryStore {
+                                    fail_writes: true,
+                                    ..Default::default()
+                                }));
+                            }
+                        }
                         // `?cpu`: no render state for the app, so the canvas draws with egui shapes.
                         if !crate::wants_cpu(&query())
                             && let Some(rs) = &cc.wgpu_render_state
@@ -191,6 +203,8 @@ fn wants_cpu(query: &str) -> bool {
 mod font_index;
 #[cfg(target_arch = "wasm32")]
 mod fonts;
+#[cfg(any(target_arch = "wasm32", test))]
+mod profile_store;
 #[cfg(target_arch = "wasm32")]
 mod upload;
 
