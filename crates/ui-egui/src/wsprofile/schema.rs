@@ -245,6 +245,27 @@ impl Default for ToolSetsState {
     }
 }
 
+/// Show/hide switches for parts of the window that are not panels or tool bars.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ViewState {
+    pub file_tabs: bool,
+    pub viewcube: bool,
+    pub ucs_icon: bool,
+    /// The layer list under the Layers palette's header.
+    pub layer_list: bool,
+    /// The Properties palette shows every property rather than the common ones.
+    pub properties_all: bool,
+    /// An in-window menu bar; off by default where the system draws the menu bar (macOS).
+    pub in_window_menu: bool,
+}
+
+impl Default for ViewState {
+    fn default() -> Self {
+        Self { file_tabs: true, viewcube: true, ucs_icon: true, layer_list: false, properties_all: true, in_window_menu: !cfg!(target_os = "macos") }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WorkspaceLayout {
@@ -260,6 +281,7 @@ pub struct WorkspaceLayout {
     pub aliases: BTreeMap<String, String>,
     pub favorites: Vec<String>,
     pub toolsets: ToolSetsState,
+    pub view: ViewState,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -326,6 +348,7 @@ impl Default for WorkspaceLayout {
             aliases: BTreeMap::new(),
             favorites: Vec::new(),
             toolsets: ToolSetsState::default(),
+            view: ViewState::default(),
             extra: Map::new(),
         }
     }

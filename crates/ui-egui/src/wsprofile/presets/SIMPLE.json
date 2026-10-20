@@ -119,6 +119,13 @@
       "tab": "Drafting",
       "collapsed_groups": [],
       "hidden_tools": []
+    },
+    "view": {
+      "file_tabs": true,
+      "viewcube": true,
+      "ucs_icon": true,
+      "layer_list": false,
+      "properties_all": true
     }
   }
 }

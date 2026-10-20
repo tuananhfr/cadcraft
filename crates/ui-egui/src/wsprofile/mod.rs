@@ -24,10 +24,13 @@ use history::LayoutHistory;
 use merge::{Effective, Layer, Level, apply_patch_locked, diff_patch, effective};
 use presets::{PRESET_IDS, SAFE_PRESET, preset};
 use schema::{SCHEMA_VERSION, WorkspaceLayout, WorkspaceProfile};
-use startup::{FALLBACK_MESSAGE, Fallback};
-use store::{MAX_SET_BYTES, ProfileSet, ProfileStore};
+use startup::{FALLBACK_MESSAGE, Fallback, NOT_KEPT_MESSAGE, POLICY_MESSAGE};
+use store::{ProfileSet, ProfileStore};
 
 pub const LOCKED_MESSAGE: &str = "Locked by company policy";
+/// First wait before a failed commit is tried again; it doubles up to [`MAX_RETRY_SECS`].
+const RETRY_SECS: f64 = 5.0;
+const MAX_RETRY_SECS: f64 = 60.0;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SaveStatus {
@@ -100,6 +103,9 @@ pub struct WsState {
     pub set_extra: Map<String, Value>,
     pub(crate) applied: WorkspaceLayout,
     pub(crate) synced: Option<Fingerprint>,
+    /// A damaged set startup could not copy aside; commits wait until the copy succeeds.
+    unkept_damage: Option<Vec<u8>>,
+    failed_commits: u32,
     now: f64,
     drag_before: Option<WorkspaceLayout>,
     released: bool,
@@ -129,6 +135,8 @@ impl Default for WsState {
             area: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0)),
             set_extra: Map::new(),
             synced: None,
+            unkept_damage: None,
+            failed_commits: 0,
             now: 0.0,
             drag_before: None,
             released: false,
@@ -162,6 +170,11 @@ impl WsState {
         layers.extend(session);
         self.layers = layers;
         self.effective = effective(&self.layers);
+    }
+
+    /// Whether a change is not stored yet; a host checks this before it exits.
+    pub fn needs_flush(&self) -> bool {
+        self.autosave.pending() || matches!(self.status, SaveStatus::Failed(_))
     }
 
     fn mark_changed(&mut self) {
@@ -208,8 +221,22 @@ pub(crate) fn observe(app: &mut CadApp, record: bool) -> bool {
     }
     let delta = diff_patch(&before, &captured);
     let open = apply_patch_locked(&app.ws.user.layout, &delta, &Default::default());
-    let allowed = apply_patch_locked(&app.ws.user.layout, &delta, &app.ws.effective.locked);
-    let blocked = open != allowed;
+    let mut allowed = apply_patch_locked(&app.ws.user.layout, &delta, &app.ws.effective.locked);
+    // The user's layer may already hold a value a lock hides, so an unchanged layer does not mean
+    // the edit went through.
+    let refused: Vec<String> =
+        merge::changed_pointers(&delta).into_iter().filter(|pointer| merge::check(&app.ws.effective, pointer).is_err()).collect();
+    let blocked = open != allowed || !refused.is_empty();
+    let panels_refused = open.panels != allowed.panels || refused.iter().any(|pointer| pointer == "/panels" || pointer.starts_with("/panels/"));
+    // The tree holds every panel's placement, including a refused move or a session's placement;
+    // the panel list alone then describes what the user may keep.
+    let session_places_panels = app.ws.layers.iter().any(|layer| layer.level == Level::Session && layer.patch.get("panels").is_some());
+    if allowed.dock_tree != app.ws.user.layout.dock_tree
+        && (panels_refused || session_places_panels)
+        && merge::check(&app.ws.effective, "/dock_tree").is_ok()
+    {
+        allowed.dock_tree = None;
+    }
     if allowed != app.ws.user.layout {
         if record {
             app.ws.history.record(app.ws.user.layout.clone());
@@ -278,7 +305,7 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
         let _ = app.commit_workspace_now();
     }
     if app.ws.autosave.pending() {
-        let wait = std::time::Duration::try_from_secs_f64(app.ws.autosave.debounce_secs).unwrap_or(std::time::Duration::from_millis(750));
+        let wait = std::time::Duration::try_from_secs_f64(app.ws.autosave.wait_secs()).unwrap_or(std::time::Duration::from_millis(750));
         ctx.request_repaint_after(wait);
     }
 }
@@ -304,7 +331,19 @@ pub fn rfc3339(unix_ms: f64) -> String {
 impl CadApp {
     /// Takes over profile storage: restores the stored workspace (or SIMPLE) and shows it.
     pub fn attach_profile_store(&mut self, mut store: Box<dyn ProfileStore>) {
-        let restored = startup::restore(store.as_mut());
+        let (restored, unkept) = startup::open(store.as_mut());
+        let damaged = matches!(restored.fallback, Some(Fallback::Corrupt(_) | Fallback::NewerMajor(_) | Fallback::Invalid(_)));
+        let kept = unkept.is_none();
+        self.ws.unkept_damage = unkept;
+        self.ws.failed_commits = 0;
+        let mut notices: Vec<String> = Vec::new();
+        if damaged {
+            notices.push(if kept { FALLBACK_MESSAGE.into() } else { NOT_KEPT_MESSAGE.into() });
+        }
+        if let Some(problem) = store.read_policy().and_then(|raw| startup::policy_problem(&raw)) {
+            log::warn!("workspace: policy: {problem}");
+            notices.push(format!("{POLICY_MESSAGE}: {problem}"));
+        }
         let session: Vec<Layer> = self.ws.layers.iter().filter(|layer| layer.level == Level::Session).cloned().collect();
         self.ws.store = Some(store);
         self.ws.user = restored.user;
@@ -317,12 +356,12 @@ impl CadApp {
         self.ws.history.clear();
         self.ws.autosave.clear();
         self.ws.status = if restored.fallback.is_none() { SaveStatus::SavedLocally } else { SaveStatus::Unsaved };
-        let damaged = matches!(restored.fallback, Some(Fallback::Corrupt(_) | Fallback::NewerMajor(_) | Fallback::Invalid(_)));
         self.ws.fallback = restored.fallback;
         self.apply_workspace();
-        if damaged {
-            self.ws.message = Some(FALLBACK_MESSAGE.into());
-            self.set_status(FALLBACK_MESSAGE);
+        if !notices.is_empty() {
+            let notice = notices.join(" ");
+            self.ws.message = Some(notice.clone());
+            self.set_status(notice);
         }
     }
 
@@ -353,6 +392,7 @@ impl CadApp {
     /// Stores the workspace now: next revision, a snapshot of it, then the current set.
     pub fn commit_workspace_now(&mut self) -> Result<(), String> {
         observe(self, true);
+        let policy = self.ws.policy();
         let Some(store) = self.ws.store.as_mut() else { return Err("No workspace storage is attached".into()) };
         let newest = store.snapshots().into_iter().max().unwrap_or(0);
         let mut user = self.ws.user.clone();
@@ -372,9 +412,14 @@ impl CadApp {
             user: Some(user.clone()),
             extra: self.ws.set_extra.clone(),
         };
-        let written = serde_json::to_string(&set).map_err(|error| error.to_string()).and_then(|json| {
-            if json.len() > MAX_SET_BYTES {
-                return Err(format!("the workspace is larger than {MAX_SET_BYTES} bytes"));
+        let unkept_damage = &mut self.ws.unkept_damage;
+        let written = startup::set_text(&set, &policy).and_then(|json| {
+            // Never write a set the next startup would refuse: that would lose every setting.
+            startup::parse_set_with(&json, &policy).map_err(|fallback| format!("it would not read back: {}", startup::describe(&fallback)))?;
+            if let Some(damaged) = unkept_damage.as_deref() {
+                startup::keep_copy(store.as_mut(), damaged)
+                    .map_err(|error| format!("the damaged workspace could not be kept, so it is not replaced: {error}"))?;
+                *unkept_damage = None;
             }
             store.push_snapshot(user.revision, &json)?;
             store.write_current(&json)
@@ -385,9 +430,14 @@ impl CadApp {
                 self.ws.profiles = set.profiles;
                 self.ws.status = SaveStatus::SavedLocally;
                 self.ws.autosave.clear();
+                self.ws.failed_commits = 0;
                 Ok(())
             }
             Err(error) => {
+                // Storage that is full or blocked now may not be later: try again, less and less often.
+                let delay = (RETRY_SECS * 2f64.powi(self.ws.failed_commits.min(4) as i32)).min(MAX_RETRY_SECS);
+                self.ws.failed_commits = self.ws.failed_commits.saturating_add(1);
+                self.ws.autosave.retry(self.ws.now, delay);
                 self.ws.status = SaveStatus::Failed(error.clone());
                 self.set_status(format!("Could not save workspace: {error}"));
                 Err(error)

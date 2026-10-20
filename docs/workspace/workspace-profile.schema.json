@@ -51,7 +51,8 @@
           "additionalProperties": { "$ref": "#/$defs/commandId" }
         },
         "favorites": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/commandId" } },
-        "toolsets": { "$ref": "#/$defs/toolSets" }
+        "toolsets": { "$ref": "#/$defs/toolSets" },
+        "view": { "$ref": "#/$defs/view" }
       },
       "additionalProperties": true
     },
@@ -140,6 +141,18 @@
         "tab": { "type": "string", "maxLength": 1024 },
         "collapsed_groups": { "type": "array", "maxItems": 500, "items": { "type": "string", "maxLength": 1024 } },
         "hidden_tools": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/commandId" } }
+      }
+    },
+    "view": {
+      "type": "object",
+      "description": "Show/hide switches for parts of the window that are not panels or tool bars.",
+      "properties": {
+        "file_tabs": { "type": "boolean" },
+        "viewcube": { "type": "boolean" },
+        "ucs_icon": { "type": "boolean" },
+        "layer_list": { "type": "boolean", "description": "The layer list under the Layers palette's header." },
+        "properties_all": { "type": "boolean", "description": "Properties shows every property rather than the common ones." },
+        "in_window_menu": { "type": "boolean", "description": "In-window menu bar; defaults to off on macOS, on elsewhere." }
       }
     }
   }

@@ -52,6 +52,16 @@ pub trait ProfileStore {
     fn read_policy(&self) -> Option<String> {
         None
     }
+    /// The current set as stored, also when it is too large or not UTF-8 for [`Self::read_current`].
+    fn read_current_bytes(&self) -> Option<Vec<u8>> {
+        self.read_current().map(String::into_bytes)
+    }
+    /// Keeps a copy of a set startup could not read, next to (not among) the snapshots, without
+    /// replacing any copy kept before; returns a name for it. A store without this keeps the copy
+    /// as snapshot [`CORRUPT_SNAPSHOT`] instead.
+    fn keep_damaged(&mut self, _raw: &[u8]) -> Result<String, String> {
+        Err("not supported".into())
+    }
 }
 
 /// Revisions to delete so that only the newest [`KEEP_SNAPSHOTS`] remain; never [`CORRUPT_SNAPSHOT`].
@@ -71,6 +81,8 @@ pub struct MemoryStore {
     pub policy: Option<String>,
     /// Makes every write fail, as a full or blocked browser storage does.
     pub fail_writes: bool,
+    /// Copies kept by [`ProfileStore::keep_damaged`], by name.
+    pub damaged: BTreeMap<String, Vec<u8>>,
 }
 
 const WRITE_REFUSED: &str = "storage is full or blocked";
@@ -110,5 +122,17 @@ impl ProfileStore for MemoryStore {
 
     fn read_policy(&self) -> Option<String> {
         self.policy.clone()
+    }
+
+    fn keep_damaged(&mut self, raw: &[u8]) -> Result<String, String> {
+        if self.fail_writes {
+            return Err(WRITE_REFUSED.into());
+        }
+        if let Some((name, _)) = self.damaged.iter().find(|(_, kept)| kept.as_slice() == raw) {
+            return Ok(name.clone());
+        }
+        let name = (1..).map(|index: u64| format!("damaged-{index}")).find(|name| !self.damaged.contains_key(name)).unwrap_or_default();
+        self.damaged.insert(name.clone(), raw.to_vec());
+        Ok(name)
     }
 }

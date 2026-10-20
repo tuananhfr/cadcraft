@@ -284,7 +284,7 @@ impl Workspace {
     }
 }
 
-fn sync(workspace: &mut Workspace, app: &crate::CadApp) -> Result<(), String> {
+pub(crate) fn sync(workspace: &mut Workspace, app: &crate::CadApp) -> Result<(), String> {
     workspace.set_visible(Panel::ToolSets, app.ui.show_toolsets)?;
     if !app.ui.show_palettes {
         workspace.set_visible(Panel::Layers, false)?;

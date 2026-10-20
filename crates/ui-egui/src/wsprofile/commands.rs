@@ -233,7 +233,8 @@ fn restore_revision(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     let revision = params.get("revision").and_then(Value::as_u64).ok_or("revision is required")?;
     let raw =
         app.ws.store.as_ref().and_then(|store| store.read_snapshot(revision)).ok_or_else(|| format!("No saved workspace revision {revision}"))?;
-    let set = startup::parse_set(&raw).map_err(|fallback| format!("Revision {revision} cannot be read: {fallback:?}"))?;
+    let set = startup::parse_set_with(&raw, &app.ws.policy())
+        .map_err(|fallback| format!("Revision {revision} cannot be read: {}", startup::describe(&fallback)))?;
     observe(app, true);
     let restored = match set.user.clone() {
         Some(user) => user,
@@ -246,7 +247,12 @@ fn restore_revision(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     let current = app.ws.user.revision;
     app.ws.user = WorkspaceProfile { revision: current, ..restored };
     app.ws.active = set.active;
-    app.ws.profiles = set.profiles;
+    // Workspaces saved since that revision stay; the restore is about the layout, not the list.
+    for profile in set.profiles {
+        if app.ws.profiles.len() < MAX_USER_PROFILES && !app.ws.profiles.iter().any(|saved| saved.profile_id == profile.profile_id) {
+            app.ws.profiles.push(profile);
+        }
+    }
     app.ws.set_extra = set.extra;
     app.ws.rebuild();
     app.apply_workspace();
@@ -264,18 +270,18 @@ fn set_value(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     let pointer = params.get("pointer").and_then(Value::as_str).ok_or("pointer is required")?;
     let value = params.get("value").cloned().ok_or("value is required")?;
     observe(app, true);
+    let mut next = app.ws.user.clone();
     match pointer {
         "/ui_scale" => {
             let scale = value.as_f64().filter(|scale| scale.is_finite()).ok_or("ui_scale must be a number")?;
-            app.ws.user.ui_scale = (scale as f32).clamp(0.75, 2.0);
+            next.ui_scale = (scale as f32).clamp(0.75, 2.0);
         }
         "/theme" => {
-            app.ws.user.theme =
+            next.theme =
                 optional_choice(&value, |theme| crate::theme::ThemePref::parse(theme).is_some(), "theme must be system, light, dark or null")?
         }
         "/locale" => {
-            app.ws.user.locale =
-                optional_choice(&value, |code| crate::i18n::Preference::parse(code).is_some(), "locale must be a language code or null")?
+            next.locale = optional_choice(&value, |code| crate::i18n::Preference::parse(code).is_some(), "locale must be a language code or null")?
         }
         _ => {
             check(&app.ws.effective, pointer).map_err(|_| LOCKED_MESSAGE.to_string())?;
@@ -283,13 +289,17 @@ fn set_value(app: &mut CadApp, params: &Value) -> Result<Value, String> {
                 return Err(format!("{DELETE_KEY} is not a value"));
             }
             let patch = patch_for_pointer(pointer, value)?;
-            let next = try_apply_patch(&app.ws.user.layout, &patch).map_err(|error| format!("{pointer}: {error}"))?;
-            if next == app.ws.user.layout {
+            next.layout = try_apply_patch(&app.ws.user.layout, &patch).map_err(|error| format!("{pointer}: {error}"))?;
+            if next.layout == app.ws.user.layout {
                 return Ok(json!({"pointer": pointer, "changed": false}));
             }
-            app.ws.history.record(std::mem::replace(&mut app.ws.user.layout, next));
         }
     }
+    startup::check_profile(&next, &app.ws.policy()).map_err(|reason| format!("{pointer} cannot be stored: {reason}"))?;
+    if next.layout != app.ws.user.layout {
+        app.ws.history.record(app.ws.user.layout.clone());
+    }
+    app.ws.user = next;
     app.ws.rebuild();
     app.apply_workspace();
     app.ws.mark_changed();

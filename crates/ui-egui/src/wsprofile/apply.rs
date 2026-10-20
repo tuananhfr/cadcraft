@@ -7,17 +7,18 @@ use craft_ui::docking::{Floating, Layout, Location, Node, Placement, StackEntry,
 use craft_ui::layout::{SplitAxis, SplitSize};
 use serde_json::Value;
 
-use super::merge::strip_nulls;
-use super::schema::{Dock, PanelMode, PanelState, ToolbarState, WorkspaceLayout};
+use super::merge::{Level, strip_nulls};
+use super::schema::{Dock, PanelMode, PanelState, ToolbarState, ViewState, WorkspaceLayout};
 use super::screen::{from_ratio, to_ratio};
 use crate::CadApp;
 use crate::docking::{Panel, Workspace};
 
 /// Points of a floating panel that stay on screen whatever the screen size.
 pub const MIN_VISIBLE: f32 = 48.0;
-/// Marks a dock tree whose floating rectangles are fractions of the content area; legacy trees
-/// carry points.
+/// Mark a dock tree whose floating rectangles, and split sizes and accordion heights, are
+/// fractions of the content area; older trees carry points.
 const RECTS_KEY: &str = "rects";
+const SIZES_KEY: &str = "sizes";
 const RATIO_RECTS: &str = "ratio";
 const STANDARD_TOOLBAR: &str = "standard";
 const MIN_FLOAT: egui::Vec2 = egui::vec2(160.0, 120.0);
@@ -43,6 +44,7 @@ pub(crate) struct Fingerprint {
     toolset_tab: String,
     collapsed_groups: Vec<String>,
     hidden_tools: Vec<String>,
+    view: ViewState,
     pub(crate) theme: &'static str,
     pub(crate) language: &'static str,
 }
@@ -61,6 +63,14 @@ impl Fingerprint {
             toolset_tab: app.ui.toolset_tab.clone(),
             collapsed_groups: app.ui.collapsed_groups.clone(),
             hidden_tools: app.ui.hidden_tools.clone(),
+            view: ViewState {
+                file_tabs: app.ui.show_file_tabs,
+                viewcube: app.ui.show_viewcube,
+                ucs_icon: app.ui.show_ucs_icon,
+                layer_list: app.ui.show_layer_list,
+                properties_all: app.ui.properties_all,
+                in_window_menu: app.ui.in_window_menu,
+            },
             theme: app.ui.theme.as_str(),
             language: app.ui.interface_language.code(),
         }
@@ -74,14 +84,8 @@ impl Fingerprint {
 /// The docking the next frame will show: the show-palette switches folded in as `docking::show` does.
 fn synced_docking(app: &CadApp) -> Workspace {
     let mut workspace = app.ui.docking.clone();
-    let _ = workspace.set_visible(Panel::ToolSets, app.ui.show_toolsets);
-    if !app.ui.show_palettes {
-        let _ = workspace.set_visible(Panel::Layers, false);
-        let _ = workspace.set_visible(Panel::Properties, false);
-    } else if !workspace.layout.contains(&Panel::Layers) && !workspace.layout.contains(&Panel::Properties) {
-        let _ = workspace.set_visible(Panel::Properties, true);
-        let _ = workspace.set_visible(Panel::Layers, true);
-    }
+    // Runs every frame; `docking::show` reports the same failure to the user when it draws.
+    let _ = crate::docking::sync(&mut workspace, app);
     workspace
 }
 
@@ -116,6 +120,19 @@ pub fn capture(app: &CadApp, area: egui::Rect) -> WorkspaceLayout {
     if moved(|a, b| a.hidden_tools == b.hidden_tools) {
         layout.toolsets.hidden_tools = now.hidden_tools.clone();
     }
+    let view: [(fn(&ViewState) -> bool, fn(&mut ViewState) -> &mut bool); 6] = [
+        (|view| view.file_tabs, |view| &mut view.file_tabs),
+        (|view| view.viewcube, |view| &mut view.viewcube),
+        (|view| view.ucs_icon, |view| &mut view.ucs_icon),
+        (|view| view.layer_list, |view| &mut view.layer_list),
+        (|view| view.properties_all, |view| &mut view.properties_all),
+        (|view| view.in_window_menu, |view| &mut view.in_window_menu),
+    ];
+    for (read, write) in view {
+        if base.is_none_or(|base| read(&base.view) != read(&now.view)) {
+            *write(&mut layout.view) = read(&now.view);
+        }
+    }
     if moved(|a, b| a.docking == b.docking && a.hidden == b.hidden) {
         let workspace = now.workspace();
         layout.panels = panels_from_docking(&workspace, area, &layout.panels);
@@ -137,8 +154,18 @@ pub fn apply(app: &mut CadApp, layout: &WorkspaceLayout, area: egui::Rect) -> Ap
     }
     app.ui.collapsed_groups = layout.toolsets.collapsed_groups.clone();
     app.ui.hidden_tools = layout.toolsets.hidden_tools.clone();
+    let view = &layout.view;
+    app.ui.show_file_tabs = view.file_tabs;
+    app.ui.show_viewcube = view.viewcube;
+    app.ui.show_ucs_icon = view.ucs_icon;
+    app.ui.show_layer_list = view.layer_list;
+    app.ui.properties_all = view.properties_all;
+    app.ui.in_window_menu = view.in_window_menu;
 
-    let mut docking = docking_from_tree(layout, area).unwrap_or_else(|| docking_from_panels(&layout.panels, area));
+    let pinned = pinned_panels(app, layout);
+    let mut docking = docking_from_tree(layout, area)
+        .filter(|tree| tree_agrees(tree, layout, &pinned, area))
+        .unwrap_or_else(|| docking_from_panels(&layout.panels, area));
     if !layout.toolsets.visible {
         let _ = docking.set_visible(Panel::ToolSets, false);
     }
@@ -149,6 +176,49 @@ pub fn apply(app: &mut CadApp, layout: &WorkspaceLayout, area: egui::Rect) -> Ap
     app.ws.applied = layout.clone();
     app.ws.synced = Some(Fingerprint::of(app));
     report(layout)
+}
+
+/// Panels whose `panels[]` entry outranks the user's dock tree: locked by policy or placed by
+/// the session layer.
+fn pinned_panels(app: &CadApp, layout: &WorkspaceLayout) -> Vec<String> {
+    let mut ids = Vec::new();
+    for lock in app.ws.effective.locked.keys() {
+        if lock.is_empty() || lock == "/panels" {
+            return layout.panels.iter().map(|state| state.id.clone()).collect();
+        }
+        if let Some(token) = lock.strip_prefix("/panels/").and_then(|rest| rest.split('/').next()) {
+            ids.push(token.replace("~1", "/").replace("~0", "~"));
+        }
+    }
+    let session = app.ws.layers.iter().filter(|layer| layer.level == Level::Session);
+    for items in session.filter_map(|layer| layer.patch.get("panels").and_then(Value::as_array)) {
+        ids.extend(items.iter().filter_map(|item| item.get("id").and_then(Value::as_str)).map(str::to_string));
+    }
+    ids
+}
+
+/// Shown, floating, and the side it docks to.
+fn placement(state: &PanelState) -> (bool, bool, Option<Dock>) {
+    let shown = state.visible && !matches!(state.mode, PanelMode::Hidden | PanelMode::AutoHide);
+    let floats = state.mode == PanelMode::Float || state.side == Some(Dock::Floating);
+    let side = if shown && !floats { state.side } else { None };
+    (shown, shown && floats, side)
+}
+
+/// Whether `tree` places each pinned panel where `layout.panels` says.
+fn tree_agrees(tree: &Workspace, layout: &WorkspaceLayout, pinned: &[String], area: egui::Rect) -> bool {
+    if pinned.is_empty() {
+        return true;
+    }
+    let shown = panels_from_docking(tree, area, &layout.panels);
+    pinned.iter().all(|id| {
+        let Some(wanted) = layout.panels.iter().find(|state| state.id == *id) else { return true };
+        let wanted_side = |side: Option<Dock>| panel_of(id).map(|panel| zone_of(side, panel));
+        shown.iter().find(|state| state.id == *id).is_some_and(|state| {
+            let (now, want) = (placement(state), placement(wanted));
+            now.0 == want.0 && now.1 == want.1 && (!now.0 || now.1 || wanted_side(now.2) == wanted_side(want.2))
+        })
+    })
 }
 
 fn set_standard_toolbar(layout: &mut WorkspaceLayout, visible: bool) {
@@ -217,18 +287,68 @@ fn dock_tree(workspace: &Workspace, area: egui::Rect) -> Value {
             *rect = to_ratio(rect_points(*rect), area);
         }
     }
+    scale_sizes(&mut copy, area, true);
     let mut value = serde_json::to_value(&copy).unwrap_or(Value::Null);
     strip_nulls(&mut value);
     if let Some(fields) = value.as_object_mut() {
         fields.insert(RECTS_KEY.into(), Value::String(RATIO_RECTS.into()));
+        fields.insert(SIZES_KEY.into(), Value::String(RATIO_RECTS.into()));
     }
     value
+}
+
+fn scale_split(size: SplitSize, along: f32, into_fraction: bool) -> SplitSize {
+    let scale = |value: f32| if into_fraction { value / along } else { value * along };
+    match size {
+        SplitSize::FixedFirst(value) => SplitSize::FixedFirst(scale(value)),
+        SplitSize::FixedSecond(value) => SplitSize::FixedSecond(scale(value)),
+        ratio @ SplitSize::Ratio(_) => ratio,
+    }
+}
+
+fn scale_node(node: &mut Node<Panel>, extent: egui::Vec2, into_fraction: bool, depth: usize) {
+    if depth > craft_ui::docking::MAX_DEPTH {
+        return;
+    }
+    match node {
+        Node::Split { axis, size, first, second } => {
+            let along = if *axis == SplitAxis::Horizontal { extent.x } else { extent.y };
+            *size = scale_split(*size, along, into_fraction);
+            scale_node(first, extent, into_fraction, depth + 1);
+            scale_node(second, extent, into_fraction, depth + 1);
+        }
+        Node::Stack { entries } => {
+            for entry in entries {
+                entry.height = entry.height.map(|height| if into_fraction { height / extent.y } else { height * extent.y });
+            }
+        }
+        Node::Tabs { .. } => {}
+    }
+}
+
+/// Converts split sizes and accordion heights between points and fractions of `area`, so a
+/// layout keeps its proportions on another screen.
+fn scale_sizes(workspace: &mut Workspace, area: egui::Rect, into_fraction: bool) {
+    let extent = area.size().max(egui::vec2(1.0, 1.0));
+    if let Some(root) = &mut workspace.layout.root {
+        scale_node(root, extent, into_fraction, 0);
+    }
+    for (_, location) in &mut workspace.hidden {
+        let along = if matches!(location.placement, Placement::Split(Zone::Top | Zone::Bottom)) { extent.y } else { extent.x };
+        location.size = location.size.map(|size| scale_split(size, along, into_fraction));
+        if let Some((_, Some(height))) = &mut location.stack {
+            *height = if into_fraction { *height / extent.y } else { *height * extent.y };
+        }
+    }
 }
 
 fn docking_from_tree(layout: &WorkspaceLayout, area: egui::Rect) -> Option<Workspace> {
     let tree = layout.dock_tree.as_ref()?;
     let ratio = tree.get(RECTS_KEY).and_then(Value::as_str) == Some(RATIO_RECTS);
     let mut workspace: Workspace = serde_json::from_value(tree.clone()).ok()?;
+    if tree.get(SIZES_KEY).and_then(Value::as_str) == Some(RATIO_RECTS) {
+        scale_sizes(&mut workspace, area, false);
+    }
     let place = |rect: [f32; 4]| if ratio { floating_rect(rect, area) } else { floating_rect(to_ratio(rect_points(rect), area), area) };
     for group in &mut workspace.layout.floating {
         group.rect = place(group.rect);

@@ -72,13 +72,17 @@ fn legacy_v1_becomes_user_layer_over_simple() {
     assert!(layout.status_bar.visible);
     assert!(layout.command_line.visible);
     assert_eq!(layout.command_line.lines, 5);
-    // Flags with no home in the layout stay under their original key.
-    assert_eq!(layout.extra.get("showViewcube"), Some(&json!(false)));
-    assert_eq!(layout.extra.get("showUcsIcon"), Some(&json!(true)));
-    assert_eq!(layout.extra.get("showLayerList"), Some(&json!(false)));
-    assert_eq!(layout.extra.get("showFileTabs"), Some(&json!(true)));
-    assert_eq!(layout.extra.get("propertiesAll"), Some(&json!(true)));
-    assert_eq!(layout.extra.get("inWindowMenu"), Some(&json!(false)));
+    // The view switches land in `layout.view`, not in `extra`.
+    let view = &layout.view;
+    assert!(!view.viewcube);
+    assert!(view.ucs_icon);
+    assert!(!view.layer_list);
+    assert!(view.file_tabs);
+    assert!(view.properties_all);
+    assert!(!view.in_window_menu);
+    for key in ["showViewcube", "showUcsIcon", "showLayerList", "showFileTabs", "propertiesAll", "inWindowMenu"] {
+        assert!(!layout.extra.contains_key(key), "{key} stayed in extra");
+    }
 
     let text = serde_json::to_string(&migrated.value).unwrap();
     assert!(validate(&text, Mode::Local).is_ok());

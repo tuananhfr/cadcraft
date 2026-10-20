@@ -9,10 +9,12 @@ use cadcraft_ui_egui::wsprofile::SaveStatus;
 use cadcraft_ui_egui::wsprofile::merge::Level;
 use cadcraft_ui_egui::wsprofile::presets::{PRESET_IDS, preset};
 use cadcraft_ui_egui::wsprofile::schema::{Dock, WorkspaceProfile};
-use cadcraft_ui_egui::wsprofile::startup::{FALLBACK_MESSAGE, Fallback};
+use cadcraft_ui_egui::wsprofile::startup::{FALLBACK_MESSAGE, Fallback, parse_set};
 use cadcraft_ui_egui::wsprofile::store::{CORRUPT_SNAPSHOT, MAX_USER_PROFILES, MemoryStore, ProfileSet, ProfileStore};
 use cadcraft_ui_egui::wsprofile::validate::{Mode, validate};
 use cadcraft_ui_egui::{CadApp, Services};
+use craft_ui::docking::Node;
+use craft_ui::layout::SplitSize;
 use serde_json::{Value, json};
 
 const SPEC_SAMPLE: &str = r#"{"schema_version":"1.0.0","profile_id":"uuid","revision":12,"base_id":"AUTOCAD_FAMILIAR","panels":[{"id":"properties","mode":"dock","side":"right","width_ratio":0.24}],"command_line":{"side":"bottom","height_ratio":0.15},"shortcuts":{"line":"L"}}"#;
@@ -32,7 +34,7 @@ fn store(app: &CadApp) -> &dyn ProfileStore {
 }
 
 fn current_set(app: &CadApp) -> ProfileSet {
-    serde_json::from_str(&store(app).read_current().unwrap()).unwrap()
+    parse_set(&store(app).read_current().unwrap()).unwrap()
 }
 
 fn standard_toolbar_visible(profile: &WorkspaceProfile) -> bool {
@@ -158,11 +160,14 @@ fn crash_recovery_ux04() {
 
 #[test]
 fn corrupt_store_falls_back_ux15() {
-    let mut app = attached(MemoryStore { current: Some("{".into()), ..MemoryStore::default() });
+    let shared = Shared::new(MemoryStore { current: Some("{".into()), ..MemoryStore::default() });
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.attach_profile_store(Box::new(shared.clone()));
     assert!(matches!(app.ws.fallback, Some(Fallback::Corrupt(_))), "{:?}", app.ws.fallback);
     assert_eq!(app.ws.user.base_id.as_deref(), Some("SIMPLE"));
     assert_eq!(app.ws.effective.layout, preset("SIMPLE").unwrap().layout);
-    assert_eq!(store(&app).read_snapshot(CORRUPT_SNAPSHOT).as_deref(), Some("{"));
+    assert_eq!(shared.damaged(), vec![b"{".to_vec()]);
+    assert!(!store(&app).snapshots().contains(&CORRUPT_SNAPSHOT), "the copy is kept beside the snapshots");
     assert_eq!(FALLBACK_MESSAGE, "Workspace could not be read; using SIMPLE. The damaged copy was kept.");
     assert_eq!(app.ws.message.as_deref(), Some(FALLBACK_MESSAGE));
     assert_eq!(app.status.as_ref().map(|(text, _)| text.as_str()), Some(FALLBACK_MESSAGE));
@@ -170,7 +175,7 @@ fn corrupt_store_falls_back_ux15() {
     // The app keeps working, and its next save keeps the damaged copy.
     run(&mut app, "ui.toggle.toolbar", json!({"on": false}));
     app.commit_workspace_now().unwrap();
-    assert_eq!(store(&app).read_snapshot(CORRUPT_SNAPSHOT).as_deref(), Some("{"));
+    assert_eq!(shared.damaged(), vec![b"{".to_vec()]);
     assert!(!standard_toolbar_visible(&current_set(&app).user.unwrap()));
 
     let mut newer = preset("SIMPLE").unwrap();
@@ -180,9 +185,11 @@ fn corrupt_store_falls_back_ux15() {
     assert!(matches!(app.ws.fallback, Some(Fallback::NewerMajor(ref version)) if version == "2.0.0"), "{:?}", app.ws.fallback);
 
     let invalid = json!({"active": "SIMPLE", "user": {"schema_version": "1.0.0", "name": "x".repeat(2000)}}).to_string();
-    let app = attached(MemoryStore { current: Some(invalid.clone()), ..MemoryStore::default() });
+    let shared = Shared::new(MemoryStore { current: Some(invalid.clone()), ..MemoryStore::default() });
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.attach_profile_store(Box::new(shared.clone()));
     assert!(matches!(app.ws.fallback, Some(Fallback::Invalid(_))), "{:?}", app.ws.fallback);
-    assert_eq!(store(&app).read_snapshot(CORRUPT_SNAPSHOT), Some(invalid));
+    assert_eq!(shared.damaged(), vec![invalid.into_bytes()]);
     assert_eq!(app.ws.effective.layout, preset("SIMPLE").unwrap().layout);
 }
 
@@ -487,4 +494,375 @@ fn every_preset_applies_and_reads_back_unchanged() {
         let status = run(&mut app, "ui.workspace.status", json!({}));
         assert_eq!(status["active"], json!(id));
     }
+}
+
+/// A new app over a copy of what `app` stored, with `policy` as the host's policy file.
+fn restarted(app: &CadApp, policy: Option<Value>) -> CadApp {
+    let old = store(app);
+    let snapshot_map = old.snapshots().into_iter().filter_map(|revision| old.read_snapshot(revision).map(|text| (revision, text))).collect();
+    attached(MemoryStore { current: old.read_current(), snapshot_map, policy: policy.map(|policy| policy.to_string()), ..MemoryStore::default() })
+}
+
+fn left_column_holds(app: &CadApp, panel: Panel) -> bool {
+    fn holds(node: &Node<Panel>, panel: Panel) -> bool {
+        match node {
+            Node::Split { first, second, .. } => holds(first, panel) || holds(second, panel),
+            Node::Tabs { panels, .. } => panels.contains(&panel),
+            Node::Stack { entries } => entries.iter().any(|entry| entry.panel == panel),
+        }
+    }
+    match &app.ui.docking.layout.root {
+        Some(Node::Split { first, .. }) => !holds(first, Panel::Canvas) && holds(first, panel),
+        _ => false,
+    }
+}
+
+fn root_size(app: &CadApp) -> SplitSize {
+    match &app.ui.docking.layout.root {
+        Some(Node::Split { size, .. }) => *size,
+        other => panic!("the root is not a split: {other:?}"),
+    }
+}
+
+#[test]
+fn policy_change_reaches_committed_user() {
+    let mut app = attached(MemoryStore::default());
+    run(&mut app, "ui.toggle.statusbar", json!({"on": false}));
+    app.commit_workspace_now().unwrap();
+    // The company later changes two fields; the user changed one of them, and nothing is locked.
+    let policy = json!({"layers": [{"level": "company", "patch": {"command_line": {"lines": 9}, "status_bar": {"visible": true}}}]});
+    let app = restarted(&app, Some(policy));
+    assert!(app.ws.fallback.is_none(), "{:?}", app.ws.fallback);
+    assert_eq!(app.ws.effective.layout.command_line.lines, 9, "the policy change shows through");
+    assert_eq!(app.ui.history_lines, 9);
+    assert!(!app.ws.effective.layout.status_bar.visible, "the user's own change still wins");
+    assert!(!app.ui.show_status_bar);
+}
+
+#[test]
+fn locked_panel_cannot_be_moved_by_dragging() {
+    let policy = json!({"layers": [{"level": "company", "patch": {}, "locks": ["/panels/layers"]}]});
+    let mut app = attached(MemoryStore { policy: Some(policy.to_string()), ..MemoryStore::default() });
+    assert!(!left_column_holds(&app, Panel::Layers));
+    run(&mut app, "ui.dock", json!({"operation": "move", "panel": "layers", "target": "toolSets", "zone": "bottom"}));
+    assert_eq!(app.ws.message.as_deref(), Some("Locked by company policy"));
+    assert!(!left_column_holds(&app, Panel::Layers), "the locked panel goes back");
+    assert!(app.ui.docking.layout.contains(&Panel::Layers));
+    app.commit_workspace_now().unwrap();
+    let app = restarted(&app, Some(policy));
+    assert!(!left_column_holds(&app, Panel::Layers), "and stays back after a restart");
+    assert!(app.ui.docking.layout.contains(&Panel::Layers));
+}
+
+#[test]
+fn session_hidden_panel_not_persisted_via_dock_tree() {
+    let mut app = attached(MemoryStore::default());
+    app.set_session_layer(json!({"panels": [{"id": "layers", "visible": false, "mode": "hidden"}]}));
+    assert!(!app.ui.docking.layout.contains(&Panel::Layers));
+    run(&mut app, "ui.dock", json!({"operation": "move", "panel": "properties", "target": "toolSets", "zone": "bottom"}));
+    assert!(left_column_holds(&app, Panel::Properties), "the user's own move is kept");
+    assert!(!app.ui.docking.layout.contains(&Panel::Layers), "the session layer still hides the panel");
+    app.commit_workspace_now().unwrap();
+    let app = restarted(&app, None);
+    assert!(app.ui.docking.layout.contains(&Panel::Layers), "the session's hidden panel was not stored");
+    assert!(left_column_holds(&app, Panel::Properties));
+}
+
+#[test]
+fn session_layer_hides_a_panel_the_users_dock_tree_shows() {
+    let mut app = attached(MemoryStore::default());
+    run(&mut app, "ui.dock", json!({"operation": "move", "panel": "properties", "target": "toolSets", "zone": "bottom"}));
+    assert!(app.ws.user.layout.dock_tree.is_some());
+    app.set_session_layer(json!({"panels": [{"id": "layers", "visible": false, "mode": "hidden"}]}));
+    assert!(!app.ui.docking.layout.contains(&Panel::Layers));
+}
+
+#[test]
+fn dock_sizes_are_stored_as_fractions_of_the_window() {
+    let small = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0));
+    let large = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(2560.0, 1600.0));
+    let mut app = attached(MemoryStore::default());
+    app.ws.area = small;
+    app.apply_workspace();
+    run(&mut app, "ui.dock", json!({"operation": "resizeSplit", "path": [], "size": {"FixedFirst": 256.0}}));
+    app.commit_workspace_now().unwrap();
+    assert_eq!(root_size(&app), SplitSize::FixedFirst(256.0));
+    app.ws.area = large;
+    app.apply_workspace();
+    assert_eq!(root_size(&app), SplitSize::FixedFirst(512.0), "the column keeps its share of a larger window");
+    let mut app = restarted(&app, None);
+    assert_eq!(root_size(&app), SplitSize::FixedFirst(256.0));
+
+    // A tree written before sizes were fractions keeps its points.
+    let mut legacy = cadcraft_ui_egui::docking::Workspace::default();
+    legacy.layout.root = app.ui.docking.layout.root.clone();
+    if let Some(Node::Split { size, .. }) = &mut legacy.layout.root {
+        *size = SplitSize::FixedFirst(300.0);
+    }
+    let mut tree = serde_json::to_value(&legacy).unwrap();
+    tree["rects"] = json!("ratio");
+    let mut layout = app.ws.user.layout.clone();
+    layout.dock_tree = Some(tree);
+    cadcraft_ui_egui::wsprofile::apply::apply(&mut app, &layout, large);
+    assert_eq!(root_size(&app), SplitSize::FixedFirst(300.0));
+}
+
+#[test]
+fn set_value_cannot_brick_restart() {
+    let mut app = attached(MemoryStore::default());
+    run(&mut app, "ui.workspace.set", json!({"pointer": "/aliases/ln", "value": "line"}));
+    app.commit_workspace_now().unwrap();
+    let deep = (0..40).map(|level| format!("/n{level}")).collect::<String>();
+    for (pointer, value) in [("/aliases/mytoken", json!("line")), ("/aliases/long", json!("x".repeat(2000))), (deep.as_str(), json!(1))] {
+        assert!(app.run("ui.workspace.set", json!({"pointer": pointer, "value": value})).is_err(), "{pointer} was accepted");
+    }
+    assert!(app.ws.user.layout.aliases.keys().all(|key| key == "ln"));
+    // Whatever puts it there, a profile startup would refuse is never written.
+    app.ws.user.layout.aliases.insert("apiKey".into(), "line".into());
+    let saved = store(&app).read_current();
+    assert!(app.commit_workspace_now().is_err());
+    assert!(matches!(app.ws.status, SaveStatus::Failed(_)), "{:?}", app.ws.status);
+    assert_eq!(store(&app).read_current(), saved);
+
+    let app = restarted(&app, None);
+    assert!(app.ws.fallback.is_none(), "{:?}", app.ws.fallback);
+    assert_eq!(app.ws.user.layout.aliases.get("ln").map(String::as_str), Some("line"));
+}
+
+/// Snapshots can be refused while the current set can still be written.
+struct SnapshotsRefused {
+    inner: MemoryStore,
+    refuse: std::rc::Rc<std::cell::Cell<bool>>,
+}
+
+impl ProfileStore for SnapshotsRefused {
+    fn read_current(&self) -> Option<String> {
+        self.inner.read_current()
+    }
+    fn write_current(&mut self, json: &str) -> Result<(), String> {
+        self.inner.write_current(json)
+    }
+    fn push_snapshot(&mut self, revision: u64, json: &str) -> Result<(), String> {
+        if self.refuse.get() {
+            return Err("snapshots are refused".into());
+        }
+        self.inner.push_snapshot(revision, json)
+    }
+    fn snapshots(&self) -> Vec<u64> {
+        self.inner.snapshots()
+    }
+    fn read_snapshot(&self, revision: u64) -> Option<String> {
+        self.inner.read_snapshot(revision)
+    }
+}
+
+#[test]
+fn a_damaged_set_that_was_not_kept_is_not_overwritten() {
+    let refuse = std::rc::Rc::new(std::cell::Cell::new(true));
+    let damaged = SnapshotsRefused { inner: MemoryStore { current: Some("{".into()), ..MemoryStore::default() }, refuse: refuse.clone() };
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.attach_profile_store(Box::new(damaged));
+    assert!(matches!(app.ws.fallback, Some(Fallback::Corrupt(_))));
+    let message = app.ws.message.clone().unwrap_or_default();
+    assert_ne!(message, FALLBACK_MESSAGE, "the damaged copy was not kept, so the message must not say so");
+    assert!(message.contains("could not be kept"), "{message}");
+    run(&mut app, "ui.toggle.toolbar", json!({"on": false}));
+    assert!(app.commit_workspace_now().is_err());
+    assert_eq!(store(&app).read_current().as_deref(), Some("{"), "the only copy is not overwritten");
+    refuse.set(false);
+    app.commit_workspace_now().unwrap();
+    assert_eq!(store(&app).read_snapshot(CORRUPT_SNAPSHOT).as_deref(), Some("{"));
+    assert!(!standard_toolbar_visible(&current_set(&app).user.unwrap()));
+}
+
+#[test]
+fn an_unreadable_policy_is_reported() {
+    for policy in ["not json", r#"{"layers": 5}"#, r#"{"layers": [{"level": "user", "patch": {}}]}"#] {
+        let app = attached(MemoryStore { policy: Some(policy.into()), ..MemoryStore::default() });
+        let message = app.ws.message.clone().unwrap_or_default();
+        assert!(message.contains("policy"), "{policy}: {message:?}");
+    }
+    let app = attached(MemoryStore { policy: Some(json!({"layers": []}).to_string()), ..MemoryStore::default() });
+    assert!(app.ws.message.is_none());
+}
+
+#[test]
+fn restore_keeps_profiles_saved_since() {
+    let mut app = attached(MemoryStore::default());
+    let first = run(&mut app, "ui.workspace.saveas", json!({"name": "First"}))["profile_id"].as_str().unwrap().to_string();
+    let revision = app.ws.user.revision;
+    let second = run(&mut app, "ui.workspace.saveas", json!({"name": "Second"}))["profile_id"].as_str().unwrap().to_string();
+    run(&mut app, "ui.workspace.restore", json!({"revision": revision}));
+    let ids: Vec<&str> = app.ws.profiles.iter().map(|profile| profile.profile_id.as_str()).collect();
+    assert!(ids.contains(&first.as_str()) && ids.contains(&second.as_str()), "{ids:?}");
+    assert_eq!(current_set(&app).profiles.len(), 2);
+}
+
+fn frame_with(app: &mut CadApp, ctx: &egui::Context, time: f64, events: Vec<egui::Event>) {
+    let raw = egui::RawInput { time: Some(time), events, ..Default::default() };
+    let mut out = ctx.run_ui(raw, |ui| app.logic(ui.ctx()));
+    out.textures_delta.clear();
+}
+
+#[test]
+fn a_drag_is_one_undo_step_and_is_saved_on_release() {
+    let mut app = attached(MemoryStore::default());
+    let ctx = egui::Context::default();
+    frame(&mut app, &ctx, 1.0);
+    let at = egui::pos2(600.0, 400.0);
+    let button =
+        |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::default() };
+    frame_with(&mut app, &ctx, 1.1, vec![egui::Event::PointerMoved(at), button(true)]);
+    for (step, time) in [(240.0, 1.15), (260.0, 1.2), (280.0, 1.25)] {
+        if let Some(Node::Split { size, .. }) = &mut app.ui.docking.layout.root {
+            *size = SplitSize::FixedFirst(step);
+        }
+        frame_with(&mut app, &ctx, time, vec![]);
+    }
+    assert!(store(&app).read_current().is_none(), "nothing is saved mid-drag");
+    frame_with(&mut app, &ctx, 1.3, vec![button(false)]);
+    assert_eq!(app.ws.history.undo_len(), 1, "the whole drag is one layout undo step");
+    assert!(store(&app).read_current().is_some(), "the release saves at once, without the debounce");
+    assert_eq!(app.ws.status, SaveStatus::SavedLocally);
+}
+
+/// A `MemoryStore` the test can still look into after the app took it.
+#[derive(Clone)]
+struct Shared(std::rc::Rc<std::cell::RefCell<MemoryStore>>);
+
+impl Shared {
+    fn new(store: MemoryStore) -> Self {
+        Self(std::rc::Rc::new(std::cell::RefCell::new(store)))
+    }
+
+    fn damaged(&self) -> Vec<Vec<u8>> {
+        self.0.borrow().damaged.values().cloned().collect()
+    }
+}
+
+impl ProfileStore for Shared {
+    fn read_current(&self) -> Option<String> {
+        self.0.borrow().read_current()
+    }
+    fn write_current(&mut self, json: &str) -> Result<(), String> {
+        self.0.borrow_mut().write_current(json)
+    }
+    fn push_snapshot(&mut self, revision: u64, json: &str) -> Result<(), String> {
+        self.0.borrow_mut().push_snapshot(revision, json)
+    }
+    fn snapshots(&self) -> Vec<u64> {
+        self.0.borrow().snapshots()
+    }
+    fn read_snapshot(&self, revision: u64) -> Option<String> {
+        self.0.borrow().read_snapshot(revision)
+    }
+    fn read_policy(&self) -> Option<String> {
+        self.0.borrow().read_policy()
+    }
+    fn keep_damaged(&mut self, raw: &[u8]) -> Result<String, String> {
+        self.0.borrow_mut().keep_damaged(raw)
+    }
+}
+
+#[test]
+fn view_toggles_survive_restart() {
+    let mut app = attached(MemoryStore::default());
+    assert!(app.ui.show_viewcube && app.ui.show_ucs_icon);
+    run(&mut app, "ui.toggle.viewcube", json!({"on": false}));
+    run(&mut app, "ui.toggle.ucsicon", json!({"on": false}));
+    app.ui.show_layer_list = true;
+    app.commit_workspace_now().unwrap();
+    let view = &current_set(&app).user.unwrap().layout.view;
+    assert!(!view.viewcube && !view.ucs_icon && view.layer_list);
+    let app = restarted(&app, None);
+    assert!(!app.ui.show_viewcube, "the viewcube stays hidden");
+    assert!(!app.ui.show_ucs_icon, "the UCS icon stays hidden");
+    assert!(app.ui.show_layer_list);
+    assert!(app.ui.show_file_tabs && app.ui.properties_all, "untouched switches keep their defaults");
+
+    // A policy lock covers the view switches like any other field.
+    let policy = json!({"layers": [{"level": "company", "patch": {"view": {"viewcube": true}}, "locks": ["/view/viewcube"]}]});
+    let mut app = restarted(&app, Some(policy));
+    assert!(app.ui.show_viewcube);
+    run(&mut app, "ui.toggle.viewcube", json!({"on": false}));
+    assert!(app.ui.show_viewcube, "the locked switch is turned back");
+    assert!(!app.ui.show_ucs_icon);
+}
+
+/// Fails the next `failures` writes, then stores normally.
+struct Flaky {
+    inner: MemoryStore,
+    failures: u32,
+}
+
+impl Flaky {
+    fn fail(&mut self) -> Result<(), String> {
+        if self.failures > 0 {
+            self.failures -= 1;
+            return Err("storage is busy".into());
+        }
+        Ok(())
+    }
+}
+
+impl ProfileStore for Flaky {
+    fn read_current(&self) -> Option<String> {
+        self.inner.read_current()
+    }
+    fn write_current(&mut self, json: &str) -> Result<(), String> {
+        self.fail()?;
+        self.inner.write_current(json)
+    }
+    fn push_snapshot(&mut self, revision: u64, json: &str) -> Result<(), String> {
+        self.inner.push_snapshot(revision, json)
+    }
+    fn snapshots(&self) -> Vec<u64> {
+        self.inner.snapshots()
+    }
+    fn read_snapshot(&self, revision: u64) -> Option<String> {
+        self.inner.read_snapshot(revision)
+    }
+}
+
+#[test]
+fn failed_commit_is_retried() {
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.attach_profile_store(Box::new(Flaky { inner: MemoryStore::default(), failures: 1 }));
+    let ctx = egui::Context::default();
+    frame(&mut app, &ctx, 1.0);
+    assert!(!app.ws.needs_flush());
+    run(&mut app, "ui.toggle.toolbar", json!({"on": false}));
+    assert!(app.ws.needs_flush());
+    frame(&mut app, &ctx, 2.0);
+    assert!(matches!(app.ws.status, SaveStatus::Failed(_)), "{:?}", app.ws.status);
+    assert!(app.ws.needs_flush(), "the change is still only in memory");
+    assert!(app.ws.autosave.pending(), "another attempt is armed");
+    frame(&mut app, &ctx, 4.0);
+    assert!(matches!(app.ws.status, SaveStatus::Failed(_)), "the retry waits");
+    frame(&mut app, &ctx, 7.5);
+    assert_eq!(app.ws.status, SaveStatus::SavedLocally);
+    assert!(!app.ws.needs_flush());
+    assert!(!standard_toolbar_visible(&current_set(&app).user.unwrap()));
+}
+
+#[test]
+fn second_damaged_start_keeps_both_copies() {
+    let shared = Shared::new(MemoryStore { current: Some("{".into()), ..MemoryStore::default() });
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.attach_profile_store(Box::new(shared.clone()));
+    assert_eq!(app.ws.message.as_deref(), Some(FALLBACK_MESSAGE));
+    drop(app);
+    // Damaged again, differently, before anything was committed.
+    shared.0.borrow_mut().current = Some("[1".into());
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.attach_profile_store(Box::new(shared.clone()));
+    assert!(matches!(app.ws.fallback, Some(Fallback::Corrupt(_))));
+    run(&mut app, "ui.toggle.toolbar", json!({"on": false}));
+    app.commit_workspace_now().unwrap();
+    let mut kept = shared.damaged();
+    kept.sort();
+    assert_eq!(kept, vec![b"[1".to_vec(), b"{".to_vec()], "neither damaged copy replaced the other");
+    assert!(!store(&app).snapshots().contains(&CORRUPT_SNAPSHOT));
+    // The same damage seen twice is kept once.
+    assert_eq!(shared.0.borrow_mut().keep_damaged(b"{"), Ok("damaged-1".to_string()));
 }

@@ -210,6 +210,30 @@ fn apply_legacy_field(layout: &mut WorkspaceLayout, key: &str, value: &Value) ->
             layout.command_line.visible = *visible;
             true
         }
+        ("showFileTabs", Value::Bool(on)) => {
+            layout.view.file_tabs = *on;
+            true
+        }
+        ("showViewcube", Value::Bool(on)) => {
+            layout.view.viewcube = *on;
+            true
+        }
+        ("showUcsIcon", Value::Bool(on)) => {
+            layout.view.ucs_icon = *on;
+            true
+        }
+        ("showLayerList", Value::Bool(on)) => {
+            layout.view.layer_list = *on;
+            true
+        }
+        ("propertiesAll", Value::Bool(on)) => {
+            layout.view.properties_all = *on;
+            true
+        }
+        ("inWindowMenu", Value::Bool(on)) => {
+            layout.view.in_window_menu = *on;
+            true
+        }
         ("historyLines", Value::Number(lines)) => match lines.as_u64().filter(|lines| *lines <= MAX_HISTORY_LINES) {
             Some(lines) => {
                 layout.command_line.lines = lines as u32;
