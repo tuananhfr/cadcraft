@@ -8,7 +8,168 @@
 pub(crate) const CAP: f64 = 6.0;
 pub(crate) const GAP: f64 = 1.6;
 
-pub(crate) fn glyph(c: char) -> Option<(f64, &'static str)> {
+/// A glyph: its advance width and up to three parts (a letter, then Vietnamese marks).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Glyph {
+    pub(crate) width: f64,
+    parts: [Part; 3],
+}
+
+/// Strokes in this font's notation, scaled and then moved by (`dx`, `dy`) font units.
+#[derive(Clone, Copy, Debug, Default)]
+struct Part {
+    spec: &'static str,
+    dx: f64,
+    dy: f64,
+    scale: f64,
+}
+
+impl Glyph {
+    fn plain(width: f64, spec: &'static str) -> Glyph {
+        Glyph { width, parts: [Part { spec, dx: 0.0, dy: 0.0, scale: 1.0 }, Part::default(), Part::default()] }
+    }
+
+    /// Its strokes in font units.
+    pub(crate) fn strokes(&self) -> impl Iterator<Item = Vec<(f64, f64)>> + '_ {
+        self.parts
+            .iter()
+            .filter(|p| !p.spec.is_empty())
+            .flat_map(|p| strokes(p.spec).into_iter().map(move |st| st.into_iter().map(|(x, y)| (p.dx + x * p.scale, p.dy + y * p.scale)).collect()))
+    }
+}
+
+pub(crate) fn glyph(c: char) -> Option<Glyph> {
+    match base(c) {
+        Some((w, spec)) => Some(Glyph::plain(w, spec)),
+        None => vietnamese(c),
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Mark {
+    Grave,
+    Acute,
+    Hook,
+    Tilde,
+    DotBelow,
+    Circumflex,
+    Breve,
+    Horn,
+}
+
+/// The base letters of Vietnamese and their five tones: grave, acute, hook above, tilde, dot below.
+pub(crate) const TONES: [(char, &str); 24] = [
+    ('a', "àáảãạ"),
+    ('ă', "ằắẳẵặ"),
+    ('â', "ầấẩẫậ"),
+    ('e', "èéẻẽẹ"),
+    ('ê', "ềếểễệ"),
+    ('i', "ìíỉĩị"),
+    ('o', "òóỏõọ"),
+    ('ô', "ồốổỗộ"),
+    ('ơ', "ờớởỡợ"),
+    ('u', "ùúủũụ"),
+    ('ư', "ừứửữự"),
+    ('y', "ỳýỷỹỵ"),
+    ('A', "ÀÁẢÃẠ"),
+    ('Ă', "ẰẮẲẴẶ"),
+    ('Â', "ẦẤẨẪẬ"),
+    ('E', "ÈÉẺẼẸ"),
+    ('Ê', "ỀẾỂỄỆ"),
+    ('I', "ÌÍỈĨỊ"),
+    ('O', "ÒÓỎÕỌ"),
+    ('Ô', "ỒỐỔỖỘ"),
+    ('Ơ', "ỜỚỞỠỢ"),
+    ('U', "ÙÚỦŨỤ"),
+    ('Ư', "ỪỨỬỮỰ"),
+    ('Y', "ỲÝỶỸỴ"),
+];
+const TONE_MARKS: [Mark; 5] = [Mark::Grave, Mark::Acute, Mark::Hook, Mark::Tilde, Mark::DotBelow];
+
+/// A mark drawn 4 units wide at half size, so 2 font units wide, from y = 0 up.
+fn mark_spec(m: Mark) -> &'static str {
+    match m {
+        Mark::Grave => "1f3c",
+        Mark::Acute => "1c3f",
+        Mark::Hook => "1e2f3e2d2c",
+        Mark::Tilde => "0d1e3d4e",
+        Mark::DotBelow => "2c2e",
+        Mark::Circumflex => "0c2e4c",
+        Mark::Breve => "0e1c3c4e",
+        Mark::Horn => "",
+    }
+}
+
+/// Vietnamese letters, built from a letter and its marks.
+fn vietnamese(c: char) -> Option<Glyph> {
+    let bar = |letter: char, spec: &'static str, dx: f64| {
+        let (w, s) = base(letter)?;
+        let mut g = Glyph::plain(w, s);
+        g.parts[1] = Part { spec, dx, dy: 0.0, scale: 1.0 };
+        Some(g)
+    };
+    match c {
+        'Đ' => return bar('D', "0f2f", -0.8),
+        'đ' => return bar('d', "3h5h", 0.0),
+        _ => {}
+    }
+    let (letter, tone) = TONES
+        .iter()
+        .find_map(|(b, row)| if *b == c { Some((*b, None)) } else { row.chars().position(|t| t == c).map(|i| (*b, TONE_MARKS.get(i).copied())) })?;
+    let (plain, modifier) = match letter {
+        'ă' => ('a', Some(Mark::Breve)),
+        'â' => ('a', Some(Mark::Circumflex)),
+        'ê' => ('e', Some(Mark::Circumflex)),
+        'ô' => ('o', Some(Mark::Circumflex)),
+        'ơ' => ('o', Some(Mark::Horn)),
+        'ư' => ('u', Some(Mark::Horn)),
+        'Ă' => ('A', Some(Mark::Breve)),
+        'Â' => ('A', Some(Mark::Circumflex)),
+        'Ê' => ('E', Some(Mark::Circumflex)),
+        'Ô' => ('O', Some(Mark::Circumflex)),
+        'Ơ' => ('O', Some(Mark::Horn)),
+        'Ư' => ('U', Some(Mark::Horn)),
+        other => (other, None),
+    };
+    let upper = plain.is_ascii_uppercase();
+    // A mark replaces the dot of i.
+    let (w, spec) = if plain == 'i' { (1.0, "0c0g") } else { base(plain)? };
+    let mut g = Glyph::plain(w, spec);
+    let mark = |m: Mark, dx: f64, dy: f64| Part { spec: mark_spec(m), dx: (w - 2.0) / 2.0 + dx, dy, scale: 0.5 };
+    let mut y = if upper { 6.6 } else { 4.6 };
+    let mut tone_dx = 0.0;
+    match modifier {
+        Some(Mark::Horn) => {
+            let horn = match plain {
+                'o' => "3g5h",
+                'u' => "4g5h",
+                'O' => "3i5j",
+                _ => "4i5j",
+            };
+            g.parts[1] = Part { spec: horn, dx: 0.0, dy: 0.0, scale: 1.0 };
+            g.width = w + 1.0;
+        }
+        // The tone sits beside a circumflex (ấ) and above a breve (ắ).
+        Some(Mark::Circumflex) => {
+            g.parts[1] = mark(Mark::Circumflex, 0.0, y);
+            tone_dx = 1.4;
+            y += 0.5;
+        }
+        Some(m) => {
+            g.parts[1] = mark(m, 0.0, y);
+            y += 1.3;
+        }
+        None => {}
+    }
+    match tone {
+        Some(Mark::DotBelow) => g.parts[2] = mark(Mark::DotBelow, 0.0, -1.4),
+        Some(t) => g.parts[2] = mark(t, tone_dx, y),
+        None => {}
+    }
+    Some(g)
+}
+
+fn base(c: char) -> Option<(f64, &'static str)> {
     let g: (f64, &str) = match c {
         ' ' => (2.4, ""),
         'A' => (4.0, "0c2i4c 1f3f"),

@@ -1361,11 +1361,11 @@ fn annotative(tags: &[Tag]) -> bool {
 /// style's `ACAD` xdata (`1000` typeface) when it has no font file (how AutoCAD stores TrueType
 /// styles); otherwise the file.
 fn style_font(tags: &[Tag], file: String) -> String {
-    if file.trim().is_empty()
-        && let Some(face) =
-            crate::dxf_ext::xdata(tags, "ACAD").iter().find(|t| t.code == 1000).map(|t| t.str().trim().to_string()).filter(|f| !f.is_empty())
-    {
-        return face;
+    if file.trim().is_empty() {
+        let face = style_family(tags);
+        if !face.is_empty() {
+            return face;
+        }
     }
     let x = crate::dxf_ext::xdata(tags, crate::dxf_ext::APP);
     let own = x.windows(2).find_map(|w| match w {
@@ -1377,6 +1377,11 @@ fn style_font(tags: &[Tag], file: String) -> String {
         Some(name) if !name.trim().is_empty() && (stem == "txt" || stem == "txt.shx") => name,
         _ => file,
     }
+}
+
+/// The TrueType family of a style's `ACAD` xdata (`1000` typeface), or "".
+fn style_family(tags: &[Tag]) -> String {
+    crate::dxf_ext::xdata(tags, "ACAD").iter().find(|t| t.code == 1000).map(|t| t.str().trim().to_string()).unwrap_or_default()
 }
 
 fn tables(tags: &[Tag], d: &mut Drawing, rx: &mut Rx) {
@@ -1475,6 +1480,7 @@ fn tables(tags: &[Tag], d: &mut Drawing, rx: &mut Rx) {
                 let st = TextStyle {
                     name: name.clone(),
                     font: style_font(&tg, t.s(3).unwrap_or_default()),
+                    family: style_family(&tg),
                     big_font: t.s(4).unwrap_or_default(),
                     height: t.fd(40, 0.0),
                     width_factor: t.fd(41, 1.0),

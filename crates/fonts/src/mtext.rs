@@ -118,7 +118,7 @@ impl MTextParams {
             rotation: 0.0,
             line_spacing: 1.0,
             line_spacing_exact: false,
-            font: TextFont::Stroke,
+            font: TextFont::STROKE,
             width_factor: 1.0,
             oblique: 0.0,
             columns: None,
@@ -219,7 +219,7 @@ fn font_switch(a: &str) -> Option<TextFont> {
     if let Some(st) = style {
         for cand in [format!("{name} {st}"), format!("{name}-{}", st.replace(' ', "")), format!("{name}{}", if bold { "bd" } else { "i" })] {
             if let Some(f) = crate::ttf::find(&cand) {
-                return Some(TextFont::Outline(f));
+                return Some(TextFont::outline(f));
             }
         }
     }
@@ -251,7 +251,7 @@ fn parse(contents: &str, base: Fmt) -> (Vec<Atom>, Vec<Fmt>) {
     // Derive a new format from the current one.
     let derive = |fmts: &mut Vec<Fmt>, cur: &mut usize, f: &dyn Fn(&mut Fmt)| {
         let mut n = fmts.get(*cur).cloned().unwrap_or(Fmt {
-            font: TextFont::Stroke,
+            font: TextFont::STROKE,
             height: 1.0,
             color: None,
             under: false,

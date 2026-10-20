@@ -15,12 +15,17 @@
 
 pub mod bidi;
 mod complex;
+mod legacy_vi;
 mod mtext;
 mod stroke;
 pub mod subset;
 pub mod ttf;
 
+use std::borrow::Cow;
+
 use cadcraft_geom::{Bounds2, Vec2};
+
+pub use legacy_vi::LegacyVi;
 
 pub use mtext::para::{DEFAULT_TAB, ListStyle, MTextColumnSpec, ParaAlign, ParaProps, Paragraphs, TabKind, list_contents};
 pub use mtext::{MTextColor, MTextLayout, MTextParams, MTextPiece, layout_mtext, layout_mtext_with, plain_mtext};
@@ -83,7 +88,7 @@ pub fn decode_controls(s: &str) -> Vec<(char, bool, bool)> {
 /// Advance width of one character at height 1 and width factor 1.
 pub fn char_advance(c: char) -> f64 {
     match stroke::glyph(c) {
-        Some((w, _)) => (w + stroke::GAP) / stroke::CAP,
+        Some(g) => (g.width + stroke::GAP) / stroke::CAP,
         None if c.is_whitespace() => (2.4 + stroke::GAP) / stroke::CAP,
         None => (4.0 + stroke::GAP) / stroke::CAP,
     }
@@ -165,7 +170,7 @@ pub fn shape_stroke(s: &str, height: f64, width_factor: f64, oblique: f64) -> Sh
         let mut adv = char_advance(c) * h * wf;
         gap = stroke::GAP * sc * wf;
         match stroke::glyph(c) {
-            Some((_, spec)) => draw_stroke_glyph(&mut out, spec, x, sc, wf, shear),
+            Some(g) => draw_stroke_glyph(&mut out, &g, x, sc, wf, shear),
             None if !c.is_whitespace() => match ttf::fallback_glyph(c) {
                 Some(g) => {
                     let (y, scale) = stroke_fallback_metrics(&g, c, h);
@@ -212,9 +217,9 @@ pub fn shape_stroke(s: &str, height: f64, width_factor: f64, oblique: f64) -> Sh
     out
 }
 
-/// Draw stroke-font glyph `spec` with its left edge at `x` (`sc` = text height / cap height).
-fn draw_stroke_glyph(out: &mut Shaped, spec: &str, x: f64, sc: f64, wf: f64, shear: f64) {
-    for st in stroke::strokes(spec) {
+/// Draw stroke-font glyph `g` with its left edge at `x` (`sc` = text height / cap height).
+fn draw_stroke_glyph(out: &mut Shaped, g: &stroke::Glyph, x: f64, sc: f64, wf: f64, shear: f64) {
+    for st in g.strokes() {
         let pts: Vec<Vec2> = st.iter().map(|(gx, gy)| Vec2::new(x + (gx * sc * wf) + gy * sc * shear, gy * sc)).collect();
         if pts.len() == 1 {
             if let Some(p) = pts.first() {
@@ -263,7 +268,7 @@ pub fn line_width(s: &str, height: f64, width_factor: f64) -> f64 {
 /// Width of the gap MTEXT leaves between two words. Words are measured without their trailing
 /// letter gap, so the stroke font's gap is added on both sides of the space, as TEXT lays it out.
 pub fn space_width(font: &TextFont, height: f64, width_factor: f64) -> f64 {
-    if let TextFont::Outline(face) = font
+    if let Some(face) = font.face()
         && let Some(w) = ttf::width(face, " ", height, width_factor)
     {
         return w;
@@ -274,28 +279,50 @@ pub fn space_width(font: &TextFont, height: f64, width_factor: f64) -> f64 {
 /// The font a piece of text is set in: the built-in stroke font or an installed TrueType /
 /// OpenType face (outlines). Either way, characters the font lacks come from a fallback font.
 #[derive(Clone, Debug, Default)]
-pub enum TextFont {
-    #[default]
-    Stroke,
-    Outline(ttf::Face),
+pub struct TextFont {
+    /// `None`: the stroke font.
+    face: Option<ttf::Face>,
+    /// The text was typed for a legacy Vietnamese font that isn't here: shown decoded.
+    legacy: Option<LegacyVi>,
 }
 
 impl TextFont {
+    pub const STROKE: TextFont = TextFont { face: None, legacy: None };
+
+    pub fn outline(face: ttf::Face) -> TextFont {
+        TextFont { face: Some(face), legacy: None }
+    }
     /// Resolve a text style font name: an installed TTF/OTF/TTC when found; else, for a font we
     /// can't find (an SHX file, a missing TTF), the FONTALT font ([`ttf::font_alt`]) when set;
     /// else the stroke font.
     pub fn resolve(name: &str) -> TextFont {
-        if let Some(f) = ttf::find(name) {
-            return TextFont::Outline(f);
+        TextFont::for_style(name, "")
+    }
+    /// [`TextFont::resolve`] for a style's font file and its TrueType `family` (`ACAD` xdata),
+    /// tried when the file isn't installed. When neither is, text typed for a legacy Vietnamese
+    /// font the names point to is shown decoded to Unicode.
+    pub fn for_style(font: &str, family: &str) -> TextFont {
+        let family = family.trim();
+        if let Some(f) = ttf::find(font).or_else(|| if family.is_empty() { None } else { ttf::find(family) }) {
+            return TextFont::outline(f);
         }
-        let n = name.trim();
-        if n.is_empty() || n.eq_ignore_ascii_case(BUILTIN_FONT) {
-            return TextFont::Stroke;
-        }
-        ttf::find(&ttf::font_alt()).map(TextFont::Outline).unwrap_or(TextFont::Stroke)
+        let legacy = LegacyVi::from_name(family).or_else(|| LegacyVi::from_name(font));
+        let n = font.trim();
+        let face = if n.is_empty() || n.eq_ignore_ascii_case(BUILTIN_FONT) { None } else { ttf::find(&ttf::font_alt()) };
+        TextFont { face, legacy }
     }
     pub fn is_outline(&self) -> bool {
-        matches!(self, TextFont::Outline(_))
+        self.face.is_some()
+    }
+    pub fn face(&self) -> Option<&ttf::Face> {
+        self.face.as_ref()
+    }
+    /// `s` as the font shows it.
+    fn text<'a>(&self, s: &'a str) -> Cow<'a, str> {
+        match self.legacy {
+            Some(l) => l.decode(s),
+            None => Cow::Borrowed(s),
+        }
     }
 }
 
@@ -410,22 +437,24 @@ pub(crate) fn decorations(spans: &[(f64, f64, bool, bool)], h: f64) -> Vec<Vec<V
 /// Shape one line in `font` (baseline at y = 0, x from 0). TrueType fonts that fail to parse
 /// fall back to the stroke font.
 pub fn shape_line(font: &TextFont, s: &str, height: f64, width_factor: f64, oblique: f64) -> Shaped {
-    if let TextFont::Outline(face) = font
-        && let Some(sh) = ttf::shape(face, s, height, width_factor, oblique)
+    let s = font.text(s);
+    if let Some(face) = font.face()
+        && let Some(sh) = ttf::shape(face, &s, height, width_factor, oblique)
     {
         return sh;
     }
-    shape_stroke(s, height, width_factor, oblique)
+    shape_stroke(&s, height, width_factor, oblique)
 }
 
 /// Width of one line in `font`.
 pub fn text_width(font: &TextFont, s: &str, height: f64, width_factor: f64) -> f64 {
-    if let TextFont::Outline(face) = font
-        && let Some(w) = ttf::width(face, s, height, width_factor)
+    let s = font.text(s);
+    if let Some(face) = font.face()
+        && let Some(w) = ttf::width(face, &s, height, width_factor)
     {
         return w;
     }
-    line_width(s, height, width_factor)
+    line_width(&s, height, width_factor)
 }
 
 /// Horizontal / vertical alignment for single-line text (matches DXF 72/73 semantics).
@@ -560,7 +589,7 @@ pub fn place_text(
     v: VAlign,
 ) -> (Vec<Vec<Vec2>>, Bounds2) {
     let p = TextParams { insert, align_pt, height, rotation, width_factor, oblique, h, v, backwards: false, upside_down: false };
-    let (sh, bb) = place(&TextFont::Stroke, s, &p);
+    let (sh, bb) = place(&TextFont::STROKE, s, &p);
     (sh.strokes, bb)
 }
 
@@ -578,14 +607,48 @@ mod tests {
     #[test]
     fn glyph_points_stay_in_grid() {
         for c in ' '..='~' {
-            let (w, spec) = stroke::glyph(c).unwrap();
-            for st in stroke::strokes(spec) {
+            let g = stroke::glyph(c).unwrap();
+            for st in g.strokes() {
                 for (x, y) in st {
-                    assert!(x >= 0.0 && x <= w, "{c:?} x={x} w={w}");
+                    assert!(x >= 0.0 && x <= g.width, "{c:?} x={x} w={}", g.width);
                     assert!((-2.0..=6.0).contains(&y), "{c:?} y={y}");
                 }
             }
         }
+    }
+
+    const VIETNAMESE: &str = "aàáảãạăằắẳẵặâầấẩẫậeèéẻẽẹêềếểễệiìíỉĩịoòóỏõọôồốổỗộơờớởỡợuùúủũụưừứửữựyỳýỷỹỵđ\
+                              AÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬEÈÉẺẼẸÊỀẾỂỄỆIÌÍỈĨỊOÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢUÙÚỦŨỤƯỪỨỬỮỰYỲÝỶỸỴĐ";
+
+    #[test]
+    fn every_vietnamese_letter_is_drawn_in_strokes() {
+        // The 134 marked letters and the 12 plain vowels.
+        assert_eq!(VIETNAMESE.chars().count(), 146);
+        for c in VIETNAMESE.chars() {
+            let g = stroke::glyph(c);
+            assert!(g.is_some(), "missing glyph {c:?}");
+            let Some(g) = g else { continue };
+            let pts: Vec<(f64, f64)> = g.strokes().flatten().collect();
+            assert!(!pts.is_empty(), "{c:?}");
+            // Marks stay close to the letter: over its width, between the dot below and two
+            // stacked marks over a capital.
+            for (x, y) in pts {
+                assert!(x >= -1.0 && x <= g.width + 1.0, "{c:?} x={x} w={}", g.width);
+                assert!((-2.0..=9.5).contains(&y), "{c:?} y={y}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_marked_letter_is_its_letter_and_its_marks() {
+        let n = |c: char| stroke::glyph(c).map(|g| g.strokes().count()).unwrap_or(0);
+        assert_eq!(n('ặ'), n('a') + 2, "breve and dot below");
+        assert_eq!(n('Ấ'), n('A') + 2, "circumflex and acute");
+        // i loses its dot under a tone mark.
+        assert_eq!(n('í'), 2);
+        assert!(stroke::glyph('ơ').is_some_and(|g| g.width > stroke::glyph('o').map_or(0.0, |o| o.width)), "the horn widens o");
+        // Drawn in strokes now, not from a fallback font.
+        assert!(shape_stroke("MẶT BẰNG", 1.0, 1.0, 0.0).glyphs.is_empty());
     }
 
     #[test]
@@ -618,7 +681,7 @@ mod tests {
         // and every glyph stays inside it.
         for (h, want) in [(Align::Right, 10.0), (Align::Center, 10.0 - 0.5), (Align::Left, 0.0)] {
             let p = TextParams { h, align_pt: Some(Vec2::new(10.0, 0.0)), ..TextParams::new(Vec2::ZERO, 1.0) };
-            let (sh, bb) = place(&TextFont::Stroke, "قیمت 25 تومان", &p);
+            let (sh, bb) = place(&TextFont::STROKE, "قیمت 25 تومان", &p);
             let edge = match h {
                 Align::Right => bb.max.x,
                 Align::Center => bb.center().x - 0.5,
@@ -752,5 +815,42 @@ mod ttf_tests {
         );
         assert!((crate::line_width("\u{4E2D}\u{6587}\u{5B57}\u{4F53}", h, wf) - four.width).abs() < 1e-9);
         assert!(crate::is_wide('\u{3042}') && crate::is_wide('\u{AC00}') && crate::is_wide('\u{FF21}') && !crate::is_wide('A'));
+    }
+}
+
+#[cfg(test)]
+mod legacy_tests {
+    use crate::{MTextParams, TextFont, layout_mtext_with, shape_line};
+    use cadcraft_geom::Vec2;
+
+    fn bytes(b: &[u8]) -> String {
+        b.iter().map(|&b| char::from(b)).collect()
+    }
+
+    #[test]
+    fn text_for_a_missing_tcvn3_font_shows_in_unicode() {
+        let f = TextFont::for_style("VHBLACK.TTF", ".VnBlackH");
+        if f.legacy.is_none() {
+            return; // The font is installed here: it draws the bytes itself.
+        }
+        let unicode = TextFont { legacy: None, ..f.clone() };
+        assert_eq!(shape_line(&f, &bytes(b"M\xc6T TI\xd2N"), 1.0, 1.0, 0.0), shape_line(&unicode, "MẶT TIỀN", 1.0, 1.0, 0.0));
+        // Names that say nothing about an encoding leave the text as stored.
+        assert!(TextFont::for_style("no-such-font-131.ttf", "").legacy.is_none());
+        assert!(TextFont::resolve("").legacy.is_none());
+    }
+
+    #[test]
+    fn an_mtext_font_switch_decodes_only_its_own_run() {
+        let p = MTextParams::new(Vec2::ZERO, 1.0);
+        let stored = layout_mtext_with(&bytes(b"{\\f.VnArialH|b0|i0|c0|p34;m\xb8i} t\xabn"), &p);
+        if TextFont::resolve(".VnArialH").legacy.is_none() {
+            return;
+        }
+        // The switched run is a capital "MÁI"; the base font's run stays as stored. Both forms
+        // of the run come out the same, so the format codes around it were not upper-cased.
+        let unicode = layout_mtext_with(&format!("{{\\f.VnArialH|b0|i0|c0|p34;MÁI}} {}", bytes(b"t\xabn")), &p);
+        assert_eq!(stored.strokes, unicode.strokes);
+        assert!(!stored.strokes.is_empty());
     }
 }

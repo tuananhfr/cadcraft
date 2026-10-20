@@ -113,6 +113,10 @@ pub struct TextStyle {
     pub name: String,
     /// Font file or family name (TTF family or a stroke-font name).
     pub font: String,
+    /// The TrueType family the file names next to the font file (`ACAD` xdata), e.g. `.VnArialH`
+    /// for `VNARIALH.TTF`: it tells which legacy Vietnamese encoding the style's text is in.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub family: String,
     pub big_font: String,
     /// 0 = not fixed.
     pub height: f64,
@@ -129,6 +133,7 @@ impl Default for TextStyle {
         TextStyle {
             name: "Standard".into(),
             font: "CADCraft Stroke".into(),
+            family: String::new(),
             big_font: String::new(),
             height: 0.0,
             width_factor: 1.0,

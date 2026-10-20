@@ -86,7 +86,7 @@ fn shape_chars(primary: Option<&Face>, chars: &[(char, bool, bool)], height: f64
                         let c = cs.get(i).copied().unwrap_or(' ');
                         let c = if rtl { bidi::mirror(c) } else { c };
                         match (&src, stroke::glyph(c)) {
-                            (Src::Stroke, Some((_, spec))) => crate::draw_stroke_glyph(&mut out, spec, x, sc, wf, shear),
+                            (Src::Stroke, Some(g)) => crate::draw_stroke_glyph(&mut out, &g, x, sc, wf, shear),
                             (Src::Missing, _) => crate::missing_glyph_box(&mut out, x, h, sc * wf),
                             _ => {}
                         }

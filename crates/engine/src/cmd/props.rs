@@ -506,7 +506,7 @@ fn style_json(st: &cadcraft_doc::TextStyle, current: &str) -> Value {
         "vertical": st.vertical,
         "annotative": st.annotative,
         "current": st.name.eq_ignore_ascii_case(current),
-        "trueType": cadcraft_fonts::TextFont::resolve(&st.font).is_outline(),
+        "trueType": cadcraft_fonts::TextFont::for_style(&st.font, &st.family).is_outline(),
     })
 }
 

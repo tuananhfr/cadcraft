@@ -1243,6 +1243,7 @@ fn text_style_flags_roundtrip() {
     let st = TextStyle {
         name: "Mirror".into(),
         font: "romans.shx".into(),
+        family: String::new(),
         big_font: "bigfont.shx".into(),
         height: 0.0,
         width_factor: 0.8,
