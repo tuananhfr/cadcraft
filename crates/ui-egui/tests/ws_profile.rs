@@ -12,9 +12,6 @@ use serde_json::{Value, json};
 
 const SPEC_SAMPLE: &str = r#"{"schema_version":"1.0.0","profile_id":"uuid","revision":12,"base_id":"AUTOCAD_FAMILIAR","panels":[{"id":"properties","mode":"dock","side":"right","width_ratio":0.24}],"command_line":{"side":"bottom","height_ratio":0.15},"shortcuts":{"line":"L"}}"#;
 
-/// Dispatched by `run_ui_command` and used by the tool bar, but absent from `UI_COMMANDS`.
-const UNLISTED_UI_COMMANDS: &[&str] = &["ui.toggle.palettes"];
-
 fn parse(value: Value) -> WorkspaceProfile {
     serde_json::from_value(value).unwrap()
 }
@@ -26,7 +23,6 @@ fn has_pointer(issues: &[Issue], pointer: &str) -> bool {
 fn known_commands() -> BTreeSet<String> {
     let mut ids: BTreeSet<String> = command_specs().iter().map(|spec| spec.id.to_string()).collect();
     ids.extend(UI_COMMANDS.iter().map(|command| command.0.to_string()));
-    ids.extend(UNLISTED_UI_COMMANDS.iter().map(|id| id.to_string()));
     ids
 }
 
@@ -166,6 +162,26 @@ fn import_payload_rules_cover_the_whole_list() {
 fn pointers_escape_special_characters() {
     let issues = validate(r#"{"a/b":{"c~d":"x.exe"}}"#, Mode::Import).unwrap_err();
     assert!(has_pointer(&issues, "/a~1b/c~0d"), "{issues:?}");
+}
+
+#[test]
+fn import_checks_object_keys_like_values() {
+    // serde decodes the escape before the key is checked.
+    let issues = validate(r#"{"layout":{"\u0073cript":"x"}}"#, Mode::Import).unwrap_err();
+    assert!(has_pointer(&issues, "/layout/script"), "{issues:?}");
+    let issues = validate(r#"{"layout":{"toolbars":[{"id":"t","meta":{"exec":"x"}}]}}"#, Mode::Import).unwrap_err();
+    assert!(has_pointer(&issues, "/layout/toolbars/0/meta/exec"), "{issues:?}");
+    let cases = [
+        (r#"{"layout":{"aliases":{"go.lsp":"line"}}}"#, "/layout/aliases/go.lsp"),
+        (r#"{"shortcuts":{"C:\\tools\\run":"L"}}"#, "/shortcuts/C:\\tools\\run"),
+        (r#"{"layout":{"aliases":{"/etc/x":"line"}}}"#, "/layout/aliases/~1etc~1x"),
+        (r#"{"x":{"file:a":1}}"#, "/x/file:a"),
+    ];
+    for (raw, pointer) in cases {
+        let issues = validate(raw, Mode::Import).unwrap_err();
+        assert!(has_pointer(&issues, pointer), "{raw}: expected {pointer}, got {issues:?}");
+        assert!(validate(raw, Mode::Local).is_ok(), "{raw} in Local mode");
+    }
 }
 
 #[test]

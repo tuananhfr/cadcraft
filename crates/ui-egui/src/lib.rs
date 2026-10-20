@@ -249,6 +249,8 @@ pub struct CadApp {
     pub hatch_dlg: Option<hatchdlg::HatchDlgState>,
     /// The Edit Block Definition dialog ([`bedit`]).
     pub bedit: bedit::State,
+    /// Workspace profile layers, layout undo and their storage ([`wsprofile`]).
+    pub ws: wsprofile::WsState,
 }
 
 impl CadApp {
@@ -288,6 +290,7 @@ impl CadApp {
             gpu_notice: None,
             hatch_dlg: None,
             bedit: bedit::State::default(),
+            ws: wsprofile::WsState::default(),
         }
     }
 
@@ -596,6 +599,7 @@ impl CadApp {
         managers::plot_window_resume(self, ctx);
         hatchdlg::resume(self);
         self.autosave_tick(ctx);
+        wsprofile::tick(self, ctx);
         menus::shortcuts(self, ctx);
         #[cfg(not(target_arch = "wasm32"))]
         for f in ctx.input(|i| i.raw.dropped_files.clone()) {

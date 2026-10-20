@@ -1328,3 +1328,14 @@
 	Justify	За шириною
 	Text color	Колір тексту
 	Click the ruler to add a tab stop, right-click to remove one	Натисніть на лінійку, щоб додати табуляцію; права кнопка видаляє її
+	Palettes	Палітри
+	Undo Layout Change	Скасувати зміну розташування
+	Redo Layout Change	Повторити зміну розташування
+	Select Workspace	Вибрати робочий простір
+	Reset Workspace	Скинути робочий простір
+	Save Workspace As...	Зберегти робочий простір як...
+	Export Workspace...	Експортувати робочий простір...
+	Import Workspace...	Імпортувати робочий простір...
+	Restore Workspace Revision	Відновити версію робочого простору
+	Workspace Save Status	Стан збереження робочого простору
+	Set Workspace Value	Задати параметр робочого простору

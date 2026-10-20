@@ -20,6 +20,16 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.spacemouse.navigate", "3D Mouse Navigation", &[], None),
     ("ui.dock", "Arrange Panel", &[], None),
     ("ui.dock.reset", "Reset Panel Layout", &["Window", "Reset Panel Layout"], None),
+    ("ui.layout.undo", "Undo Layout Change", &["Window", "Undo Layout Change"], None),
+    ("ui.layout.redo", "Redo Layout Change", &["Window", "Redo Layout Change"], None),
+    ("ui.workspace.select", "Select Workspace", &[], None),
+    ("ui.workspace.reset", "Reset Workspace", &[], None),
+    ("ui.workspace.saveas", "Save Workspace As...", &[], None),
+    ("ui.workspace.export", "Export Workspace...", &[], None),
+    ("ui.workspace.import", "Import Workspace...", &[], None),
+    ("ui.workspace.restore", "Restore Workspace Revision", &[], None),
+    ("ui.workspace.status", "Workspace Save Status", &[], None),
+    ("ui.workspace.set", "Set Workspace Value", &[], None),
     ("ui.open", "Open...", &[], Some("Cmd+O")),
     ("ui.newtemplate", "New from Template...", &["File", "New from Template..."], None),
     ("ui.saveas", "Save As...", &[], None),
@@ -34,6 +44,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.animations.off", "Off", &["View", "Accessibility", "Animation Effects", "Off"], None),
     ("ui.animations", "Animation Effects", &[], None),
     ("ui.toggle.toolbar", "Tool Bar", &["Window", "Tool Bar"], None),
+    ("ui.toggle.palettes", "Palettes", &[], None),
     ("ui.toggle.filetabs", "File Tab", &["Window", "File Tab"], None),
     ("ui.toggle.statusbar", "Status Bar", &["Window", "Status Bar"], None),
     ("ui.toggle.cmdline", "Command Line", &["Window", "Command Line"], Some("Cmd+9")),
@@ -79,10 +90,20 @@ pub fn is_ui_command(id: &str) -> bool {
 
 /// Run a UI-only command. `None` if `id` isn't one.
 pub fn run_ui_command(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
-    crate::i18n::with_language(app.language(), || run_ui_command_inner(app, id, params))
+    // Changes made outside commands (dragging, palette clicks) are folded in first, so the
+    // command's own change becomes one layout undo step.
+    crate::wsprofile::observe(app, true);
+    let result = crate::i18n::with_language(app.language(), || run_ui_command_inner(app, id, params));
+    if result.is_some() {
+        crate::wsprofile::observe(app, true);
+    }
+    result
 }
 
 fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
+    if let Some(result) = crate::wsprofile::commands::route(app, id, params) {
+        return Some(result);
+    }
     if let Some(result) = crate::spacemouse::route(app, id, params) {
         return Some(result);
     }

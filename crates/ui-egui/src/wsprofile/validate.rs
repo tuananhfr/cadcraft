@@ -113,8 +113,18 @@ fn check_key(key: &str, pointer: &str, mode: Mode, issues: &mut Vec<Issue>) {
     if SECRET_KEY_PARTS.iter().any(|part| squashed.contains(part)) {
         issues.push(issue(pointer, format!("secret-like key `{key}` is not stored in a profile")));
     }
-    if mode == Mode::Import && EXECUTABLE_KEYS.contains(&squashed.as_str()) {
+    if mode != Mode::Import {
+        return;
+    }
+    if EXECUTABLE_KEYS.contains(&squashed.as_str()) {
         issues.push(issue(pointer, format!("key `{key}` could start code and is not allowed in an imported profile")));
+    }
+    // Map keys (shortcuts, aliases, unknown fields) reach the same consumers as values do.
+    if has_executable_extension(key) {
+        issues.push(issue(pointer, "key with the file extension of an executable or script is not allowed in an imported profile"));
+    }
+    if is_absolute_path(key) {
+        issues.push(issue(pointer, "key holding an absolute, UNC or file: path is not allowed in an imported profile"));
     }
 }
 
