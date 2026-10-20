@@ -342,7 +342,7 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
             (Icon::DynInput, s.dynmode, "dynmode", "Dynamic Input (F12)"),
             (Icon::QuickProps, s.qpmode, "qpmode", "Quick Properties"),
             (Icon::Annotation, anno_all, "annovisible.toggle", "Annotation Visibility"),
-            (Icon::Workspace, false, "ui.noop", "Workspace Switching"),
+            (Icon::Workspace, false, "ui.workspace.select", "Workspace Switching"),
             (Icon::Gear, false, "ui.dialog.dsettings", "Drafting Settings"),
         ];
         let size = 20.0;
@@ -357,14 +357,15 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
                 cadcraft_engine::units::format_distance(0.0, lu, lp)
             )
         });
+        let content_right = crate::wsprofile::picker::status(app, ui, rx, r.center().y);
+        let mut coord_right = content_right - 8.0;
         // MODEL / PAPER (layouts only): toggles MSPACE and PSPACE like AutoCAD's status button.
-        let mut coord_right = rx - 8.0;
         // The annotation scale list (model space).
         coord_right = annoscale::status(app, ui, coord_right, r.center().y);
         if matches!(app.session.layout_space(), cadcraft_doc::Space::Paper(_)) {
             let model = app.session.state().is_ok_and(|st| st.mspace.is_some());
             let label = if model { "MODEL" } else { "PAPER" };
-            let br = Rect::from_min_max(pos2(rx - 60.0, r.center().y - 9.0), pos2(rx - 6.0, r.center().y + 9.0));
+            let br = Rect::from_min_max(pos2(content_right - 60.0, r.center().y - 9.0), pos2(content_right - 6.0, r.center().y + 9.0));
             let resp = ui.interact(br, ui.id().with("mspace_toggle"), Sense::click());
             p.rect_filled(br, 3.0, if resp.hovered() { t.control_hover } else { t.toggle_on.gamma_multiply(0.25) });
             p.text(br.center(), egui::Align2::CENTER_CENTER, crate::i18n::t(label), crate::theme::small(), t.text);
@@ -490,6 +491,7 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
             }
         }
         let mut toggle_cmd = None;
+        let mut workspace_button = None;
         for (icon, on, cmd, tip) in toggles {
             let br = Rect::from_min_size(pos2(rx, r.center().y - size / 2.0), vec2(size, size));
             let resp = ui.interact(br, ui.id().with(("tg", tip)), Sense::click());
@@ -504,13 +506,26 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
                 p.hline(br.x_range().shrink(4.0), br.bottom() - 1.0, Stroke::new(1.5, t.toggle_on));
             }
             icons::describe_control(ui, &resp, tip, Some(on), false);
-            if resp.on_hover_text(crate::i18n::t(tip)).clicked() {
+            let resp = resp.on_hover_text(crate::i18n::t(tip));
+            if icon == Icon::Workspace {
+                workspace_button = Some(resp);
+            } else if resp.clicked() {
                 toggle_cmd = Some(cmd);
             }
             rx += size + 4.0;
         }
         if let Some(c) = toggle_cmd {
             app.start(c);
+        }
+        if let Some(button) = workspace_button {
+            let mut action = None;
+            egui::Popup::from_toggle_button_response(&button)
+                .width(240.0)
+                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                .show(|ui| action = crate::wsprofile::picker::menu(ui, &app.ws));
+            if let Some(action) = action {
+                crate::wsprofile::picker::run_menu_action(app, action);
+            }
         }
     });
 }

@@ -8,6 +8,7 @@ pub mod commands;
 pub mod history;
 pub mod merge;
 pub mod migrate;
+pub mod picker;
 pub mod presets;
 pub mod schema;
 pub mod screen;
@@ -101,6 +102,12 @@ pub struct WsState {
     pub area: egui::Rect,
     /// Unknown fields of the stored set, written back unchanged.
     pub set_extra: Map<String, Value>,
+    /// The attached store held nothing: this is the first run, and the picker is still to be offered.
+    pub first_run: bool,
+    /// The open picker is the first-run one, so closing it unchosen picks SIMPLE.
+    pub(crate) first_run_picker_open: bool,
+    /// A layout was replaced while a panel may be mid-drag; the docking surface drops that drag.
+    pub(crate) cancel_drag: bool,
     pub(crate) applied: WorkspaceLayout,
     pub(crate) synced: Option<Fingerprint>,
     /// A damaged set startup could not copy aside; commits wait until the copy succeeds.
@@ -134,6 +141,9 @@ impl Default for WsState {
             report: ApplyReport::default(),
             area: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0)),
             set_extra: Map::new(),
+            first_run: false,
+            first_run_picker_open: false,
+            cancel_drag: false,
             synced: None,
             unkept_damage: None,
             failed_commits: 0,
@@ -258,11 +268,21 @@ pub(crate) fn observe(app: &mut CadApp, record: bool) -> bool {
     true
 }
 
+/// Opens the picker once on a first run, unless the host asked to skip it (UX01).
+fn offer_picker(app: &mut CadApp) {
+    if !std::mem::take(&mut app.ws.first_run) || app.skip_first_run_picker {
+        return;
+    }
+    app.ws.first_run_picker_open = true;
+    app.ui.dialog = Some(picker::PICKER_DIALOG.into());
+}
+
 /// Per-frame workspace upkeep: follows the window, records drags once they end, autosaves.
 pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
     if app.ws.store.is_none() {
         return;
     }
+    offer_picker(app);
     let (time, down, released) = ctx.input(|input| (input.time, input.pointer.any_down(), input.pointer.any_released()));
     app.ws.now = time;
     let area = ctx.content_rect();
@@ -301,10 +321,16 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
         }
     }
     app.ws.released = released;
-    if !down && app.ws.autosave.due(time) {
+    // Another dialog replacing the picker abandons it; storing resumes.
+    if app.ui.dialog.as_deref() != Some(picker::PICKER_DIALOG) {
+        app.ws.first_run_picker_open = false;
+    }
+    // Until the first-run choice is made nothing is stored, so closing the app leaves the picker due.
+    let storing = !app.ws.first_run_picker_open;
+    if !down && storing && app.ws.autosave.due(time) {
         let _ = app.commit_workspace_now();
     }
-    if app.ws.autosave.pending() {
+    if storing && app.ws.autosave.pending() {
         let wait = std::time::Duration::try_from_secs_f64(app.ws.autosave.wait_secs()).unwrap_or(std::time::Duration::from_millis(750));
         ctx.request_repaint_after(wait);
     }
@@ -356,6 +382,7 @@ impl CadApp {
         self.ws.history.clear();
         self.ws.autosave.clear();
         self.ws.status = if restored.fallback.is_none() { SaveStatus::SavedLocally } else { SaveStatus::Unsaved };
+        self.ws.first_run = matches!(restored.fallback, Some(Fallback::NoProfile));
         self.ws.fallback = restored.fallback;
         self.apply_workspace();
         if !notices.is_empty() {
@@ -376,6 +403,7 @@ impl CadApp {
         let layout = self.ws.effective.layout.clone();
         let area = self.ws.area;
         self.ws.report = apply::apply(self, &layout, area);
+        self.ws.cancel_drag = true;
     }
 
     /// Replaces the session layer: changes for this run only (an embedding host's), never stored.

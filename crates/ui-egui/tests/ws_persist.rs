@@ -21,6 +21,7 @@ const SPEC_SAMPLE: &str = r#"{"schema_version":"1.0.0","profile_id":"uuid","revi
 
 fn attached(store: MemoryStore) -> CadApp {
     let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
     app.attach_profile_store(Box::new(store));
     app
 }
@@ -54,6 +55,7 @@ fn frame(app: &mut CadApp, ctx: &egui::Context, time: f64) {
 #[test]
 fn app_without_store_keeps_todays_behaviour() {
     let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
     assert!(app.ws.store.is_none());
     assert!(app.commit_workspace_now().is_err());
     run(&mut app, "ui.toggle.toolbar", json!({"on": false}));
@@ -132,6 +134,7 @@ fn crash_recovery_ux04() {
     let store = app.ws.store.take().unwrap();
     drop(app);
     let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
     app.attach_profile_store(store);
 
     assert!(app.ws.fallback.is_none());
@@ -162,6 +165,7 @@ fn crash_recovery_ux04() {
 fn corrupt_store_falls_back_ux15() {
     let shared = Shared::new(MemoryStore { current: Some("{".into()), ..MemoryStore::default() });
     let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
     app.attach_profile_store(Box::new(shared.clone()));
     assert!(matches!(app.ws.fallback, Some(Fallback::Corrupt(_))), "{:?}", app.ws.fallback);
     assert_eq!(app.ws.user.base_id.as_deref(), Some("SIMPLE"));
@@ -187,6 +191,7 @@ fn corrupt_store_falls_back_ux15() {
     let invalid = json!({"active": "SIMPLE", "user": {"schema_version": "1.0.0", "name": "x".repeat(2000)}}).to_string();
     let shared = Shared::new(MemoryStore { current: Some(invalid.clone()), ..MemoryStore::default() });
     let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
     app.attach_profile_store(Box::new(shared.clone()));
     assert!(matches!(app.ws.fallback, Some(Fallback::Invalid(_))), "{:?}", app.ws.fallback);
     assert_eq!(shared.damaged(), vec![invalid.into_bytes()]);
@@ -397,6 +402,7 @@ fn set_with_user(theme: Value, locale: Value) -> String {
 
 fn app_with_prefs(current: String) -> CadApp {
     let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
     app.ui.theme = ThemePref::Light;
     app.ui.interface_language = Preference::parse("de").unwrap();
     app.attach_profile_store(Box::new(MemoryStore { current: Some(current), ..MemoryStore::default() }));
@@ -661,6 +667,7 @@ fn a_damaged_set_that_was_not_kept_is_not_overwritten() {
     let refuse = std::rc::Rc::new(std::cell::Cell::new(true));
     let damaged = SnapshotsRefused { inner: MemoryStore { current: Some("{".into()), ..MemoryStore::default() }, refuse: refuse.clone() };
     let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
     app.attach_profile_store(Box::new(damaged));
     assert!(matches!(app.ws.fallback, Some(Fallback::Corrupt(_))));
     let message = app.ws.message.clone().unwrap_or_default();
@@ -827,6 +834,7 @@ impl ProfileStore for Flaky {
 #[test]
 fn failed_commit_is_retried() {
     let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
     app.attach_profile_store(Box::new(Flaky { inner: MemoryStore::default(), failures: 1 }));
     let ctx = egui::Context::default();
     frame(&mut app, &ctx, 1.0);
@@ -849,12 +857,14 @@ fn failed_commit_is_retried() {
 fn second_damaged_start_keeps_both_copies() {
     let shared = Shared::new(MemoryStore { current: Some("{".into()), ..MemoryStore::default() });
     let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
     app.attach_profile_store(Box::new(shared.clone()));
     assert_eq!(app.ws.message.as_deref(), Some(FALLBACK_MESSAGE));
     drop(app);
     // Damaged again, differently, before anything was committed.
     shared.0.borrow_mut().current = Some("[1".into());
     let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
     app.attach_profile_store(Box::new(shared.clone()));
     assert!(matches!(app.ws.fallback, Some(Fallback::Corrupt(_))));
     run(&mut app, "ui.toggle.toolbar", json!({"on": false}));

@@ -317,6 +317,10 @@ pub fn command(app: &mut crate::CadApp, reset: bool, params: &Value) -> Result<V
 
 pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
     let t = crate::theme::Tokens::get();
+    // A replaced layout must not take a drop from a drag that started on the old one.
+    if std::mem::take(&mut app.ws.cancel_drag) {
+        craft_ui::docking::cancel_drag::<Panel>(ui.ctx(), egui::Id::new("cadcraft-docking"));
+    }
     let mut workspace = app.ui.docking.clone();
     if let Err(error) = workspace.validate().and_then(|()| sync(&mut workspace, app)) {
         app.set_status(format!("Panel layout could not be restored: {error}"));

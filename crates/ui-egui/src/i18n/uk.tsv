@@ -1339,3 +1339,38 @@
 	Restore Workspace Revision	Відновити версію робочого простору
 	Workspace Save Status	Стан збереження робочого простору
 	Set Workspace Value	Задати параметр робочого простору
+	Simple	Простий
+	AutoCAD Familiar	Звичний для AutoCAD
+	Planning and GIS	Планування та ГІС
+	Architecture	Архітектура
+	Structure	Конструкції
+	MEP and Fire	Інженерні мережі та пожежна безпека
+	Infrastructure	Інфраструктура
+	Quantity Survey and QA	Кошториси та контроль якості
+	Sheets and Publishing	Аркуші та публікація
+	The CADCraft window as it is today: tool bar, Tool Sets and palettes.	Вікно CADCraft таким, яким воно є зараз: панель інструментів, набори інструментів і палітри.
+	Ribbon with tabs and groups in the order AutoCAD users expect.	Стрічка з вкладками та групами в порядку, звичному для користувачів AutoCAD.
+	Ribbon plus a survey tool bar and base map attachments.	Стрічка, панель інструментів знімання та підключення підкладок.
+	Walls and openings, schedules and an architecture tool bar.	Стіни й отвори, відомості та архітектурна панель інструментів.
+	Structural grids, constraints and a structure tool bar.	Конструктивні сітки, обмеження та панель інструментів конструкцій.
+	Routing, symbols and take-off for services and fire protection.	Трасування, позначки та підрахунок для інженерних мереж і пожежного захисту.
+	Alignments and station annotation for infrastructure.	Осі трас і позначення пікетів для інфраструктури.
+	Quantity take-off, drawing comparison and checks.	Підрахунок обсягів, порівняння креслень і перевірки.
+	Layouts, plotting and publishing.	Аркуші, друк і публікація.
+	A workspace you saved.	Збережений вами робочий простір.
+	Pick the layout that suits your work. You can change it any time from the status bar.	Оберіть розташування, яке підходить для вашої роботи. Його можна змінити будь-коли в рядку стану.
+	Discipline workspaces are drafts that await CAD Manager review.	Робочі простори за напрямами є чернетками, що очікують перевірки CAD-менеджером.
+	Familiar to AutoCAD users	Знайомий користувачам AutoCAD
+	Choose a Workspace	Оберіть робочий простір
+	Save Workspace As	Зберегти робочий простір як
+	Customize...	Налаштувати...
+	Available in a later update	Буде доступно в наступному оновленні
+	Reset	Скинути
+	Saved locally	Збережено локально
+	Saving…	Збереження…
+	Not saved	Не збережено
+	Could not save workspace	Не вдалося зберегти робочий простір
+	Syncing	Синхронізація
+	Synced	Синхронізовано
+	Offline	Не в мережі
+	Sync conflict	Конфлікт синхронізації

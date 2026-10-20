@@ -214,6 +214,9 @@ pub struct CadApp {
     /// Drawings being read on worker threads ([`opening`]).
     pub opening: opening::Opening,
     pub integrated_titlebar: bool,
+    /// A host that frames or scripts the app (an embedding page, `?sample`) sets this so a first run
+    /// opens straight into the default workspace instead of the picker.
+    pub skip_first_run_picker: bool,
     control_rx: Option<Receiver<ControlRequest>>,
     pending_shots: Vec<(u64, Option<String>, std::sync::mpsc::Sender<Value>, f64)>,
     queued_shots: Vec<(u64, f64, u32)>,
@@ -269,6 +272,7 @@ impl CadApp {
             status: None,
             opening: opening::Opening::default(),
             integrated_titlebar: false,
+            skip_first_run_picker: false,
             control_rx: None,
             pending_shots: Vec::new(),
             queued_shots: Vec::new(),

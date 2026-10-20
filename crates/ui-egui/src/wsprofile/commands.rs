@@ -11,7 +11,7 @@ use super::validate::{Issue, Mode, validate};
 use super::{LOCKED_MESSAGE, SaveStatus, observe, rfc3339, startup};
 use crate::CadApp;
 
-const MAX_NAME: usize = 100;
+pub(super) const MAX_NAME: usize = 100;
 
 pub fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
     let result = match id {
@@ -45,6 +45,12 @@ fn issues_text(issues: &[Issue]) -> String {
 }
 
 fn select(app: &mut CadApp, params: &Value) -> Result<Value, String> {
+    // The menu form (no parameters) asks the person; a script has to name the workspace.
+    if params.is_null() {
+        app.ws.first_run_picker_open = false;
+        app.ui.dialog = Some(super::picker::PICKER_DIALOG.into());
+        return Ok(Value::Null);
+    }
     let ids = || app.ws.choices().iter().map(|choice| choice.id.clone()).collect::<Vec<_>>().join(", ");
     let Some(id) = params.get("id").and_then(Value::as_str).map(str::trim) else { return Err(format!("id is required: {}", ids())) };
     let next = if preset_json(id).is_some() {
@@ -60,9 +66,16 @@ fn select(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         commit_now(app);
     }
     let revision = app.ws.user.revision.max(next.revision);
+    // A switch is one layout undo step like any other layout change.
+    if app.ws.user.layout != next.layout {
+        app.ws.history.record(app.ws.user.layout.clone());
+    }
     app.ws.user = WorkspaceProfile { revision, ..next };
     app.ws.active = id.to_string();
-    app.ws.history.clear();
+    app.ws.first_run_picker_open = false;
+    if app.ui.dialog.as_deref() == Some(super::picker::PICKER_DIALOG) {
+        app.ui.dialog = None;
+    }
     app.ws.rebuild();
     app.apply_workspace();
     app.ws.mark_changed();
@@ -104,6 +117,10 @@ fn new_profile_id(app: &CadApp, name: &str) -> String {
 }
 
 fn save_as(app: &mut CadApp, params: &Value) -> Result<Value, String> {
+    if params.is_null() {
+        app.ui.dialog = Some(super::picker::SAVE_AS_DIALOG.into());
+        return Ok(Value::Null);
+    }
     let name = params.get("name").and_then(Value::as_str).map(str::trim).filter(|name| !name.is_empty()).ok_or("name is required")?;
     if name.chars().count() > MAX_NAME {
         return Err(format!("A workspace name has at most {MAX_NAME} characters"));

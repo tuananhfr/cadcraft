@@ -2,12 +2,17 @@
 
 use std::collections::BTreeSet;
 
-use cadcraft_engine::command_specs;
+use cadcraft_engine::{Session, command_specs};
 use cadcraft_ui_egui::docking::Panel;
 use cadcraft_ui_egui::menus::UI_COMMANDS;
 use cadcraft_ui_egui::wsprofile::presets::{PRESET_IDS, SAFE_PRESET, preset, preset_json};
 use cadcraft_ui_egui::wsprofile::schema::{Dock, OwnerType, PanelMode, ProfileStatus, SCHEMA_VERSION, WorkspaceLayout, WorkspaceProfile};
+use cadcraft_ui_egui::wsprofile::store::MemoryStore;
 use cadcraft_ui_egui::wsprofile::validate::{Issue, Mode, validate};
+use cadcraft_ui_egui::{CadApp, Services};
+use egui::{Event, Modifiers, PointerButton, vec2};
+use egui_kittest::Harness;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::{Value, json};
 
 const SPEC_SAMPLE: &str = r#"{"schema_version":"1.0.0","profile_id":"uuid","revision":12,"base_id":"AUTOCAD_FAMILIAR","panels":[{"id":"properties","mode":"dock","side":"right","width_ratio":0.24}],"command_line":{"side":"bottom","height_ratio":0.15},"shortcuts":{"line":"L"}}"#;
@@ -440,4 +445,249 @@ fn schema_doc_lists_every_field() {
         let value = serde_json::to_value(preset(id).unwrap()).unwrap();
         assert_documented(&schema, &schema, &value, &format!("{id}:"));
     }
+}
+
+fn first_run_app(skip_picker: bool) -> CadApp {
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = skip_picker;
+    app.attach_profile_store(Box::new(MemoryStore::default()));
+    app
+}
+
+fn shell(mut app: CadApp) -> Harness<'static, CadApp> {
+    app.ui.in_window_menu = false;
+    app.integrated_titlebar = true;
+    let mut harness = Harness::builder().with_size(vec2(1280.0, 760.0)).build_ui_state(
+        |ui, app: &mut CadApp| {
+            app.logic(&ui.ctx().clone());
+            app.ui(ui);
+        },
+        app,
+    );
+    harness.run_steps(5);
+    harness
+}
+
+fn stored_active(app: &CadApp) -> String {
+    let raw = app.ws.store.as_deref().and_then(|store| store.read_current()).expect("a workspace was stored");
+    serde_json::from_str::<Value>(&raw).unwrap()["active"].as_str().unwrap().to_string()
+}
+
+#[test]
+fn first_run_shows_picker_ux01() {
+    let mut harness = shell(first_run_app(false));
+    assert_eq!(harness.state().ui.dialog.as_deref(), Some("workspace_picker"));
+    assert!(harness.state().ws.store.as_deref().unwrap().read_current().is_none(), "nothing is stored before the user chooses");
+
+    harness.state_mut().run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    harness.run_steps(4);
+    let app = harness.state();
+    assert_eq!(app.ui.dialog, None, "choosing closes the picker");
+    assert_eq!(app.ws.active, "AUTOCAD_FAMILIAR");
+    assert_eq!(stored_active(app), "AUTOCAD_FAMILIAR", "the choice is stored, so the picker does not come back");
+    let layout = &app.ws.effective.layout;
+    assert!(layout.ribbon.visible);
+    assert!(layout.command_line.visible && app.ui.show_command_line);
+    let properties = layout.panels.iter().find(|panel| panel.id == "properties").unwrap();
+    assert!(properties.visible && properties.mode == PanelMode::Dock);
+    assert!(app.ui.docking.layout.contains(&Panel::Properties));
+    let preset_tabs: Vec<String> = preset("AUTOCAD_FAMILIAR").unwrap().layout.ribbon.tabs.iter().map(|tab| tab.id.clone()).collect();
+    let tabs: Vec<String> = layout.ribbon.tabs.iter().map(|tab| tab.id.clone()).collect();
+    assert_eq!(tabs, preset_tabs);
+    assert_eq!(tabs[..7], ["home", "insert", "annotate", "layers", "view", "layout", "tools"]);
+    let orders: Vec<u32> = layout.ribbon.tabs.iter().map(|tab| tab.order).collect();
+    assert!(orders.windows(2).all(|pair| pair[0] < pair[1]), "tab order follows the preset: {orders:?}");
+}
+
+#[test]
+fn picker_lists_every_preset_and_a_row_selects_it() {
+    let mut harness = shell(first_run_app(false));
+    for name in [
+        "Simple",
+        "AutoCAD Familiar",
+        "Planning and GIS",
+        "Architecture",
+        "Structure",
+        "MEP and Fire",
+        "Infrastructure",
+        "Quantity Survey and QA",
+        "Sheets and Publishing",
+    ] {
+        harness.get_by_label(name);
+    }
+    harness.get_by_label("Familiar to AutoCAD users");
+    harness.get_by_label("Architecture").click();
+    harness.run_steps(4);
+    assert_eq!(harness.state().ui.dialog, None);
+    assert_eq!(harness.state().ws.active, "ARCHITECTURE");
+    assert_eq!(stored_active(harness.state()), "ARCHITECTURE");
+}
+
+#[test]
+fn picker_escape_selects_simple() {
+    let mut harness = shell(first_run_app(false));
+    assert_eq!(harness.state().ui.dialog.as_deref(), Some("workspace_picker"));
+    harness.key_press(egui::Key::Escape);
+    harness.run_steps(4);
+    let app = harness.state();
+    assert_eq!(app.ui.dialog, None);
+    assert_eq!(app.ws.active, "SIMPLE");
+    assert_eq!(stored_active(app), "SIMPLE");
+
+    // Same store, next run: something is stored now, so no picker.
+    let store = harness.state_mut().ws.store.take().unwrap();
+    let mut again = CadApp::new(Session::new(), Services::default());
+    again.attach_profile_store(store);
+    let again = shell(again);
+    assert_eq!(again.state().ui.dialog, None);
+}
+
+#[test]
+fn picker_closed_with_its_button_selects_simple() {
+    let mut harness = shell(first_run_app(false));
+    harness.get_by_label("Close window").click();
+    harness.run_steps(4);
+    assert_eq!(harness.state().ui.dialog, None);
+    assert_eq!(stored_active(harness.state()), "SIMPLE");
+}
+
+#[test]
+fn host_or_sample_skips_picker() {
+    let harness = shell(first_run_app(true));
+    assert_eq!(harness.state().ui.dialog, None);
+    assert_eq!(harness.state().ws.active, "SIMPLE");
+
+    // Not the first run: nothing to offer even when the flag is off.
+    let mut stored = first_run_app(true);
+    stored.run("ui.workspace.select", json!({"id": "ARCHITECTURE"})).unwrap();
+    let store = stored.ws.store.take().unwrap();
+    let mut returning = CadApp::new(Session::new(), Services::default());
+    returning.attach_profile_store(store);
+    assert_eq!(shell(returning).state().ui.dialog, None);
+}
+
+#[test]
+fn select_without_an_id_opens_the_picker_only_from_a_menu() {
+    let mut app = first_run_app(true);
+    assert!(app.run("ui.workspace.select", json!({})).is_err(), "a programmatic call without an id is an error, not a dialog");
+    assert_eq!(app.ui.dialog, None);
+    app.start("ui.workspace.select");
+    assert_eq!(app.ui.dialog.as_deref(), Some("workspace_picker"));
+}
+
+fn pointer(harness: &mut Harness<'_, CadApp>, pos: egui::Pos2, pressed: Option<bool>) {
+    match pressed {
+        None => harness.event(Event::PointerMoved(pos)),
+        Some(pressed) => harness.event(Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE }),
+    }
+    harness.run_steps(2);
+}
+
+#[test]
+fn switch_during_drag_cancels_drag_keeps_command() {
+    let mut harness = shell(first_run_app(true));
+    let source = harness.get_by_role_and_label(egui::accesskit::Role::Tab, "Layers").rect().center();
+    let target = harness.get_by_role_and_label(egui::accesskit::Role::Tab, "Tool Sets").rect().center();
+    pointer(&mut harness, source, None);
+    pointer(&mut harness, source, Some(true));
+    for step in 1..=6 {
+        pointer(&mut harness, source.lerp(target, step as f32 / 6.0), None);
+    }
+    assert!(harness.ctx.dragged_id().is_some(), "the tab is being dragged");
+
+    harness.state_mut().start("line");
+    harness.run_steps(2);
+    assert_eq!(harness.state().session.running.as_ref().map(|command| command.id.as_str()), Some("line"));
+
+    harness.state_mut().run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    harness.run_steps(3);
+    assert!(harness.ctx.dragged_id().is_none(), "the switch cancelled the drag");
+    let after_switch = serde_json::to_value(&harness.state().ui.docking).unwrap();
+
+    // Letting go where the tab was heading changes nothing: the drag is gone.
+    pointer(&mut harness, target, Some(false));
+    harness.run_steps(3);
+    assert_eq!(serde_json::to_value(&harness.state().ui.docking).unwrap(), after_switch);
+    let app = harness.state();
+    assert_eq!(app.session.running.as_ref().map(|command| command.id.as_str()), Some("line"), "the command is still waiting for its point");
+    assert!(app.session.prompting());
+    assert!(!app.session.state().unwrap().is_dirty());
+    assert_eq!(app.ws.active, "AUTOCAD_FAMILIAR");
+}
+
+#[test]
+fn switching_is_a_layout_change_that_layout_undo_takes_back() {
+    let mut app = first_run_app(true);
+    let before = app.ui.docking.layout.clone();
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    assert_ne!(app.ui.docking.layout, before);
+    app.run("ui.layout.undo", json!({})).unwrap();
+    assert_eq!(app.ui.docking.layout, before);
+    assert!(!app.session.state().unwrap().is_dirty());
+}
+
+#[test]
+fn status_bar_shows_save_state() {
+    let mut harness = shell(first_run_app(true));
+    harness.state_mut().run("ui.cmdline.lines", json!({"lines": 7})).unwrap();
+    harness.run_steps(2);
+    harness.get_by_label("Saving…");
+    harness.state_mut().commit_workspace_now().unwrap();
+    harness.run_steps(3);
+    harness.get_by_label("Saved locally");
+    assert!(harness.query_by_label("Saving…").is_none());
+
+    let mut failing = first_run_app(true);
+    failing.ws.store = Some(Box::new(MemoryStore { fail_writes: true, ..Default::default() }));
+    let mut harness = shell(failing);
+    harness.state_mut().run("ui.cmdline.lines", json!({"lines": 7})).unwrap();
+    let _ = harness.state_mut().commit_workspace_now();
+    harness.run_steps(3);
+    harness.get_by_label("Not saved");
+}
+
+#[test]
+fn status_bar_without_storage_shows_no_save_state() {
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
+    let harness = shell(app);
+    for label in ["Saved locally", "Saving…", "Not saved"] {
+        assert!(harness.query_by_label(label).is_none(), "{label}");
+    }
+}
+
+#[test]
+fn workspace_menu_switches_saves_and_resets() {
+    let mut harness = shell(first_run_app(true));
+    harness.get_by_label("Workspace Switching").click();
+    harness.run_steps(3);
+    harness.get_by_label("Architecture").click();
+    harness.run_steps(4);
+    assert_eq!(harness.state().ws.active, "ARCHITECTURE");
+
+    harness.state_mut().run("ui.toggle.statusbar", json!({"on": false})).unwrap();
+    harness.run_steps(2);
+    assert!(!harness.state().ui.show_status_bar);
+    // The status bar is hidden now; bring it back through the menu's Reset.
+    harness.state_mut().run("ui.toggle.statusbar", json!({"on": true})).unwrap();
+    harness.run_steps(2);
+    harness.get_by_label("Workspace Switching").click();
+    harness.run_steps(3);
+    assert!(harness.get_by_label("Customize...").accesskit_node().is_disabled(), "Customize waits for a later update");
+    harness.get_by_label("Reset").click();
+    harness.run_steps(3);
+    assert!(harness.state().ui.show_status_bar);
+
+    harness.get_by_label("Workspace Switching").click();
+    harness.run_steps(3);
+    harness.get_by_label("Save As...").click();
+    harness.run_steps(3);
+    assert_eq!(harness.state().ui.dialog.as_deref(), Some("workspace_saveas"));
+    harness.query_all_by_role(egui::accesskit::Role::TextInput).find(|node| node.accesskit_node().is_focused()).unwrap().type_text("My Layout");
+    harness.run_steps(2);
+    harness.get_by_label("Save").click();
+    harness.run_steps(4);
+    assert_eq!(harness.state().ui.dialog, None);
+    assert!(harness.state().ws.profiles.iter().any(|profile| profile.name == "My Layout"));
+    assert_eq!(harness.state().ws.active, harness.state().ws.profiles[0].profile_id);
 }

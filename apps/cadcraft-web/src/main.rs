@@ -170,6 +170,8 @@ mod web {
                         // Embedded, the parent sends the drawing: start on the Start tab, not Drawing1.
                         let session = if app_bridge.is_some() { Session::empty() } else { Session::new() };
                         let mut app = CadApp::new(session, services());
+                        // A framing page or the sample link wants a drawing, not a first-run question.
+                        app.skip_first_run_picker = query_param("host").as_deref() == Some("parent") || query().contains("sample");
                         app.system_languages =
                             web_sys::window().map(|w| w.navigator().languages().iter().filter_map(|v| v.as_string()).collect()).unwrap_or_default();
                         let fonts = crate::fonts::Fonts::new(&cc.egui_ctx);
