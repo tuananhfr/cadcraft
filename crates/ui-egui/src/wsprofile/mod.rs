@@ -270,9 +270,18 @@ pub(crate) fn observe(app: &mut CadApp, record: bool) -> bool {
 
 /// Opens the picker once on a first run, unless the host asked to skip it (UX01).
 fn offer_picker(app: &mut CadApp) {
-    if !std::mem::take(&mut app.ws.first_run) || app.skip_first_run_picker {
+    if !app.ws.first_run {
         return;
     }
+    if app.skip_first_run_picker {
+        app.ws.first_run = false;
+        return;
+    }
+    // Whatever the host already put on screen stays; the picker comes on a later frame.
+    if app.ui.dialog.is_some() {
+        return;
+    }
+    app.ws.first_run = false;
     app.ws.first_run_picker_open = true;
     app.ui.dialog = Some(picker::PICKER_DIALOG.into());
 }
@@ -325,7 +334,7 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
     if app.ui.dialog.as_deref() != Some(picker::PICKER_DIALOG) {
         app.ws.first_run_picker_open = false;
     }
-    // Until the first-run choice is made nothing is stored, so closing the app leaves the picker due.
+    // The debounce does not store while the picker waits, so a layout settling under it is not written as a choice.
     let storing = !app.ws.first_run_picker_open;
     if !down && storing && app.ws.autosave.due(time) {
         let _ = app.commit_workspace_now();

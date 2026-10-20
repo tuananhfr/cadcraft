@@ -341,6 +341,8 @@ fn main() -> eframe::Result {
             if let Some(prefs) = cc.storage.and_then(|s| s.get_string(cadcraft_ui_egui::autosave::PREFS_KEY)) {
                 cadcraft_ui_egui::autosave::load_prefs(&prefs);
             }
+            // A scripted or sample run wants a drawing, not a first-run question (D4).
+            app.skip_first_run_picker = sample || control_port.is_some();
             // After the preferences: a profile that names a theme or language overrides them.
             if let Some(opened) = workspace::open_default() {
                 app.attach_profile_store(Box::new(opened.store));

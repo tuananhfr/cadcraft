@@ -1,7 +1,7 @@
 //! Workspace layers, merge patches and policy locks; autosave timing; layout history; screen ratios.
 
 use cadcraft_ui_egui::wsprofile::autosave::Autosave;
-use cadcraft_ui_egui::wsprofile::history::{HISTORY_CAP, LayoutHistory};
+use cadcraft_ui_egui::wsprofile::history::{Entry, HISTORY_CAP, LayoutHistory};
 use cadcraft_ui_egui::wsprofile::merge::{Layer, Level, PolicyBlock, apply_patch, changed_pointers, check, diff_patch, effective};
 use cadcraft_ui_egui::wsprofile::presets::{PRESET_IDS, preset};
 use cadcraft_ui_egui::wsprofile::schema::{Dock, PanelMode, PanelState, ToolbarState, WorkspaceLayout};
@@ -136,19 +136,19 @@ fn debounce_and_drag_end() {
 fn layout_history_is_capped_and_a_new_change_drops_redo() {
     let mut history = LayoutHistory::default();
     let mut layout = WorkspaceLayout::default();
-    assert!(history.undo(layout.clone()).is_none());
+    assert!(history.undo(Entry::Layout(layout.clone())).is_none());
     for lines in 0..(HISTORY_CAP as u32 + 10) {
         let before = layout.clone();
         layout.command_line.lines = lines + 1;
         history.record(before);
     }
     assert_eq!(history.undo_len(), HISTORY_CAP);
-    let previous = history.undo(layout.clone()).unwrap();
+    let Some(Entry::Layout(previous)) = history.undo(Entry::Layout(layout.clone())) else { panic!("a layout step") };
     assert_eq!(previous.command_line.lines, HISTORY_CAP as u32 + 9);
-    assert_eq!(history.redo(previous.clone()).unwrap(), layout);
-    history.undo(layout.clone());
+    assert_eq!(history.redo(Entry::Layout(previous.clone())), Some(Entry::Layout(layout.clone())));
+    history.undo(Entry::Layout(layout.clone()));
     history.record(previous);
-    assert!(history.redo(WorkspaceLayout::default()).is_none());
+    assert!(history.redo(Entry::Layout(WorkspaceLayout::default())).is_none());
 }
 
 #[test]

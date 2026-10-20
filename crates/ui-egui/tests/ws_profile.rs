@@ -615,15 +615,107 @@ fn switch_during_drag_cancels_drag_keeps_command() {
     assert_eq!(app.ws.active, "AUTOCAD_FAMILIAR");
 }
 
+fn run_ok(app: &mut CadApp, id: &str, params: Value) -> Value {
+    app.run(id, params.clone()).unwrap_or_else(|error| panic!("{id} {params}: {error}"))
+}
+
 #[test]
 fn switching_is_a_layout_change_that_layout_undo_takes_back() {
     let mut app = first_run_app(true);
     let before = app.ui.docking.layout.clone();
     app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
     assert_ne!(app.ui.docking.layout, before);
+    assert_eq!(app.ws.active, "AUTOCAD_FAMILIAR");
+    assert_eq!(app.ws.user.base_id.as_deref(), Some("AUTOCAD_FAMILIAR"));
+
     app.run("ui.layout.undo", json!({})).unwrap();
     assert_eq!(app.ui.docking.layout, before);
+    assert_eq!(app.ws.active, "SIMPLE", "undo takes the workspace back, not only its layout");
+    assert_eq!(app.ws.user.base_id.as_deref(), Some("SIMPLE"));
+    assert_eq!(app.ws.user.profile_id, "user.SIMPLE");
+    let status = app.workspace_status();
+    assert_eq!((status["active"].as_str(), status["base_id"].as_str()), (Some("SIMPLE"), Some("SIMPLE")));
+
+    app.run("ui.layout.redo", json!({})).unwrap();
+    assert_eq!(app.ws.active, "AUTOCAD_FAMILIAR");
+    assert_eq!(app.ws.user.base_id.as_deref(), Some("AUTOCAD_FAMILIAR"));
+    assert_ne!(app.ui.docking.layout, before);
     assert!(!app.session.state().unwrap().is_dirty());
+}
+
+#[test]
+fn undoing_a_switch_never_rewrites_a_saved_workspace() {
+    let mut app = first_run_app(true);
+    run_ok(&mut app, "ui.cmdline.lines", json!({"lines": 9}));
+    let mine = run_ok(&mut app, "ui.workspace.saveas", json!({"name": "Mine"}))["profile_id"].as_str().unwrap().to_string();
+    run_ok(&mut app, "ui.workspace.select", json!({"id": "ARCHITECTURE"}));
+    let saved_before = app.ws.profiles[0].clone();
+    assert_eq!(saved_before.layout.command_line.lines, 9);
+
+    run_ok(&mut app, "ui.workspace.select", json!({"id": mine}));
+    assert_eq!(app.ws.active, mine);
+    let stored_revision = app.ws.profiles[0].revision;
+    run_ok(&mut app, "ui.layout.undo", json!({}));
+    assert_eq!(app.ws.active, "ARCHITECTURE");
+    assert_eq!(app.ws.user.base_id.as_deref(), Some("ARCHITECTURE"));
+    app.commit_workspace_now().unwrap();
+    // Selecting it stores it once (revision), but its content and identity must stay as saved.
+    let saved_after = &app.ws.profiles[0];
+    assert_eq!(
+        (&saved_after.profile_id, &saved_after.name, &saved_after.base_id, &saved_after.layout),
+        (&saved_before.profile_id, &saved_before.name, &saved_before.base_id, &saved_before.layout),
+        "the saved workspace is untouched by undo and the commit after it"
+    );
+    let raw = app.ws.store.as_deref().unwrap().read_current().unwrap();
+    assert_eq!(serde_json::from_str::<Value>(&raw).unwrap()["active"], json!("ARCHITECTURE"));
+    assert_eq!(app.ws.profiles[0].revision, stored_revision, "undo and the commit after it did not rewrite the saved workspace");
+
+    run_ok(&mut app, "ui.layout.redo", json!({}));
+    assert_eq!(app.ws.active, mine);
+    assert_eq!(app.ws.user.profile_id, mine);
+    assert_eq!(app.ws.user.layout.command_line.lines, 9);
+}
+
+#[test]
+fn menu_check_and_status_follow_the_workspace_after_undo() {
+    let mut harness = shell(first_run_app(true));
+    harness.state_mut().run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    harness.state_mut().run("ui.layout.undo", json!({})).unwrap();
+    harness.run_steps(3);
+    harness.get_by_label("Workspace Switching").click();
+    harness.run_steps(3);
+    assert_eq!(harness.get_by_label("Simple").accesskit_node().toggled(), Some(egui::accesskit::Toggled::True));
+    assert_ne!(harness.get_by_label("AutoCAD Familiar").accesskit_node().toggled(), Some(egui::accesskit::Toggled::True));
+}
+
+#[test]
+fn a_second_dialog_keeps_the_picker_for_a_later_frame() {
+    let mut app = first_run_app(false);
+    app.ui.dialog = Some("about".into());
+    let mut harness = shell(app);
+    assert_eq!(harness.state().ui.dialog.as_deref(), Some("about"), "an open dialog is not replaced");
+    harness.state_mut().ui.dialog = None;
+    harness.run_steps(3);
+    assert_eq!(harness.state().ui.dialog.as_deref(), Some("workspace_picker"));
+}
+
+#[test]
+fn choosing_the_active_workspace_in_the_menu_changes_nothing() {
+    let mut harness = shell(first_run_app(true));
+    harness.state_mut().run("ui.workspace.select", json!({"id": "ARCHITECTURE"})).unwrap();
+    harness.state_mut().run("ui.cmdline.lines", json!({"lines": 7})).unwrap();
+    harness.run_steps(2);
+    let undo_steps = harness.state().ws.history.undo_len();
+    let layout = harness.state().ws.user.layout.clone();
+    harness.get_by_label("Workspace Switching").click();
+    harness.run_steps(3);
+    harness.get_by_label("Architecture").click();
+    harness.run_steps(3);
+    let app = harness.state();
+    assert_eq!(app.ws.user.layout, layout, "the user's changes are kept");
+    assert_eq!(app.ui.history_lines, 7);
+    assert_eq!(app.ws.history.undo_len(), undo_steps);
+    assert_eq!(app.ws.active, "ARCHITECTURE");
 }
 
 #[test]

@@ -2,6 +2,7 @@
 
 use serde_json::{Value, json};
 
+use super::history::Entry;
 use super::merge::{DELETE_KEY, changed_pointers, check, diff_patch, patch_for_pointer, strip_nulls, try_apply_patch};
 use super::migrate::migrate;
 use super::presets::preset_json;
@@ -66,11 +67,13 @@ fn select(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         commit_now(app);
     }
     let revision = app.ws.user.revision.max(next.revision);
-    // A switch is one layout undo step like any other layout change.
-    if app.ws.user.layout != next.layout {
-        app.ws.history.record(app.ws.user.layout.clone());
+    let next = WorkspaceProfile { revision, ..next };
+    // One undo step that also gives back which workspace this was, so a later commit cannot write
+    // the old layout over another workspace.
+    if app.ws.active != id || app.ws.user != next {
+        app.ws.history.record_switch(app.ws.active.clone(), app.ws.user.clone());
     }
-    app.ws.user = WorkspaceProfile { revision, ..next };
+    app.ws.user = next;
     app.ws.active = id.to_string();
     app.ws.first_run_picker_open = false;
     if app.ui.dialog.as_deref() == Some(super::picker::PICKER_DIALOG) {
@@ -333,10 +336,22 @@ fn optional_choice(value: &Value, valid: impl Fn(&str) -> bool, error: &str) -> 
 
 fn step_history(app: &mut CadApp, undo: bool) -> Result<Value, String> {
     observe(app, true);
-    let now = app.ws.user.layout.clone();
+    let pending = if undo { app.ws.history.peek_undo() } else { app.ws.history.peek_redo() };
+    let now = match pending {
+        Some(Entry::Switch { .. }) => Entry::Switch { active: app.ws.active.clone(), user: Box::new(app.ws.user.clone()) },
+        _ => Entry::Layout(app.ws.user.layout.clone()),
+    };
     let step = if undo { app.ws.history.undo(now) } else { app.ws.history.redo(now) };
-    let Some(layout) = step else { return Err(if undo { "No layout change to undo".into() } else { "No layout change to redo".into() }) };
-    app.ws.user.layout = layout;
+    match step {
+        None => return Err(if undo { "No layout change to undo".into() } else { "No layout change to redo".into() }),
+        Some(Entry::Layout(layout)) => app.ws.user.layout = layout,
+        Some(Entry::Switch { active, user }) => {
+            // Revisions only grow, so the restored workspace cannot be older than a stored one.
+            let revision = app.ws.user.revision.max(user.revision);
+            app.ws.user = WorkspaceProfile { revision, ..*user };
+            app.ws.active = active;
+        }
+    }
     app.ws.rebuild();
     app.apply_workspace();
     app.ws.mark_changed();
