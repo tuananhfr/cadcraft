@@ -22,6 +22,13 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.dock.reset", "Reset Panel Layout", &["Window", "Reset Panel Layout"], None),
     ("ui.layout.undo", "Undo Layout Change", &["Window", "Undo Layout Change"], None),
     ("ui.layout.redo", "Redo Layout Change", &["Window", "Redo Layout Change"], None),
+    ("ui.toolbar.hide", "Hide Toolbar", &[], None),
+    ("ui.toolbar.show", "Show Toolbar", &[], None),
+    ("ui.toolbar.lock", "Lock Toolbar", &[], None),
+    ("ui.toolbar.unlock", "Unlock Toolbar", &[], None),
+    ("ui.toolbar.dock", "Dock Toolbar", &[], None),
+    ("ui.toolbar.float", "Float Toolbar", &[], None),
+    ("ui.toolbar.move", "Move Toolbar", &[], None),
     ("ui.workspace.select", "Select Workspace", &[], None),
     ("ui.workspace.reset", "Reset Workspace", &[], None),
     ("ui.workspace.saveas", "Save Workspace As...", &[], None),
@@ -102,6 +109,9 @@ pub fn run_ui_command(app: &mut CadApp, id: &str, params: &Value) -> Option<Resu
 
 fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
     if let Some(result) = crate::wsprofile::commands::route(app, id, params) {
+        return Some(result);
+    }
+    if let Some(result) = crate::toolbars::route(app, id, params) {
         return Some(result);
     }
     if let Some(result) = crate::spacemouse::route(app, id, params) {
@@ -526,6 +536,10 @@ pub fn tree(app: &CadApp) -> Vec<(String, Vec<Entry>)> {
             add(menu, label, id, *sc, true);
         }
     }
+    if let Some((_, window)) = out.iter_mut().find(|(m, _)| m == "Window") {
+        let at = window.iter().position(|e| matches!(e, Entry::Item { id, .. } if id == "ui.toggle.toolbar")).map_or(window.len(), |i| i + 1);
+        window.insert(at, Entry::Sub { label: "Toolbars".into(), children: crate::toolbars::menu_entries(app) });
+    }
     if let Some((_, file)) = out.iter_mut().find(|(m, _)| m == "File") {
         let at = file.iter().position(|e| matches!(e, Entry::Item { id, .. } if id == "open")).map_or(0, |i| i + 1);
         file.insert(at, Entry::Sub { label: OPEN_RECENT.into(), children: recent_entries(app) });
@@ -565,6 +579,13 @@ pub(crate) fn shortcut_label(s: &str, mac: bool) -> String {
 
 pub(crate) fn entry_ui(ui: &mut egui::Ui, e: &Entry, clicked: &mut Option<String>) {
     match e {
+        Entry::Item { label, id, enabled, .. } if crate::toolbars::menu_check_state(id).is_some() => {
+            let mut shown = crate::toolbars::menu_check_state(id).unwrap_or(false);
+            if ui.add_enabled(*enabled, egui::Checkbox::new(&mut shown, crate::i18n::t(label))).clicked() {
+                *clicked = Some(id.clone());
+                ui.close();
+            }
+        }
         Entry::Item { label, id, shortcut, enabled } => {
             let mut b = egui::Button::new(crate::i18n::t(label));
             if let Some(s) = shortcut {
@@ -652,6 +673,7 @@ pub fn shortcuts(app: &mut CadApp, ctx: &egui::Context) {
         (sc(Modifiers::NONE, Key::F12), "dynmode"),
     ];
     crate::clipboard::mirror(app, ctx);
+    crate::toolbars::claim_menu_key(ctx);
     if ctx.egui_wants_keyboard_input() || app.closing.is_some() {
         return;
     }

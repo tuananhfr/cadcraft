@@ -47,6 +47,7 @@ pub mod plotstyles;
 pub mod quick;
 pub mod shortcut_menus;
 pub mod theme;
+pub mod toolbars;
 pub mod viewcube;
 pub mod vpscale;
 pub mod wsprofile;
@@ -656,9 +657,12 @@ impl CadApp {
         if self.ui.show_status_bar {
             chrome::status_bar(self, ui);
         }
+        toolbars::show_docked(ui, self, wsprofile::schema::Dock::Bottom);
         if self.ui.show_file_tabs {
             chrome::file_tabs(self, ui);
         }
+        toolbars::show_docked(ui, self, wsprofile::schema::Dock::Left);
+        toolbars::show_docked(ui, self, wsprofile::schema::Dock::Right);
         let has_doc = !self.session.docs.is_empty() && !self.ui.start_tab;
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {
             if has_doc {
@@ -667,6 +671,7 @@ impl CadApp {
                 chrome::start_page(self, ui);
             }
         });
+        toolbars::show_floating(ui.ctx(), self);
         dialogs::show(self, ui.ctx());
         palettes::patterns::prompt_picker(self, ui.ctx());
         closing::prompt(self, ui.ctx());

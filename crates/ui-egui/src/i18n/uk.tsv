@@ -1374,3 +1374,20 @@
 	Synced	Синхронізовано
 	Offline	Не в мережі
 	Sync conflict	Конфлікт синхронізації
+	Hide	Приховати
+	Unlock	Розблокувати
+	Dock	Прикріпити
+	Top	Згори
+	Bottom	Знизу
+	Float	Плаваюча
+	Locked by company policy	Заблоковано політикою компанії
+	Toolbars	Панелі інструментів
+	{name} toolbar grip	Маркер переміщення панелі «{name}»
+	{title} — not available in this version	{title} — недоступно в цій версії
+	Hide Toolbar	Приховати панель інструментів
+	Show Toolbar	Показати панель інструментів
+	Lock Toolbar	Заблокувати панель інструментів
+	Unlock Toolbar	Розблокувати панель інструментів
+	Dock Toolbar	Прикріпити панель інструментів
+	Float Toolbar	Зробити панель інструментів плаваючою
+	Move Toolbar	Пересунути панель інструментів

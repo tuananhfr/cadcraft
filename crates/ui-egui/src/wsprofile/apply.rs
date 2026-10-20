@@ -236,12 +236,15 @@ fn panel_of(id: &str) -> Option<Panel> {
     Panel::ALL.iter().chain(Panel::ON_DEMAND).copied().find(|panel| panel.id() == id)
 }
 
+/// Whether this build runs the command `id` (an id it does not know stays in the profile as a placeholder).
+pub(crate) fn command_known(id: &str) -> bool {
+    crate::menus::is_ui_command(id)
+        || cadcraft_engine::command_specs().iter().any(|spec| spec.id == id || spec.aliases.contains(&id))
+        || cadcraft_engine::cmd::registry::resolve_stable(id).is_some()
+}
+
 fn report(layout: &WorkspaceLayout) -> ApplyReport {
-    let known = |id: &str| {
-        crate::menus::is_ui_command(id)
-            || cadcraft_engine::command_specs().iter().any(|spec| spec.id == id || spec.aliases.contains(&id))
-            || cadcraft_engine::cmd::registry::resolve_stable(id).is_some()
-    };
+    let known = command_known;
     let ribbon = layout.ribbon.tabs.iter().flat_map(|tab| tab.groups.iter()).flat_map(|group| group.commands.iter());
     let toolbars = layout.toolbars.iter().flat_map(|toolbar| toolbar.commands.iter());
     let named = ribbon

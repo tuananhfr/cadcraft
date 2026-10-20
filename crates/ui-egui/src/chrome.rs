@@ -6,39 +6,9 @@ use serde_json::json;
 use crate::CadApp;
 use crate::icons::{self, Icon};
 use crate::theme::Tokens;
+use crate::wsprofile::schema::Dock;
 
 pub mod annoscale;
-
-const TOOLBAR: &[&[(Icon, &str, &str, Option<&str>)]] = &[
-    &[
-        (Icon::New, "new", "New Drawing", Some("Cmd+N")),
-        (Icon::Open, "open", "Open", Some("Cmd+O")),
-        (Icon::Save, "qsave", "Save", Some("Cmd+S")),
-        (Icon::SaveAs, "saveas", "Save As", None),
-    ],
-    &[(Icon::Undo, "u", "Undo", Some("Cmd+Z")), (Icon::Redo, "redo", "Redo", Some("Cmd+Shift+Z"))],
-    &[
-        (Icon::Plot, "plot", "Print", None),
-        (Icon::Publish, "publish", "Batch Publish", None),
-        (Icon::PageSetup, "pagesetup", "Page Setup Manager", None),
-        (Icon::Preview, "preview", "Plot Preview", None),
-    ],
-    &[
-        (Icon::Import, "import", "Import", None),
-        (Icon::Export, "export", "Export", None),
-        (Icon::Attach, "attach", "Attach", None),
-        (Icon::Share, "share", "Share", None),
-    ],
-    &[(Icon::ZoomWindow, "zoom.window", "Zoom Window", None), (Icon::Pan, "pan", "Pan", None), (Icon::Orbit, "3dorbit", "Orbit", None)],
-    &[
-        (Icon::ZoomExtents, "zoom.extents", "Zoom Extents", None),
-        (Icon::Properties, "ui.toggle.palettes", "Properties", None),
-        (Icon::Layers, "ui.dialog.layers", "Layer Properties Manager", None),
-        (Icon::Blocks, "ui.dialog.blocks", "Blocks", None),
-    ],
-    &[(Icon::Measure, "dist", "Measure Distance", None), (Icon::List, "list", "List", None), (Icon::Area, "area", "Area", None)],
-    &[(Icon::Help, "ui.dialog.about", "Help", None)],
-];
 
 /// Height of the macOS integrated title row (#161). AppKit draws the traffic lights itself,
 /// centred in the standard 28 pt title-bar band at the top of the window; moving them would take
@@ -61,117 +31,37 @@ fn title_left(left: f32, width: f32, text_w: f32) -> f32 {
     (left + (width - text_w) / 2.0).max(left + MAC_CONTENT_LEFT)
 }
 
-/// Title row (with the integrated macOS title bar) and the Tool Bar.
+/// Title row (with the integrated macOS title bar), then the tool bars docked to the top edge.
 pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
-    let title_h = if app.integrated_titlebar { MAC_TITLE_BAR } else { 0.0 };
-    let tb_h = if app.ui.show_toolbar { 34.0 } else { 0.0 };
-    egui::Panel::top("cc_title_toolbar").exact_size(title_h + tb_h).frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |ui| {
-        let r = ui.max_rect();
-        if title_h > 0.0 {
-            let title = match app.session.state() {
-                Ok(st) if !app.ui.start_tab => format!("CADCraft      {}{}", st.title, if st.title.contains('.') { "" } else { ".dwg" }),
-                _ => format!("CADCraft      {}", crate::tl!("Start")),
-            };
-            // Centred on the traffic lights' centre line (the row's middle): with the system font
-            // the capitals' middle is the text box's middle, so no optical nudge.
-            let galley = ui.painter().layout_no_wrap(title, egui::FontId::proportional(13.0), t.text_dim);
-            let x = title_left(r.left(), r.width(), galley.size().x);
-            ui.painter().galley(pos2(x, r.top() + (title_h - galley.size().y) / 2.0), galley, t.text_dim);
-            // Allow dragging the window by the title row.
-            let tr = Rect::from_min_size(r.min, vec2(r.width(), title_h));
-            let resp = ui.interact(tr, ui.id().with("titledrag"), Sense::CLICK | Sense::DRAG);
-            if resp.drag_started() {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
-            }
-            if resp.double_clicked() {
-                let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
-            }
-        }
-        if tb_h > 0.0 {
-            let row = Rect::from_min_size(pos2(r.left(), r.top() + title_h), vec2(r.width(), tb_h));
-            let mut x = r.left() + if app.integrated_titlebar { 120.0 } else { 12.0 };
-            let size = 26.0;
-            let mut clicked = None;
-            let mac = ui.ctx().os().is_mac();
-            let widths: Vec<_> = TOOLBAR.iter().map(|group| group.len() as f32 * (size + 6.0) - 6.0).collect();
-            let available = (row.right() - 12.0 - x).max(0.0);
-            let Some(fit) = craft_ui::layout::fit_toolbar(&widths, available, 24.0, 30.0) else {
-                // Very small windows still expose the complete command row by scrolling.
-                ui.scope_builder(egui::UiBuilder::new().max_rect(row.shrink2(vec2(4.0, 0.0))), |ui| {
-                    egui::ScrollArea::horizontal().id_salt("toolbar_small").show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            for group in TOOLBAR {
-                                for (icon, cmd, tip, _) in *group {
-                                    if icons::button(ui, *icon, size, tip, false).clicked() {
-                                        clicked = Some(*cmd);
-                                    }
-                                }
-                                ui.add_space(18.0);
-                            }
-                        });
-                    });
-                });
-                if let Some(command) = clicked {
-                    app.start(command);
+    if app.integrated_titlebar {
+        egui::Panel::top("cc_title_toolbar").exact_size(MAC_TITLE_BAR).show_separator_line(false).frame(egui::Frame::NONE.fill(t.chrome)).show(
+            ui,
+            |ui| {
+                let r = ui.max_rect();
+                let title = match app.session.state() {
+                    Ok(st) if !app.ui.start_tab => format!("CADCraft      {}{}", st.title, if st.title.contains('.') { "" } else { ".dwg" }),
+                    _ => format!("CADCraft      {}", crate::tl!("Start")),
+                };
+                // Centred on the traffic lights' centre line (the row's middle): with the system font
+                // the capitals' middle is the text box's middle, so no optical nudge.
+                let galley = ui.painter().layout_no_wrap(title, egui::FontId::proportional(13.0), t.text_dim);
+                let x = title_left(r.left(), r.width(), galley.size().x);
+                ui.painter().galley(pos2(x, r.top() + (MAC_TITLE_BAR - galley.size().y) / 2.0), galley, t.text_dim);
+                // Allow dragging the window by the title row.
+                let tr = Rect::from_min_size(r.min, vec2(r.width(), MAC_TITLE_BAR));
+                let resp = ui.interact(tr, ui.id().with("titledrag"), Sense::CLICK | Sense::DRAG);
+                if resp.drag_started() {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
                 }
-                return;
-            };
-            for (index, _) in &fit.shown {
-                let Some(group) = TOOLBAR.get(*index) else { continue };
-                for (icon, cmd, label, shortcut) in group.iter() {
-                    let br = Rect::from_min_size(pos2(x, row.center().y - size / 2.0), vec2(size, size));
-                    let resp = ui.interact(br, ui.id().with(("tb", *cmd)), Sense::click());
-                    if resp.hovered() {
-                        ui.painter().rect_filled(br, 3.0, t.control_hover.gamma_multiply(0.6));
-                    }
-                    icons::paint(ui.painter(), br.shrink(4.0), *icon, false);
-                    let tip = match shortcut {
-                        Some(sc) => format!("{} ({})", crate::i18n::t(label), crate::menus::shortcut_label(sc, mac)),
-                        None => crate::i18n::t(label).to_string(),
-                    };
-                    icons::describe_control(ui, &resp, &tip, None, false);
-                    if resp.on_hover_text(tip).clicked() {
-                        clicked = Some(*cmd);
-                    }
-                    x += size + 6.0;
+                if resp.double_clicked() {
+                    let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
                 }
-                x += 18.0;
-            }
-            if !fit.overflow.is_empty() {
-                let br = Rect::from_min_size(pos2(x, row.center().y - size / 2.0), vec2(fit.overflow_width, size));
-                let response = ui.interact(br, ui.id().with("toolbar_more"), Sense::click());
-                if response.hovered() {
-                    ui.painter().rect_filled(br, 3.0, t.control_hover.gamma_multiply(0.6));
-                }
-                for offset in [-5.0, 0.0, 5.0] {
-                    ui.painter().circle_filled(br.center() + vec2(offset, 0.0), 1.5, t.text);
-                }
-                icons::describe_control(ui, &response, "More toolbar commands", None, false);
-                egui::Popup::menu(&response).show(|ui| {
-                    for (position, index) in fit.overflow.iter().enumerate() {
-                        let Some(group) = TOOLBAR.get(*index) else { continue };
-                        if position > 0 {
-                            ui.separator();
-                        }
-                        for (_, command, label, _) in *group {
-                            let response = ui.button(crate::i18n::t(label));
-                            crate::control::record_widget(ui, &response, label, "button", None);
-                            if response.clicked() {
-                                clicked = Some(*command);
-                                ui.close();
-                            }
-                        }
-                    }
-                });
-                response.on_hover_text(crate::tl!("More toolbar commands"));
-            }
-            if let Some(c) = clicked {
-                app.start(c);
-            }
-        }
-    });
+            },
+        );
+    }
+    crate::toolbars::show_docked(ui, app, Dock::Top);
 }
 
 /// File tabs: switcher, "+", Start, open drawings.

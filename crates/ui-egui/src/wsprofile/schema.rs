@@ -286,7 +286,7 @@ pub struct WorkspaceLayout {
     pub extra: Map<String, Value>,
 }
 
-/// Command ids of the shipped tool bar (`chrome::TOOLBAR`), in display order.
+/// Command ids of the shipped Standard tool bar (`toolbars::builtin_toolbar_commands`), in display order.
 const STANDARD_TOOLBAR: &[&str] = &[
     "new",
     "open",

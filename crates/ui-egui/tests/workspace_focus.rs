@@ -38,7 +38,10 @@ fn toolbar_tab_and_shift_tab_skip_title_drag_and_activate_once() {
     let mut h = harness();
     h.key_press(Key::Tab);
     h.run_steps(2);
-    assert!(h.get_by_label("New Drawing (⌘N)").is_focused(), "the title drag region is not a keyboard control");
+    assert!(h.get_by_label("Standard toolbar grip").is_focused(), "the title drag region is not a keyboard control; the grip is the first stop");
+    h.key_press(Key::Tab);
+    h.run_steps(2);
+    assert!(h.get_by_label("New Drawing (⌘N)").is_focused());
     h.key_press(Key::Tab);
     h.run_steps(2);
     assert!(h.get_by_label("Open (⌘O)").is_focused());

@@ -108,6 +108,8 @@ pub struct WsState {
     pub(crate) first_run_picker_open: bool,
     /// A layout was replaced while a panel may be mid-drag; the docking surface drops that drag.
     pub(crate) cancel_drag: bool,
+    /// A tool bar grip is being dragged; a replaced layout drops it (like [`Self::cancel_drag`] for panels).
+    pub toolbar_drag: crate::toolbars::DragPhase,
     pub(crate) applied: WorkspaceLayout,
     pub(crate) synced: Option<Fingerprint>,
     /// A damaged set startup could not copy aside; commits wait until the copy succeeds.
@@ -144,6 +146,7 @@ impl Default for WsState {
             first_run: false,
             first_run_picker_open: false,
             cancel_drag: false,
+            toolbar_drag: crate::toolbars::DragPhase::Idle,
             synced: None,
             unkept_damage: None,
             failed_commits: 0,
@@ -266,6 +269,28 @@ pub(crate) fn observe(app: &mut CadApp, record: bool) -> bool {
         app.apply_workspace();
     }
     true
+}
+
+/// Changes the tool bar list through the user layer, so policy locks, layout undo and autosave apply
+/// as for any other layout edit. Returns whether anything changed.
+pub(crate) fn edit_toolbars(app: &mut CadApp, change: impl FnOnce(&mut Vec<schema::ToolbarState>) -> Result<(), String>) -> Result<bool, String> {
+    observe(app, true);
+    let mut next = app.ws.user.layout.clone();
+    change(&mut next.toolbars)?;
+    if next == app.ws.user.layout {
+        return Ok(false);
+    }
+    let delta = diff_patch(&app.ws.user.layout, &next);
+    if merge::changed_pointers(&delta).iter().any(|pointer| merge::check(&app.ws.effective, pointer).is_err()) {
+        return Err(LOCKED_MESSAGE.into());
+    }
+    let profile = WorkspaceProfile { layout: next, ..app.ws.user.clone() };
+    startup::check_profile(&profile, &app.ws.policy()).map_err(|reason| format!("The tool bars cannot be stored: {reason}"))?;
+    app.ws.history.record(std::mem::replace(&mut app.ws.user.layout, profile.layout));
+    app.ws.rebuild();
+    app.apply_workspace();
+    app.ws.mark_changed();
+    Ok(true)
 }
 
 /// Opens the picker once on a first run, unless the host asked to skip it (UX01).
@@ -413,6 +438,7 @@ impl CadApp {
         let area = self.ws.area;
         self.ws.report = apply::apply(self, &layout, area);
         self.ws.cancel_drag = true;
+        self.ws.toolbar_drag = crate::toolbars::DragPhase::Idle;
     }
 
     /// Replaces the session layer: changes for this run only (an embedding host's), never stored.

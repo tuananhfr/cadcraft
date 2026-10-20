@@ -1,0 +1,235 @@
+//! Moving a tool bar by its grip: the drag state, where a drop would land, the preview, and the
+//! one commit when the button is released.
+
+use egui::{Key, Modifiers, Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
+
+use super::render::{self, BAR, Geometry};
+use crate::CadApp;
+use crate::theme::Tokens;
+use crate::wsprofile::LOCKED_MESSAGE;
+use crate::wsprofile::merge::{check, escape_token};
+use crate::wsprofile::schema::{Dock, ToolbarState};
+
+/// How close to an edge of the drawing area (or beyond it) a pointer docks a bar instead of floating it.
+const SNAP: f32 = 40.0;
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum DragPhase {
+    #[default]
+    Idle,
+    Dragging {
+        id: String,
+        /// Pointer position relative to the bar's top left corner when the grip was taken.
+        grab: Vec2,
+        target: Option<DropTarget>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum DropTarget {
+    /// `order` counts the bars of the row, hidden ones included.
+    Edge { dock: Dock, row: u32, order: u32 },
+    /// Top left corner as fractions of the window's content area.
+    Float { pos_ratio: [f32; 2] },
+}
+
+/// Starts dragging `bar`; a bar the company policy holds stays where it is.
+pub(super) fn begin(app: &mut CadApp, bar: &ToolbarState, grab: Vec2) {
+    if check(&app.ws.effective, &format!("/toolbars/{}", escape_token(&bar.id))).is_err() {
+        app.set_status(LOCKED_MESSAGE);
+        return;
+    }
+    app.ws.toolbar_drag = DragPhase::Dragging { id: bar.id.clone(), grab, target: None };
+}
+
+fn unit(value: f32) -> f32 {
+    if value.is_finite() { value.clamp(0.0, 1.0) } else { 0.0 }
+}
+
+/// Puts the bar `id` where `target` says; other bars of the destination row are renumbered to make room.
+pub fn apply_drop(toolbars: &mut [ToolbarState], id: &str, target: &DropTarget) -> Result<(), String> {
+    let at = toolbars.iter().position(|bar| bar.id == id).ok_or_else(|| format!("Unknown toolbar: {}", id.chars().take(64).collect::<String>()))?;
+    match target {
+        DropTarget::Float { pos_ratio } => {
+            let Some(bar) = toolbars.get_mut(at) else { return Ok(()) };
+            bar.dock = Dock::Floating;
+            bar.x_ratio = unit(pos_ratio[0]);
+            bar.y_ratio = unit(pos_ratio[1]);
+        }
+        DropTarget::Edge { dock, row, order } => {
+            if *dock == Dock::Floating {
+                return Err("A tool bar docks to the top, bottom, left or right edge".into());
+            }
+            let Some(bar) = toolbars.get_mut(at) else { return Ok(()) };
+            bar.dock = *dock;
+            bar.row = *row;
+            let mut row_members: Vec<usize> =
+                (0..toolbars.len()).filter(|i| *i != at && toolbars.get(*i).is_some_and(|bar| bar.dock == *dock && bar.row == *row)).collect();
+            row_members.sort_by_key(|i| toolbars.get(*i).map_or(0, |bar| bar.order));
+            row_members.insert((*order as usize).min(row_members.len()), at);
+            for (position, i) in row_members.into_iter().enumerate() {
+                if let Some(bar) = toolbars.get_mut(i) {
+                    bar.order = u32::try_from(position).unwrap_or(u32::MAX);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The bars of `dock` row `row` other than `moving`, by position in the row: full index in the
+/// row (hidden bars count) and the rectangle when the bar is on screen.
+fn row_members(toolbars: &[ToolbarState], geometry: &Geometry, moving: &str, dock: Dock, row: u32) -> Vec<Option<Rect>> {
+    let mut members: Vec<&ToolbarState> = toolbars.iter().filter(|bar| bar.dock == dock && bar.row == row && bar.id != moving).collect();
+    members.sort_by_key(|bar| bar.order);
+    members.iter().map(|bar| geometry.bars.iter().find(|drawn| drawn.id == bar.id).map(|drawn| drawn.rect)).collect()
+}
+
+fn edge_target(dock: Dock, pointer: Pos2, moving: &str, toolbars: &[ToolbarState], geometry: &Geometry) -> DropTarget {
+    let horizontal = matches!(dock, Dock::Top | Dock::Bottom);
+    let (cross, main) = if horizontal { (pointer.y, pointer.x) } else { (pointer.x, pointer.y) };
+    let rows: Vec<&render::RowRect> = geometry.rows.iter().filter(|row| row.dock == dock).collect();
+    let contains = |row: &render::RowRect| {
+        let (low, high) = if horizontal { (row.rect.top(), row.rect.bottom()) } else { (row.rect.left(), row.rect.right()) };
+        cross >= low && cross < high
+    };
+    let toward_center = |inner: &render::RowRect| match dock {
+        Dock::Top => cross >= inner.rect.bottom(),
+        Dock::Left => cross >= inner.rect.right(),
+        Dock::Bottom => cross < inner.rect.top(),
+        Dock::Right | Dock::Floating => cross < inner.rect.left(),
+    };
+    let row = match (rows.iter().find(|row| contains(row)), rows.last()) {
+        (Some(row), _) => row.row,
+        (None, None) => 0,
+        (None, Some(inner)) if toward_center(inner) => {
+            // A bar alone in the innermost row stays there rather than opening a row for itself.
+            let alone = toolbars.iter().filter(|bar| bar.dock == dock && bar.row == inner.row).all(|bar| bar.id == moving);
+            if alone { inner.row } else { inner.row.saturating_add(1) }
+        }
+        (None, Some(_)) => rows.first().map_or(0, |outer| outer.row),
+    };
+    let members = row_members(toolbars, geometry, moving, dock, row);
+    let before = |rect: &Rect| if horizontal { rect.center().x < main } else { rect.center().y < main };
+    // Index of the first visible bar the pointer is before; hidden bars keep their place around it.
+    let order = members
+        .iter()
+        .position(|rect| rect.as_ref().is_some_and(|rect| !before(rect)))
+        .or_else(|| members.iter().rposition(Option::is_some).map(|last| last + 1))
+        .unwrap_or(members.len());
+    DropTarget::Edge { dock, row, order: u32::try_from(order).unwrap_or(u32::MAX) }
+}
+
+/// Where dropping with the pointer at `pointer` would put the bar `moving`.
+pub(super) fn target_at(pointer: Pos2, grab: Vec2, moving: &str, toolbars: &[ToolbarState], geometry: &Geometry, content: Rect) -> DropTarget {
+    let center = geometry.center;
+    let nearest = if center.is_positive() {
+        [
+            (Dock::Top, pointer.y - center.top()),
+            (Dock::Bottom, center.bottom() - pointer.y),
+            (Dock::Left, pointer.x - center.left()),
+            (Dock::Right, center.right() - pointer.x),
+        ]
+        .into_iter()
+        .filter(|(_, distance)| *distance < SNAP)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+    } else {
+        None
+    };
+    match nearest {
+        Some((dock, _)) => edge_target(dock, pointer, moving, toolbars, geometry),
+        None => {
+            let corner = pointer - grab;
+            let size = content.size().max(vec2(1.0, 1.0));
+            DropTarget::Float { pos_ratio: [unit((corner.x - content.left()) / size.x), unit((corner.y - content.top()) / size.y)] }
+        }
+    }
+}
+
+fn paint_preview(ctx: &egui::Context, target: &DropTarget, moving: &str, toolbars: &[ToolbarState], geometry: &Geometry, content: Rect) {
+    let t = Tokens::get();
+    let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("cc_toolbar_preview")));
+    let stroke = Stroke::new(2.0, t.accent);
+    match target {
+        DropTarget::Float { pos_ratio } => {
+            let size = render::drawn_size(geometry, moving);
+            let min = pos2(content.left() + pos_ratio[0] * content.width(), content.top() + pos_ratio[1] * content.height());
+            let rect = Rect::from_min_size(min, size).intersect(content);
+            painter.rect_stroke(rect, 3.0, stroke, StrokeKind::Inside);
+        }
+        DropTarget::Edge { dock, row, order } => {
+            let horizontal = matches!(dock, Dock::Top | Dock::Bottom);
+            let band = geometry.rows.iter().find(|held| held.dock == *dock && held.row == *row).map(|held| held.rect).or_else(|| {
+                let edge = render::edge_index(*dock).and_then(|i| geometry.edges.get(i)).copied()?;
+                let inward = match dock {
+                    Dock::Top => vec2(0.0, BAR),
+                    Dock::Bottom => vec2(0.0, -BAR),
+                    Dock::Left => vec2(BAR, 0.0),
+                    Dock::Right | Dock::Floating => vec2(-BAR, 0.0),
+                };
+                let inner = geometry.rows.iter().filter(|held| held.dock == *dock).map(|held| held.rect).fold(edge, |all, rect| all.union(rect));
+                let new_row = match dock {
+                    Dock::Top => Rect::from_min_max(pos2(inner.left(), inner.bottom()), pos2(inner.right(), inner.bottom() + inward.y)),
+                    Dock::Bottom => Rect::from_min_max(pos2(inner.left(), inner.top() + inward.y), pos2(inner.right(), inner.top())),
+                    Dock::Left => Rect::from_min_max(pos2(inner.right(), inner.top()), pos2(inner.right() + inward.x, inner.bottom())),
+                    Dock::Right | Dock::Floating => {
+                        Rect::from_min_max(pos2(inner.left() + inward.x, inner.top()), pos2(inner.left(), inner.bottom()))
+                    }
+                };
+                Some(new_row)
+            });
+            let Some(band) = band else { return };
+            painter.rect_stroke(band, 0.0, Stroke::new(1.0, t.accent), StrokeKind::Inside);
+            let members = row_members(toolbars, geometry, moving, *dock, *row);
+            let index = (*order as usize).min(members.len());
+            let before = members.iter().skip(index).flatten().next();
+            let after = members.iter().take(index).flatten().last();
+            let along = match (before, after, horizontal) {
+                (Some(rect), _, true) => rect.left() - 2.0,
+                (Some(rect), _, false) => rect.top() - 2.0,
+                (None, Some(rect), true) => rect.right() + 2.0,
+                (None, Some(rect), false) => rect.bottom() + 2.0,
+                (None, None, true) => band.left() + 4.0,
+                (None, None, false) => band.top() + 4.0,
+            };
+            let mark = if horizontal {
+                Rect::from_min_max(pos2(along - 1.5, band.top() + 3.0), pos2(along + 1.5, band.bottom() - 3.0))
+            } else {
+                Rect::from_min_max(pos2(band.left() + 3.0, along - 1.5), pos2(band.right() - 3.0, along + 1.5))
+            };
+            painter.rect_filled(mark, 1.5, t.accent);
+        }
+    }
+}
+
+fn commit(app: &mut CadApp, id: &str, target: &DropTarget) {
+    match crate::wsprofile::edit_toolbars(app, |toolbars| apply_drop(toolbars, id, target)) {
+        Ok(true) => app.ws.autosave.interaction_ended(),
+        Ok(false) => {}
+        Err(error) => app.set_status(error),
+    }
+}
+
+/// Runs the drag in progress for this frame: Esc cancels it, the pointer moves its target, and the
+/// release commits it as one layout change.
+pub(super) fn tick(ctx: &egui::Context, app: &mut CadApp, content: Rect) {
+    let DragPhase::Dragging { id, grab, .. } = app.ws.toolbar_drag.clone() else { return };
+    if ctx.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Escape)) {
+        app.ws.toolbar_drag = DragPhase::Idle;
+        return;
+    }
+    let (down, pointer) = ctx.input(|input| (input.pointer.primary_down(), input.pointer.latest_pos()));
+    if down {
+        let geometry = render::current(ctx);
+        let Some(pointer) = pointer else { return };
+        let target = target_at(pointer, grab, &id, &app.ws.applied.toolbars, &geometry, content);
+        paint_preview(ctx, &target, &id, &app.ws.applied.toolbars, &geometry, content);
+        app.ws.toolbar_drag = DragPhase::Dragging { id, grab, target: Some(target) };
+        ctx.request_repaint();
+        return;
+    }
+    let phase = std::mem::take(&mut app.ws.toolbar_drag);
+    if let DragPhase::Dragging { id, target: Some(target), .. } = phase {
+        commit(app, &id, &target);
+    }
+}

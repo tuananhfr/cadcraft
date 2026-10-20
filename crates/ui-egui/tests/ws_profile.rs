@@ -302,12 +302,9 @@ fn ribbon_presets_carry_the_seven_standard_tabs() {
     }
 }
 
-/// The ids of `chrome::TOOLBAR`, read from the source so the preset cannot drift from the shipped tool bar.
+/// The ids of the shipped Standard tool bar, so the preset cannot drift from it.
 fn shipped_toolbar_ids() -> Vec<String> {
-    let source = include_str!("../src/chrome.rs");
-    let start = source.find("const TOOLBAR").unwrap();
-    let body = &source[start..start + source[start..].find("\n];").unwrap()];
-    body.split("(Icon::").skip(1).map(|entry| entry.split('"').nth(1).unwrap().to_string()).collect()
+    cadcraft_ui_egui::toolbars::builtin_toolbar_commands("standard").into_iter().map(str::to_string).collect()
 }
 
 #[test]
@@ -315,7 +312,7 @@ fn simple_equals_current_ui() {
     let simple = preset("SIMPLE").unwrap();
     let standard = simple.layout.toolbars.iter().find(|toolbar| toolbar.id == "standard").unwrap();
     let shipped = shipped_toolbar_ids();
-    assert_eq!(shipped.len(), 25, "chrome::TOOLBAR changed: update SIMPLE and presets.md");
+    assert_eq!(shipped.len(), 25, "the shipped Standard tool bar changed: update SIMPLE and presets.md");
     assert_eq!(standard.commands, shipped);
     assert_eq!(standard.dock, Dock::Top);
     assert!(standard.visible);
