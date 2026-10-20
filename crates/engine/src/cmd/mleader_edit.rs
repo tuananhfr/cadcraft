@@ -18,7 +18,6 @@ const MAX_ITEMS: usize = 10_000;
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("mleaderedit", "Edit Multileader", run_edit)
-            .alias(&["mledit"])
             .params("{handle, mode?: add|remove (default add), points?: [[x,y]...] (arrowheads to add; with remove, points picking the leaders to remove), index?: number|[number] (remove by position)}")
             .interactive(|_| Ok(Box::new(EditM::new(None)))),
         CommandSpec::new("mleaderedit.add", "Add Leader", |s, p| run_edit(s, &with_mode(p, "add")))
