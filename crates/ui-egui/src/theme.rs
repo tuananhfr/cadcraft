@@ -302,8 +302,8 @@ pub fn mono() -> FontId {
     FontId::new(12.0, FontFamily::Monospace)
 }
 
-/// Load a system UI font at run time when one is installed (not bundled), else keep egui's;
-/// then CJK fonts after the Latin ones, so Latin text keeps its look, in every interface
+/// Load a system UI font at run time when one is installed (not bundled), else keep egui's (on
+/// the web, the embedded Noto Sans); then CJK fonts after the Latin ones, so Latin text keeps its look, in every interface
 /// language: file, layout and layer names can be Japanese or Chinese whatever the interface
 /// shows (#513). In a Chinese interface (`language` "zh…") the Chinese font comes first, else a
 /// Japanese one, so names take their own glyph forms; in an Arabic interface an installed
@@ -358,6 +358,18 @@ pub fn install_fonts(ctx: &egui::Context, language: &str) {
             && let Some(bytes) = arabic_font().and_then(|p| read_capped(p, MAX_UI_FONT_BYTES))
         {
             added.push(("system-arabic".into(), std::sync::Arc::new(egui::FontData::from_owned(bytes))));
+        }
+    }
+    // The web has no system fonts, and egui's own faces stop short of Vietnamese (U+1EA0…).
+    #[cfg(target_arch = "wasm32")]
+    if let Some(f) = cadcraft_fonts::CRAFT_FONTS.iter().find(|f| f.family == "Noto Sans") {
+        let name = format!("craft-{}", f.stem());
+        fonts.font_data.insert(name.clone(), std::sync::Arc::new(egui::FontData::from_static(f.bytes)));
+        if let Some(p) = fonts.families.get_mut(&FontFamily::Proportional) {
+            p.insert(0, name.clone());
+        }
+        if let Some(m) = fonts.families.get_mut(&FontFamily::Monospace) {
+            m.push(name);
         }
     }
     let mut embedded: Vec<_> = cadcraft_fonts::CRAFT_FONTS

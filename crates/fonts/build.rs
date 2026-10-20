@@ -51,8 +51,10 @@ fn craft_fonts(dir: &std::path::Path) -> Result<String, String> {
             continue;
         }
         let arabic = scripts.split(',').any(|s| s.trim() == "Arab");
-        let web_face = (*family == "BIZ UDPGothic" && *style == "Regular") || arabic;
-        if wasm && !web_face {
+        // The web interface's Latin face (Vietnamese included); desktops use an installed one.
+        let web_only = *family == "Noto Sans";
+        let web_face = (*family == "BIZ UDPGothic" && *style == "Regular") || arabic || web_only;
+        if (wasm && !web_face) || (!wasm && web_only) {
             continue;
         }
         let path = dir.join(file).canonicalize().map_err(|e| format!("{file}: {e}"))?;

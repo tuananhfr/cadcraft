@@ -3,7 +3,11 @@
 This branch (`tuananhfr`) is UbotCAD, the UbotBuild build of [CADCraft](https://github.com/storytold/cadcraft) 0.8.0, based on CADCraft by the ArtCraft team, licensed MIT OR Apache-2.0 (see `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE`). Changes from upstream (Apache-2.0 §4b):
 
 - Removed the ArtCraft logos and marks (`docs/brand/` and its `ATTRIBUTION.md` rows) and every link to the ArtCraft Discord and getartcraft.com, as the ArtCraft brand terms require for modified versions: About dialog, the macOS app-menu Discord item and its `ui.discord` handler, README logo, badges, community and Crafting Apps sections, and the Linux/Windows packaging links (now https://ubotbuild.com/).
-- About now reads "UbotCAD — based on CADCraft by the ArtCraft team." and links ubotbuild.com. It stays in English until the bundled UI font covers Vietnamese.
+- About now reads "UbotCAD — dựa trên CADCraft của nhóm ArtCraft." ("UbotCAD — based on CADCraft by the ArtCraft team.") and links ubotbuild.com.
+- Vietnamese text:
+  - the stroke font draws the 134 Vietnamese marked letters (its letters plus the tone marks, breve, circumflex, horn and the bar of Đ);
+  - a text style keeps the TrueType family of its `ACAD` xdata (`TextStyle::family`), and text typed for a legacy 8-bit Vietnamese font (TCVN3 `.Vn*`, VNI `VNI-*`, or a `vn*`/`vh*` file) is shown in Unicode when neither the font file nor the family is installed (`cadcraft_fonts::LegacyVi`). This is display only, so the saved text is unchanged;
+  - the web build embeds Noto Sans Regular from our craft-fonts fork as its first interface font, since egui's own faces have no Vietnamese. Desktops keep using an installed system font. Build the web app with `CRAFT_FONTS_DIR` set to a checkout of [tuananhfr/craft-fonts@b7dfde9](https://github.com/tuananhfr/craft-fonts/tree/b7dfde98c6d9d5db761c405732f9ef6d58bec192) (branch `fonts/noto-sans`); without it the interface falls back to egui's faces.
 - Dropped the translations of the removed strings from every catalog.
 - DWG opens and saves in the web build too. Upstream builds the DWG bridge (`crates/dwg`, acadrust) for the desktop only, though it works from bytes in memory and acadrust builds for wasm32; the web build now includes it (about 1 MB more brotli-compressed wasm). To fit large DWGs in wasm32's 4 GB:
   - a picked or dropped file is read directly (`cmd::file::read_data`) instead of through OPEN's base64 `data`;

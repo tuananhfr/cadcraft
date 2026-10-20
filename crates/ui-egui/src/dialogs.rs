@@ -324,7 +324,7 @@ fn about(ctx: &egui::Context, open: &mut bool) {
                     ui.label(crate::tf!("Version {version}", version = env!("CARGO_PKG_VERSION")));
                     ui.label(crate::tl!("Computer-aided design and drafting: an open-source, clean-room CAD application written in pure Rust."));
                     ui.add_space(6.0);
-                    ui.label(RichText::new("UbotCAD — based on CADCraft by the ArtCraft team.").color(t.text_dim));
+                    ui.label(RichText::new("UbotCAD — dựa trên CADCraft của nhóm ArtCraft.").color(t.text_dim));
                     ui.hyperlink_to("ubotbuild.com", "https://ubotbuild.com/");
                     ui.add_space(6.0);
                     ui.label(RichText::new(crate::tl!("MIT OR Apache-2.0. Not affiliated with Autodesk, Inc.")).small().color(t.text_faint));
