@@ -34,18 +34,23 @@ pub fn open_default() -> Option<Opened> {
 
 /// The store under `<root>/workspace/`, after moving a first-generation `<root>/workspace.json` into it.
 pub fn open(root: &Path) -> Opened {
+    open_with(root, &|from, to| fs::rename(from, to))
+}
+
+fn open_with(root: &Path, rename: &dyn Fn(&Path, &Path) -> std::io::Result<()>) -> Opened {
     let mut store = FileProfileStore::new(root.join("workspace"));
-    let notice = match migrate_legacy(root, &mut store) {
-        Ok(()) => None,
+    let notice = match migrate_legacy(root, &mut store, rename) {
+        Ok(notice) => notice,
         Err(error) => Some(format!("Workspace could not be restored; its file was left unchanged. {error}")),
     };
     Opened { store, notice }
 }
 
-fn migrate_legacy(root: &Path, store: &mut FileProfileStore) -> Result<(), String> {
+/// `Ok(Some(notice))`: the workspace was moved, but the old file could not be set aside.
+fn migrate_legacy(root: &Path, store: &mut FileProfileStore, rename: &dyn Fn(&Path, &Path) -> std::io::Result<()>) -> Result<Option<String>, String> {
     let legacy = root.join(LEGACY_FILE);
     if !legacy.is_file() || store.has_current() {
-        return Ok(());
+        return Ok(None);
     }
     let describe = |error: &dyn std::fmt::Display| format!("{}: {error}", legacy.display());
     let mut bytes = Vec::new();
@@ -74,7 +79,8 @@ fn migrate_legacy(root: &Path, store: &mut FileProfileStore) -> Result<(), Strin
     store.push_snapshot(1, &json)?;
     store.write_current(&json)?;
     let backup = backup_path(root);
-    fs::rename(&legacy, &backup).map_err(|error| format!("{}: could not rename to {}: {error}", legacy.display(), backup.display()))
+    // From here the new files are in place and the next start will not migrate again.
+    Ok(rename(&legacy, &backup).err().map(|error| format!("Workspace restored; the old file could not be renamed. {}: {error}", legacy.display())))
 }
 
 fn legacy_profile_hash() -> u64 {
@@ -212,6 +218,24 @@ mod tests {
         let backups =
             fs::read_dir(&root).unwrap().flatten().filter(|entry| entry.file_name().to_string_lossy().starts_with("workspace.v1.bak")).count();
         assert_eq!(backups, 2);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_failed_rename_is_reported_apart_from_a_failed_restore() {
+        let root = temp_dir();
+        let legacy = legacy_file(&root);
+        let opened = open_with(&root, &|_, _| Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "read-only")));
+        let notice = opened.notice.unwrap();
+        assert!(notice.starts_with("Workspace restored; the old file could not be renamed"), "{notice}");
+        assert!(!notice.contains("could not be restored"), "{notice}");
+        assert!(opened.store.has_current());
+        assert!(root.join("workspace/snapshots/rev-1.json").exists());
+        assert_eq!(fs::read(root.join("workspace.json")).unwrap(), legacy);
+        // The next start uses the new set and does not move the file again.
+        let again = open(&root);
+        assert_eq!(again.notice, None);
+        assert!(root.join("workspace.json").exists());
         fs::remove_dir_all(root).unwrap();
     }
 

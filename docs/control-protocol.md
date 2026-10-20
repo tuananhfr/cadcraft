@@ -107,10 +107,14 @@ The default directory is `~/Library/Application Support/CADCraft` on macOS,
 `%APPDATA%/CADCraft` on Windows, and `$XDG_CONFIG_HOME/cadcraft` or `~/.config/cadcraft` elsewhere.
 Set `CADCRAFT_CONFIG_DIR` to a private directory for an isolated profile; an explicitly empty
 value disables workspace reads and writes. An unreadable, oversized or newer-version
-`current.json` starts the app on the SIMPLE workspace and the damaged text is kept as snapshot 0
-(`snapshots/rev-0.json`). A `current.json` that cannot be read at all is never overwritten. The web
+`current.json` starts the app on the SIMPLE workspace and the damaged text is kept byte for byte
+(`damaged/<time>-<n>.json`, newest 10 kept; on the web `cadcraft.ws.damaged:<n>`, newest 3). A `current.json` that cannot be read at all is never overwritten. The web
 build keeps the same set in `localStorage` (`cadcraft.ws.current`, `cadcraft.ws.snap:<n>`,
 `cadcraft.ws.snaps`).
+
+Two instances using the same settings directory (or two tabs of one site) each write `current.json`
+when they save: the last writer wins. Nothing is lost for good, because every save also keeps a
+snapshot, and a revision that was overwritten can be restored from the snapshots.
 
 ## Panel docking
 

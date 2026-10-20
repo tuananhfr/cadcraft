@@ -18,16 +18,20 @@ mod host;
 mod web {
     use cadcraft_engine::Session;
     use cadcraft_ui_egui::{CadApp, Services};
+    use std::cell::RefCell;
+    use std::rc::Rc;
     use wasm_bindgen::JsCast as _;
+    use wasm_bindgen::closure::Closure;
 
     const CANVAS_ID: &str = "cadcraft_canvas";
     const LOADING_ID: &str = "cadcraft_loading";
 
-    /// The app, the files File > Open… and drag and drop read for it in the background, the
-    /// page embedding it (`?host=parent`), and the browser's `prefers-reduced-motion` (it stays
-    /// live, so View ▸ Accessibility ▸ Animation Effects ▸ Use System Setting follows a change).
+    /// The app (shared with the page-hide listener, which saves the layout when the tab is left),
+    /// the files File > Open… and drag and drop read for it in the background, the page embedding
+    /// it (`?host=parent`), and the browser's `prefers-reduced-motion` (it stays live, so View ▸
+    /// Accessibility ▸ Animation Effects ▸ Use System Setting follows a change).
     struct Shell(
-        CadApp,
+        Rc<RefCell<CadApp>>,
         crate::upload::Inbox,
         Option<(crate::host::Bridge, crate::host::DirtyReport)>,
         Option<web_sys::MediaQueryList>,
@@ -36,32 +40,72 @@ mod web {
 
     impl eframe::App for Shell {
         fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+            let Ok(mut app) = self.0.try_borrow_mut() else { return };
             self.1.take_dropped(ctx);
-            self.1.drain(&mut self.0);
-            self.4.frame(&mut self.0);
-            self.0.system_animations = self.3.as_ref().map(|reduced| !reduced.matches());
-            self.0.logic(ctx);
+            self.1.drain(&mut app);
+            self.4.frame(&mut app);
+            app.system_animations = self.3.as_ref().map(|reduced| !reduced.matches());
+            app.logic(ctx);
             if let Some((bridge, reported)) = &self.2 {
-                bridge.report_dirty(&self.0, reported);
+                bridge.report_dirty(&app, reported);
             }
         }
         fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
-            self.0.raw_input_hook(raw);
+            if let Ok(mut app) = self.0.try_borrow_mut() {
+                app.raw_input_hook(raw);
+            }
             cadcraft_ui_egui::cmdline::capture_tab(ctx, raw);
         }
         /// Preferences (interface theme and language) survive reloads; egui state is not kept.
         fn save(&mut self, storage: &mut dyn eframe::Storage) {
-            storage.set_string(cadcraft_ui_egui::options::PROFILE_KEY, self.0.profile_json());
-            storage.set_string(cadcraft_ui_egui::PREFS_KEY, self.0.prefs_json());
+            let Ok(app) = self.0.try_borrow() else { return };
+            storage.set_string(cadcraft_ui_egui::options::PROFILE_KEY, app.profile_json());
+            storage.set_string(cadcraft_ui_egui::PREFS_KEY, app.prefs_json());
         }
         fn persist_egui_memory(&self) -> bool {
             false
         }
         fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-            self.0.ui(ui);
+            let Ok(mut app) = self.0.try_borrow_mut() else { return };
+            app.ui(ui);
             if let Some((bridge, reported)) = &self.2 {
-                bridge.report_dirty(&self.0, reported);
+                bridge.report_dirty(&app, reported);
             }
+        }
+    }
+
+    /// Saves a layout change that is still inside the autosave delay when the tab is hidden or
+    /// closed: no frame runs after that, so the frame loop cannot do it.
+    fn flush_when_leaving(app: &Rc<RefCell<CadApp>>) {
+        let Some(window) = web_sys::window() else { return };
+        let flush = |app: &Rc<RefCell<CadApp>>| {
+            if let Ok(mut app) = app.try_borrow_mut()
+                && app.ws.store.is_some()
+                && app.ws.needs_flush()
+                && let Err(error) = app.commit_workspace_now()
+            {
+                log::warn!("workspace: {error}");
+            }
+        };
+        let on_hide = {
+            let app = Rc::clone(app);
+            Closure::<dyn FnMut()>::new(move || flush(&app))
+        };
+        if window.add_event_listener_with_callback("pagehide", on_hide.as_ref().unchecked_ref()).is_ok() {
+            on_hide.forget();
+        }
+        let Some(document) = window.document() else { return };
+        let on_visibility = {
+            let app = Rc::clone(app);
+            let document = document.clone();
+            Closure::<dyn FnMut()>::new(move || {
+                if document.hidden() {
+                    flush(&app);
+                }
+            })
+        };
+        if document.add_event_listener_with_callback("visibilitychange", on_visibility.as_ref().unchecked_ref()).is_ok() {
+            on_visibility.forget();
         }
     }
 
@@ -174,6 +218,8 @@ mod web {
                             (bridge, crate::host::DirtyReport::default())
                         });
                         let reduced_motion = web_sys::window().and_then(|w| w.match_media("(prefers-reduced-motion: reduce)").ok().flatten());
+                        let app = Rc::new(RefCell::new(app));
+                        flush_when_leaving(&app);
                         Ok(Box::new(Shell(app, inbox, host, reduced_motion, fonts)))
                     }),
                 )

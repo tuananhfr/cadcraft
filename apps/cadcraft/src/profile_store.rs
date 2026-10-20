@@ -5,11 +5,16 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use cadcraft_ui_egui::wsprofile::store::{CORRUPT_SNAPSHOT, MAX_SET_BYTES, ProfileStore, expired_snapshots};
+use cadcraft_ui_egui::wsprofile::store::{MAX_SET_BYTES, ProfileStore, expired_snapshots};
 
 const CURRENT: &str = "current.json";
 const POLICY: &str = "policy.json";
 const SNAPSHOTS: &str = "snapshots";
+const DAMAGED: &str = "damaged";
+/// Damaged copies kept, oldest dropped first; they are evidence, so they outlive snapshot pruning.
+const MAX_DAMAGED_COPIES: usize = 10;
+/// Larger files are kept cut at this size.
+const MAX_DAMAGED_BYTES: usize = 16 << 20;
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 pub struct FileProfileStore {
@@ -42,6 +47,24 @@ fn read_capped(path: &Path, limit: usize) -> std::io::Result<Option<String>> {
     let mut bytes = Vec::new();
     file.take(limit as u64).read_to_end(&mut bytes)?;
     Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
+}
+
+/// Reads at most `limit` bytes as they are; `None` when the file does not exist.
+fn read_bytes_capped(path: &Path, limit: usize) -> std::io::Result<Option<Vec<u8>>> {
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let mut bytes = Vec::new();
+    file.take(limit as u64).read_to_end(&mut bytes)?;
+    Ok(Some(bytes))
+}
+
+/// `<unix>-<n>.json` as (n, unix): `n` only grows, so it orders copies even if the clock goes back.
+fn damaged_order(name: &str) -> Option<(u64, u64)> {
+    let (unix, n) = name.strip_suffix(".json")?.split_once('-')?;
+    Some((n.parse().ok()?, unix.parse().ok()?))
 }
 
 /// tmp -> fsync -> rename, so a crash leaves the old file or the new one, never half of either.
@@ -77,15 +100,70 @@ fn within(json: &str, limit: usize) -> Result<(), String> {
 
 impl ProfileStore for FileProfileStore {
     fn read_current(&self) -> Option<String> {
-        // One byte past the cap, so startup sees an oversized file as damaged instead of cutting it silently.
-        match read_capped(&self.dir.join(CURRENT), MAX_SET_BYTES + 1) {
-            Ok(text) => text,
+        // Too large or not UTF-8 text goes to startup as bytes, which keeps it as it is.
+        let bytes = self.read_current_bytes().filter(|bytes| bytes.len() <= MAX_SET_BYTES)?;
+        String::from_utf8(bytes).ok()
+    }
+
+    fn read_current_bytes(&self) -> Option<Vec<u8>> {
+        match read_bytes_capped(&self.dir.join(CURRENT), MAX_DAMAGED_BYTES) {
+            Ok(bytes) => bytes,
             Err(error) => {
                 log::warn!("workspace: {CURRENT}: {error}");
                 self.current_unreadable.store(true, Ordering::Relaxed);
                 None
             }
         }
+    }
+
+    fn keep_damaged(&mut self, raw: &[u8]) -> Result<String, String> {
+        let dir = self.dir.join(DAMAGED);
+        fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
+        let mut kept: Vec<((u64, u64), String)> = fs::read_dir(&dir)
+            .map_err(|error| format!("{}: {error}", dir.display()))?
+            .flatten()
+            .filter_map(|entry| {
+                let name = entry.file_name().into_string().ok()?;
+                Some((damaged_order(&name)?, name))
+            })
+            .collect();
+        kept.sort();
+        let raw = raw.get(..MAX_DAMAGED_BYTES).unwrap_or(raw);
+        let same = kept.iter().find(|(_, name)| {
+            let path = dir.join(name);
+            fs::metadata(&path).is_ok_and(|meta| meta.len() == raw.len() as u64) && fs::read(&path).is_ok_and(|bytes| bytes == raw)
+        });
+        if let Some((_, name)) = same {
+            return Ok(format!("{DAMAGED}/{name}"));
+        }
+        let unix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_secs());
+        let mut n = kept.last().map_or(0, |((n, _), _)| n.saturating_add(1));
+        let name = loop {
+            let name = format!("{unix}-{n}.json");
+            let path = dir.join(&name);
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            match options.open(&path) {
+                Ok(mut file) => {
+                    if let Err(error) = file.write_all(raw).and_then(|()| file.sync_all()) {
+                        drop(file);
+                        let _ = fs::remove_file(&path);
+                        return Err(format!("{}: {error}", path.display()));
+                    }
+                    break name;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists && n < u64::MAX => n += 1,
+                Err(error) => return Err(format!("{}: {error}", path.display())),
+            }
+        };
+        kept.push(((n, unix), name.clone()));
+        let excess = kept.len().saturating_sub(MAX_DAMAGED_COPIES);
+        for (_, old) in kept.iter().take(excess) {
+            if let Err(error) = fs::remove_file(dir.join(old)) {
+                log::warn!("workspace: could not remove old damaged copy {old}: {error}");
+            }
+        }
+        Ok(format!("{DAMAGED}/{name}"))
     }
 
     fn write_current(&mut self, json: &str) -> Result<(), String> {
@@ -97,8 +175,7 @@ impl ProfileStore for FileProfileStore {
     }
 
     fn push_snapshot(&mut self, revision: u64, json: &str) -> Result<(), String> {
-        // A damaged copy may be the one-byte-over text `read_current` hands out.
-        within(json, if revision == CORRUPT_SNAPSHOT { MAX_SET_BYTES + 1 } else { MAX_SET_BYTES })?;
+        within(json, MAX_SET_BYTES)?;
         write_atomic(&self.snapshot_path(revision), json)?;
         for expired in expired_snapshots(&self.snapshots()) {
             if let Err(error) = fs::remove_file(self.snapshot_path(expired)) {
@@ -202,12 +279,13 @@ mod tests {
         let restored = restore(&mut store);
         assert!(matches!(restored.fallback, Some(Fallback::Corrupt(_))), "{:?}", restored.fallback);
         assert_eq!(fs::read_to_string(workspace.join("current.json")).unwrap(), "{");
-        assert_eq!(store.read_snapshot(CORRUPT_SNAPSHOT).as_deref(), Some("{"));
+        assert_eq!(damaged_copies(&workspace), [b"{".to_vec()]);
+        assert!(store.snapshots().is_empty(), "a damaged copy is not a snapshot");
         fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn a_newer_major_set_is_kept_as_a_snapshot() {
+    fn a_newer_major_set_is_kept_as_a_damaged_copy() {
         let dir = temp_dir();
         let workspace = dir.join("workspace");
         fs::create_dir_all(&workspace).unwrap();
@@ -217,7 +295,7 @@ mod tests {
         let restored = restore(&mut store);
         assert!(matches!(restored.fallback, Some(Fallback::NewerMajor(_))), "{:?}", restored.fallback);
         assert_eq!(fs::read_to_string(workspace.join("current.json")).unwrap(), newer);
-        assert_eq!(store.read_snapshot(CORRUPT_SNAPSHOT).as_deref(), Some(newer));
+        assert_eq!(damaged_copies(&workspace), [newer.as_bytes().to_vec()]);
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -231,6 +309,7 @@ mod tests {
         let restored = restore(&mut store);
         assert!(matches!(restored.fallback, Some(Fallback::Corrupt(_))), "{:?}", restored.fallback);
         assert_eq!(fs::metadata(workspace.join("current.json")).unwrap().len(), (MAX_SET_BYTES + 10) as u64);
+        assert_eq!(damaged_copies(&workspace), [vec![b' '; MAX_SET_BYTES + 10]]);
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -282,6 +361,62 @@ mod tests {
         fs::write(workspace.join("snapshots/rev-x.json"), "x").unwrap();
         fs::write(workspace.join("snapshots/rev-4.json.bak"), "x").unwrap();
         assert_eq!(store.snapshots(), [3]);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The kept damaged copies, oldest first.
+    fn damaged_copies(workspace: &Path) -> Vec<Vec<u8>> {
+        let mut names: Vec<_> =
+            fs::read_dir(workspace.join("damaged")).map(|dir| dir.flatten().map(|entry| entry.file_name()).collect()).unwrap_or_default();
+        names.sort_by_key(|name| damaged_order(&name.to_string_lossy()));
+        names.iter().map(|name| fs::read(workspace.join("damaged").join(name)).unwrap()).collect()
+    }
+
+    #[test]
+    fn a_second_damaged_copy_does_not_replace_the_first() {
+        let dir = temp_dir();
+        let workspace = dir.join("workspace");
+        let mut store = FileProfileStore::new(workspace.clone());
+        let first = store.keep_damaged(b"{first").unwrap();
+        let second = store.keep_damaged(b"{second").unwrap();
+        assert_ne!(first, second);
+        assert_eq!(damaged_copies(&workspace), [b"{first".to_vec(), b"{second".to_vec()]);
+        // The same bytes again (a restart that changed nothing) add no copy.
+        assert_eq!(store.keep_damaged(b"{first").unwrap(), first);
+        assert_eq!(damaged_copies(&workspace).len(), 2);
+        assert!(store.snapshots().is_empty());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn non_utf8_bytes_are_kept_byte_for_byte() {
+        let dir = temp_dir();
+        let workspace = dir.join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+        let raw: Vec<u8> = vec![b'{', 0xff, 0xfe, 0x00, b'"', 0x80, b'}'];
+        fs::write(workspace.join("current.json"), &raw).unwrap();
+        let mut store = FileProfileStore::new(workspace.clone());
+        assert_eq!(store.read_current(), None, "text that is not UTF-8 goes the bytes way");
+        assert_eq!(store.read_current_bytes(), Some(raw.clone()));
+        let restored = restore(&mut store);
+        assert!(matches!(restored.fallback, Some(Fallback::Corrupt(_))), "{:?}", restored.fallback);
+        assert_eq!(damaged_copies(&workspace), std::slice::from_ref(&raw));
+        assert_eq!(fs::read(workspace.join("current.json")).unwrap(), raw);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn only_the_newest_damaged_copies_are_kept() {
+        let dir = temp_dir();
+        let workspace = dir.join("workspace");
+        let mut store = FileProfileStore::new(workspace.clone());
+        for n in 0..15u32 {
+            store.keep_damaged(format!("{{{n}").as_bytes()).unwrap();
+        }
+        let kept = damaged_copies(&workspace);
+        assert_eq!(kept.len(), MAX_DAMAGED_COPIES);
+        assert_eq!(kept.first().map(Vec::as_slice), Some(b"{5".as_slice()));
+        assert_eq!(kept.last().map(Vec::as_slice), Some(b"{14".as_slice()));
         fs::remove_dir_all(dir).unwrap();
     }
 }

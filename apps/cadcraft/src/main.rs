@@ -50,11 +50,11 @@ impl App {
         }
     }
 
-    /// The CadApp tick saves on its own; this keeps a change made just before closing, which is
-    /// still inside the autosave delay.
+    /// The CadApp tick saves on its own; this keeps a change made just before closing (inside the
+    /// autosave delay, or after a failed save).
     fn flush_workspace(&mut self) {
         if self.cad.ws.store.is_some()
-            && self.cad.ws.autosave.pending()
+            && self.cad.ws.needs_flush()
             && let Err(error) = self.cad.commit_workspace_now()
         {
             eprintln!("CADCraft workspace: {error}");
