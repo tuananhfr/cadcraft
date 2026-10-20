@@ -1,0 +1,124 @@
+{
+  "schema_version": "1.0.0",
+  "profile_id": "preset.SIMPLE",
+  "tenant_id": null,
+  "owner_type": "platform",
+  "owner_id": null,
+  "name": "Simple",
+  "base_id": null,
+  "revision": 1,
+  "etag": null,
+  "status": "published",
+  "locale": null,
+  "theme": null,
+  "ui_scale": 1.0,
+  "created_at": "2026-10-21T00:00:00Z",
+  "updated_at": "2026-10-21T00:00:00Z",
+  "layout": {
+    "ribbon": {
+      "visible": false,
+      "collapsed": false,
+      "tabs": []
+    },
+    "toolbars": [
+      {
+        "id": "standard",
+        "label": "Standard",
+        "dock": "top",
+        "order": 0,
+        "row": 0,
+        "visible": true,
+        "locked": false,
+        "x_ratio": 0.0,
+        "y_ratio": 0.0,
+        "commands": ["new", "open", "qsave", "saveas", "u", "redo", "plot", "publish", "pagesetup", "preview", "import", "export", "attach", "share", "zoom.window", "pan", "3dorbit", "zoom.extents", "ui.toggle.palettes", "ui.dialog.layers", "ui.dialog.blocks", "dist", "list", "area", "ui.dialog.about"]
+      }
+    ],
+    "panels": [
+      {
+        "id": "toolSets",
+        "mode": "dock",
+        "side": "left",
+        "tab_group": null,
+        "visible": true,
+        "x_ratio": 0.0,
+        "y_ratio": 0.0,
+        "width_ratio": 0.15,
+        "height_ratio": 1.0
+      },
+      {
+        "id": "layers",
+        "mode": "dock",
+        "side": "right",
+        "tab_group": null,
+        "visible": true,
+        "x_ratio": 0.0,
+        "y_ratio": 0.0,
+        "width_ratio": 0.21,
+        "height_ratio": 0.4
+      },
+      {
+        "id": "properties",
+        "mode": "dock",
+        "side": "right",
+        "tab_group": null,
+        "visible": true,
+        "x_ratio": 0.0,
+        "y_ratio": 0.0,
+        "width_ratio": 0.21,
+        "height_ratio": 0.6
+      },
+      {
+        "id": "externalReferences",
+        "mode": "hidden",
+        "side": "right",
+        "tab_group": null,
+        "visible": false,
+        "x_ratio": 0.0,
+        "y_ratio": 0.0,
+        "width_ratio": 0.21,
+        "height_ratio": 0.5
+      }
+    ],
+    "dock_tree": null,
+    "command_line": {
+      "dock": "bottom",
+      "height_ratio": 0.1,
+      "lines": 3,
+      "visible": true,
+      "x_ratio": 0.0,
+      "y_ratio": 0.0
+    },
+    "quick_access": [],
+    "status_bar": {
+      "visible": true,
+      "items": {
+        "annotation": true,
+        "coordinates": true,
+        "dynmode": true,
+        "grid": true,
+        "isodraft": true,
+        "layouts": true,
+        "lineweight": true,
+        "ortho": true,
+        "osnap": true,
+        "otrack": true,
+        "polar": true,
+        "quickprops": true,
+        "settings": true,
+        "snap": true,
+        "transparency": true,
+        "workspace": true
+      }
+    },
+    "shortcuts": {},
+    "aliases": {},
+    "favorites": [],
+    "toolsets": {
+      "visible": true,
+      "tab": "Drafting",
+      "collapsed_groups": [],
+      "hidden_tools": []
+    }
+  }
+}

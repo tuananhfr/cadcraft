@@ -49,6 +49,7 @@ pub mod shortcut_menus;
 pub mod theme;
 pub mod viewcube;
 pub mod vpscale;
+pub mod wsprofile;
 
 pub mod exchange;
 

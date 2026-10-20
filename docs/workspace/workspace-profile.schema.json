@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cadcraft.dev/schemas/workspace-profile/1.0.0.json",
+  "title": "CADCraft workspace profile",
+  "description": "Serialisable user layout: ribbon, tool bars, panels, command line, shortcuts. Limits when importing: 256 KiB, 32 nesting levels, 500 array elements, 1024 characters per string. Unknown fields at the root and in `layout` are preserved verbatim. A spec-style profile may carry `panels`, `command_line` and `shortcuts` at the root; they are read as the same keys of `layout`.",
+  "type": "object",
+  "properties": {
+    "schema_version": { "const": "1.0.0", "description": "Version of this schema." },
+    "profile_id": { "type": "string", "maxLength": 1024, "description": "Stable id; presets use preset.<PRESET_ID>." },
+    "tenant_id": { "type": ["string", "null"], "maxLength": 1024 },
+    "owner_type": {
+      "enum": ["platform", "product", "tenant", "company", "discipline", "project", "user", "session"],
+      "description": "Layer of the merge order, most general first."
+    },
+    "owner_id": { "type": ["string", "null"], "maxLength": 1024 },
+    "name": { "type": "string", "maxLength": 1024 },
+    "base_id": { "type": ["string", "null"], "maxLength": 1024, "description": "Preset or profile this one derives from." },
+    "revision": { "type": "integer", "minimum": 0 },
+    "etag": { "type": ["string", "null"], "maxLength": 1024, "description": "Opaque server version tag." },
+    "status": { "enum": ["draft", "published"] },
+    "locale": { "type": ["string", "null"], "maxLength": 1024 },
+    "theme": { "type": ["string", "null"], "maxLength": 1024 },
+    "ui_scale": { "type": "number", "minimum": 0.75, "maximum": 2.0, "description": "Out-of-range values are clamped when read." },
+    "created_at": { "type": "string", "format": "date-time", "maxLength": 1024 },
+    "updated_at": { "type": "string", "format": "date-time", "maxLength": 1024 },
+    "layout": { "$ref": "#/$defs/layout" }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "ratio": { "type": "number", "minimum": 0, "maximum": 1, "description": "Fraction of the content area; out-of-range values are clamped when read." },
+    "commandId": { "type": "string", "maxLength": 1024, "description": "Engine or UI command id. Unknown ids are kept and shown as unavailable placeholders." },
+    "dock": { "enum": ["top", "bottom", "left", "right", "floating"] },
+    "layout": {
+      "type": "object",
+      "properties": {
+        "ribbon": { "$ref": "#/$defs/ribbon" },
+        "toolbars": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/toolbar" } },
+        "panels": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/panel" } },
+        "dock_tree": { "type": ["object", "null"], "description": "craft-ui dock layout, opaque outside the code that applies it." },
+        "command_line": { "$ref": "#/$defs/commandLine" },
+        "quick_access": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/commandId" } },
+        "status_bar": { "$ref": "#/$defs/statusBar" },
+        "shortcuts": {
+          "type": "object",
+          "description": "Command id to key chord, for example \"Ctrl+Shift+L\".",
+          "additionalProperties": { "type": "string", "maxLength": 1024 }
+        },
+        "aliases": {
+          "type": "object",
+          "description": "Command-line alias to command id.",
+          "additionalProperties": { "$ref": "#/$defs/commandId" }
+        },
+        "favorites": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/commandId" } },
+        "toolsets": { "$ref": "#/$defs/toolSets" }
+      },
+      "additionalProperties": true
+    },
+    "ribbon": {
+      "type": "object",
+      "properties": {
+        "visible": { "type": "boolean" },
+        "collapsed": { "type": "boolean" },
+        "tabs": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/ribbonTab" } }
+      }
+    },
+    "ribbonTab": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 1024 },
+        "label": { "type": "string", "maxLength": 1024 },
+        "order": { "type": "integer", "minimum": 0 },
+        "visible": { "type": "boolean" },
+        "contextual": { "type": ["string", "null"], "maxLength": 1024, "description": "Selection kind that shows the tab (dimension, hatch); null for a standing tab." },
+        "groups": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/ribbonGroup" } }
+      }
+    },
+    "ribbonGroup": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 1024 },
+        "label": { "type": "string", "maxLength": 1024 },
+        "commands": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/commandId" } }
+      }
+    },
+    "toolbar": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 1024 },
+        "label": { "type": "string", "maxLength": 1024 },
+        "dock": { "$ref": "#/$defs/dock" },
+        "order": { "type": "integer", "minimum": 0 },
+        "row": { "type": "integer", "minimum": 0 },
+        "visible": { "type": "boolean" },
+        "locked": { "type": "boolean" },
+        "x_ratio": { "$ref": "#/$defs/ratio" },
+        "y_ratio": { "$ref": "#/$defs/ratio" },
+        "commands": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/commandId" } }
+      }
+    },
+    "panel": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 1024, "description": "Panel id, for example properties, layers, toolSets." },
+        "mode": { "enum": ["dock", "float", "auto_hide", "hidden"] },
+        "side": { "oneOf": [{ "$ref": "#/$defs/dock" }, { "type": "null" }] },
+        "tab_group": { "type": ["string", "null"], "maxLength": 1024 },
+        "visible": { "type": "boolean" },
+        "x_ratio": { "$ref": "#/$defs/ratio" },
+        "y_ratio": { "$ref": "#/$defs/ratio" },
+        "width_ratio": { "$ref": "#/$defs/ratio" },
+        "height_ratio": { "$ref": "#/$defs/ratio" }
+      }
+    },
+    "commandLine": {
+      "type": "object",
+      "properties": {
+        "dock": { "enum": ["top", "bottom", "floating"], "description": "Also accepted as `side`; left and right are read as bottom." },
+        "height_ratio": { "$ref": "#/$defs/ratio" },
+        "lines": { "type": "integer", "minimum": 0 },
+        "visible": { "type": "boolean" },
+        "x_ratio": { "$ref": "#/$defs/ratio" },
+        "y_ratio": { "$ref": "#/$defs/ratio" }
+      }
+    },
+    "statusBar": {
+      "type": "object",
+      "properties": {
+        "visible": { "type": "boolean" },
+        "items": {
+          "type": "object",
+          "description": "Status bar toggle name to shown.",
+          "additionalProperties": { "type": "boolean" }
+        }
+      }
+    },
+    "toolSets": {
+      "type": "object",
+      "properties": {
+        "visible": { "type": "boolean" },
+        "tab": { "type": "string", "maxLength": 1024 },
+        "collapsed_groups": { "type": "array", "maxItems": 500, "items": { "type": "string", "maxLength": 1024 } },
+        "hidden_tools": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/commandId" } }
+      }
+    }
+  }
+}
