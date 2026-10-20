@@ -19,6 +19,7 @@ mod legacy_vi;
 mod mtext;
 mod stroke;
 pub mod subset;
+mod substitution;
 pub mod ttf;
 
 use std::borrow::Cow;
@@ -26,6 +27,7 @@ use std::borrow::Cow;
 use cadcraft_geom::{Bounds2, Vec2};
 
 pub use legacy_vi::LegacyVi;
+pub use substitution::{FontInfo, FontState, font_info, font_map, replacement, set_font_map};
 
 pub use mtext::para::{DEFAULT_TAB, ListStyle, MTextColumnSpec, ParaAlign, ParaProps, Paragraphs, TabKind, list_contents};
 pub use mtext::{MTextColor, MTextLayout, MTextParams, MTextPiece, layout_mtext, layout_mtext_with, plain_mtext};
@@ -302,14 +304,8 @@ impl TextFont {
     /// tried when the file isn't installed. When neither is, text typed for a legacy Vietnamese
     /// font the names point to is shown decoded to Unicode.
     pub fn for_style(font: &str, family: &str) -> TextFont {
-        let family = family.trim();
-        if let Some(f) = ttf::find(font).or_else(|| if family.is_empty() { None } else { ttf::find(family) }) {
-            return TextFont::outline(f);
-        }
-        let legacy = LegacyVi::from_name(family).or_else(|| LegacyVi::from_name(font));
-        let n = font.trim();
-        let face = if n.is_empty() || n.eq_ignore_ascii_case(BUILTIN_FONT) { None } else { ttf::find(&ttf::font_alt()) };
-        TextFont { face, legacy }
+        let r = substitution::resolve(font, family);
+        TextFont { face: r.face, legacy: r.info.legacy }
     }
     pub fn is_outline(&self) -> bool {
         self.face.is_some()
@@ -770,6 +766,7 @@ mod ttf_tests {
 
     #[test]
     fn font_alt_that_is_not_installed_keeps_the_stroke_font() {
+        let _serial = crate::ttf::test_lock();
         crate::ttf::set_fallback_fonts(" no-such-font-130 ; . ,other-missing ");
         assert_eq!(crate::ttf::fallback_fonts(), "no-such-font-130, other-missing");
         crate::ttf::set_fallback_fonts("");

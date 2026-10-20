@@ -37,11 +37,20 @@ struct App {
     system_animations: system_animations::SystemAnimations,
     workspace: workspace::Workspace,
     workspace_error: Option<String>,
+    /// The fonts the user added, kept in `<settings dir>/fonts`.
+    fonts: Option<cadcraft_ui_egui::fontstore::FontStore>,
     #[cfg(target_os = "macos")]
     native_menu: Option<native_menu::NativeMenu>,
 }
 
 impl App {
+    /// Keep the fonts the user added or removed in the settings folder.
+    fn persist_fonts(&mut self) {
+        if let Some(store) = &self.fonts {
+            store.sync(&mut self.cad);
+        }
+    }
+
     fn persist_workspace(&mut self, final_attempt: bool) {
         let result = if final_attempt { self.workspace.save_on_exit(&self.cad.ui) } else { self.workspace.save_if_changed(&self.cad.ui) };
         if let Err(error) = result {
@@ -90,6 +99,7 @@ impl eframe::App for App {
     }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.cad.ui(ui);
+        self.persist_fonts();
         self.persist_workspace(false);
     }
     /// A normal exit: the workspace is saved, and this run's autosave files are not needed (a
@@ -124,6 +134,22 @@ pub fn install_io() {
         groups: cadcraft_io::entity_groups,
         entity: cadcraft_io::entity_from_groups,
     });
+}
+
+/// Add Font...: a font file chosen in the system dialog, with its contents.
+fn pick_font() -> Option<(String, Vec<u8>)> {
+    let path = rfd::FileDialog::new()
+        .add_filter("Fonts (TTF, OTF, TTC)", &["ttf", "otf", "ttc", "otc"])
+        .add_filter(i18n::t("All files"), &["*"])
+        .pick_file()?;
+    let name = path.file_name()?.to_string_lossy().into_owned();
+    match std::fs::read(&path) {
+        Ok(bytes) => Some((name, bytes)),
+        Err(e) => {
+            log::warn!("font {}: {e}", path.display());
+            None
+        }
+    }
 }
 
 fn services() -> Services {
@@ -339,6 +365,11 @@ fn main() -> eframe::Result {
                 }
                 app.session.set_lisp_support_dir(Some(support));
             }
+            app.fontmgr.pick_file = Some(Box::new(pick_font));
+            let fonts = config_dir().map(|d| cadcraft_ui_egui::fontstore::FontStore::new(d.join("fonts")));
+            if let Some(store) = &fonts {
+                store.load(&mut app);
+            }
             app.integrated_titlebar = cfg!(target_os = "macos");
             if surface.present_mode == eframe::wgpu::PresentMode::AutoNoVsync {
                 app.frame_cap = Some(cadcraft_ui_egui::gpu::FrameCap::new(240));
@@ -370,6 +401,7 @@ fn main() -> eframe::Result {
                 spacemouse: spacemouse::SpaceMouse::start(cc.egui_ctx.clone()),
                 workspace,
                 workspace_error,
+                fonts,
                 #[cfg(target_os = "macos")]
                 native_menu: None,
             }))

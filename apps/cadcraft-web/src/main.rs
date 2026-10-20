@@ -26,12 +26,19 @@ mod web {
     /// The app, the files File > Open… and drag and drop read for it in the background, the
     /// page embedding it (`?host=parent`), and the browser's `prefers-reduced-motion` (it stays
     /// live, so View ▸ Accessibility ▸ Animation Effects ▸ Use System Setting follows a change).
-    struct Shell(CadApp, crate::upload::Inbox, Option<(crate::host::Bridge, crate::host::DirtyReport)>, Option<web_sys::MediaQueryList>);
+    struct Shell(
+        CadApp,
+        crate::upload::Inbox,
+        Option<(crate::host::Bridge, crate::host::DirtyReport)>,
+        Option<web_sys::MediaQueryList>,
+        crate::fonts::Fonts,
+    );
 
     impl eframe::App for Shell {
         fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
             self.1.take_dropped(ctx);
             self.1.drain(&mut self.0);
+            self.4.frame(&mut self.0);
             self.0.system_animations = self.3.as_ref().map(|reduced| !reduced.matches());
             self.0.logic(ctx);
             if let Some((bridge, reported)) = &self.2 {
@@ -121,6 +128,9 @@ mod web {
                         let mut app = CadApp::new(session, services());
                         app.system_languages =
                             web_sys::window().map(|w| w.navigator().languages().iter().filter_map(|v| v.as_string()).collect()).unwrap_or_default();
+                        let fonts = crate::fonts::Fonts::new(&cc.egui_ctx);
+                        fonts.load(&mut app);
+                        app.fontmgr.local_supported = crate::fonts::Fonts::can_list_local();
                         if let Some(profile) = cc.storage.and_then(|s| s.get_string(cadcraft_ui_egui::options::PROFILE_KEY)) {
                             app.load_profile(&profile);
                         }
@@ -152,7 +162,7 @@ mod web {
                             (bridge, crate::host::DirtyReport::default())
                         });
                         let reduced_motion = web_sys::window().and_then(|w| w.match_media("(prefers-reduced-motion: reduce)").ok().flatten());
-                        Ok(Box::new(Shell(app, inbox, host, reduced_motion)))
+                        Ok(Box::new(Shell(app, inbox, host, reduced_motion, fonts)))
                     }),
                 )
                 .await;
@@ -177,6 +187,10 @@ fn wants_cpu(query: &str) -> bool {
     query.trim_start_matches('?').split('&').any(|p| p == "cpu" || p.starts_with("cpu="))
 }
 
+#[cfg(any(target_arch = "wasm32", test))]
+mod font_index;
+#[cfg(target_arch = "wasm32")]
+mod fonts;
 #[cfg(target_arch = "wasm32")]
 mod upload;
 

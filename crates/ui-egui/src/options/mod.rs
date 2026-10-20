@@ -308,6 +308,7 @@ impl CadApp {
         json!({
             "version": 1,
             "sysvars": cadcraft_engine::cmd::options::profile(&self.session),
+            "fonts": cadcraft_engine::cmd::fonts::profile(),
             "systemCursor": self.ui.system_cursor,
             "modelBackground": color_json(self.options.model_background),
             "paperBackground": color_json(self.options.paper_background),
@@ -327,6 +328,9 @@ impl CadApp {
         let Ok(v) = serde_json::from_str::<Value>(json) else { return };
         if let Some(vars) = v.get("sysvars") {
             cadcraft_engine::cmd::options::restore(&mut self.session, vars);
+        }
+        if let Some(fonts) = v.get("fonts") {
+            cadcraft_engine::cmd::fonts::restore(fonts);
         }
         let mut c = UiChanges::default();
         for key in ["systemCursor", "modelBackground", "paperBackground", "selectionColor", "snapMarkerSize", "timeSensitiveRightClick"] {

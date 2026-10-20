@@ -43,6 +43,7 @@ mod utility;
 mod view;
 
 pub mod curves;
+pub mod fonts;
 pub mod helpers;
 pub mod machines;
 pub mod options;
@@ -197,6 +198,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(inquiry::specs());
         v.extend(settings::specs());
         v.extend(options::specs());
+        v.extend(fonts::specs());
         v.extend(utility::specs());
         v.extend(table::specs());
         v.extend(tolerance::specs());

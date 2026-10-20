@@ -75,6 +75,14 @@ impl Face {
     pub fn has_glyph(&self, c: char) -> bool {
         self.font().is_some_and(|f| f.charmap().map(c).is_some())
     }
+    /// The family name as the font states it (English when it has one).
+    pub fn family_name(&self) -> Option<String> {
+        let f = self.font()?;
+        let id = skrifa::string::StringId::TYPOGRAPHIC_FAMILY_NAME;
+        let name =
+            f.localized_strings(id).english_or_first().or_else(|| f.localized_strings(skrifa::string::StringId::FAMILY_NAME).english_or_first());
+        name.map(|n| n.to_string()).filter(|n| !n.trim().is_empty())
+    }
     fn names(&self) -> Vec<String> {
         let Some(f) = self.font() else { return Vec::new() };
         [skrifa::string::StringId::FAMILY_NAME, skrifa::string::StringId::TYPOGRAPHIC_FAMILY_NAME, skrifa::string::StringId::FULL_NAME]
@@ -179,6 +187,10 @@ struct Db {
     fallback: Fallback,
     /// Bytes of font files loaded from disk so far (bounded by `MAX_LOADED_BYTES`).
     loaded_bytes: usize,
+    /// Fonts the user added ([`add_user_font`]), in the order they were added.
+    user: Vec<UserFont>,
+    /// Normalised family name → stem of the user font that has it.
+    families: HashMap<String, String>,
 }
 
 /// State of the missing-glyph search.
@@ -303,6 +315,19 @@ impl Db {
         Some(bytes)
     }
 
+    /// Drop the user font `stem` and the family names that pointed at it.
+    fn forget_user(&mut self, stem: &str) {
+        self.user.retain(|u| u.stem != stem);
+        self.families.retain(|_, s| s != stem);
+        self.files.remove(stem);
+    }
+
+    /// Forget answers that a changed font set may have changed.
+    fn reset_lookups(&mut self) {
+        self.resolved.clear();
+        self.fallback = Fallback::default();
+    }
+
     fn lookup(&mut self, k: &str) -> Option<Face> {
         let candidates = [k.to_string(), k.replace(' ', ""), format!("{k} regular"), format!("{}-regular", k.replace(' ', ""))];
         for c in &candidates {
@@ -310,7 +335,19 @@ impl Db {
                 return Some(face);
             }
         }
+        if let Some(face) = self.user_family(k) {
+            return Some(face);
+        }
         self.by_family(k)
+    }
+
+    /// The face of a user font whose family or full name is `k`.
+    fn user_family(&mut self, k: &str) -> Option<Face> {
+        let want = norm(k);
+        let stem = self.families.get(&want)?.clone();
+        let faces = faces(&self.file(&stem)?);
+        let i = faces.iter().position(|f| f.names().contains(&want)).unwrap_or(0);
+        faces.into_iter().nth(i)
     }
 
     /// A face whose family or full name is `k`, among files with a similar stem, then among the
@@ -485,14 +522,128 @@ pub(crate) fn register_static(name: &str, bytes: &'static [u8]) {
     g.fallback = Fallback::default();
 }
 
+/// A font file the user added: it is found by its file name and by the families it states.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UserFont {
+    /// Lower-case file name without the extension, the way style font names are looked up.
+    pub stem: String,
+    /// The family of each face, as the font states it (a collection has several).
+    pub families: Vec<String>,
+    pub bytes: usize,
+}
+
+/// The largest font file, the most fonts and the most bytes in all that can be added.
+pub const MAX_USER_FONT_BYTES: usize = 48 << 20;
+const MAX_USER_FONTS: usize = 64;
+const MAX_USER_TOTAL_BYTES: usize = 128 << 20;
+
+/// Add a font file the user chose, found afterwards by `file_name` (like an installed font) and by
+/// its family names; it takes the place of an installed font of the same name. Replaces a
+/// font added under the same name.
+pub fn add_user_font(file_name: &str, bytes: Vec<u8>) -> Result<UserFont, String> {
+    let base = file_name.rsplit(['/', '\\']).next().unwrap_or("");
+    let stem = key(base);
+    if stem.is_empty() || stem.chars().count() > 128 {
+        return Err("the font file needs a name".into());
+    }
+    if bytes.len() > MAX_USER_FONT_BYTES {
+        return Err(format!("{base} is larger than {} MB", MAX_USER_FONT_BYTES >> 20));
+    }
+    let len = bytes.len();
+    let bytes = Arc::new(bytes);
+    let fs = faces(&bytes);
+    if fs.is_empty() {
+        return Err(format!("{base} is not a TrueType or OpenType font"));
+    }
+    let mut families: Vec<String> = Vec::new();
+    for name in fs.iter().filter_map(Face::family_name) {
+        if !families.contains(&name) {
+            families.push(name);
+        }
+    }
+    let font = UserFont { stem: stem.clone(), families, bytes: len };
+    let mut g = lock();
+    let others: usize = g.user.iter().filter(|u| u.stem != stem).map(|u| u.bytes).sum();
+    if g.user.iter().filter(|u| u.stem != stem).count() >= MAX_USER_FONTS || others + len > MAX_USER_TOTAL_BYTES {
+        return Err(format!("too many fonts added (at most {MAX_USER_FONTS}, {} MB in all)", MAX_USER_TOTAL_BYTES >> 20));
+    }
+    g.forget_user(&stem);
+    for face in &fs {
+        for n in face.names() {
+            g.families.insert(n, stem.clone());
+        }
+    }
+    g.files.insert(stem, bytes);
+    g.user.push(font.clone());
+    g.reset_lookups();
+    Ok(font)
+}
+
+/// Remove a font added with [`add_user_font`]; false when there is none named `stem`.
+pub fn remove_user_font(stem: &str) -> bool {
+    let stem = key(stem);
+    let mut g = lock();
+    let had = g.user.iter().any(|u| u.stem == stem);
+    if had {
+        g.forget_user(&stem);
+        g.reset_lookups();
+    }
+    had
+}
+
+/// The fonts the user added.
+pub fn user_fonts() -> Vec<UserFont> {
+    lock().user.clone()
+}
+
+/// Where a font offered for a replacement comes from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FontOrigin {
+    /// Added by the user.
+    Added,
+    /// Compiled into the app (free fonts).
+    Bundled,
+    /// Installed on the computer (never on the web).
+    Installed,
+}
+
+/// A font the user can pick as a replacement. `name` is what to store: it finds the font again.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FontChoice {
+    pub name: String,
+    pub origin: FontOrigin,
+}
+
+/// Fonts to offer as a replacement: those the user added, those compiled in, then the installed
+/// ones by file name.
+pub fn font_choices() -> Vec<FontChoice> {
+    const MAX_INSTALLED: usize = 5000;
+    let g = lock();
+    let mut out: Vec<FontChoice> = g
+        .user
+        .iter()
+        .map(|u| FontChoice { name: u.families.first().cloned().unwrap_or_else(|| u.stem.clone()), origin: FontOrigin::Added })
+        .collect();
+    for f in crate::CRAFT_FONTS.iter().filter(|f| f.style == "Regular") {
+        if !out.iter().any(|c| c.name == f.family) {
+            out.push(FontChoice { name: f.family.to_string(), origin: FontOrigin::Bundled });
+        }
+    }
+    let mut installed: Vec<&String> =
+        g.paths.iter().filter(|(stem, src)| matches!(src, Source::File(_)) && !g.files.contains_key(*stem)).map(|(s, _)| s).collect();
+    installed.sort();
+    out.extend(installed.into_iter().take(MAX_INSTALLED).map(|s| FontChoice { name: s.clone(), origin: FontOrigin::Installed }));
+    out
+}
+
 /// Normalise a style font name ("arial.ttf", "Arial", "ARIALBD.TTF") to a lookup key.
-fn key(name: &str) -> String {
+pub fn key(name: &str) -> String {
     let n = name.trim().to_ascii_lowercase();
     n.trim_end_matches(".ttf").trim_end_matches(".otf").trim_end_matches(".ttc").trim_end_matches(".otc").to_string()
 }
 
 /// Names that mean a stroke font: never looked up as TrueType.
-fn is_stroke_name(k: &str) -> bool {
+pub(crate) fn is_stroke_name(k: &str) -> bool {
     k.is_empty() || k.ends_with(".shx") || k == crate::BUILTIN_FONT.to_ascii_lowercase() || k == "txt" || k == "simplex" || k == "romans"
 }
 
@@ -541,6 +692,13 @@ fn clean_name(s: &str) -> String {
 
 fn split_list(s: &str) -> Vec<String> {
     s.split([',', ';']).map(clean_name).filter(|n| !n.is_empty()).take(16).collect()
+}
+
+/// Held by tests that change the process-wide font settings (FONTALT, the replacement table).
+#[cfg(test)]
+pub(crate) fn test_lock() -> MutexGuard<'static, ()> {
+    static L: Mutex<()> = Mutex::new(());
+    L.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// FONTALT: the font used for a text style font that can't be found. Empty = the built-in

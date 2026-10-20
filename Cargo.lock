@@ -730,6 +730,7 @@ name = "cadcraft-web"
 version = "0.8.0"
 dependencies = [
  "cadcraft-engine",
+ "cadcraft-fonts",
  "cadcraft-io",
  "cadcraft-ui-egui",
  "eframe",

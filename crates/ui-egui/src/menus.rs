@@ -86,6 +86,9 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
     if let Some(result) = crate::spacemouse::route(app, id, params) {
         return Some(result);
     }
+    if let Some(r) = crate::fontmgr::route(app, id, params) {
+        return Some(r);
+    }
     if let Some(r) = crate::xrefs::route(app, id, params) {
         return Some(r);
     }

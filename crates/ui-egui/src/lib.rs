@@ -21,6 +21,9 @@ pub mod control;
 pub mod credits;
 pub mod dialogs;
 pub mod docking;
+pub mod fontmgr;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod fontstore;
 pub mod hatchdlg;
 mod mtext_editor;
 pub mod spacemouse;
@@ -202,6 +205,8 @@ pub struct CadApp {
     pub services: Services,
     pub canvas: canvas::CanvasState,
     /// Desktop HID status and navigation preferences; the web host supplies no HID backend.
+    /// Fonts the user added and the replacement dialog ([`fontmgr`]).
+    pub fontmgr: fontmgr::State,
     pub spacemouse: spacemouse::State,
     pub cmd: cmdline::CmdLine,
     pub status: Option<(String, f64)>,
@@ -255,6 +260,7 @@ impl CadApp {
             options: options::UiOptions::default(),
             services,
             canvas: canvas::CanvasState::default(),
+            fontmgr: fontmgr::State::default(),
             spacemouse: spacemouse::State::default(),
             cmd: cmdline::CmdLine::default(),
             status: None,
@@ -524,6 +530,7 @@ impl CadApp {
                 if let Some(w) = v.get("warnings").and_then(Value::as_array).and_then(|w| w.first()).and_then(Value::as_str) {
                     self.set_status(w.to_string());
                 }
+                self.notify_missing_fonts();
                 // A dynamic block's own drawing: ask whether to open it in the Block Editor.
                 if self.session.state().is_ok_and(|st| cadcraft_engine::blockedit::has_authoring_elements(&st.doc)) {
                     self.ui.dialog = Some("authoring".into());
