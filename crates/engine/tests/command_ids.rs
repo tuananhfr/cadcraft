@@ -6,7 +6,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
 
-use cadcraft_engine::cmd::registry::{CommandMeta, RENAMED, RiskClass, capability_present, command_registry, resolve_stable};
+use cadcraft_engine::cmd::registry::{
+    CommandMeta, EDIT_IDS, EXECUTE_IDS, FILE_IDS, LISP_IDS, RENAMED, RiskClass, XREF_IDS, capability_present, command_registry, resolve_stable,
+};
 
 fn manifest_path(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel)
@@ -14,7 +16,6 @@ fn manifest_path(rel: &str) -> PathBuf {
 
 fn updating() -> bool {
     // Opt-in so a normal run can never rewrite the guarded files.
-
     std::env::var("UPDATE_COMMAND_IDS").is_ok_and(|v| v == "1")
 }
 
@@ -106,6 +107,10 @@ fn appload_is_execute_and_line_is_edit() {
     assert_eq!(risk("line"), RiskClass::Edit);
     assert_eq!(risk("open"), RiskClass::File);
     assert_eq!(risk("plot"), RiskClass::File);
+    assert_eq!(risk("bsave"), RiskClass::Edit);
+    assert_eq!(risk("undo"), RiskClass::Edit);
+    assert_eq!(risk("new"), RiskClass::File);
+    assert_eq!(risk("close"), RiskClass::File);
     assert_eq!(risk("list"), RiskClass::Read);
     assert_eq!(risk("dist"), RiskClass::Read);
 }
@@ -123,6 +128,20 @@ fn permissions_follow_risk_and_category_has_a_fallback() {
     assert_eq!(map["appload"].capabilities, ["lisp"]);
     assert_eq!(map["fonts"].capabilities, ["fonts"]);
     assert!(map["line"].capabilities.is_empty());
+}
+
+#[test]
+fn listed_ids_exist_in_registry() {
+    // Not engine commands yet; the lists keep them so the risk class is right once they land.
+    const NOT_YET: &[&str] = &["load", "vbarun"];
+    let ids: BTreeSet<&str> = command_registry().iter().map(|m| m.stable_id).collect();
+    for (table, list) in
+        [("EDIT_IDS", EDIT_IDS), ("FILE_IDS", FILE_IDS), ("EXECUTE_IDS", EXECUTE_IDS), ("LISP_IDS", LISP_IDS), ("XREF_IDS", XREF_IDS)]
+    {
+        for id in list {
+            assert!(ids.contains(id) || NOT_YET.contains(id), "{table} lists `{id}`, which is not a registry command");
+        }
+    }
 }
 
 #[test]

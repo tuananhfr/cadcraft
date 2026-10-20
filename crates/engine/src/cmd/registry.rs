@@ -35,10 +35,10 @@ const CAPABILITIES: &[&str] = &["lisp", "xref", "fonts"];
 pub const RENAMED: &[(&str, &str)] = &[];
 
 // Run code or scripts supplied by the user or a file.
-const EXECUTE_IDS: &[&str] = &["appload", "load", "lisp", "script", "vbarun"];
+pub const EXECUTE_IDS: &[&str] = &["appload", "load", "lisp", "script", "vbarun"];
 
 // Read or write files outside the open drawing, or hand it to a device or another app.
-const FILE_IDS: &[&str] = &[
+pub const FILE_IDS: &[&str] = &[
     "open",
     "qsave",
     "saveas",
@@ -63,17 +63,23 @@ const FILE_IDS: &[&str] = &[
     "datalink",
     "datalinkupdate",
     "share",
+    "new",
+    "close",
+    "closeall",
 ];
 
-const LISP_IDS: &[&str] = &["appload", "load", "lisp"];
-const XREF_IDS: &[&str] = &["xref", "-xref", "xattach", "xopen", "xbind"];
+// Not undoable (they steer or persist the session, not the drawing's undo stack) yet change state.
+pub const EDIT_IDS: &[&str] = &["undo", "u", "redo", "mredo", "bsave", "bsaveas", "bclose", "layout.set"];
+
+pub const LISP_IDS: &[&str] = &["appload", "load", "lisp"];
+pub const XREF_IDS: &[&str] = &["xref", "-xref", "xattach", "xopen", "xbind"];
 
 fn risk_of(spec: &CommandSpec) -> RiskClass {
     if EXECUTE_IDS.contains(&spec.id) {
         RiskClass::Execute
     } else if FILE_IDS.contains(&spec.id) {
         RiskClass::File
-    } else if spec.undoable {
+    } else if EDIT_IDS.contains(&spec.id) || spec.undoable {
         RiskClass::Edit
     } else {
         RiskClass::Read

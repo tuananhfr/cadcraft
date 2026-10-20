@@ -53,7 +53,7 @@ Engine commands only; UI-only ids are added by `ui-egui`. An id listed here neve
 | `autoconstrain` | Tools | edit |  |
 | `base` | Draw | edit |  |
 | `battman` | Modify | edit |  |
-| `bclose` | Other | read |  |
+| `bclose` | Other | edit |  |
 | `bedit` | Tools | read | be, -bedit |
 | `blend` | Modify | edit | blendcurves |
 | `block` | Draw | edit | b, bmake |
@@ -66,8 +66,8 @@ Engine commands only; UI-only ids are added by `ui-egui`. An id listed here neve
 | `boundary` | Draw | edit | bo, bpoly |
 | `break` | Modify | edit | br |
 | `breakatpoint` | Modify | edit |  |
-| `bsave` | Other | read |  |
-| `bsaveas` | Other | read |  |
+| `bsave` | Other | edit |  |
+| `bsaveas` | Other | edit |  |
 | `cal` | Tools | read | quickcalc, qc |
 | `centerline` | Draw | edit |  |
 | `centermark` | Draw | edit |  |
@@ -79,8 +79,8 @@ Engine commands only; UI-only ids are added by `ui-egui`. An id listed here neve
 | `circle.cd` | Draw | edit |  |
 | `circle.ttr` | Draw | edit |  |
 | `circle.ttt` | Draw | edit |  |
-| `close` | File | read |  |
-| `closeall` | File | read |  |
+| `close` | File | file |  |
+| `closeall` | File | file |  |
 | `color` | Format | edit | col, colour |
 | `compare` | Tools | file |  |
 | `compare.next` | Other | read |  |
@@ -247,7 +247,7 @@ Engine commands only; UI-only ids are added by `ui-egui`. An id listed here neve
 | `layout.list` | Other | read |  |
 | `layout.new` | Insert | edit |  |
 | `layout.rename` | Other | edit |  |
-| `layout.set` | Other | read |  |
+| `layout.set` | Other | edit |  |
 | `laythw` | Other | edit |  |
 | `layulk` | Format | edit |  |
 | `layuniso` | Format | edit |  |
@@ -277,13 +277,13 @@ Engine commands only; UI-only ids are added by `ui-egui`. An id listed here neve
 | `mline` | Draw | edit | ml |
 | `mlstyle` | Format | edit |  |
 | `move` | Modify | edit | m |
-| `mredo` | Other | read |  |
+| `mredo` | Other | edit |  |
 | `mspace` | Other | read | ms |
 | `mtext` | Draw | edit | t, mt |
 | `mview` | Other | edit | mv |
 | `mview.polygonal` | View | edit |  |
 | `ncopy` | Modify | edit |  |
-| `new` | File | read | qnew |
+| `new` | File | file | qnew |
 | `objectscale` | Modify | edit | -objectscale |
 | `offset` | Modify | edit | o |
 | `open` | File | file |  |
@@ -330,7 +330,7 @@ Engine commands only; UI-only ids are added by `ui-egui`. An id listed here neve
 | `ray` | Draw | edit |  |
 | `recover` | File | file |  |
 | `rectang` | Draw | edit | rec, rectangle |
-| `redo` | Edit | read |  |
+| `redo` | Edit | edit |  |
 | `redraw` | View | read | r |
 | `refclose` | Tools | edit |  |
 | `refedit` | Tools | edit |  |
@@ -397,8 +397,8 @@ Engine commands only; UI-only ids are added by `ui-egui`. An id listed here neve
 | `tolerance` | Dimension | edit | tol |
 | `transparencydisplay` | Other | read |  |
 | `trim` | Modify | edit | tr |
-| `u` | Edit | read |  |
-| `undo` | Other | read |  |
+| `u` | Edit | edit |  |
+| `undo` | Other | edit |  |
 | `ungroup` | Tools | edit |  |
 | `union` | Modify | edit | uni |
 | `unisolateobjects` | Tools | edit |  |
