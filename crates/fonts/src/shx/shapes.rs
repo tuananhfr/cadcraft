@@ -2,7 +2,7 @@
 //! `(code u16, len u16)`, then the bodies back to back. Shape 0, when present, is the font header.
 use std::collections::BTreeMap;
 
-use super::{MAX_GLYPHS, ShxError};
+use super::ShxError;
 
 /// Bounds-checked little-endian reader; every read reports `Truncated` instead of indexing.
 pub(super) struct Reader<'a> {
@@ -56,13 +56,11 @@ pub(super) fn parse(body: &[u8]) -> Result<(FontHeader, BTreeMap<u32, Vec<u8>>),
     let mut r = Reader::new(body);
     r.take(4)?;
     let count = usize::from(r.u16()?);
-    if count > MAX_GLYPHS {
-        return Err(ShxError::TooLarge);
-    }
     let table_len = count.checked_mul(4).ok_or(ShxError::TooLarge)?;
     let table = r.take(table_len)?;
 
     let mut header = FontHeader::default();
+    let mut have_header = false;
     let mut glyphs = BTreeMap::new();
     let (entries, _) = table.as_chunks::<4>();
     for [c0, c1, l0, l1] in entries {
@@ -70,7 +68,10 @@ pub(super) fn parse(body: &[u8]) -> Result<(FontHeader, BTreeMap<u32, Vec<u8>>),
         let len = usize::from(u16::from_le_bytes([*l0, *l1]));
         let data = r.take(len)?;
         if code == 0 {
-            header = FontHeader::parse(data).ok_or(ShxError::Truncated)?;
+            if !have_header {
+                header = FontHeader::parse(data).ok_or(ShxError::Truncated)?;
+                have_header = true;
+            }
         } else {
             glyphs.entry(u32::from(code)).or_insert_with(|| data.to_vec());
         }

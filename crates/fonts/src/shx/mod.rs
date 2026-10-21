@@ -1,7 +1,7 @@
 //! SHX compiled shape fonts: recognition and the glyph table (shapes 1.0/1.1, unifont 1.0).
 //!
-//! Layouts are the ones the format documentation describes, checked against synthetic images only;
-//! anything that does not fit them exactly is a typed error rather than a guess.
+//! Layouts follow public descriptions plus black-box structure checks (counts only) on local fonts;
+//! anything that does not fit exactly is a typed error.
 mod shapes;
 
 use std::collections::BTreeMap;
@@ -109,7 +109,10 @@ fn parse_unifont(body: &[u8]) -> Result<(FontHeader, BTreeMap<u32, Vec<u8>>), Sh
         let code = u32::from(r.u16()?);
         let len = usize::from(r.u16()?);
         let data = r.take(len)?;
-        glyphs.entry(code).or_insert_with(|| data.to_vec());
+        // Code 0 is the header in shapes files; keep the two kinds consistent.
+        if code != 0 {
+            glyphs.entry(code).or_insert_with(|| data.to_vec());
+        }
     }
     Ok((header, glyphs))
 }

@@ -118,6 +118,23 @@ fn first_of_duplicate_codes_wins() {
 }
 
 #[test]
+fn second_shape_zero_does_not_replace_the_header() {
+    let img = shapes_image(SHAPES_10, Some(font_header("FIRST", 8, 2, 0)), &[(0, font_header("SECOND", 1, 1, 2)), (0x41, glyph("A", &[1]))]);
+    let font = ShxFont::parse(&img).unwrap();
+    assert_eq!((font.name.as_str(), font.above, font.below, font.modes), ("FIRST", 8, 2, 0));
+    assert_eq!(font.len(), 1);
+}
+
+#[test]
+fn unifont_code_zero_is_not_a_glyph() {
+    let img = unifont_image(font_header("UNI0", 5, 1, 0), &[(0, glyph("NUL", &[1])), (0x41, glyph("A", &[1]))]);
+    let font = ShxFont::parse(&img).unwrap();
+    assert_eq!(font.glyph_bytes(0), None);
+    assert_eq!(font.len(), 1);
+    assert!(font.glyph_bytes(0x41).is_some());
+}
+
+#[test]
 fn parses_synthetic_unifont() {
     let font = ShxFont::parse(&two_glyph_unifont()).unwrap();
     assert_eq!(font.kind, ShxKind::Unifont);
@@ -141,7 +158,7 @@ fn rejects_non_shx_and_bigfont() {
         assert_eq!(ShxFont::parse(junk).unwrap_err(), ShxError::NotShx, "{junk:?}");
     }
     let mut big = BIGFONT.to_vec();
-    big.extend_from_slice(&[8, 0, 0xd9, 9, 1, 0, 0x2f, 0]);
+    big.extend_from_slice(&[0; 8]);
     assert_eq!(ShxFont::parse(&big).unwrap_err(), ShxError::Unsupported(ShxKind::Bigfont));
     // The header alone is enough to refuse it, whatever follows.
     assert_eq!(ShxFont::parse(BIGFONT).unwrap_err(), ShxError::Unsupported(ShxKind::Bigfont));
@@ -251,7 +268,12 @@ fn hostile_shx_never_panics() {
     let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
     for _ in 0..1000 {
         let mut img = match rng.below(4) {
-            0 => (0..rng.below(300)).map(|_| rng.next() as u8).collect::<Vec<u8>>(),
+            0 => {
+                // A supported magic in front, so the junk reaches the table parsers (large counts included).
+                let mut v = [SHAPES_10, SHAPES_11, UNIFONT][rng.below(3)].to_vec();
+                v.extend((0..rng.below(300)).map(|_| rng.next() as u8));
+                v
+            }
             n => seeds.get(n - 1).cloned().unwrap_or_default(),
         };
         for _ in 0..rng.below(6) {
@@ -280,7 +302,6 @@ fn shx_files(dir: &Path, out: &mut Vec<PathBuf>) {
             out.push(path);
         }
     }
-    out.sort();
 }
 
 /// Corpus files whose own tables are inconsistent (an entry runs past the end of the file or the
@@ -290,9 +311,10 @@ const DAMAGED_IN_CORPUS: &[&str] = &["eur_____.shx", "vnarial.shx", "vnavant.shx
 #[test]
 #[ignore = "needs SHX_TEST_DIR pointing at a folder of .shx files"]
 fn real_corpus_parses() {
-    let Ok(dir) = std::env::var("SHX_TEST_DIR") else { return };
+    let dir = std::env::var("SHX_TEST_DIR").expect("set SHX_TEST_DIR to a folder of .shx files to run this test");
     let mut files = Vec::new();
     shx_files(Path::new(&dir), &mut files);
+    files.sort();
     assert!(!files.is_empty(), "no .shx files under {dir}");
 
     let (mut shapes, mut unifont, mut bigfont, mut foreign, mut damaged) = (0, 0, 0, 0, 0);
