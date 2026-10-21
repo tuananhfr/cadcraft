@@ -502,6 +502,12 @@ fn octant_count_above_eight_stops_the_glyph() {
 }
 
 #[test]
+fn fractional_arc_count_above_eight_stops_the_glyph() {
+    let g = run(&[0x30, 0xB, 0, 0, 0, 2, 0x0F, 0x30]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0]]]);
+}
+
+#[test]
 fn arcs_scale_with_the_scale_factor() {
     let g = run(&[4, 2, 0xA, 1, 0x04]);
     let pts = &g.strokes[0];
@@ -660,42 +666,88 @@ fn malformed_programs_return_what_was_built() {
     assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0], [3.0, 1.0]]]);
 }
 
-/// Subshape fan-out whose callees scan long sequences, bulge sequences at a tiny scale and bodies
-/// with no NUL: only a shared work budget keeps this fast.
-#[test]
-fn hostile_fan_out_is_bounded_by_work() {
-    let mut pairs = vec![9u8];
-    for _ in 0..31_000 {
-        pairs.extend([1, 1]);
-    }
-    pairs.extend([0, 0]);
-    let mut bulges = vec![3u8, 255, 3, 255, 3, 255, 0xD];
-    for _ in 0..20_000 {
-        bulges.extend([127, 127, 127]);
-    }
-    bulges.extend([0, 0]);
+/// Runs a glyph that, pen up, calls subshape 0x42 `calls` times and then draws one marker vector.
+/// The marker is missing exactly when the work budget ran out first, which makes each charge
+/// observable on its own: every case below is sized so that it exhausts the budget only when the
+/// charge under test is counted.
+fn fan_out(preamble: &[u8], callee: Vec<u8>, calls: usize) -> (ShxGlyph, std::time::Duration) {
     let mut caller = vec![2u8];
-    for callee in [0x42u8, 0x43, 0x44] {
-        for _ in 0..10_000 {
-            caller.extend([7, callee]);
-        }
+    caller.extend_from_slice(preamble);
+    for _ in 0..calls {
+        caller.extend([7, 0x42]);
     }
-    let list = vec![(0x41u16, glyph("G", &caller)), (0x42, glyph("G", &pairs)), (0x43, glyph("G", &bulges)), (0x44, vec![b'x'; 60_000])];
+    caller.extend([1, 0x30]);
+    let list = vec![(0x41u16, glyph("G", &caller)), (0x42, callee)];
     let f = ShxFont::parse(&shapes_image(SHAPES_10, Some(font_header("T", 1, 0, 0)), &list)).unwrap();
     let started = std::time::Instant::now();
     let g = f.glyph(0x41).expect("hostile fan-out still yields a glyph");
     let elapsed = started.elapsed();
-    assert!(elapsed.as_millis() < 1500, "took {elapsed:?}");
+    assert!(elapsed.as_millis() < 1000, "took {elapsed:?}");
     assert!(points(&g) <= MAX_POINTS);
     assert!(g.advance.iter().all(|v| v.is_finite()));
+    (g, elapsed)
+}
 
-    // The same sequences with the pen down must stop at the point budget quickly too.
-    let list = [(0x41u16, glyph("G", &[1, 7, 0x42, 7, 0x42])), (0x42, glyph("G", &pairs))];
+fn assert_budget_gates(preamble: &[u8], callee: Vec<u8>, exhausting_calls: usize) {
+    let (g, _) = fan_out(preamble, callee.clone(), exhausting_calls);
+    assert!(g.strokes.is_empty(), "the budget should have run out before the marker");
+    // Control: a quarter of the calls finishes and draws the marker.
+    let (g, _) = fan_out(preamble, callee, exhausting_calls / 4);
+    assert_eq!(g.strokes.len(), 1, "the control run must reach the marker");
+}
+
+#[test]
+fn work_budget_charges_xy_sequence_entries() {
+    // 1,000 pairs per call: 3,008 units with the per-entry charge, 2,008 without it.
+    let mut ops = vec![9u8];
+    for _ in 0..1000 {
+        ops.extend([1, 1]);
+    }
+    ops.extend([0, 0]);
+    assert_budget_gates(&[], glyph("G", &ops), 1200);
+}
+
+#[test]
+fn work_budget_charges_bulge_sequence_entries() {
+    // Straight (bulge 0) triples, so only bytes and the entry charge count: 4,008 against 3,008.
+    let mut ops = vec![0xDu8];
+    for _ in 0..1000 {
+        ops.extend([1, 1, 0]);
+    }
+    ops.extend([0, 0]);
+    assert_budget_gates(&[], glyph("G", &ops), 870);
+}
+
+#[test]
+fn work_budget_charges_arc_segments_at_a_tiny_scale() {
+    // 100 half-circle bulges per call at scale 1/255^3: 16 segments each dominate the cost.
+    let mut ops = vec![0xDu8];
+    for _ in 0..100 {
+        ops.extend([127, 127, 127]);
+    }
+    ops.extend([0, 0]);
+    assert_budget_gates(&[3, 255, 3, 255, 3, 255], glyph("G", &ops), 2500);
+}
+
+#[test]
+fn work_budget_charges_the_name_scan_of_a_body_without_nul() {
+    // 60,000 bytes that never reach a NUL: the program is empty, only the scan costs anything.
+    assert_budget_gates(&[], vec![b'x'; 60_000], 100);
+}
+
+#[test]
+fn pen_down_sequence_fan_out_stops_at_the_point_budget() {
+    let mut ops = vec![9u8];
+    for _ in 0..31_000 {
+        ops.extend([1, 1]);
+    }
+    ops.extend([0, 0]);
+    let list = [(0x41u16, glyph("G", &[1, 7, 0x42, 7, 0x42])), (0x42, glyph("G", &ops))];
     let f = ShxFont::parse(&shapes_image(SHAPES_10, Some(font_header("T", 1, 0, 0)), &list)).unwrap();
     let started = std::time::Instant::now();
     let g = f.glyph(0x41).unwrap();
-    assert!(started.elapsed().as_millis() < 1500);
-    assert!(points(&g) <= MAX_POINTS);
+    assert!(started.elapsed().as_millis() < 1000);
+    assert_eq!(points(&g), MAX_POINTS);
 }
 
 #[test]

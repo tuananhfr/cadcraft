@@ -298,6 +298,10 @@ impl<'f> Machine<'f> {
             // be told from the corpus.
             Op::FractionalArc { start_offset, end_offset, radius, spec } => {
                 let octant = f64::from((spec >> 4) & 7);
+                // Like 0xA: a count above 8 is not an octant count, and would draw a multi-turn arc.
+                if spec & 0xF > 8 {
+                    return Err(Halt);
+                }
                 let count = f64::from(spec & 0xF);
                 let clockwise = spec & 0x80 != 0;
                 let offset = |o: u8| f64::from(o) / 256.0;
