@@ -215,23 +215,28 @@ fn locked_by_policy_ux11() {
 
 #[test]
 fn offscreen_toolbar_pulled_back() {
+    // The ratios go in literally, through the generic setter, so nothing clamps them on input.
+    let floating_draw = |x: f64, y: f64| json!({"label": "Draw", "dock": "floating", "visible": true, "x_ratio": x, "y_ratio": y, "commands": toolbars::builtin_toolbar_commands("draw")});
     let mut app = attached(MemoryStore::default());
-    run(&mut app, "ui.toolbar.float", json!({"id": "draw", "x_ratio": 1.4, "y_ratio": 1.2}));
+    run(&mut app, "ui.workspace.set", json!({"pointer": "/toolbars/draw", "value": floating_draw(1.4, 1.2)}));
+    assert_eq!(bar(&app, "draw").x_ratio, 1.0, "the profile schema itself keeps ratios in 0..=1; the window clamp below is a separate step");
     let h = harness(app);
     let content = egui::Rect::from_min_size(Pos2::ZERO, vec2(1366.0, 768.0));
-    let rect = toolbars::floating_rect(&bar(h.state(), "draw"), content);
-    let seen = rect.intersect(content);
-    assert!(seen.width() >= 24.0 && seen.height() >= 24.0, "{rect:?} shows {seen:?}");
-    let grip = h.get_by_label("Draw toolbar grip").rect();
-    assert!(grip.intersect(content).is_positive(), "the grip is on screen: {grip:?}");
+    let seen = |h: &Harness<'_, CadApp>, content: egui::Rect| {
+        // The grip sits 5 pt inside the bar's left and top edges, so the painted bar starts there.
+        let grip = h.get_by_label("Draw toolbar grip").rect();
+        let bar = egui::Rect::from_min_size(grip.min - vec2(5.0, 5.0), vec2(34.0, 34.0)).intersect(content);
+        assert!(grip.intersect(content).is_positive(), "the grip is on screen: {grip:?}");
+        assert!(bar.width() >= 24.0 - 0.5 && bar.height() >= 24.0 - 0.5, "{grip:?} leaves {bar:?} of the bar inside {content:?}");
+    };
+    seen(&h, content);
+    assert_eq!(bar(h.state(), "draw").x_ratio, 1.0, "painting does not write anything back");
 
     // A smaller window pulls it back again without touching what is stored.
-    let mut small = harness_sized(attached(MemoryStore::default()), 800.0, 600.0);
-    run(small.state_mut(), "ui.toolbar.float", json!({"id": "draw", "x_ratio": 0.99, "y_ratio": 0.99}));
-    small.run_steps(3);
-    let content = egui::Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0));
-    let seen = toolbars::floating_rect(&bar(small.state(), "draw"), content).intersect(content);
-    assert!(seen.width() >= 24.0 && seen.height() >= 24.0);
+    let mut app = attached(MemoryStore::default());
+    run(&mut app, "ui.workspace.set", json!({"pointer": "/toolbars/draw", "value": floating_draw(0.99, 0.99)}));
+    let small = harness_sized(app, 800.0, 600.0);
+    seen(&small, egui::Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)));
     assert_eq!(bar(small.state(), "draw").x_ratio, 0.99, "the clamp is never written back");
 }
 
@@ -332,16 +337,17 @@ fn drop_targets_are_ordered_rows_on_an_edge() {
         ToolbarState { id: "b".into(), order: 1, ..ToolbarState::default() },
         ToolbarState { id: "c".into(), dock: Dock::Left, ..ToolbarState::default() },
     ];
-    toolbars::drag::apply_drop(&mut bars, "c", &DropTarget::Edge { dock: Dock::Top, row: 0, order: 1 }).unwrap();
+    toolbars::drag::apply_drop(&mut bars, "c", &DropTarget::Edge { dock: Dock::Top, row: 0, order: 1 }, &[]).unwrap();
     let orders: Vec<(&str, u32)> = bars.iter().map(|bar| (bar.id.as_str(), bar.order)).collect();
     assert_eq!(orders, [("a", 0), ("b", 2), ("c", 1)]);
-    toolbars::drag::apply_drop(&mut bars, "c", &DropTarget::Edge { dock: Dock::Top, row: 0, order: 99 }).unwrap();
-    assert_eq!(bars.iter().find(|bar| bar.id == "c").map(|bar| bar.order), Some(2));
-    toolbars::drag::apply_drop(&mut bars, "a", &DropTarget::Float { pos_ratio: [2.0, f32::NAN] }).unwrap();
+    toolbars::drag::apply_drop(&mut bars, "c", &DropTarget::Edge { dock: Dock::Top, row: 0, order: 99 }, &[]).unwrap();
+    let after_b = bars.iter().find(|bar| bar.id == "c").map(|bar| bar.order) > bars.iter().find(|bar| bar.id == "b").map(|bar| bar.order);
+    assert!(after_b, "dropped past the end, c is last");
+    toolbars::drag::apply_drop(&mut bars, "a", &DropTarget::Float { pos_ratio: [2.0, f32::NAN] }, &[]).unwrap();
     let a = &bars[0];
     assert_eq!((a.dock, a.x_ratio, a.y_ratio), (Dock::Floating, 1.0, 0.0));
-    assert!(toolbars::drag::apply_drop(&mut bars, "zzz", &DropTarget::Float { pos_ratio: [0.0, 0.0] }).is_err());
-    assert!(toolbars::drag::apply_drop(&mut bars, "a", &DropTarget::Edge { dock: Dock::Floating, row: 0, order: 0 }).is_err());
+    assert!(toolbars::drag::apply_drop(&mut bars, "zzz", &DropTarget::Float { pos_ratio: [0.0, 0.0] }, &[]).is_err());
+    assert!(toolbars::drag::apply_drop(&mut bars, "a", &DropTarget::Edge { dock: Dock::Floating, row: 0, order: 0 }, &[]).is_err());
 }
 
 #[test]
@@ -351,4 +357,137 @@ fn simple_draws_todays_toolbar_with_a_grip() {
     assert!(h.query_by_label("New Drawing (Ctrl+N)").is_some());
     assert!(h.query_by_label("Zoom Window").is_some());
     assert!(h.state().ws.user.layout.toolbars.iter().all(|bar| bar.id == "standard"), "the other shipped bars are only offered, not stored");
+}
+
+/// A company layer that holds `draw` at row 0, position `order`, and locks it.
+fn company_holds_draw_at(order: u32) -> MemoryStore {
+    let draw = json!({
+        "id": "draw", "label": "Draw", "dock": "top", "row": 0, "order": order, "visible": true,
+        "commands": toolbars::builtin_toolbar_commands("draw")
+    });
+    let policy = json!({"layers": [{"level": "company", "patch": {"toolbars": [draw]}, "locks": ["/toolbars/draw"]}]});
+    MemoryStore { policy: Some(policy.to_string()), ..MemoryStore::default() }
+}
+
+fn order_of(app: &CadApp, id: &str) -> u32 {
+    bar(app, id).order
+}
+
+#[test]
+fn dropping_next_to_a_locked_bar_leaves_its_order_alone() {
+    // Gap before the locked bar: there is room right in front of it.
+    let mut app = attached(company_holds_draw_at(3));
+    run(&mut app, "ui.toolbar.move", json!({"id": "modify", "dock": "top", "row": 0, "order": 1}));
+    assert_eq!((order_of(&app, "standard"), order_of(&app, "modify"), order_of(&app, "draw")), (0, 1, 3));
+
+    // After the locked bar.
+    let mut app = attached(company_holds_draw_at(1));
+    run(&mut app, "ui.toolbar.move", json!({"id": "modify", "dock": "top", "row": 0, "order": 2}));
+    assert_eq!((order_of(&app, "standard"), order_of(&app, "draw"), order_of(&app, "modify")), (0, 1, 2));
+
+    // Directly before it there is no room without moving it: the nearest legal slot is taken.
+    let mut app = attached(company_holds_draw_at(1));
+    run(&mut app, "ui.toolbar.dock", json!({"id": "modify", "dock": "top", "row": 0, "order": 1}));
+    assert_eq!(order_of(&app, "draw"), 1, "the locked bar did not move");
+    assert!(order_of(&app, "modify") > 1, "{:?}", bar(&app, "modify"));
+    assert_eq!(app.ws.user.layout.toolbars.iter().find(|bar| bar.id == "draw").map(|bar| bar.order), Some(1));
+}
+
+#[test]
+fn apply_drop_never_renumbers_a_frozen_bar() {
+    let bar = |id: &str, order: u32| ToolbarState { id: id.into(), order, ..ToolbarState::default() };
+    let frozen = ["f".to_string()];
+    let orders = |bars: &[ToolbarState]| bars.iter().map(|bar| (bar.id.clone(), bar.order)).collect::<Vec<_>>();
+    let mut bars = vec![bar("a", 0), bar("f", 1), bar("g", 2), bar("m", 9)];
+    toolbars::drag::apply_drop(&mut bars, "m", &DropTarget::Edge { dock: Dock::Top, row: 0, order: 0 }, &frozen).unwrap();
+    assert_eq!(bars.iter().find(|bar| bar.id == "f").map(|bar| bar.order), Some(1));
+    assert_eq!(
+        orders(&bars),
+        [("a".to_string(), 0), ("f".to_string(), 1), ("g".to_string(), 3), ("m".to_string(), 2)],
+        "no room before f: the nearest slot is after it"
+    );
+
+    // Free bars after a frozen one are pushed when they collide.
+    let mut bars = vec![bar("f", 0), bar("g", 1), bar("m", 5)];
+    toolbars::drag::apply_drop(&mut bars, "m", &DropTarget::Edge { dock: Dock::Top, row: 0, order: 1 }, &["f".to_string()]).unwrap();
+    assert_eq!(orders(&bars), [("f".to_string(), 0), ("g".to_string(), 2), ("m".to_string(), 1)]);
+}
+
+#[test]
+fn dragging_a_bar_past_a_locked_one_is_not_refused() {
+    let mut h = harness(attached(company_holds_draw_at(1)));
+    let history = h.state().ws.history.undo_len();
+    let start = grip(&h, "Standard");
+    let row_y = start.y;
+    drag(&mut h, start, Pos2::new(1300.0, row_y), true);
+    let state = h.state();
+    assert_eq!(order_of(state, "draw"), 1, "the locked bar kept its place");
+    assert!(order_of(state, "standard") > 1, "standard now follows draw");
+    assert_eq!(state.ws.history.undo_len(), history + 1, "{:?}", state.ws.status);
+    assert!(h.get_by_label("Standard toolbar grip").rect().left() > h.get_by_label("Draw toolbar grip").rect().left());
+}
+
+#[test]
+fn locked_bar_is_unlocked_from_the_keyboard() {
+    let mut app = attached(MemoryStore::default());
+    run(&mut app, "ui.toolbar.lock", json!({"id": "standard"}));
+    let polar = app.session.settings.polarmode;
+    let mut h = harness(app);
+    assert!(h.query_by_label("Standard toolbar grip").is_none(), "a locked bar has no grip");
+    for _ in 0..120 {
+        if h.query_by_label("New Drawing (Ctrl+N)").is_some_and(|node| node.is_focused()) {
+            break;
+        }
+        h.key_press(Key::Tab);
+        h.run_steps(2);
+    }
+    assert!(h.get_by_label("New Drawing (Ctrl+N)").is_focused(), "Tab reaches a button of the locked bar");
+    h.key_press_modifiers(Modifiers::SHIFT, Key::F10);
+    h.run_steps(3);
+    assert!(h.get_by_label("Hide").is_focused(), "Shift+F10 on a button opens the bar's menu");
+    assert_eq!(h.state().session.settings.polarmode, polar);
+    h.key_press(Key::Tab);
+    h.run_steps(2);
+    assert!(h.get_by_label("Unlock").is_focused());
+    h.key_press(Key::Enter);
+    h.run_steps(4);
+    assert!(!bar(h.state(), "standard").locked);
+    assert!(h.query_by_label("Standard toolbar grip").is_some(), "the grip is back");
+}
+
+#[test]
+fn commands_materialize_a_shipped_bar_the_profile_does_not_hold() {
+    let cases = [
+        ("ui.toolbar.lock", json!({"id": "modify"})),
+        ("ui.toolbar.unlock", json!({"id": "modify"})),
+        ("ui.toolbar.dock", json!({"id": "modify", "dock": "right"})),
+        ("ui.toolbar.float", json!({"id": "modify"})),
+        ("ui.toolbar.move", json!({"id": "modify", "dock": "bottom"})),
+    ];
+    for (command, params) in cases {
+        let mut app = attached(MemoryStore::default());
+        assert!(app.ws.user.layout.toolbars.iter().all(|bar| bar.id != "modify"));
+        run(&mut app, command, params);
+        let modify = bar(&app, "modify");
+        assert_eq!(modify.commands, toolbars::builtin_toolbar_commands("modify"), "{command}");
+        assert_eq!(modify.locked, command == "ui.toolbar.lock", "{command}");
+    }
+    let mut app = attached(MemoryStore::default());
+    assert!(app.run("ui.toolbar.lock", json!({"id": "nonsense"})).unwrap_err().contains("Unknown toolbar"));
+}
+
+#[test]
+fn every_disabled_item_of_a_policy_locked_bar_explains_why() {
+    let mut h = harness(attached(company_locks_draw()));
+    h.get_by_label("Draw toolbar grip").click_secondary();
+    h.run_steps(3);
+    for label in ["Hide", "Lock", "Dock ⏵", "Float"] {
+        let item = h.get_by_label(label);
+        assert!(item.accesskit_node().is_disabled(), "{label} is greyed out");
+        item.hover();
+        h.run_steps(6);
+        assert!(h.query_by_label("Locked by company policy").is_some(), "{label} has the policy tooltip");
+        h.hover_at(Pos2::new(1200.0, 600.0));
+        h.run_steps(3);
+    }
 }

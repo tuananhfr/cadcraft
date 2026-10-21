@@ -54,12 +54,13 @@ pub(super) struct Geometry {
     pub edges: [Rect; 4],
     pub rows: Vec<RowRect>,
     pub bars: Vec<BarRect>,
-    pub grips: Vec<Id>,
+    /// Every keyboard stop of a bar with the bar it belongs to, for the key that opens its menu.
+    pub stops: Vec<(Id, Id)>,
 }
 
 impl Default for Geometry {
     fn default() -> Self {
-        Self { pass: 0, center: Rect::NOTHING, edges: [Rect::NOTHING; 4], rows: Vec::new(), bars: Vec::new(), grips: Vec::new() }
+        Self { pass: 0, center: Rect::NOTHING, edges: [Rect::NOTHING; 4], rows: Vec::new(), bars: Vec::new(), stops: Vec::new() }
     }
 }
 
@@ -218,6 +219,10 @@ fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect,
     let body = ui.interact(bar_rect, owner.with("body"), Sense::CLICK);
     let mut open = if body.secondary_clicked() { Some(egui::SetOpenCommand::Bool(true)) } else { None };
     let mut by_keyboard = false;
+    if menu::take_menu_key(ui.ctx(), owner) {
+        open = Some(egui::SetOpenCommand::Bool(true));
+        by_keyboard = true;
+    }
 
     if !bar.locked {
         let grip_rect = along(axis, band, start, 5.0, GRIP, BAR - 10.0);
@@ -228,13 +233,10 @@ fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect,
         let name = if bar.label.is_empty() { bar.id.as_str() } else { bar.label.as_str() };
         let label = crate::tf!("{name} toolbar grip", name = crate::i18n::t(name));
         icons::describe_control(ui, &grip, &label, None, false);
-        building(ui.ctx(), |geometry| geometry.grips.push(grip_id));
-        if menu::take_menu_key(ui.ctx(), grip_id) {
+        building(ui.ctx(), |geometry| geometry.stops.push((grip_id, owner)));
+        if !by_keyboard && grip.secondary_clicked() {
             open = Some(egui::SetOpenCommand::Bool(true));
-            by_keyboard = true;
-        } else if grip.secondary_clicked() {
-            open = Some(egui::SetOpenCommand::Bool(true));
-        } else if grip.clicked() {
+        } else if !by_keyboard && grip.clicked() {
             open = Some(egui::SetOpenCommand::Toggle);
             by_keyboard = ui.input(|input| input.key_pressed(egui::Key::Enter) || input.key_pressed(egui::Key::Space));
         }
@@ -254,6 +256,7 @@ fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect,
             let rect = along(axis, band, start + cursor + position as f32 * STEP, (BAR - BUTTON) / 2.0, BUTTON, BUTTON);
             let id = owner.with(("button", *index, position));
             if command.known {
+                building(ui.ctx(), |geometry| geometry.stops.push((id, owner)));
                 let response = known_button(ui, rect, id, command, mac);
                 secondary |= response.secondary_clicked();
                 if response.clicked() {
@@ -267,6 +270,7 @@ fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect,
     }
     if !fit.overflow.is_empty() {
         let rect = along(axis, band, start + cursor, (BAR - BUTTON) / 2.0, fit.overflow_width, BUTTON);
+        building(ui.ctx(), |geometry| geometry.stops.push((owner.with("more"), owner)));
         let response = ui.interact(rect, owner.with("more"), Sense::click());
         if response.hovered() {
             ui.painter().rect_filled(rect, 3.0, t.control_hover.gamma_multiply(0.6));

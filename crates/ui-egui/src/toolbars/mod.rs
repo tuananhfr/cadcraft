@@ -231,11 +231,10 @@ fn append_to(toolbars: &[ToolbarState], moving: &str, dock: Dock) -> (u32, u32) 
     (last.row, u32::try_from(in_row).unwrap_or(u32::MAX))
 }
 
-fn edit(toolbars: &mut Vec<ToolbarState>, op: &str, id: &str, params: &Value) -> Result<(), String> {
+fn edit(toolbars: &mut Vec<ToolbarState>, op: &str, id: &str, params: &Value, frozen: &[String]) -> Result<(), String> {
     let mut at = toolbars.iter().position(|bar| bar.id == id);
-    let shows_it = matches!(op, "show" | "dock" | "float" | "move");
     if at.is_none()
-        && shows_it
+        && op != "hide"
         && let Some(bar) = shipped_bar(id, toolbars)
     {
         toolbars.push(bar);
@@ -265,24 +264,24 @@ fn edit(toolbars: &mut Vec<ToolbarState>, op: &str, id: &str, params: &Value) ->
             let dock = edge(params)?;
             let (row, order) = append_to(toolbars, id, dock);
             let (row, order) = (index(params, "row")?.unwrap_or(row), index(params, "order")?.unwrap_or(order));
-            drag::apply_drop(toolbars, id, &DropTarget::Edge { dock, row, order })?;
+            drag::apply_drop(toolbars, id, &DropTarget::Edge { dock, row, order }, frozen)?;
             show(toolbars, i);
         }
         "float" => {
             let (x, y) = toolbars.get(i).map_or((0.1, 0.12), |bar| if bar.dock == Dock::Floating { (bar.x_ratio, bar.y_ratio) } else { (0.1, 0.12) });
             let pos_ratio = [ratio(params, "x_ratio", x)?, ratio(params, "y_ratio", y)?];
-            drag::apply_drop(toolbars, id, &DropTarget::Float { pos_ratio })?;
+            drag::apply_drop(toolbars, id, &DropTarget::Float { pos_ratio }, frozen)?;
             show(toolbars, i);
         }
         _ => {
             if params.get("dock").and_then(Value::as_str) == Some("floating") {
                 let pos_ratio = [ratio(params, "x_ratio", 0.1)?, ratio(params, "y_ratio", 0.12)?];
-                drag::apply_drop(toolbars, id, &DropTarget::Float { pos_ratio })?;
+                drag::apply_drop(toolbars, id, &DropTarget::Float { pos_ratio }, frozen)?;
             } else {
                 let dock = edge(params)?;
                 let (row, order) = append_to(toolbars, id, dock);
                 let (row, order) = (index(params, "row")?.unwrap_or(row), index(params, "order")?.unwrap_or(order));
-                drag::apply_drop(toolbars, id, &DropTarget::Edge { dock, row, order })?;
+                drag::apply_drop(toolbars, id, &DropTarget::Edge { dock, row, order }, frozen)?;
             }
             show(toolbars, i);
         }
@@ -310,6 +309,7 @@ pub fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value,
     let target = params.get("id").and_then(Value::as_str).or(inline).map(str::trim).filter(|target| !target.is_empty());
     let Some(target) = target else { return Some(Err(format!("id is required: {}", known_ids(app).join(", ")))) };
     let target = target.to_string();
-    let changed = crate::wsprofile::edit_toolbars(app, |toolbars| edit(toolbars, op, &target, params));
+    let frozen = drag::frozen_orders(app);
+    let changed = crate::wsprofile::edit_toolbars(app, |toolbars| edit(toolbars, op, &target, params, &frozen));
     Some(changed.map(|changed| json!({"id": target, "changed": changed})))
 }

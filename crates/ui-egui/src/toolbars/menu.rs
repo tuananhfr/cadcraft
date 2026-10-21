@@ -11,22 +11,20 @@ use crate::wsprofile::schema::{Dock, ToolbarState};
 
 const MENU_KEY: &str = "cc_toolbar_menu_key";
 
-/// Takes Shift+F10 while a grip has the keyboard focus, so it opens that bar's menu instead of
-/// reaching the F10 shortcut (Polar Tracking), which egui matches whatever Shift does.
+/// Takes Shift+F10 while any control of a bar has the keyboard focus, so it opens that bar's menu
+/// instead of reaching the F10 shortcut (Polar Tracking), which egui matches whatever Shift does.
 pub(crate) fn claim_menu_key(ctx: &egui::Context) {
     let Some(focused) = ctx.memory(|memory| memory.focused()) else { return };
-    if !render::last(ctx).grips.contains(&focused) {
-        return;
-    }
+    let Some(owner) = render::last(ctx).stops.iter().find(|(stop, _)| *stop == focused).map(|(_, owner)| *owner) else { return };
     if ctx.input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::F10)) {
-        ctx.data_mut(|data| data.insert_temp(Id::new(MENU_KEY), Some(focused)));
+        ctx.data_mut(|data| data.insert_temp(Id::new(MENU_KEY), Some(owner)));
     }
 }
 
-/// Whether the menu key was pressed for the grip `grip`.
-pub(super) fn take_menu_key(ctx: &egui::Context, grip: Id) -> bool {
+/// Whether the menu key was pressed for the bar `owner`.
+pub(super) fn take_menu_key(ctx: &egui::Context, owner: Id) -> bool {
     ctx.data_mut(|data| {
-        let pressed = data.get_temp::<Option<Id>>(Id::new(MENU_KEY)).flatten() == Some(grip);
+        let pressed = data.get_temp::<Option<Id>>(Id::new(MENU_KEY)).flatten() == Some(owner);
         if pressed {
             data.insert_temp(Id::new(MENU_KEY), None::<Id>);
         }
@@ -60,29 +58,39 @@ pub(super) fn context_menu(
             hide.on_disabled_hover_text(crate::tl!("Locked by company policy"));
         }
         let (label, command) = if bar.locked { (crate::tl!("Unlock"), "ui.toolbar.unlock") } else { (crate::tl!("Lock"), "ui.toolbar.lock") };
-        if ui.add_enabled(!policy_locked, egui::Button::new(label)).clicked() {
+        let toggle = ui.add_enabled(!policy_locked, egui::Button::new(label));
+        if toggle.clicked() {
             chosen = Some((command, json!({"id": id})));
             ui.close();
         }
-        ui.add_enabled_ui(movable, |ui| {
-            ui.menu_button(crate::tl!("Dock"), |ui| {
-                let edges = [
-                    (crate::tl!("Top"), Dock::Top, "top"),
-                    (crate::tl!("Bottom"), Dock::Bottom, "bottom"),
-                    (crate::tl!("Left"), Dock::Left, "left"),
-                    (crate::tl!("Right"), Dock::Right, "right"),
-                ];
-                for (label, dock, name) in edges {
-                    if ui.add_enabled(bar.dock != dock, egui::Button::new(label)).clicked() {
-                        chosen = Some(("ui.toolbar.dock", json!({"id": id, "dock": name})));
-                        ui.close();
+        let dock_menu = ui
+            .add_enabled_ui(movable, |ui| {
+                ui.menu_button(crate::tl!("Dock"), |ui| {
+                    let edges = [
+                        (crate::tl!("Top"), Dock::Top, "top"),
+                        (crate::tl!("Bottom"), Dock::Bottom, "bottom"),
+                        (crate::tl!("Left"), Dock::Left, "left"),
+                        (crate::tl!("Right"), Dock::Right, "right"),
+                    ];
+                    for (label, dock, name) in edges {
+                        if ui.add_enabled(bar.dock != dock, egui::Button::new(label)).clicked() {
+                            chosen = Some(("ui.toolbar.dock", json!({"id": id, "dock": name})));
+                            ui.close();
+                        }
                     }
-                }
-            });
-        });
-        if ui.add_enabled(movable && bar.dock != Dock::Floating, egui::Button::new(crate::tl!("Float"))).clicked() {
+                })
+                .response
+            })
+            .inner;
+        let float = ui.add_enabled(movable && bar.dock != Dock::Floating, egui::Button::new(crate::tl!("Float")));
+        if float.clicked() {
             chosen = Some(("ui.toolbar.float", json!({"id": id})));
             ui.close();
+        }
+        if policy_locked {
+            for item in [toggle, dock_menu, float] {
+                item.on_disabled_hover_text(crate::tl!("Locked by company policy"));
+            }
         }
     });
     if let Some((command, params)) = chosen

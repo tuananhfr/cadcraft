@@ -46,8 +46,48 @@ fn unit(value: f32) -> f32 {
     if value.is_finite() { value.clamp(0.0, 1.0) } else { 0.0 }
 }
 
-/// Puts the bar `id` where `target` says; other bars of the destination row are renumbered to make room.
-pub fn apply_drop(toolbars: &mut [ToolbarState], id: &str, target: &DropTarget) -> Result<(), String> {
+/// Orders for a row after the moving bar takes slot `at` among `members` (existing order, frozen).
+/// A frozen bar keeps its order, so the bars after the moving one are only pushed when they are free to move.
+fn arrange(members: &[(u32, bool)], at: usize) -> Option<Vec<u32>> {
+    let before = members.iter().take(at).map(|member| Some(*member));
+    let after = members.iter().skip(at).map(|member| Some(*member));
+    let mut orders = Vec::with_capacity(members.len() + 1);
+    let mut previous: Option<(u32, bool)> = None;
+    for slot in before.chain(std::iter::once(None)).chain(after) {
+        let (value, free) = match slot {
+            None => (previous.map_or(0, |(order, _)| order.saturating_add(1)), true),
+            Some((order, false)) => (previous.map_or(order, |(last, _)| if order > last { order } else { last.saturating_add(1) }), true),
+            Some((order, true)) => {
+                if previous.is_some_and(|(last, free)| free && order <= last) {
+                    return None;
+                }
+                (order, false)
+            }
+        };
+        orders.push(value);
+        previous = Some((value, free));
+    }
+    Some(orders)
+}
+
+/// The slot closest to `wanted` where the moving bar fits without changing a frozen bar's order.
+fn nearest_slot(members: &[(u32, bool)], wanted: usize) -> (usize, Vec<u32>) {
+    for distance in 0..=members.len() {
+        for slot in [wanted.saturating_add(distance), wanted.saturating_sub(distance)] {
+            if slot <= members.len()
+                && let Some(orders) = arrange(members, slot)
+            {
+                return (slot, orders);
+            }
+        }
+    }
+    // Appending after the last bar always fits; this only guards the arithmetic.
+    (members.len(), arrange(members, members.len()).unwrap_or_default())
+}
+
+/// Puts the bar `id` where `target` says. Bars in `frozen` (order held by policy) are never renumbered;
+/// a drop that would need that lands in the nearest slot that does not.
+pub fn apply_drop(toolbars: &mut [ToolbarState], id: &str, target: &DropTarget, frozen: &[String]) -> Result<(), String> {
     let at = toolbars.iter().position(|bar| bar.id == id).ok_or_else(|| format!("Unknown toolbar: {}", id.chars().take(64).collect::<String>()))?;
     match target {
         DropTarget::Float { pos_ratio } => {
@@ -66,15 +106,24 @@ pub fn apply_drop(toolbars: &mut [ToolbarState], id: &str, target: &DropTarget) 
             let mut row_members: Vec<usize> =
                 (0..toolbars.len()).filter(|i| *i != at && toolbars.get(*i).is_some_and(|bar| bar.dock == *dock && bar.row == *row)).collect();
             row_members.sort_by_key(|i| toolbars.get(*i).map_or(0, |bar| bar.order));
-            row_members.insert((*order as usize).min(row_members.len()), at);
-            for (position, i) in row_members.into_iter().enumerate() {
+            let state: Vec<(u32, bool)> =
+                row_members.iter().filter_map(|i| toolbars.get(*i)).map(|bar| (bar.order, frozen.contains(&bar.id))).collect();
+            let (slot, orders) = nearest_slot(&state, (*order as usize).min(state.len()));
+            row_members.insert(slot, at);
+            for (i, order) in row_members.into_iter().zip(orders) {
                 if let Some(bar) = toolbars.get_mut(i) {
-                    bar.order = u32::try_from(position).unwrap_or(u32::MAX);
+                    bar.order = order;
                 }
             }
         }
     }
     Ok(())
+}
+
+/// Bars whose order the company policy holds; a drop must leave them alone.
+pub(super) fn frozen_orders(app: &CadApp) -> Vec<String> {
+    let held = app.ws.user.layout.toolbars.iter();
+    held.filter(|bar| check(&app.ws.effective, &format!("/toolbars/{}/order", escape_token(&bar.id))).is_err()).map(|bar| bar.id.clone()).collect()
 }
 
 /// The bars of `dock` row `row` other than `moving`, by position in the row: full index in the
@@ -203,7 +252,8 @@ fn paint_preview(ctx: &egui::Context, target: &DropTarget, moving: &str, toolbar
 }
 
 fn commit(app: &mut CadApp, id: &str, target: &DropTarget) {
-    match crate::wsprofile::edit_toolbars(app, |toolbars| apply_drop(toolbars, id, target)) {
+    let frozen = frozen_orders(app);
+    match crate::wsprofile::edit_toolbars(app, |toolbars| apply_drop(toolbars, id, target, &frozen)) {
         Ok(true) => app.ws.autosave.interaction_ended(),
         Ok(false) => {}
         Err(error) => app.set_status(error),
