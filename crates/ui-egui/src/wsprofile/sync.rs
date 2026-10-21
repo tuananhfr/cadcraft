@@ -289,6 +289,10 @@ impl CadApp {
         if self.ws.set_extra.get(BASES_KEY) == Some(&bases) {
             return Ok(());
         }
+        // A damaged set that could not be kept must not be overwritten; commit_workspace_now keeps it first.
+        if self.ws.unkept_damage.is_some() {
+            return Err("the damaged workspace has not been kept yet".into());
+        }
         let mut extra = self.ws.set_extra.clone();
         extra.insert(BASES_KEY.into(), bases);
         let set = ProfileSet {
