@@ -773,7 +773,7 @@ fn ribbon_home_text_buttons_show_full_labels_at_1920() {
         .with_size(vec2(1920.0, 1080.0))
         .build_ui_state(|ui, app: &mut CadApp| cadcraft_ui_egui::ribbon::render::show(app, ui), app);
     h.run_steps(3);
-    let style = h.ctx.style();
+    let style = h.ctx.global_style();
     let font = egui::TextStyle::Button.resolve(&style);
     for id in text_commands {
         let label = cadcraft_ui_egui::i18n::t(cadcraft_engine::find_command(&id).unwrap().label);
