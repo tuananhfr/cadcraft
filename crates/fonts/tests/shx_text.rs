@@ -351,8 +351,10 @@ fn unencodable_char_falls_back() {
         let mut buf = [0; 4];
         let text = c.encode_utf8(&mut buf);
         let sh = shape_line(&f, text, 10.0, 1.0, 0.0);
-        assert_eq!(sh.strokes, shape_stroke(text, 10.0, 1.0, 0.0).strokes, "{c}");
-        assert!(near(sh.width, char_advance(c) * 10.0) && near(text_width(&f, text, 10.0, 1.0), sh.width));
+        let stroke = shape_stroke(text, 10.0, 1.0, 0.0);
+        assert_eq!(sh.strokes, stroke.strokes, "{c}");
+        // A TTF fallback glyph (when CRAFT_FONTS_DIR is set) has its own advance, not char_advance.
+        assert!(near(sh.width, stroke.width) && near(text_width(&f, text, 10.0, 1.0), sh.width), "{c}");
     }
     assert!(ttf::remove_user_font("f5-no-question.shx"));
 }
