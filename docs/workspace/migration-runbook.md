@@ -20,13 +20,31 @@ Outcomes by schema version `X.Y.Z` of the input:
 | --- | --- |
 | Legacy `workspace.json` (`{"version":1,"workspace":{..}}`) | Converted by `from_legacy_v1` to a `user` profile over `SIMPLE`, step `legacy_v1` |
 | Same major as `SCHEMA_VERSION`, older | Upgraded through `STEPS` |
-| Same major, newer minor or patch | Returned unchanged, unknown fields kept, no steps |
+| Same major, newer minor or patch | Returned unchanged only if the typed profile still parses; unknown fields kept, but unknown enum values return `MigrateError::Invalid` |
 | Newer major | `MigrateError::NewerMajor`; startup falls back to the `SIMPLE` preset and keeps the snapshot |
 | Older major with no path, missing or unreadable `schema_version`, wrong types, not an object | `MigrateError::Invalid` / `NotAnObject` |
 
 Command ids listed in `cadcraft_engine::cmd::registry::RENAMED` are rewritten in toolbars, ribbon groups,
 quick access, favorites, hidden tools, shortcut keys and alias targets (step `rename_command_ids`). Ids
 the build does not know are left alone; the UI shows them as inactive placeholders.
+
+Adding a value to an enum is a major schema bump: an older client rejects an unknown enum value as Invalid (fail-closed) and starts on SIMPLE keeping the damaged copy.
+The regression `ws_docs::future_minor_with_unknown_enum_value_is_invalid` stamps schema 1.3.0 and
+`owner_type: "team"` and asserts `MigrateError::Invalid` (current schema: 1.0.0).
+
+## Stored layout patches
+
+Stored user layouts are PATCHES deserialised over today's base before `migrate()`:
+`startup.rs::resolve_layout_patch` reads `layout_patch`, applies it with `try_apply_patch`, then
+`load_profile` validates and migrates the expanded profile. This means an old enum or field can
+fail typed patch application before a full-profile migrator can see it.
+
+Every future schema bump must migrate patches too (patch-aware), with a fixture of an old patch.
+Keep the original patch and base/version metadata for rollback; migrate raw patches before typed
+application when the change requires it. This patch-aware upgrade path is not yet implemented:
+`STEPS` is empty at schema 1.0.0. A full-profile fixture alone cannot prove stored upgrades work.
+For each bump, add an old `layout_patch` fixture and exercise actual startup over the new base,
+checking intended overrides, new base defaults, policy locks, unknown fields, idempotence and backup.
 
 ## Adding a migrator
 

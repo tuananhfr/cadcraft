@@ -1,0 +1,507 @@
+openapi: 3.1.0
+info:
+  title: CADCraft workspace API contract
+  version: 0.1.0
+  description: |
+    PROPOSAL awaiting approval: use /api/v1/cad-workspaces to avoid Drupal's
+    existing /api/v1/workspace NAS API. This maps the eight operations of
+    workspace specification section 6 (/v1/workspaces) without changing their
+    meaning. No HTTP backend or authentication integration is implemented.
+    Deployment, authentication, proxy/CORS and CSRF details require approval;
+    all operations require an authenticated principal and server-side tenant
+    filtering and RBAC/ABAC. Client-supplied ownership never grants authority.
+    The HTTP PATCH contract is RFC 6902 JSON Patch. W11 MemoryRemote instead
+    accepts custom merge patches with id-keyed arrays; an HTTP adapter and
+    conversion are not yet implemented. Never send those patches as RFC 6902.
+    Profile payloads reference workspace-profile.schema.json. effective_policy
+    is response metadata, not part of the portable profile. Strong opaque ETags
+    identify the returned representation. If-Match is required for mutations
+    of an existing resource, never for reads or creation; stale tags yield 412.
+    Collection ETags cannot be used to mutate an individual profile. Error
+    responses document 403/404/412/422 consistently; a read cannot itself have
+    a stale If-Match, so 412 applies only to conditional mutations.
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+paths:
+  /api/v1/cad-workspaces:
+    x-spec-path: /v1/workspaces
+    get:
+      operationId: listWorkspaces
+      summary: List profiles accessible to the authenticated tenant principal
+      description: Tenant filtering precedes pagination and metadata generation. If-Match is not used.
+      responses:
+        '200':
+          description: Accessible profiles with effective_policy; ETag covers this collection representation.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [profiles, effective_policy]
+                properties:
+                  profiles:
+                    type: array
+                    maxItems: 500
+                    items:
+                      $ref: '#/components/schemas/ProfileEnvelope'
+                  effective_policy:
+                    $ref: '#/components/schemas/EffectivePolicy'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/Stale'
+        '422':
+          $ref: '#/components/responses/Invalid'
+    post:
+      operationId: createWorkspace
+      summary: Clone a base into a new named profile
+      description: Validate the resulting profile against WorkspaceProfile. No If-Match on creation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [base_id, name]
+              properties:
+                base_id:
+                  type: string
+                  maxLength: 1024
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+      responses:
+        '201':
+          description: New profile and effective_policy; ownership is assigned by the server.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Location:
+              description: URI of the created profile.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileEnvelope'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/Stale'
+        '422':
+          $ref: '#/components/responses/Invalid'
+  /api/v1/cad-workspaces/{id}:
+    x-spec-path: /v1/workspaces/{id}
+    parameters:
+      - $ref: '#/components/parameters/ProfileId'
+    get:
+      operationId: getWorkspace
+      summary: Read a profile, its ETag and effective_policy
+      description: If-Match is not used. Cross-tenant access reveals no profile metadata.
+      responses:
+        '200':
+          $ref: '#/components/responses/Profile'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/Stale'
+        '422':
+          $ref: '#/components/responses/Invalid'
+    patch:
+      operationId: patchWorkspace
+      summary: Apply JSON Patch and create a new revision
+      description: |
+        Apply RFC 6902 atomically, then validate WorkspaceProfile and all policy
+        locks. Paths address the profile JSON (array indexes, not keyed ids).
+        Reject edits of server-owned identity, tenant, ownership, revision, etag,
+        timestamps, schema_version and publication status; reject locked fields
+        with 403. Published company versions are immutable: clone before editing.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json-patch+json:
+            schema:
+              type: array
+              maxItems: 500
+              items:
+                $ref: '#/components/schemas/PatchOperation'
+      responses:
+        '200':
+          $ref: '#/components/responses/Profile'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/Stale'
+        '422':
+          $ref: '#/components/responses/Invalid'
+  /api/v1/cad-workspaces/{id}/publish:
+    x-spec-path: /v1/workspaces/{id}/publish
+    parameters:
+      - $ref: '#/components/parameters/ProfileId'
+    post:
+      operationId: publishWorkspace
+      summary: Approve and publish an immutable signed version
+      description: |
+        Admin-only RBAC/ABAC approval, schema validation and policy checks precede
+        publication. The server must sign with Ed25519 and audit the new version.
+        Signing keys, trust distribution and signature byte encoding are not yet
+        implemented; these must be agreed before enabling publication.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [approval_id]
+              properties:
+                approval_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 1024
+      responses:
+        '200':
+          description: Signed immutable version, new ETag and effective_policy.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ProfileEnvelope'
+                  - type: object
+                    required: [signature]
+                    properties:
+                      signature:
+                        type: object
+                        required: [algorithm, key_id, value]
+                        properties:
+                          algorithm:
+                            const: Ed25519
+                          key_id:
+                            type: string
+                          value:
+                            type: string
+                            description: Detached signature; canonical bytes and encoding await server design.
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/Stale'
+        '422':
+          $ref: '#/components/responses/Invalid'
+  /api/v1/cad-workspaces/import:
+    x-spec-path: /v1/workspaces/import
+    post:
+      operationId: importWorkspace
+      summary: Validate a portable manifest, preview or import as a new user profile
+      description: |
+        dry_run=true validates and returns changes without writing or executing
+        commands. dry_run=false creates a new profile revision, never overwrites
+        the manifest's source identity. No If-Match on creation or preview.
+        Apply the same schema, size and payload checks in both modes. Reject
+        executable payloads, sensitive paths and secret-like keys. Authority and
+        tenant derive from the authenticated principal, not the manifest.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [manifest, dry_run]
+              properties:
+                manifest:
+                  $ref: '#/components/schemas/WorkspaceProfile'
+                dry_run:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Preview only; ETag identifies the baseline used to compute changes.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [dry_run, changes, effective_policy]
+                properties:
+                  dry_run:
+                    const: true
+                  changes:
+                    $ref: '#/components/schemas/Changes'
+                  effective_policy:
+                    $ref: '#/components/schemas/EffectivePolicy'
+        '201':
+          description: Imported profile and effective_policy after validation.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileEnvelope'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/Stale'
+        '422':
+          $ref: '#/components/responses/Invalid'
+  /api/v1/cad-workspaces/{id}/export:
+    x-spec-path: /v1/workspaces/{id}/export
+    parameters:
+      - $ref: '#/components/parameters/ProfileId'
+    get:
+      operationId: exportWorkspace
+      summary: Export portable profile JSON and checksum
+      description: |
+        If-Match is not used. Exclude credentials, sensitive paths and host-specific
+        tenant/owner identity and ETag from the portable profile. effective_policy
+        remains response metadata, not an imported source of authority. The checksum
+        detects corruption; it does not authenticate a company preset. SHA-256 is
+        over the UTF-8 bytes of portable_json, with no added newline.
+      responses:
+        '200':
+          description: Portable WorkspaceProfile JSON, checksum and effective_policy.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [profile, portable_json, checksum, effective_policy]
+                properties:
+                  profile:
+                    $ref: '#/components/schemas/WorkspaceProfile'
+                  portable_json:
+                    type: string
+                    description: Exact serialized profile bytes represented as a JSON string.
+                  checksum:
+                    type: object
+                    required: [algorithm, value]
+                    properties:
+                      algorithm:
+                        const: SHA-256
+                      value:
+                        type: string
+                        pattern: '^[0-9a-f]{64}$'
+                  effective_policy:
+                    $ref: '#/components/schemas/EffectivePolicy'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/Stale'
+        '422':
+          $ref: '#/components/responses/Invalid'
+  /api/v1/cad-workspaces/{id}/restore:
+    x-spec-path: /v1/workspaces/{id}/restore
+    parameters:
+      - $ref: '#/components/parameters/ProfileId'
+    post:
+      operationId: restoreWorkspace
+      summary: Restore a snapshot as a new revision and return its diff
+      description: |
+        Validate the snapshot against WorkspaceProfile and current policy. Preserve
+        both the source snapshot and intervening revisions; never overwrite history.
+        Tenant scope applies to snapshot lookup as well as the target profile.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [snapshot_id]
+              properties:
+                snapshot_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 1024
+      responses:
+        '200':
+          description: New revision, changed pointers, effective_policy and new ETag.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ProfileEnvelope'
+                  - type: object
+                    required: [changes]
+                    properties:
+                      changes:
+                        $ref: '#/components/schemas/Changes'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/Stale'
+        '422':
+          $ref: '#/components/responses/Invalid'
+components:
+  parameters:
+    ProfileId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 1024
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong current resource ETag; no wildcard or unconditional overwrite.
+      schema:
+        type: string
+        minLength: 1
+  headers:
+    ETag:
+      description: Strong opaque representation tag; preserve quotes when sending If-Match.
+      required: true
+      schema:
+        type: string
+  schemas:
+    WorkspaceProfile:
+      $ref: './workspace-profile.schema.json'
+    EffectivePolicy:
+      type: object
+      description: Server-derived policy; importing this metadata never grants permissions.
+      required: [locks]
+      properties:
+        locks:
+          type: object
+          description: Layout JSON Pointer to locking layer; keyed array elements use stable ids.
+          additionalProperties:
+            enum: [platform, product, tenant, company, discipline, project, user, session]
+    ProfileEnvelope:
+      type: object
+      required: [profile, effective_policy]
+      properties:
+        profile:
+          $ref: '#/components/schemas/WorkspaceProfile'
+        effective_policy:
+          $ref: '#/components/schemas/EffectivePolicy'
+    Changes:
+      type: array
+      maxItems: 500
+      description: Changed JSON Pointers, keyed layout elements addressed by stable id for display.
+      items:
+        type: string
+    PatchOperation:
+      type: object
+      additionalProperties: false
+      required: [op, path]
+      properties:
+        op:
+          enum: [add, remove, replace, move, copy, test]
+        path:
+          type: string
+          maxLength: 1024
+        from:
+          type: string
+          maxLength: 1024
+        value: {}
+      allOf:
+        - if:
+            properties:
+              op:
+                enum: [add, replace, test]
+          then:
+            required: [value]
+        - if:
+            properties:
+              op:
+                enum: [move, copy]
+          then:
+            required: [from]
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        pointer:
+          type: string
+          description: Offending JSON Pointer, when safe to disclose.
+        effective_policy:
+          $ref: '#/components/schemas/EffectivePolicy'
+  responses:
+    Profile:
+      description: Profile revision and effective_policy validated against WorkspaceProfile.
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProfileEnvelope'
+    Forbidden:
+      description: Permission or policy lock denied; no metadata from another tenant.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Missing or inaccessible profile, base or snapshot; no cross-tenant metadata.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Stale:
+      description: |
+        Conditional mutation only; If-Match did not match. No write occurred.
+        Return the current authorized profile for explicit three-way reconciliation.
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/Error'
+              - type: object
+                required: [current_profile, effective_policy]
+                properties:
+                  current_profile:
+                    $ref: '#/components/schemas/WorkspaceProfile'
+                  effective_policy:
+                    $ref: '#/components/schemas/EffectivePolicy'
+    Invalid:
+      description: Invalid schema, import limits or payload, patch, approval or snapshot input; no write occurred.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

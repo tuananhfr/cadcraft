@@ -1,0 +1,37 @@
+# Workspace profile security
+
+This is the W12 client threat model and proposed server contract (WP02/WP06),
+not evidence of deployed server security. The `/api/v1/cad-workspaces` prefix in
+[openapi.yaml](openapi.yaml) is a **PROPOSAL awaiting approval**, chosen to avoid
+Drupal's existing `/api/v1/workspace` NAS API. The eight operations retain §6
+semantics. Backend hosting, authentication, CSRF, proxy/CORS and transport wiring
+are not yet implemented for workspace synchronization.
+
+The trust boundary is external JSON → validation → migration → typed profile →
+policy merge → UI application. A profile describes UI state; tenant/owner fields,
+command ids and unknown fields do not confer permissions. Files and browser
+storage are local data, not trusted identity or a secure credential store.
+
+| Threat | Client measure implemented and regression coverage | Server work not yet implemented |
+| --- | --- | --- |
+| Malicious import consumes memory, hides executable payloads or corrupts state | W3 `validate.rs` checks 256 KiB raw text before parsing, nesting ≤32, arrays ≤500, strings and keys ≤1024 characters, and caps reported issues at 64. Import-mode checks traverse values and object keys. W5 `commands.rs::import` validates, migrates and deserializes before application; native file reads are capped at limit + 1 byte. Tests: `ws_profile::limits`, `invalid_json_and_non_objects_are_reported`, `import_checks_object_keys_like_values`; `ws_persist::import_dry_run_lists_changes_without_applying` checks preview does not apply and a rejected payload leaves the layout intact. | Enforce body limits before allocation, schema/patch validation and identical dry-run checks on every server entry point; rate limits and resource budgets. Local checks do not protect a server. |
+| Tenant A reads or writes tenant B's profile, base, snapshot or metadata | W5 portable export clears tenant_id, owner_id and etag. W11 MemoryRemote simulates per-id denial, not tenant isolation: `ws_sync::memory_remote_checks_etag_permissions_and_revision_overflow` and `forbidden_is_reported_not_retried_forever`. There is no client tenant authorization test or trustworthy tenant identity. | RBAC/ABAC with principal-derived tenant filters on list, read, clone, patch, publish, import, export and restore, including nested lookups and 412 responses. UX10 is blocked: real tenant A/B 403/404 tests with no metadata disclosure are not yet implemented. |
+| A user overwrites a company preset or bypasses a locked field | W5 `merge.rs` applies Platform → Product → Tenant → Company → Discipline → Project → User → Session, preserving higher-level locks including ancestor replacement/deletion. Policy is read from a host/local store, not accepted as import authority. Edits overlay bundled presets. Tests: `ws_merge::a_lock_survives_deletes_and_replacements_from_later_levels`, `ws_persist::locked_pointers_refuse_user_changes`, `policy_change_reaches_committed_user`, `published_preset_is_immutable`; W7 `ws_toolbars::locked_by_policy_ux11`. | Server-side lock and RBAC/ABAC enforcement, immutable published versions, admin approval, Ed25519 signing/verification and key lifecycle, audit log for publish/migration/restore. Local policy can be changed by someone controlling local storage; it is a UX11 client guard, not a security boundary. |
+| A profile starts LISP, APPLOAD or another executable | W3 import rejects executable suffixes `.lsp .fas .vlx .dvb .arx .dll .exe .js .ps1 .bat .cmd`, normalized exact keys `script/lisp/exec/eval/code/onload/startup`, and absolute/UNC/file: paths. W5 import applies layout/preferences only; it never dispatches imported text or command ids. Tests: `ws_profile::import_rejects_executable_and_secrets`, `import_payload_rules_cover_the_whole_list`, `import_checks_object_keys_like_values`, plus the rejected nested onload case in `ws_persist::import_dry_run_lists_changes_without_applying`. Composite keys such as extra_startup or inert text may survive validation but have no execution hook. The W10 end-to-end test `profile_import_never_runs_lisp_ux12` is not yet present in this checkout. | Revalidate manifests and disallow executable hooks independently of the client. LISP sandbox/compatibility scanning and permissions are separate work, not privileges granted by a profile. UX12 engine-history/loaded-files end-to-end evidence is not yet available here. |
+| A shared profile leaks tokens, credentials or sensitive local paths | W3 rejects keys containing normalized `token/password/secret/cookie/authorization/apikey` in both Local and Import modes. W5 export validates in Import mode and refuses unsafe output rather than silently exporting it; it omits host identity and does not capture recent drawing paths. Tests: `ws_profile::import_payload_rules_cover_the_whole_list` covers secret keys in both modes; `ws_persist::export_has_no_secrets_and_round_trips` covers portable output without recent paths. No token field or auth token store exists in profiles. | Authentication secrets must live outside profiles, manifests, snapshots and audit payloads. Add server-side secret/path rejection, safe logging and credential lifecycle controls. Key-name screening is not content classification: arbitrary free text can still contain a pasted secret, and Local mode does not reject all paths. Encryption or general secret detection is not yet implemented. |
+| Concurrent writers silently lose revisions or retry forbidden writes indefinitely | W11 `sync.rs` commits locally before sync, preserves a base for three-way merge, and `conflict.rs` exposes KeepMine/UseServer/KeepBoth instead of silent last-write-wins. Tests: `ws_sync::offline_edit_then_online_syncs_ux05`, `two_machines_same_field_conflict_ux06`, `different_fields_merge_silently`, `forbidden_is_reported_not_retried_forever`, `repeated_stale_responses_have_a_bounded_retry`, `sync_waits_for_local_commit_and_failed_storage`. | Atomic server If-Match comparison/write with strong ETags and 412, persistent version history, authorization on every retry and an async HTTP transport. MemoryRemote is a synchronous test double, not a backend or evidence of deployed UX05/UX06. |
+
+W5 `store.rs` defines atomic current-set replacement, retention of 20 committed
+snapshots and preservation of damaged input. `ws_persist::corrupt_store_falls_back_ux15`,
+`store_write_failure_keeps_running`, `restore_creates_new_revision` and
+`a_damaged_set_that_was_not_kept_is_not_overwritten` cover recovery behavior.
+These local snapshots are neither tamper-proof storage nor a server audit log.
+[The migration runbook](migration-runbook.md) covers fail-closed enum handling
+and the additional risk of applying old stored patches over today's base.
+
+The HTTP contract uses RFC 6902 JSON Patch; W11 uses a custom merge patch with
+id-keyed arrays. Conversion, server schema enforcement, signed preset bytes and
+trust anchors remain not yet implemented. Export checksums detect accidental
+corruption and do not replace an Ed25519 signature. Before a backend is enabled,
+server acceptance must include UX10 tenant isolation, policy bypass attempts,
+import payloads, stale writes and immutable signed publication with audit evidence.
