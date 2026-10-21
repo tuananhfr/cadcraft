@@ -145,8 +145,10 @@ fn autohide_hover_delay_and_focus_leave_close_overlay() {
     h.run_steps(2);
     h.get_by_label("Pin panel").focus();
     h.run_steps(2);
-    h.get_by_label("Command line input").focus();
+    assert!(h.get_by_label("Pin panel").is_focused());
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Show Properties").focus();
     h.run_steps(2);
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "Show Properties").is_focused());
     assert!(h.state().autohide.active.is_none(), "keyboard focus left the overlay");
     h.state_mut().run("ui.panel.peek", json!({"panel": "properties"})).unwrap();
     h.run_steps(2);
@@ -339,8 +341,11 @@ fn autohide_popup_keeps_overlay_open() {
     let _guard = test_lock();
     let mut app = attached(MemoryStore::default());
     app.run("ui.panel.autohide", json!({"panel": "properties"})).unwrap();
-    app.run("ui.panel.peek", json!({"panel": "properties"})).unwrap();
     let mut h = harness(app);
+    // The first frame reapplies the workspace for its actual size and clears temporary peeks.
+    h.state_mut().run("ui.panel.peek", json!({"panel": "properties"})).unwrap();
+    h.run_steps(3);
+    assert_eq!(h.state().autohide.active, Some(Panel::Properties));
     h.get_by_role_and_label(egui::accesskit::Role::Button, "■ ByLayer").click();
     h.run_steps(3);
     let item = h.get_by_role_and_label(egui::accesskit::Role::Button, "Red").rect().center();
@@ -364,16 +369,23 @@ fn autohide_text_edit_keeps_overlay_open() {
     let _guard = test_lock();
     let mut app = attached(MemoryStore::default());
     app.run("ui.panel.autohide", json!({"panel": "quickCalc"})).unwrap();
-    app.run("ui.panel.peek", json!({"panel": "quickCalc"})).unwrap();
     let mut h = harness(app);
-    h.get(by().role(egui::accesskit::Role::TextInput).predicate(|node| node.placeholder() == Some("Expression"))).focus();
+    h.state_mut().run("ui.panel.peek", json!({"panel": "quickCalc"})).unwrap();
+    h.run_steps(3);
+    assert_eq!(h.state().autohide.active, Some(Panel::QuickCalc));
+    // QuickCalc's main editor precedes the separate Variables expression editor.
+    h.get_all(by().role(egui::accesskit::Role::TextInput).predicate(|node| node.placeholder() == Some("Expression"))).next().unwrap().focus();
     h.run_steps(2);
+    let expression =
+        h.get_all(by().role(egui::accesskit::Role::TextInput).predicate(|node| node.placeholder() == Some("Expression"))).next().unwrap();
+    assert!(expression.is_focused());
     h.event(Event::PointerGone);
     h.run_steps(40);
     assert!(h.ctx.text_edit_focused());
     assert_eq!(h.state().autohide.active, Some(Panel::QuickCalc));
-    h.get_by_label("Command line input").focus();
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Show QuickCalc").focus();
     h.run_steps(2);
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "Show QuickCalc").is_focused());
     assert!(h.state().autohide.active.is_none());
 }
 
@@ -386,12 +398,22 @@ fn parameter_only_panel_commands_are_hidden_but_callable() {
         assert!(cadcraft_ui_egui::quick_access::search(&app, id).is_empty());
         assert!(app.run(id, json!({})).is_err(), "panel is required");
     }
+    let suggestions = cadcraft_ui_egui::quick_access::search(&app, "ui.panel.");
+    assert!(suggestions.iter().any(|entry| entry.id.eq_ignore_ascii_case("ui.panel.fonts")));
+    for id in ["ui.panel.autohide", "ui.panel.pin", "ui.panel.peek"] {
+        assert!(suggestions.iter().all(|entry| !entry.id.eq_ignore_ascii_case(id)));
+    }
     app.run("ui.customize.open", json!({})).unwrap();
     let mut h = harness(app);
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Keyboard").click();
     h.run_steps(2);
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Find command").focus();
+    h.run_steps(2);
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Find command").is_focused());
     h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Find command").type_text("ui.panel.");
     h.run_steps(2);
+    assert_eq!(h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Find command").value().as_deref(), Some("ui.panel."));
+    assert!(h.query_by_label("Fonts (ui.panel.fonts)").is_some());
     for label in ["Auto-hide (ui.panel.autohide)", "Pin panel (ui.panel.pin)", "Show Auto-hide Panel (ui.panel.peek)"] {
         assert!(h.query_by_label(label).is_none(), "{label}");
     }
@@ -405,7 +427,7 @@ fn parameter_only_panel_commands_are_hidden_but_callable() {
 #[test]
 fn window_menu_has_one_toolsets_entry_and_legacy_toggle_works() {
     let _guard = test_lock();
-    let mut app = attached(MemoryStore::default());
+    let app = attached(MemoryStore::default());
     let tree = menus::tree(&app);
     let window = &tree.iter().find(|(label, _)| label == "Window").unwrap().1;
     assert!(window.iter().all(|entry| !matches!(entry, Entry::Item { label, .. } if label == "Tool Sets")));
@@ -417,10 +439,17 @@ fn window_menu_has_one_toolsets_entry_and_legacy_toggle_works() {
         })
         .unwrap();
     assert_eq!(panels.iter().filter(|entry| matches!(entry, Entry::Item { label, .. } if label == "Tool Sets")).count(), 1);
-    app.run("ui.toggle.toolsets", json!({"on": false})).unwrap();
-    assert!(!app.ui.docking.layout.contains(&Panel::ToolSets));
-    app.run("ui.toggle.toolsets", json!({"on": true})).unwrap();
-    assert!(app.ui.docking.layout.contains(&Panel::ToolSets));
+    let mut h = harness(app);
+    h.state_mut().run("ui.toggle.toolsets", json!({"on": false})).unwrap();
+    assert!(!h.state().ui.show_toolsets);
+    assert!(!h.state().ws.effective.layout.toolsets.visible);
+    h.run_steps(2);
+    assert!(!h.state().ui.docking.layout.contains(&Panel::ToolSets));
+    h.state_mut().run("ui.toggle.toolsets", json!({"on": true})).unwrap();
+    assert!(h.state().ui.show_toolsets);
+    assert!(h.state().ws.effective.layout.toolsets.visible);
+    h.run_steps(2);
+    assert!(h.state().ui.docking.layout.contains(&Panel::ToolSets));
 }
 
 #[test]
@@ -435,7 +464,8 @@ fn loaded_files_preserve_case_and_exclude_failed_loads() {
     assert_eq!(lisp::loaded_files(&app.session), ["MiXeD.LSP"], "waiting is not success");
     app.session.input(cadcraft_engine::Input::Text("done".into())).unwrap();
     assert_eq!(lisp::loaded_files(&app.session), ["Later.LSP", "MiXeD.LSP"]);
-    app.session.lisp_load("Cancelled.LSP", "(getstring \"Value: \")", false).unwrap();
+    assert!(app.session.lisp_load("Cancelled.LSP", "(getstring \"Value: \")", false).unwrap().is_none());
+    assert_eq!(lisp::loaded_files(&app.session), ["Later.LSP", "MiXeD.LSP"], "a previous result cannot complete this pending load");
     app.session.lisp_abort("Function cancelled");
     assert_eq!(lisp::loaded_files(&app.session), ["Later.LSP", "MiXeD.LSP"]);
     app.session.lisp_eval("(defun *error* (msg) (getstring \"Handle: \"))", false, true, Vec::new()).unwrap();
@@ -447,6 +477,35 @@ fn loaded_files_preserve_case_and_exclude_failed_loads() {
     assert!(h.query_by_label("MiXeD.LSP").is_some());
     assert!(h.query_by_label("SyntaxError.LSP").is_none());
     assert!(h.query_by_label("RuntimeError.LSP").is_none());
+    assert!(h.query_by_label("Cancelled.LSP").is_none());
+    assert!(h.query_by_label("HandledError.LSP").is_none());
+}
+
+#[test]
+fn lisp_load_success_echo_follows_trailing_output() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    for (name, source, trailing, pending) in [
+        ("Immediate.LSP", "(princ \"immediate trailing\")", "immediate trailing", false),
+        ("Deferred.LSP", "(getstring \"Value: \") (princ \"deferred trailing\")", "deferred trailing", true),
+    ] {
+        let before = app.session.log.len();
+        let result = app.session.lisp_load(name, source, false).unwrap();
+        if pending {
+            assert!(result.is_none());
+            assert!(!lisp::loaded_files(&app.session).iter().any(|file| file == name));
+            app.session.input(cadcraft_engine::Input::Text("done".into())).unwrap();
+        } else {
+            assert!(matches!(result, Some(Ok(_))));
+        }
+        let output = &app.session.log[before..];
+        let success = format!("{name} successfully loaded.");
+        let trailing_index = output.iter().position(|line| line == trailing).unwrap();
+        let success_index = output.iter().position(|line| line == &success).unwrap();
+        assert!(trailing_index < success_index, "the routine's trailing output precedes the success echo");
+        assert_eq!(output.iter().filter(|line| *line == &success).count(), 1);
+        assert!(lisp::loaded_files(&app.session).iter().any(|file| file == name));
+    }
 }
 
 #[test]

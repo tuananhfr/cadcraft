@@ -238,6 +238,8 @@ impl Session {
         if self.lisp.active {
             return Err(crate::EngineError::Other("a LISP routine is already running".into()));
         }
+        // A resumed run can leave a result behind; it cannot complete the next run.
+        self.lisp_last = None;
         self.lisp.active = true;
         let st = self.state()?;
         let before = Some((st.doc.clone(), st.selection.clone()));
@@ -418,12 +420,6 @@ impl Session {
     fn lisp_end(&mut self, result: std::result::Result<Value, String>) {
         let Some(run) = self.lisp.run.take() else { return };
         self.lisp.active = false;
-        if result.is_ok()
-            && !run.handler
-            && let Some(name) = &run.loaded_file
-        {
-            self.lisp_loaded(name);
-        }
         let mut env = self.lisp.envs.remove(&run.uid).unwrap_or_default();
         self.lisp_flush(&mut env, true);
         self.lisp.envs.insert(run.uid, env);
@@ -432,6 +428,12 @@ impl Session {
             if !builtins::is_null_symbol(v) {
                 self.echo(text);
             }
+        }
+        if result.is_ok()
+            && !run.handler
+            && let Some(name) = &run.loaded_file
+        {
+            self.lisp_loaded(name);
         }
         if let Some((doc, sel)) = run.before
             && let Some(st) = self.docs.iter_mut().find(|d| d.uid == run.uid)
