@@ -253,7 +253,12 @@ pub fn set(s: &mut Session, name: &str, v: &Value) -> Result<()> {
             let unit = as_pt(v)
                 .filter(|p| p.is_finite() && if n == "GRIDUNIT" { p.x >= 0.0 && p.y >= 0.0 } else { p.x > 0.0 && p.y > 0.0 })
                 .ok_or_else(bad)?;
-            s.doc_mut()?.header.set(&n, cadcraft_doc::HVal::Point(unit.to3(0.0)));
+            let settings = s.drafting_settings();
+            let current = if n == "SNAPUNIT" { settings.snapunit } else { settings.gridunit };
+            // A workspace restore sets the drawing's own value back; writing it would mark the drawing changed.
+            if unit != current {
+                s.doc_mut()?.header.set(&n, cadcraft_doc::HVal::Point(unit.to3(0.0)));
+            }
         }
         "GRIDMAJOR" => st.gridmajor = as_f64(v).ok_or_else(bad)?.clamp(1.0, 100.0) as u32,
         "DYNDIGRIP" => st.dyndigrip = as_i(v).filter(|i| (0..=31).contains(i)).and_then(|i| u32::try_from(i).ok()).ok_or_else(bad)?,

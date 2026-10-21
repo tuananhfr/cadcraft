@@ -440,6 +440,18 @@ fn theme_and_locale_follow_profile() {
 }
 
 #[test]
+fn restoring_the_saved_options_keeps_an_unchanged_drawing_clean() {
+    let mut app = attached(MemoryStore::default());
+    run(&mut app, "ui.sample", json!({}));
+    let drawing = app.session.state().unwrap().doc.clone();
+    let profile = app.profile_json();
+    app.load_profile(&profile);
+    let state = app.session.state().unwrap();
+    assert!(!state.is_dirty(), "GRIDUNIT/SNAPUNIT equal to the drawing's own are not written back");
+    assert!(std::sync::Arc::ptr_eq(&drawing, &state.doc));
+}
+
+#[test]
 fn profile_save_never_dirties_drawing_ux13() {
     let mut app = attached(MemoryStore::default());
     run(&mut app, "ui.sample", json!({}));
