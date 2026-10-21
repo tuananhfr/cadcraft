@@ -25,3 +25,11 @@ evidence remains outstanding until the profile_import_never_runs_lisp_ux12 test 
 The supported minimum working area is 640×360 logical points (window size divided by display scale and interface scale). Below
 that, for example 1366×768 at 200% display scale with interface scale 2.0 (about 341×192 points), the menu bar, status bar and
 command line leave no usable drawing area; the layout is not guaranteed there.
+
+On macOS the native menu bar installs its key equivalents once at start-up; after a shortcut is rebound in Customize
+or a workspace with other shortcuts is selected, the native menu still shows and answers the old key. The shortcut
+router inside the window follows the new bindings. Refreshing the native accelerators needs a macOS build to verify.
+
+A workspace whose pending changes cannot be saved (storage full or refused, or a damaged set that could not be
+kept) cannot be left for another workspace, so its changes are not lost silently; the error stays on screen and
+the save is retried. Reset to the preset is the way out.
