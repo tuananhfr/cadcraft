@@ -22,7 +22,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.dock.reset", "Reset Panel Layout", &["Window", "Reset Panel Layout"], None),
     ("ui.layout.undo", "Undo Layout Change", &["Window", "Undo Layout Change"], None),
     ("ui.layout.redo", "Redo Layout Change", &["Window", "Redo Layout Change"], None),
-    ("ui.customize.open", "Customize Workspace…", &["Window", "Customize Workspace…"], None),
+    ("ui.customize.open", "Customize Workspace...", &["Window", "Customize Workspace..."], None),
     ("ui.ribbon.tab.add", "Add Ribbon Tab", &[], None),
     ("ui.ribbon.tab.rename", "Rename Ribbon Tab", &[], None),
     ("ui.ribbon.tab.remove", "Remove Ribbon Tab", &[], None),
@@ -33,7 +33,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.ribbon.group.move", "Move Ribbon Group", &[], None),
     ("ui.ribbon.button.add", "Add to Ribbon", &[], None),
     ("ui.ribbon.button.remove", "Remove from Ribbon", &[], None),
-    ("ui.ribbon.collapse", "Collapse Ribbon", &[], None),
+    ("ui.ribbon.collapse", "Minimize Ribbon", &["Window", "Minimize Ribbon"], None),
     ("ui.shortcut.bind", "Assign Shortcut", &[], None),
     ("ui.shortcut.unbind", "Remove Shortcut", &[], None),
     ("ui.quickaccess.pin", "Add to Quick Access", &[], None),
@@ -134,6 +134,9 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
         return Some(result);
     }
     if let Some(result) = crate::quick_access::route(app, id, params) {
+        return Some(result);
+    }
+    if let Some(result) = crate::customize::route(app, id, params) {
         return Some(result);
     }
     if let Some(result) = crate::ribbon::route(app, id, params) {
@@ -609,7 +612,18 @@ pub(crate) fn shortcut_label(s: &str, mac: bool) -> String {
 }
 
 pub(crate) fn entry_ui(ui: &mut egui::Ui, e: &Entry, clicked: &mut Option<String>) {
+    entry_ui_with_ribbon(ui, e, clicked, None);
+}
+
+fn entry_ui_with_ribbon(ui: &mut egui::Ui, e: &Entry, clicked: &mut Option<String>, collapsed: Option<bool>) {
     match e {
+        Entry::Item { label, id, enabled, .. } if id == "ui.ribbon.collapse" && collapsed.is_some() => {
+            let mut checked = collapsed.unwrap_or(false);
+            if ui.add_enabled(*enabled, egui::Checkbox::new(&mut checked, crate::i18n::t(label))).changed() {
+                *clicked = Some(id.clone());
+                ui.close();
+            }
+        }
         Entry::Item { label, id, enabled, .. } if crate::toolbars::menu_check_state(id).is_some() => {
             let mut shown = crate::toolbars::menu_check_state(id).unwrap_or(false);
             if ui.add_enabled(*enabled, egui::Checkbox::new(&mut shown, crate::i18n::t(label))).clicked() {
@@ -630,7 +644,7 @@ pub(crate) fn entry_ui(ui: &mut egui::Ui, e: &Entry, clicked: &mut Option<String
         Entry::Sub { label, children } => {
             ui.menu_button(crate::i18n::menu(label), |ui| {
                 for c in children {
-                    entry_ui(ui, c, clicked);
+                    entry_ui_with_ribbon(ui, c, clicked, collapsed);
                 }
             });
         }
@@ -649,7 +663,7 @@ pub fn menu_bar(app: &mut CadApp, ui: &mut egui::Ui) {
                 for (name, entries) in &tree {
                     ui.menu_button(crate::i18n::menu(name), |ui| {
                         for e in entries {
-                            entry_ui(ui, e, &mut clicked);
+                            entry_ui_with_ribbon(ui, e, &mut clicked, Some(app.ws.effective.layout.ribbon.collapsed));
                         }
                     });
                 }

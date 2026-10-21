@@ -1,6 +1,6 @@
 //! Responsive ribbon groups collapse before the remaining groups need scrolling.
 
-use egui::{Id, Key, Modifiers, Stroke, StrokeKind, vec2};
+use egui::{Align, Id, Key, Layout, Modifiers, vec2};
 use serde_json::json;
 
 use crate::CadApp;
@@ -47,16 +47,35 @@ fn run(app: &mut CadApp, command: &str, params: serde_json::Value) {
 }
 
 fn scroll_button(ui: &mut egui::Ui, glyph: &str, label: &str, enabled: bool) -> egui::Response {
-    let response = ui.add_enabled(enabled, egui::Button::new(glyph));
+    let response = ui.add_enabled_ui(enabled, |ui| ui.add_sized(vec2(SCROLL_WIDTH, BUTTON_HEIGHT), egui::Button::new(glyph))).inner;
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
     response.on_hover_text(label)
 }
 
+const BUTTON_HEIGHT: f32 = 24.0;
+const COLUMN_WIDTH: f32 = 28.0;
+const COLUMN_GAP: f32 = 6.0;
+const ROW_GAP: f32 = 4.0;
+const ROWS: usize = 3;
+const COLUMNS_HEIGHT: f32 = ROWS as f32 * BUTTON_HEIGHT + (ROWS - 1) as f32 * ROW_GAP;
+const LABEL_HEIGHT: f32 = 18.0;
+const GROUP_HEIGHT: f32 = COLUMNS_HEIGHT + ROW_GAP + LABEL_HEIGHT;
+const GROUP_PADDING: f32 = 6.0;
+const GROUP_GAP: f32 = 8.0;
+const MIN_GROUP_WIDTH: f32 = 90.0;
+const COMPACT_WIDTH: f32 = 76.0;
+const SCROLL_WIDTH: f32 = 24.0;
+
+fn group_width(group: &RibbonGroup) -> f32 {
+    let columns = group.commands.len().div_ceil(ROWS);
+    (columns as f32 * COLUMN_WIDTH + columns.saturating_sub(1) as f32 * COLUMN_GAP + 2.0 * GROUP_PADDING).max(MIN_GROUP_WIDTH)
+}
+
 fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
     let available = ui.available_width().max(0.0);
-    let widths: Vec<_> = tab.groups.iter().map(|group| ((group.commands.len().div_ceil(3) as f32 * 34.0) + 12.0).max(90.0)).collect();
+    let widths: Vec<_> = tab.groups.iter().map(group_width).collect();
     let mut collapsed = vec![false; widths.len()];
-    let mut total = widths.iter().sum::<f32>() + widths.len() as f32 * 8.0;
+    let mut total = widths.iter().sum::<f32>() + widths.len().saturating_sub(1) as f32 * GROUP_GAP;
     for (index, width) in widths.iter().enumerate().rev() {
         if total <= available {
             break;
@@ -64,7 +83,7 @@ fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
         if let Some(slot) = collapsed.get_mut(index) {
             *slot = true;
         }
-        total -= (width - 76.0).max(0.0);
+        total -= width - COMPACT_WIDTH;
     }
     let scroll = total > available;
     let scroll_id = Id::new(("cc_ribbon_scroll", &tab.id));
@@ -74,41 +93,51 @@ fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
         start = 0;
     }
     ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = GROUP_GAP;
         if scroll && scroll_button(ui, "‹", crate::tl!("Previous ribbon groups"), start > 0).clicked() {
             start = start.saturating_sub(1);
         }
-        let mut remaining = (available - if scroll { 68.0 } else { 0.0 }).max(0.0);
+        let mut remaining = (available - if scroll { 2.0 * (SCROLL_WIDTH + GROUP_GAP) } else { 0.0 }).max(0.0);
         let mut end = start;
         for (index, group) in tab.groups.iter().enumerate().skip(start) {
             let compact = collapsed.get(index).copied().unwrap_or(true);
-            let width = if compact { 76.0 } else { widths.get(index).copied().unwrap_or(90.0) };
-            if remaining < width && end > start {
+            let width = if compact { COMPACT_WIDTH } else { widths.get(index).copied().unwrap_or(MIN_GROUP_WIDTH) };
+            if remaining < width {
                 break;
             }
             ui.push_id((&tab.id, &group.id), |ui| {
-                ui.allocate_ui(vec2(width.min(remaining).max(1.0), 100.0), |ui| {
+                let (rect, _) = ui.allocate_exact_size(vec2(width, GROUP_HEIGHT), egui::Sense::hover());
+                ui.scope_builder(egui::UiBuilder::new().max_rect(rect).layout(Layout::top_down(Align::Min)), |ui| {
+                    ui.set_min_size(vec2(width, GROUP_HEIGHT));
+                    ui.spacing_mut().item_spacing.y = ROW_GAP;
                     if compact {
-                        ui.menu_button(crate::i18n::t(&group.label), |ui| {
+                        egui::containers::menu::MenuButton::from_button(
+                            egui::Button::new(crate::i18n::t(&group.label)).truncate().min_size(vec2(COMPACT_WIDTH, BUTTON_HEIGHT)),
+                        )
+                        .ui(ui, |ui| {
                             for id in &group.commands {
                                 button(app, ui, tab, group, id, false);
                             }
                         });
                     } else {
-                        for (column, commands) in group.commands.chunks(3).enumerate() {
-                            let rect = ui.max_rect();
-                            let column_rect = egui::Rect::from_min_size(rect.min + vec2(column as f32 * 34.0, 0.0), vec2(32.0, 82.0));
-                            ui.scope_builder(egui::UiBuilder::new().max_rect(column_rect), |ui| {
+                        let (columns_rect, _) = ui.allocate_exact_size(vec2(width, COLUMNS_HEIGHT), egui::Sense::hover());
+                        for (column, commands) in group.commands.chunks(ROWS).enumerate() {
+                            let column_rect = egui::Rect::from_min_size(
+                                columns_rect.min + vec2(GROUP_PADDING + column as f32 * (COLUMN_WIDTH + COLUMN_GAP), 0.0),
+                                vec2(COLUMN_WIDTH, COLUMNS_HEIGHT),
+                            );
+                            ui.scope_builder(egui::UiBuilder::new().max_rect(column_rect).layout(Layout::top_down(Align::Min)), |ui| {
+                                ui.set_min_size(vec2(COLUMN_WIDTH, COLUMNS_HEIGHT));
                                 for id in commands {
                                     button(app, ui, tab, group, id, true);
                                 }
                             });
                         }
-                        ui.allocate_space(vec2(width, 82.0));
-                        ui.label(crate::i18n::t(&group.label));
+                        ui.add_sized(vec2(width, LABEL_HEIGHT), egui::Label::new(crate::i18n::t(&group.label)).truncate());
                     }
                 });
             });
-            remaining -= width + 8.0;
+            remaining -= width + GROUP_GAP;
             end = index.saturating_add(1);
         }
         if scroll && scroll_button(ui, "›", crate::tl!("Next ribbon groups"), end < tab.groups.len()).clicked() {
@@ -121,7 +150,6 @@ fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
 fn button(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGroup, id: &str, icon: bool) {
     ui.push_id(id, |ui| {
         let mut command = crate::toolbars::resolve(id);
-        command.known = super::known(id);
         if let Some(spec) = cadcraft_engine::find_command(id) {
             command.label = spec.label.to_string();
         }
@@ -130,15 +158,16 @@ fn button(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGr
         let response = ui
             .add_enabled_ui(enabled, |ui| {
                 if icon && let Some(icon) = command.icon {
-                    crate::icons::button(ui, icon, 24.0, &label, false)
+                    crate::icons::button(ui, icon, BUTTON_HEIGHT, &label, false)
                 } else {
-                    ui.add_sized(if icon { vec2(28.0, 24.0) } else { vec2(140.0, 24.0) }, egui::Button::new(label.as_str()).truncate())
+                    ui.add_sized(
+                        if icon { vec2(COLUMN_WIDTH, BUTTON_HEIGHT) } else { vec2(140.0, BUTTON_HEIGHT) },
+                        egui::Button::new(label.as_str()).truncate(),
+                    )
+                    .on_hover_text(label.as_str())
                 }
             })
             .inner;
-        if response.has_focus() {
-            ui.painter().rect_stroke(response.rect.shrink(1.0), 2.0, Stroke::new(1.0, Tokens::get().accent), StrokeKind::Inside);
-        }
         crate::control::record_widget(ui, &response, &label, "button", None);
         if response.clicked() {
             crate::menus::activate(app, id);
@@ -159,6 +188,5 @@ fn button(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGr
                 ui.close();
             }
         });
-        response.on_hover_text(label);
     });
 }

@@ -29,7 +29,7 @@ pub fn visible_tabs(app: &CadApp) -> Vec<RibbonTab> {
 }
 
 pub(crate) fn known(id: &str) -> bool {
-    cadcraft_engine::find_command(id).is_some() || crate::menus::is_ui_command(id)
+    crate::wsprofile::apply::command_known(id)
 }
 
 fn text<'a>(params: &'a Value, field: &str) -> Result<&'a str, String> {
@@ -61,11 +61,6 @@ fn fresh_id<'a>(ids: impl Iterator<Item = &'a str>) -> String {
 }
 
 pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<Result<Value, String>> {
-    if command == "ui.customize.open" {
-        app.customize = crate::customize::State::default();
-        app.ui.dialog = Some(crate::customize::DIALOG.into());
-        return Some(Ok(json!({"dialog": crate::customize::DIALOG})));
-    }
     if !matches!(
         command,
         "ui.ribbon.tab.add"
@@ -84,14 +79,22 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
     }
     Some((|| {
         let mut ribbon = app.ws.effective.layout.ribbon.clone();
-        ribbon.tabs.sort_by_key(|tab| tab.order);
         let mut created = None;
         if command == "ui.ribbon.collapse" {
             ribbon.collapsed = params.get("collapsed").and_then(Value::as_bool).unwrap_or(!ribbon.collapsed);
         } else if command == "ui.ribbon.tab.add" {
             let label = text(params, "label")?;
             let id = fresh_id(ribbon.tabs.iter().map(|tab| tab.id.as_str()));
-            ribbon.tabs.push(RibbonTab { id: id.clone(), label: label.into(), ..RibbonTab::default() });
+            let order = ribbon
+                .tabs
+                .iter()
+                .filter(|tab| tab.contextual.is_none())
+                .map(|tab| tab.order)
+                .max()
+                .map_or(Some(0), |order| order.checked_add(1))
+                .ok_or_else(|| crate::tl!("Ribbon tab order is full").to_string())?;
+            // Display order uses `order`; reordering the stored array would touch unrelated policy locks.
+            ribbon.tabs.push(RibbonTab { id: id.clone(), label: label.into(), order, ..RibbonTab::default() });
             created = Some(id);
         } else {
             let tab_id = text(params, "tab")?;
@@ -99,7 +102,17 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
             if command == "ui.ribbon.tab.remove" {
                 ribbon.tabs.remove(from);
             } else if command == "ui.ribbon.tab.move" {
-                move_item(&mut ribbon.tabs, from, destination(params)?);
+                let mut tabs: Vec<_> = ribbon.tabs.iter().filter(|tab| tab.contextual.is_none()).cloned().collect();
+                tabs.sort_by_key(|tab| tab.order);
+                let orders: Vec<_> = tabs.iter().map(|tab| tab.order).collect();
+                if let Some(from) = tabs.iter().position(|tab| tab.id == tab_id) {
+                    move_item(&mut tabs, from, destination(params)?);
+                    for (moved, order) in tabs.iter().zip(orders) {
+                        if let Some(tab) = ribbon.tabs.iter_mut().find(|tab| tab.id == moved.id) {
+                            tab.order = order;
+                        }
+                    }
+                }
             } else {
                 let tab = ribbon.tabs.get_mut(from).ok_or_else(|| crate::tl!("Ribbon tab was not found").to_string())?;
                 match command {
@@ -144,9 +157,6 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
                     }
                 }
             }
-        }
-        for (order, tab) in ribbon.tabs.iter_mut().enumerate() {
-            tab.order = u32::try_from(order).unwrap_or(u32::MAX);
         }
         let changed = crate::wsprofile::edit_layout(app, |layout| {
             layout.ribbon = ribbon;

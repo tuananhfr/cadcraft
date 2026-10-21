@@ -116,6 +116,8 @@ fn integrated_title_row_draws_quick_access_when_menu_hidden() {
     h.run_steps(4);
     assert!(h.query_by_label("Save (Ctrl+S)").is_some() || h.query_by_label("Save (⌘S)").is_some());
     h.state_mut().run("ui.workspace.select", json!({"id": "SIMPLE"})).unwrap();
+    h.state_mut().integrated_titlebar = true;
+    h.state_mut().run("ui.toggle.menubar", json!({"on": false})).unwrap();
     h.state_mut().run("ui.toggle.toolbar", json!({"on": false})).unwrap();
     h.run_steps(4);
     assert!(h.query_by_label("Search commands...").is_none(), "an empty Quick Access list stays empty");
@@ -138,4 +140,33 @@ fn ribbon_unknown_command_keeps_accessible_placeholder() {
     assert!(h.get_by_role_and_label(Role::Button, "Sheet Set — not available in this version").accesskit_node().is_disabled());
     let restored = restart(h.state_mut());
     assert_eq!(restored.ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.id == "home").unwrap().groups.first().unwrap().commands, ["sheetset"]);
+}
+
+#[test]
+fn customize_escape_preserves_focused_text_and_ime() {
+    let mut app = app();
+    app.run("ui.customize.open", json!({})).unwrap();
+    let mut h =
+        Harness::builder().with_size(vec2(1366.0, 768.0)).build_ui_state(|ui, app: &mut CadApp| cadcraft_ui_egui::dialogs::show(app, ui.ctx()), app);
+    h.run_steps(3);
+    h.get_by_role_and_label(Role::TextInput, "Tab or group name").click();
+    h.run_steps(2);
+    h.key_press(Key::Escape);
+    h.run_steps(2);
+    assert_eq!(h.state().ui.dialog.as_deref(), Some(customize::DIALOG));
+    assert!(h.get_by_role_and_label(Role::TextInput, "Tab or group name").is_focused());
+    h.event(Event::Ime(ImeEvent::Preedit { text: "Bản vẽ".into(), active_range_chars: None }));
+    h.run_steps(2);
+    h.key_press(Key::Escape);
+    h.run_steps(2);
+    assert_eq!(h.state().ui.dialog.as_deref(), Some(customize::DIALOG));
+    assert!(h.get_by_role_and_label(Role::TextInput, "Tab or group name").is_focused());
+    h.event(Event::Ime(ImeEvent::Commit("Bản vẽ kiến trúc".into())));
+    h.run_steps(2);
+    h.get_by_label("Rename Tab").click();
+    h.run_steps(2);
+    assert_eq!(h.state().ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.id == "home").unwrap().label, "Bản vẽ kiến trúc");
+    h.key_press(Key::Escape);
+    h.run_steps(2);
+    assert!(h.state().ui.dialog.is_none(), "Escape closes Customize after focus leaves the text field");
 }

@@ -20,6 +20,8 @@ pub struct State {
     toolbar: String,
     command: String,
     query: String,
+    command_filter: Option<String>,
+    commands: Vec<(&'static str, &'static str)>,
     label: String,
     key: String,
     replace: bool,
@@ -41,22 +43,34 @@ pub(crate) fn run(app: &mut CadApp, command: &str, params: Value, state: &mut St
     }
 }
 
+pub(crate) fn route(app: &mut CadApp, command: &str, _params: &Value) -> Option<Result<Value, String>> {
+    if command != "ui.customize.open" {
+        return None;
+    }
+    app.customize = State::default();
+    app.ui.dialog = Some(DIALOG.into());
+    Some(Ok(json!({"dialog": DIALOG})))
+}
+
 fn edit(ui: &mut egui::Ui, text: &mut String, label: &str) -> egui::Response {
     ui.label(label);
-    let response = ui.add(egui::TextEdit::singleline(text).id_salt(label).hint_text(label).char_limit(1024).desired_width(240.0));
+    // Keep Escape with the editor so egui cannot clear IME focus before the dialog handles input.
+    let response = ui.add(
+        egui::TextEdit::singleline(text).id_salt(label).hint_text(label).char_limit(1024).desired_width(240.0).event_filter(egui::EventFilter {
+            horizontal_arrows: true,
+            vertical_arrows: true,
+            escape: true,
+            ..Default::default()
+        }),
+    );
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, label));
     response
 }
 
 fn row(ui: &mut egui::Ui, selected: bool, label: &str) -> bool {
     let response = ui.add(egui::Button::selectable(selected, label));
-    if response.has_focus() {
+    if response.gained_focus() {
         response.scroll_to_me(None);
-        let down = ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::ArrowDown));
-        let up = ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::ArrowUp));
-        if down || up {
-            ui.memory_mut(|memory| memory.move_focus(if down { egui::FocusDirection::Next } else { egui::FocusDirection::Previous }));
-        }
     }
     response.clicked()
 }
@@ -64,7 +78,8 @@ fn row(ui: &mut egui::Ui, selected: bool, label: &str) -> bool {
 pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     let mut state = std::mem::take(&mut app.customize);
     let mut close = false;
-    egui::Window::new(crate::tl!("Customize Workspace…"))
+    let editing = ctx.text_edit_focused();
+    egui::Window::new(crate::tl!("Customize Workspace..."))
         .id(egui::Id::new(DIALOG))
         .open(open)
         .default_width(700.0)
@@ -107,7 +122,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                 }
             });
         });
-    if close || ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Escape)) {
+    if close || (!editing && !ctx.text_edit_focused() && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Escape))) {
         *open = false;
     }
     app.customize = state;
@@ -115,28 +130,35 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
 
 fn commands(_app: &CadApp, ui: &mut egui::Ui, state: &mut State) {
     edit(ui, &mut state.query, crate::tl!("Find command"));
-    let query = state.query.to_lowercase();
-    let registry = cadcraft_engine::cmd::registry::command_registry();
-    let mut commands: Vec<_> = registry
-        .iter()
-        .map(|command| (command.stable_id, command.label))
-        .chain(crate::menus::UI_COMMANDS.iter().filter(|command| !command.1.is_empty()).map(|command| (command.0, command.1)))
-        .filter(|(id, label)| id.contains(&query) || label.to_lowercase().contains(&query))
-        .collect();
-    commands.sort_by_key(|(id, _)| *id);
-    commands.dedup_by_key(|(id, _)| *id);
+    if state.command_filter.as_deref() != Some(state.query.as_str()) {
+        let query = state.query.to_lowercase();
+        state.commands = cadcraft_engine::cmd::registry::command_registry()
+            .iter()
+            .map(|command| (command.stable_id, command.label))
+            .chain(crate::menus::UI_COMMANDS.iter().filter(|command| !command.1.is_empty()).map(|command| (command.0, command.1)))
+            .filter(|(id, label)| id.contains(&query) || label.to_lowercase().contains(&query))
+            .collect();
+        state.commands.sort_by_key(|(id, _)| *id);
+        state.commands.dedup_by_key(|(id, _)| *id);
+        state.command_filter = Some(state.query.clone());
+    }
     if state.command.is_empty()
-        && let Some((id, _)) = commands.first()
+        && let Some((id, _)) = state.commands.first()
     {
         state.command = (*id).into();
     }
-    egui::ScrollArea::vertical().id_salt("command_list").max_height(110.0).show(ui, |ui| {
-        for (id, label) in commands {
-            ui.push_id(id, |ui| {
-                if row(ui, state.command == id, &format!("{} ({id})", crate::i18n::t(label))) {
-                    state.command = id.into();
-                }
-            });
-        }
-    });
+    egui::ScrollArea::vertical().id_salt("command_list").max_height(110.0).show_rows(
+        ui,
+        ui.spacing().interact_size.y,
+        state.commands.len(),
+        |ui, range| {
+            for &(id, label) in state.commands.get(range).unwrap_or_default() {
+                ui.push_id(id, |ui| {
+                    if row(ui, state.command == id, &format!("{} ({id})", crate::i18n::t(label))) {
+                        state.command = id.into();
+                    }
+                });
+            }
+        },
+    );
 }

@@ -6,6 +6,10 @@ use super::{State, commands, edit, row, run};
 use crate::CadApp;
 
 pub(super) fn show(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State) {
+    let mut collapsed = app.ws.effective.layout.ribbon.collapsed;
+    if ui.checkbox(&mut collapsed, crate::tl!("Minimize ribbon")).changed() {
+        let _ = run(app, "ui.ribbon.collapse", json!({"collapsed": collapsed}), state);
+    }
     let mut tabs = app.ws.effective.layout.ribbon.tabs.clone();
     tabs.sort_by_key(|tab| tab.order);
     if !tabs.iter().any(|tab| tab.id == state.tab) {
@@ -14,7 +18,7 @@ pub(super) fn show(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State) {
     ui.label(crate::tl!("Ribbon tabs"));
     egui::ScrollArea::vertical().id_salt("tabs").max_height(90.0).show(ui, |ui| {
         for tab in &tabs {
-            if row(ui, tab.id == state.tab, &tab.label) {
+            if row(ui, tab.id == state.tab, crate::i18n::t(&tab.label)) {
                 state.tab = tab.id.clone();
                 state.group.clear();
             }
@@ -43,11 +47,12 @@ pub(super) fn show(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State) {
         if ui.button(crate::tl!("Remove Tab")).clicked() {
             let _ = run(app, "ui.ribbon.tab.remove", json!({"tab": state.tab}), state);
         }
-        if let Some(at) = tabs.iter().position(|tab| tab.id == state.tab) {
+        let movable: Vec<_> = tabs.iter().filter(|tab| tab.contextual.is_none()).collect();
+        if let Some(at) = movable.iter().position(|tab| tab.id == state.tab) {
             if ui.add_enabled(at > 0, egui::Button::new(crate::tl!("Tab Up"))).clicked() {
                 let _ = run(app, "ui.ribbon.tab.move", json!({"tab": state.tab, "to": at.saturating_sub(1)}), state);
             }
-            if ui.add_enabled(at + 1 < tabs.len(), egui::Button::new(crate::tl!("Tab Down"))).clicked() {
+            if ui.add_enabled(at + 1 < movable.len(), egui::Button::new(crate::tl!("Tab Down"))).clicked() {
                 let _ = run(app, "ui.ribbon.tab.move", json!({"tab": state.tab, "to": at + 1}), state);
             }
         }
@@ -59,7 +64,7 @@ pub(super) fn show(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State) {
     ui.label(crate::tl!("Ribbon groups"));
     egui::ScrollArea::vertical().id_salt("groups").max_height(80.0).show(ui, |ui| {
         for group in &groups {
-            if row(ui, group.id == state.group, &group.label) {
+            if row(ui, group.id == state.group, crate::i18n::t(&group.label)) {
                 state.group = group.id.clone();
             }
         }

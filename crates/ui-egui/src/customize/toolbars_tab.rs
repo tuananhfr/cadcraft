@@ -21,10 +21,10 @@ pub(super) fn show(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State) {
     }
     edit(ui, &mut state.label, crate::tl!("Toolbar name"));
     ui.horizontal(|ui| {
-        if ui.button(crate::tl!("Add")).clicked() {
+        if ui.button(crate::tl!("Show")).clicked() {
             let _ = run(app, "ui.toolbar.show", json!({"id": state.toolbar}), state);
         }
-        if ui.button(crate::tl!("Remove")).clicked() {
+        if ui.button(crate::tl!("Hide")).clicked() {
             let _ = run(app, "ui.toolbar.hide", json!({"id": state.toolbar}), state);
         }
         if ui.button(crate::tl!("Rename")).clicked() {
@@ -39,8 +39,13 @@ pub(super) fn show(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State) {
                 crate::wsprofile::schema::Dock::Right => "right",
                 crate::wsprofile::schema::Dock::Floating => "floating",
             };
-            for (label, order) in [(crate::tl!("Up"), bar.order.saturating_sub(1)), (crate::tl!("Down"), bar.order.saturating_add(1))] {
-                if ui.button(label).clicked() {
+            let docked = bar.dock != crate::wsprofile::schema::Dock::Floating;
+            let before = docked && bars.iter().any(|other| other.dock == bar.dock && other.row == bar.row && other.order < bar.order);
+            let after = docked && bars.iter().any(|other| other.dock == bar.dock && other.row == bar.row && other.order > bar.order);
+            for (label, order, enabled) in
+                [(crate::tl!("Up"), bar.order.saturating_sub(1), before), (crate::tl!("Down"), bar.order.saturating_add(1), after)]
+            {
+                if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
                     let _ = run(app, "ui.toolbar.move", json!({"id": bar.id, "dock": dock, "row": bar.row, "order": order}), state);
                 }
             }

@@ -7,11 +7,12 @@ use std::str::FromStr;
 use cadcraft_ui_egui::menus::{self, Entry};
 use cadcraft_ui_egui::{CadApp, i18n};
 use muda::accelerator::Accelerator;
-use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
+use muda::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 
 pub struct NativeMenu {
     _menu: Menu,
     items: HashMap<String, (String, String, MenuItem)>,
+    ribbon_minimize: CheckMenuItem,
     submenus: Vec<(String, Submenu)>,
     predefined: Vec<(&'static str, PredefinedMenuItem)>,
     language: &'static str,
@@ -34,6 +35,8 @@ impl NativeMenu {
         let menu = Menu::new();
         let mut items = HashMap::new();
         let language = app.language();
+        let ribbon_minimize =
+            CheckMenuItem::with_id("cc-ribbon-minimize", i18n::tr(language, "Minimize Ribbon"), true, app.ws.effective.layout.ribbon.collapsed, None);
         let mut submenus = Vec::new();
         let mut counter = 0usize;
         let app_menu = Submenu::new("CADCraft", true);
@@ -60,11 +63,14 @@ impl NativeMenu {
         for (title, entries) in menus::tree(app) {
             let sub = Submenu::new(i18n::tr_menu(language, &title), true);
             build(&sub, &entries, &mut items, &mut submenus, &mut counter, language);
+            if title == "Window" {
+                let _ = sub.append(&ribbon_minimize);
+            }
             let _ = menu.append(&sub);
             submenus.push((title, sub));
         }
         menu.init_for_nsapp();
-        Self { _menu: menu, items, submenus, predefined, language, last_refresh: 0.0, recent: app.ui.recent_files.clone(), counter }
+        Self { _menu: menu, items, ribbon_minimize, submenus, predefined, language, last_refresh: 0.0, recent: app.ui.recent_files.clone(), counter }
     }
 
     /// Rebuild File ▸ Open Recent after a drawing was opened or the list was cleared: the native
@@ -87,15 +93,20 @@ impl NativeMenu {
 
     pub fn poll(&mut self, app: &mut CadApp, ctx: &egui::Context) {
         while let Ok(ev) = MenuEvent::receiver().try_recv() {
-            if let Some((cmd, _, _)) = self.items.get(ev.id.as_ref()) {
+            if ev.id.as_ref() == "cc-ribbon-minimize" {
+                menus::activate(app, "ui.ribbon.collapse");
+                ctx.request_repaint();
+            } else if let Some((cmd, _, _)) = self.items.get(ev.id.as_ref()) {
                 menus::activate(app, &cmd.clone());
                 ctx.request_repaint();
             }
         }
+        self.ribbon_minimize.set_checked(app.ws.effective.layout.ribbon.collapsed);
         self.refresh_recent(app);
         let language = app.language();
         if self.language != language {
             self.language = language;
+            self.ribbon_minimize.set_text(i18n::tr(language, "Minimize Ribbon"));
             for (_, label, item) in self.items.values() {
                 item.set_text(i18n::tr(language, label));
             }
@@ -135,6 +146,9 @@ fn build(
                 submenus.push((label.clone(), sub));
             }
             Entry::Item { label, id, shortcut, enabled } => {
+                if id == "ui.ribbon.collapse" {
+                    continue;
+                }
                 *counter += 1;
                 let mid = format!("cc{counter}");
                 let i = MenuItem::with_id(mid.clone(), i18n::tr(language, label), *enabled, shortcut.as_deref().and_then(accel));
