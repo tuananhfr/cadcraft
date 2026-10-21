@@ -52,7 +52,9 @@ impl CadApp {
     /// ([`Self::take_font_changes`]).
     pub fn add_font(&mut self, file_name: &str, bytes: Vec<u8>) -> Result<ttf::UserFont, String> {
         let font = ttf::add_user_font(file_name, bytes.clone())?;
-        self.fontmgr.changes.push(FontChange::Added { file_name: file_name.to_string(), bytes });
+        // An SHX font under another extension is keyed (and so kept and removed) as `<stem>.shx`.
+        let kept = if font.is_shx() && !ttf::key(file_name).ends_with(".shx") { font.stem.clone() } else { file_name.to_string() };
+        self.fontmgr.changes.push(FontChange::Added { file_name: kept, bytes });
         self.after_font_change(format!("Added font {}", font.families.first().unwrap_or(&font.stem)));
         Ok(font)
     }

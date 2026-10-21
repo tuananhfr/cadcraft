@@ -4,8 +4,9 @@
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use cadcraft_engine::Session;
-use cadcraft_fonts::ttf;
+use cadcraft_fonts::{CRAFT_FONTS, ttf};
 use cadcraft_ui_egui::fontmgr::FontChange;
+use cadcraft_ui_egui::fontstore::FontStore;
 use cadcraft_ui_egui::{CadApp, Services, dialogs};
 use serde_json::json;
 
@@ -94,4 +95,44 @@ fn open_notice_skips_standard_shx() {
     let before = app.session.log.len();
     app.notify_missing_fonts();
     assert_eq!(app.session.log.len(), before);
+}
+
+#[test]
+fn misnamed_shx_is_kept_and_removed_under_its_own_key() {
+    let _s = serial();
+    let dir = std::env::temp_dir().join(format!("cadcraft-shx-store-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = FontStore::new(dir.join("fonts"));
+    let mut app = CadApp::new(Session::new(), Services::default());
+
+    // A TrueType file `x.ttf` kept first (when a font is embedded), then SHX bytes named `x.ttf`.
+    let ttf_bytes = CRAFT_FONTS.iter().find(|f| f.style == "Regular").map(|f| f.bytes.to_vec());
+    if let Some(bytes) = &ttf_bytes {
+        app.add_font("x.ttf", bytes.clone()).unwrap();
+    }
+    let added = app.add_font("x.ttf", shx_bytes()).unwrap();
+    assert_eq!(added.stem, "x.shx");
+    let changes = app.take_font_changes();
+    assert_eq!(changes.last(), Some(&FontChange::Added { file_name: "x.shx".into(), bytes: shx_bytes() }));
+    for change in &changes {
+        match change {
+            FontChange::Added { file_name, bytes } => {
+                std::fs::create_dir_all(dir.join("fonts")).unwrap();
+                std::fs::write(dir.join("fonts").join(file_name), bytes).unwrap();
+            }
+            FontChange::Removed { .. } => {}
+        }
+    }
+    assert!(dir.join("fonts").join("x.shx").is_file());
+
+    app.remove_font("x.shx");
+    store.sync(&mut app);
+    assert!(!dir.join("fonts").join("x.shx").exists(), "the kept SHX copy is gone");
+    if ttf_bytes.is_some() {
+        assert!(dir.join("fonts").join("x.ttf").is_file(), "the TrueType font with the same stem is untouched");
+        app.remove_font("x");
+        store.sync(&mut app);
+        assert!(!dir.join("fonts").join("x.ttf").exists());
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }

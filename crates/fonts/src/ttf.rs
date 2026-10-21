@@ -526,7 +526,8 @@ pub(crate) fn register_static(name: &str, bytes: &'static [u8]) {
 /// A font file the user added: it is found by its file name and by the families it states.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UserFont {
-    /// Lower-case file name without the extension, the way style font names are looked up.
+    /// Lower-case file name without the extension, the way style font names are looked up. An SHX
+    /// font keeps its `.shx` extension (`vhtime.shx`).
     pub stem: String,
     /// The family of each face, as the font states it (a collection has several).
     pub families: Vec<String>,
@@ -561,6 +562,7 @@ fn check_user_limits(g: &Db, stem: &str, len: usize) -> Result<(), String> {
 fn add_shx_font(base: &str, stem: String, bytes: &[u8]) -> Result<UserFont, String> {
     let font = crate::shx::ShxFont::parse(bytes).map_err(|e| match e {
         crate::shx::ShxError::Unsupported(crate::shx::ShxKind::Bigfont) => format!("{base} is an SHX bigfont; bigfont is not supported yet"),
+        crate::shx::ShxError::TooLarge => format!("{base} is larger than {} MB", crate::shx::MAX_SHX_BYTES >> 20),
         _ => "Not a readable SHX file".to_string(),
     })?;
     let user = UserFont { stem: stem.clone(), families: Vec::new(), bytes: bytes.len() };

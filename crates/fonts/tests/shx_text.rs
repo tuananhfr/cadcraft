@@ -244,3 +244,47 @@ fn glyphs_are_built_once_per_code() {
     // A clone starts without the original's cache but equals it.
     assert_eq!(font.clone(), font);
 }
+
+/// Height 1000 so coordinates stay small; each glyph zigzags through `points` vertices.
+fn big_glyph_font(codes: u16, points: usize) -> Vec<u8> {
+    let zigzag: Vec<u8> = (0..points).map(|i| if i % 2 == 0 { 0x14 } else { 0x1C }).collect();
+    let glyphs: Vec<(u16, Vec<u8>)> = (1..=codes).map(|c| (0x100 + c, glyph("Z", &zigzag))).collect();
+    shapes_image("BIG", 10, &glyphs)
+}
+
+#[test]
+fn glyph_cache_is_bounded_by_total_points() {
+    let codes = 150u16;
+    let font = ShxFont::parse(&big_glyph_font(codes, 19_000)).unwrap();
+    let one = font.glyph_shared(0x101).unwrap();
+    let per_glyph: usize = one.strokes.iter().map(Vec::len).sum();
+    assert!(per_glyph >= 15_000, "the synthetic glyph is large ({per_glyph} points)");
+    assert!(per_glyph * usize::from(codes) > cadcraft_fonts::shx::MAX_CACHED_POINTS, "the font as a whole is over the cap");
+    for c in 1..=codes {
+        let g = font.glyph_shared(0x100 + u32::from(c)).unwrap();
+        assert_eq!(g.strokes.iter().map(Vec::len).sum::<usize>(), per_glyph);
+        assert!(font.cached_points() <= cadcraft_fonts::shx::MAX_CACHED_POINTS, "after code {c}: {}", font.cached_points());
+    }
+    // Dropping the cache only costs a rebuild: the glyph is still right and cached again.
+    let again = font.glyph_shared(0x101).unwrap();
+    assert_eq!(*again, *one);
+    assert!(font.cached_points() >= per_glyph);
+}
+
+#[test]
+fn oversized_shx_says_how_large() {
+    let _s = serial();
+    let mut big = SHAPES_10.to_vec();
+    big.resize(cadcraft_fonts::shx::MAX_SHX_BYTES + 1, 0);
+    let err = ttf::add_user_font("huge.shx", big).unwrap_err();
+    assert_eq!(err, "huge.shx is larger than 8 MB");
+    assert_eq!(font_info("huge.shx", "").state, FontState::Missing);
+}
+
+#[test]
+fn debug_output_of_a_font_is_short() {
+    let font = ShxFont::parse(&big_glyph_font(50, 2_000)).unwrap();
+    let text = format!("{font:?}");
+    assert!(text.len() < 200, "{} bytes: {text}", text.len());
+    assert!(text.contains("BIG") && text.contains("50"), "{text}");
+}

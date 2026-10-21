@@ -17,6 +17,8 @@ pub use standard::{STANDARD_SHX, is_standard_shx};
 
 pub const MAX_GLYPHS: usize = 65_536;
 pub const MAX_SHX_BYTES: usize = 8 << 20;
+/// The glyph cache of one font is dropped when it would hold more points than this.
+pub const MAX_CACHED_POINTS: usize = 2_000_000;
 
 const SHAPES_10: &[u8] = b"AutoCAD-86 shapes 1.0\r\n\x1a";
 const SHAPES_11: &[u8] = b"AutoCAD-86 shapes 1.1\r\n\x1a";
@@ -59,7 +61,13 @@ pub fn has_shx_signature(bytes: &[u8]) -> bool {
 /// Glyphs built so far, by code. The interpreter's work budget is per glyph, so text drawing
 /// builds each glyph once and shares it.
 #[derive(Default)]
-struct GlyphCache(Mutex<HashMap<u32, Arc<ShxGlyph>>>);
+struct GlyphCache(Mutex<CachedGlyphs>);
+
+#[derive(Default)]
+struct CachedGlyphs {
+    glyphs: HashMap<u32, Arc<ShxGlyph>>,
+    points: usize,
+}
 
 /// Bounds memory for fonts with tens of thousands of glyphs; dropping the cache only costs a rebuild.
 const MAX_CACHED_GLYPHS: usize = 4096;
@@ -67,12 +75,6 @@ const MAX_CACHED_GLYPHS: usize = 4096;
 impl Clone for GlyphCache {
     fn clone(&self) -> Self {
         GlyphCache::default()
-    }
-}
-
-impl std::fmt::Debug for GlyphCache {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("GlyphCache")
     }
 }
 
@@ -87,7 +89,7 @@ impl Eq for GlyphCache {}
 
 /// A parsed font. Glyph bodies are kept as stored (name, NUL, shape bytes); decoding them is the
 /// job of the layers above.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ShxFont {
     pub kind: ShxKind,
     pub name: String,
@@ -96,6 +98,13 @@ pub struct ShxFont {
     pub modes: u8,
     glyphs: BTreeMap<u32, Vec<u8>>,
     built: GlyphCache,
+}
+
+// The glyph table is large; a font prints as what identifies it.
+impl std::fmt::Debug for ShxFont {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ShxFont").field("kind", &self.kind).field("name", &self.name).field("glyphs", &self.glyphs.len()).finish_non_exhaustive()
+    }
 }
 
 impl ShxFont {
@@ -123,17 +132,28 @@ impl ShxFont {
         self.glyphs.get(&code).map(Vec::as_slice)
     }
 
+    /// Points in the glyphs built so far.
+    pub fn cached_points(&self) -> usize {
+        self.built.0.lock().unwrap_or_else(PoisonError::into_inner).points
+    }
+
     /// [`ShxFont::glyph`], built on first use and shared afterwards.
     pub fn glyph_shared(&self, code: u32) -> Option<Arc<ShxGlyph>> {
-        if let Some(g) = self.built.0.lock().unwrap_or_else(PoisonError::into_inner).get(&code) {
+        if let Some(g) = self.built.0.lock().unwrap_or_else(PoisonError::into_inner).glyphs.get(&code) {
             return Some(g.clone());
         }
         let built = Arc::new(self.glyph(code)?);
+        let points: usize = built.strokes.iter().map(Vec::len).sum();
         let mut cache = self.built.0.lock().unwrap_or_else(PoisonError::into_inner);
-        if cache.len() >= MAX_CACHED_GLYPHS {
-            cache.clear();
+        if let Some(g) = cache.glyphs.get(&code) {
+            return Some(g.clone());
         }
-        Some(cache.entry(code).or_insert(built).clone())
+        if cache.glyphs.len() >= MAX_CACHED_GLYPHS || cache.points.saturating_add(points) > MAX_CACHED_POINTS {
+            *cache = CachedGlyphs::default();
+        }
+        cache.points += points;
+        cache.glyphs.insert(code, built.clone());
+        Some(built)
     }
 
     pub fn len(&self) -> usize {
