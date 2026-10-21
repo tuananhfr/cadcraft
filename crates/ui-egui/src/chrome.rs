@@ -50,8 +50,7 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
                 // Centred on the traffic lights' centre line (the row's middle): with the system font
                 // the capitals' middle is the text box's middle, so no optical nudge.
                 let galley = ui.painter().layout_no_wrap(title, egui::FontId::proportional(13.0), t.text_dim);
-                let x = title_left(r.left(), r.width(), galley.size().x);
-                ui.painter().galley(pos2(x, r.top() + (MAC_TITLE_BAR - galley.size().y) / 2.0), galley, t.text_dim);
+                let title_width = galley.size().x;
                 // Allow dragging the window by the title row.
                 let tr = Rect::from_min_size(r.min, vec2(r.width(), MAC_TITLE_BAR));
                 let resp = ui.interact(tr, ui.id().with("titledrag"), Sense::CLICK | Sense::DRAG);
@@ -61,6 +60,18 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
                 if resp.double_clicked() {
                     let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
+                }
+                let mut content_left = r.left() + MAC_CONTENT_LEFT;
+                if !app.ui.in_window_menu && !app.ws.effective.layout.quick_access.is_empty() {
+                    let inner = ui.horizontal(|ui| {
+                        ui.add_space(MAC_CONTENT_LEFT);
+                        crate::quick_access::show(app, ui);
+                    });
+                    content_left = inner.response.rect.right() + 8.0;
+                }
+                let x = title_left(r.left(), r.width(), title_width).max(content_left);
+                if x + title_width <= r.right() {
+                    ui.painter().galley(pos2(x, r.top() + (MAC_TITLE_BAR - galley.size().y) / 2.0), galley, t.text_dim);
                 }
             },
         );

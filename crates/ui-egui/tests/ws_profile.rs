@@ -762,7 +762,7 @@ fn workspace_menu_switches_saves_and_resets() {
     harness.run_steps(2);
     harness.get_by_label("Workspace Switching").click();
     harness.run_steps(3);
-    assert!(harness.get_by_label("Customize...").accesskit_node().is_disabled(), "Customize waits for a later update");
+    assert!(!harness.get_by_label("Customize...").accesskit_node().is_disabled(), "Customize is available");
     harness.get_by_label("Reset").click();
     harness.run_steps(3);
     assert!(harness.state().ui.show_status_bar);

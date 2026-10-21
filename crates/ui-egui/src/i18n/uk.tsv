@@ -1411,3 +1411,81 @@
 	id is required	Потрібно вказати ідентифікатор
 	to must be a whole number	to має бути цілим числом
 	Quick Access item is not pinned	Елемент швидкого доступу не закріплено
+	Add Command	Додати команду
+	Add Group	Додати групу
+	Add Ribbon Group	Додати групу стрічки
+	Add Ribbon Tab	Додати вкладку стрічки
+	Add Tab	Додати вкладку
+	Add to Ribbon	Додати до стрічки
+	Alignment	Вирівнювання
+	Annotate	Анотування
+	Annotation	Анотація
+	Annotation Scaling	Масштабування анотацій
+	Base Maps	Базові карти
+	Checks	Перевірки
+	Cleanup	Очищення
+	Collapse Ribbon	Згорнути стрічку
+	Constraints	Обмеження
+	Current shortcut: {key}	Поточне сполучення: {key}
+	Customize Workspace…	Налаштувати робочий простір…
+	Data	Дані
+	Dimensions	Розміри
+	Edit Dimension	Редагування розміру
+	Favorite	Обране
+	Find command	Знайти команду
+	Group Down	Групу вниз
+	Group Up	Групу вгору
+	Key combination	Сполучення клавіш
+	Keyboard	Клавіатура
+	Layout Viewports	Видові екрани аркуша
+	Layouts	Аркуші
+	Leaders	Виноски
+	Manage	Керування
+	Markup	Позначки
+	Missing or invalid field: {field}	Відсутнє або неправильне поле: {field}
+	Move Ribbon Group	Перемістити групу стрічки
+	Move Ribbon Tab	Перемістити вкладку стрічки
+	Navigate	Навігація
+	New Group	Нова група
+	New Tab	Нова вкладка
+	Next ribbon groups	Наступні групи стрічки
+	Page	Сторінка
+	Pinned commands	Закріплені команди
+	Planning and Survey	Планування та геодезія
+	Previous ribbon groups	Попередні групи стрічки
+	Publish	Публікація
+	Quantities	Обсяги
+	Quick Access	Швидкий доступ
+	Reference	Посилання
+	Remove Command	Видалити команду
+	Remove Group	Видалити групу
+	Remove Ribbon Group	Видалити групу стрічки
+	Remove Ribbon Tab	Видалити вкладку стрічки
+	Remove Tab	Видалити вкладку
+	Remove from Ribbon	Видалити зі стрічки
+	Rename	Перейменувати
+	Rename Group	Перейменувати групу
+	Rename Ribbon Group	Перейменувати групу стрічки
+	Rename Ribbon Tab	Перейменувати вкладку стрічки
+	Rename Tab	Перейменувати вкладку
+	Replace conflicting shortcut	Замінити конфліктне сполучення клавіш
+	Review Markup	Перегляд позначок
+	Ribbon	Стрічка
+	Ribbon group was not found	Групу стрічки не знайдено
+	Ribbon groups	Групи стрічки
+	Ribbon tab was not found	Вкладку стрічки не знайдено
+	Ribbon tabs	Вкладки стрічки
+	Routing	Трасування
+	Schedules	Специфікації
+	Settings	Налаштування
+	Stations	Пікети
+	Structural Grid	Конструктивна сітка
+	Symbols	Умовні позначення
+	Tab Down	Вкладку вниз
+	Tab Up	Вкладку вгору
+	Tab or group name	Назва вкладки або групи
+	Take-off	Підрахунок обсягів
+	Toolbar name	Назва панелі інструментів
+	Utilities	Службові засоби
+	Visibility	Видимість
+	Walls and Openings	Стіни та прорізи

@@ -21,6 +21,7 @@ const ROW_HEIGHT: f32 = 48.0;
 pub enum MenuAction {
     Select(String),
     SaveAs,
+    Customize,
     Reset,
 }
 
@@ -224,7 +225,10 @@ pub fn menu(ui: &mut egui::Ui, ws: &WsState) -> Option<MenuAction> {
         }
     });
     ui.separator();
-    ui.add_enabled(false, egui::Button::new(crate::tl!("Customize..."))).on_disabled_hover_text(crate::tl!("Available in a later update"));
+    if ui.button(crate::tl!("Customize...")).clicked() {
+        action = Some(MenuAction::Customize);
+        ui.close();
+    }
     if ui.button(crate::tl!("Save As...")).clicked() {
         action = Some(MenuAction::SaveAs);
         ui.close();
@@ -241,6 +245,7 @@ pub fn run_menu_action(app: &mut CadApp, action: MenuAction) {
         // Choosing what is already active would start it over from its preset and drop the user's changes.
         MenuAction::Select(id) if id == app.ws.active => {}
         MenuAction::Select(id) => choose(app, &id),
+        MenuAction::Customize => app.start("ui.customize.open"),
         MenuAction::SaveAs => app.start("ui.workspace.saveas"),
         MenuAction::Reset => {
             if let Err(error) = app.run("ui.workspace.reset", json!({})) {

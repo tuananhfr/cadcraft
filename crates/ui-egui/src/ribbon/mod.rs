@@ -1,0 +1,157 @@
+//! Ribbon layout commands use the same policy and history path as other workspace edits.
+
+use serde_json::{Value, json};
+
+use crate::CadApp;
+use crate::wsprofile::schema::{RibbonGroup, RibbonTab};
+
+pub mod contextual;
+pub mod render;
+
+pub fn visible_tabs(app: &CadApp) -> Vec<RibbonTab> {
+    let contexts = contextual::active_contexts(&app.session);
+    let mut tabs: Vec<_> = app
+        .ws
+        .effective
+        .layout
+        .ribbon
+        .tabs
+        .iter()
+        .filter(|tab| {
+            tab.visible
+                && tab.contextual.as_deref().is_none_or(|context| contexts.contains(&context))
+                && (tab.contextual.is_none() || tab.groups.iter().any(|group| group.commands.iter().any(|id| known(id))))
+        })
+        .cloned()
+        .collect();
+    tabs.sort_by_key(|tab| tab.order);
+    tabs
+}
+
+pub(crate) fn known(id: &str) -> bool {
+    cadcraft_engine::find_command(id).is_some() || crate::menus::is_ui_command(id)
+}
+
+fn text<'a>(params: &'a Value, field: &str) -> Result<&'a str, String> {
+    params
+        .get(field)
+        .and_then(Value::as_str)
+        .filter(|text| !text.trim().is_empty() && text.chars().count() <= 1024)
+        .ok_or_else(|| crate::tf!("Missing or invalid field: {field}", field = field))
+}
+
+fn destination(params: &Value) -> Result<usize, String> {
+    params
+        .get("to")
+        .and_then(Value::as_u64)
+        .and_then(|to| usize::try_from(to).ok())
+        .ok_or_else(|| crate::tl!("to must be a whole number").to_string())
+}
+
+fn move_item<T>(items: &mut Vec<T>, from: usize, to: usize) {
+    if from < items.len() {
+        let item = items.remove(from);
+        items.insert(to.min(items.len()), item);
+    }
+}
+
+fn fresh_id<'a>(ids: impl Iterator<Item = &'a str>) -> String {
+    let ids: std::collections::BTreeSet<_> = ids.collect();
+    (1..=501).map(|number| format!("custom_{number}")).find(|id| !ids.contains(id.as_str())).unwrap_or_else(|| "custom".into())
+}
+
+pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<Result<Value, String>> {
+    if command == "ui.customize.open" {
+        app.customize = crate::customize::State::default();
+        app.ui.dialog = Some(crate::customize::DIALOG.into());
+        return Some(Ok(json!({"dialog": crate::customize::DIALOG})));
+    }
+    if !matches!(
+        command,
+        "ui.ribbon.tab.add"
+            | "ui.ribbon.tab.rename"
+            | "ui.ribbon.tab.remove"
+            | "ui.ribbon.tab.move"
+            | "ui.ribbon.group.move"
+            | "ui.ribbon.group.add"
+            | "ui.ribbon.group.rename"
+            | "ui.ribbon.group.remove"
+            | "ui.ribbon.button.add"
+            | "ui.ribbon.button.remove"
+            | "ui.ribbon.collapse"
+    ) {
+        return None;
+    }
+    Some((|| {
+        let mut ribbon = app.ws.effective.layout.ribbon.clone();
+        ribbon.tabs.sort_by_key(|tab| tab.order);
+        let mut created = None;
+        if command == "ui.ribbon.collapse" {
+            ribbon.collapsed = params.get("collapsed").and_then(Value::as_bool).unwrap_or(!ribbon.collapsed);
+        } else if command == "ui.ribbon.tab.add" {
+            let label = text(params, "label")?;
+            let id = fresh_id(ribbon.tabs.iter().map(|tab| tab.id.as_str()));
+            ribbon.tabs.push(RibbonTab { id: id.clone(), label: label.into(), ..RibbonTab::default() });
+            created = Some(id);
+        } else {
+            let tab_id = text(params, "tab")?;
+            let from = ribbon.tabs.iter().position(|tab| tab.id == tab_id).ok_or_else(|| crate::tl!("Ribbon tab was not found").to_string())?;
+            if command == "ui.ribbon.tab.remove" {
+                ribbon.tabs.remove(from);
+            } else if command == "ui.ribbon.tab.move" {
+                move_item(&mut ribbon.tabs, from, destination(params)?);
+            } else {
+                let tab = ribbon.tabs.get_mut(from).ok_or_else(|| crate::tl!("Ribbon tab was not found").to_string())?;
+                match command {
+                    "ui.ribbon.tab.rename" => tab.label = text(params, "label")?.into(),
+                    "ui.ribbon.group.add" => {
+                        let id = fresh_id(tab.groups.iter().map(|group| group.id.as_str()));
+                        tab.groups.push(RibbonGroup { id: id.clone(), label: text(params, "label")?.into(), commands: Vec::new() });
+                        created = Some(id);
+                    }
+                    _ => {
+                        let group_id = text(params, "group")?;
+                        let from = tab
+                            .groups
+                            .iter()
+                            .position(|group| group.id == group_id)
+                            .ok_or_else(|| crate::tl!("Ribbon group was not found").to_string())?;
+                        match command {
+                            "ui.ribbon.group.move" => move_item(&mut tab.groups, from, destination(params)?),
+                            "ui.ribbon.group.remove" => {
+                                tab.groups.remove(from);
+                            }
+                            _ => {
+                                let group = tab.groups.get_mut(from).ok_or_else(|| crate::tl!("Ribbon group was not found").to_string())?;
+                                match command {
+                                    "ui.ribbon.group.rename" => group.label = text(params, "label")?.into(),
+                                    "ui.ribbon.button.add" => {
+                                        let id = text(params, "id")?;
+                                        if !known(id) {
+                                            return Err(crate::tf!("Unknown command: {id}", id = id));
+                                        }
+                                        if !group.commands.iter().any(|held| held == id) {
+                                            group.commands.push(id.into());
+                                        }
+                                    }
+                                    _ => {
+                                        let id = text(params, "id")?;
+                                        group.commands.retain(|held| held != id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for (order, tab) in ribbon.tabs.iter_mut().enumerate() {
+            tab.order = u32::try_from(order).unwrap_or(u32::MAX);
+        }
+        let changed = crate::wsprofile::edit_layout(app, |layout| {
+            layout.ribbon = ribbon;
+            Ok(())
+        })?;
+        Ok(json!({"changed": changed, "id": created}))
+    })())
+}

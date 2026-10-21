@@ -22,6 +22,18 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.dock.reset", "Reset Panel Layout", &["Window", "Reset Panel Layout"], None),
     ("ui.layout.undo", "Undo Layout Change", &["Window", "Undo Layout Change"], None),
     ("ui.layout.redo", "Redo Layout Change", &["Window", "Redo Layout Change"], None),
+    ("ui.customize.open", "Customize Workspace…", &["Window", "Customize Workspace…"], None),
+    ("ui.ribbon.tab.add", "Add Ribbon Tab", &[], None),
+    ("ui.ribbon.tab.rename", "Rename Ribbon Tab", &[], None),
+    ("ui.ribbon.tab.remove", "Remove Ribbon Tab", &[], None),
+    ("ui.ribbon.tab.move", "Move Ribbon Tab", &[], None),
+    ("ui.ribbon.group.add", "Add Ribbon Group", &[], None),
+    ("ui.ribbon.group.rename", "Rename Ribbon Group", &[], None),
+    ("ui.ribbon.group.remove", "Remove Ribbon Group", &[], None),
+    ("ui.ribbon.group.move", "Move Ribbon Group", &[], None),
+    ("ui.ribbon.button.add", "Add to Ribbon", &[], None),
+    ("ui.ribbon.button.remove", "Remove from Ribbon", &[], None),
+    ("ui.ribbon.collapse", "Collapse Ribbon", &[], None),
     ("ui.shortcut.bind", "Assign Shortcut", &[], None),
     ("ui.shortcut.unbind", "Remove Shortcut", &[], None),
     ("ui.quickaccess.pin", "Add to Quick Access", &[], None),
@@ -122,6 +134,9 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
         return Some(result);
     }
     if let Some(result) = crate::quick_access::route(app, id, params) {
+        return Some(result);
+    }
+    if let Some(result) = crate::ribbon::route(app, id, params) {
         return Some(result);
     }
     if let Some(result) = crate::toolbars::route(app, id, params) {

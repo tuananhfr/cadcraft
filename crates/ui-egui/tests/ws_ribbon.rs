@@ -184,6 +184,7 @@ fn quick_access_pin_unpin_reorder() {
     assert!(!restored.session.state().unwrap().is_dirty());
     restored.run("ui.toggle.menubar", json!({"on": true})).unwrap();
     restored.run("ui.toggle.toolsets", json!({"on": false})).unwrap();
+    restored.run("ui.ribbon.collapse", json!({"collapsed": true})).unwrap();
     let mut h = harness(restored);
     h.get_by_label("Line").click();
     h.run_steps(3);
@@ -338,4 +339,187 @@ fn quick_access_labels_include_shortcuts() {
     h.run_steps(3);
     assert!(h.query_by_label("Save").is_none());
     assert!(h.query_by_label("Save (Ctrl+S)").is_some() || h.query_by_label("Save (⌘S)").is_some());
+}
+
+#[test]
+fn custom_tab_and_group_order_survive_restart_ux03() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    let added = app.run("ui.ribbon.tab.add", json!({"label": "My Tab"})).unwrap();
+    let id = added["id"].as_str().unwrap();
+    app.run("ui.ribbon.group.move", json!({"tab": "home", "group": "modify", "to": 0})).unwrap();
+    app.run("ui.ribbon.tab.move", json!({"tab": id, "to": 1})).unwrap();
+    let restored = restarted(&mut app);
+    assert_eq!(restored.ws.effective.layout.ribbon, app.ws.effective.layout.ribbon);
+    let tabs = &restored.ws.effective.layout.ribbon.tabs;
+    assert_eq!(tabs.iter().find(|tab| tab.id == id).unwrap().label, "My Tab");
+    assert_eq!(tabs.iter().find(|tab| tab.id == "home").unwrap().groups.first().unwrap().id, "modify");
+    assert_eq!(tabs.get(1).unwrap().id, id);
+    assert!(!restored.session.state().unwrap().is_dirty());
+}
+
+#[test]
+fn contextual_dimension_tab() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    let result = app.run("dimlinear", json!({"p1": [0, 0], "p2": [10, 0], "at": [5, 3]})).unwrap();
+    let handle = cadcraft_engine::doc::Handle::parse_hex(result["handle"].as_str().unwrap()).unwrap();
+    app.session.set_selection(vec![handle]);
+    assert_eq!(cadcraft_ui_egui::ribbon::contextual::active_contexts(&app.session), ["dimension"]);
+    let mut h =
+        Harness::builder().with_size(vec2(1366.0, 768.0)).build_ui_state(|ui, app: &mut CadApp| cadcraft_ui_egui::ribbon::render::show(app, ui), app);
+    h.run_steps(3);
+    assert!(h.query_by_label("Dimension").is_some());
+    h.state_mut().session.set_selection(Vec::new());
+    h.run_steps(3);
+    assert!(cadcraft_ui_egui::ribbon::contextual::active_contexts(&h.state().session).is_empty());
+    assert!(h.query_by_label("Dimension").is_none());
+    let line = h.state_mut().run("line", json!({"points": [[0, 0], [2, 2]]})).unwrap();
+    let line_handle = cadcraft_engine::doc::Handle::parse_hex(line["handles"][0].as_str().unwrap()).unwrap();
+    h.state_mut().session.set_selection(vec![handle, line_handle]);
+    h.run_steps(3);
+    assert!(h.query_by_label("Dimension").is_none(), "mixed selections do not open a context");
+}
+
+#[test]
+fn ribbon_buttons_run_real_commands() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    for id in app.ws.effective.layout.ribbon.tabs.iter().flat_map(|tab| &tab.groups).flat_map(|group| &group.commands) {
+        assert!(cadcraft_engine::find_command(id).is_some() || cadcraft_ui_egui::menus::is_ui_command(id), "{id}");
+    }
+    let label = cadcraft_engine::find_command("line").unwrap().label;
+    let mut h = harness(app);
+    h.get_by_label(label).click();
+    h.run_steps(3);
+    assert_eq!(running(h.state()), Some("line"));
+}
+
+fn keyboard_activate(h: &mut Harness<'_, CadApp>, label: &str, reverse: bool) {
+    for _ in 0..180 {
+        if h.query_all_by_label(label).any(|node| node.is_focused()) {
+            h.key_press(Key::Enter);
+            h.run_steps(3);
+            return;
+        }
+        if reverse {
+            h.key_press_modifiers(Modifiers::SHIFT, Key::Tab);
+        } else {
+            h.key_press(Key::Tab);
+        }
+        h.run_steps(2);
+    }
+    panic!("keyboard could not reach {label}");
+}
+
+#[test]
+fn customize_keyboard_only_ux14() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    let preset = app.ws.effective.layout.clone();
+    app.run("ui.shortcut.bind", json!({"command": "ui.customize.open", "key": "Ctrl+Shift+F12"})).unwrap();
+    let mut h = Harness::builder().with_size(vec2(1366.0, 768.0)).build_ui_state(
+        |ui, app: &mut CadApp| {
+            app.logic(&ui.ctx().clone());
+            if app.ui.dialog.as_deref() == Some(cadcraft_ui_egui::customize::DIALOG) {
+                let mut open = true;
+                cadcraft_ui_egui::customize::dialog(app, ui.ctx(), &mut open);
+                if !open {
+                    app.ui.dialog = None;
+                }
+            }
+        },
+        app,
+    );
+    h.run_steps(3);
+    h.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::F12);
+    h.run_steps(3);
+    assert_eq!(h.state().ui.dialog.as_deref(), Some(cadcraft_ui_egui::customize::DIALOG));
+    keyboard_activate(&mut h, "Add Tab", false);
+    assert!(h.state().ws.effective.layout.ribbon.tabs.iter().any(|tab| tab.label == "New Tab"));
+    keyboard_activate(&mut h, "Home", true);
+    h.key_press(Key::ArrowDown);
+    h.run_steps(2);
+    h.key_press(Key::ArrowUp);
+    h.run_steps(2);
+    keyboard_activate(&mut h, "Group Down", false);
+    assert_eq!(h.state().ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.id == "home").unwrap().groups.first().unwrap().id, "modify");
+    keyboard_activate(&mut h, "Reset", true);
+    assert_eq!(h.state().ws.effective.layout, preset);
+    assert!(!h.state().session.state().unwrap().is_dirty());
+}
+
+#[test]
+fn ribbon_edits_obey_policy_and_layout_undo() {
+    let _guard = test_lock();
+    let policy = json!({"layers": [{"level": "company", "patch": {}, "locks": ["/ribbon"]}]});
+    let mut app = attached(MemoryStore { policy: Some(policy.to_string()), ..MemoryStore::default() });
+    assert!(app.run("ui.ribbon.tab.add", json!({"label": "Blocked"})).unwrap_err().contains("Locked by company policy"));
+    assert_eq!(app.ws.history.undo_len(), 0);
+    let mut app = attached(MemoryStore::default());
+    let before = app.ws.effective.layout.ribbon.clone();
+    app.run("ui.ribbon.tab.add", json!({"label": "Allowed"})).unwrap();
+    app.run("ui.layout.undo", json!({})).unwrap();
+    assert_eq!(app.ws.effective.layout.ribbon, before);
+    app.run("ui.layout.redo", json!({})).unwrap();
+    assert!(app.ws.effective.layout.ribbon.tabs.iter().any(|tab| tab.label == "Allowed"));
+}
+
+#[test]
+fn ribbon_collapses_groups_and_scrolls_at_narrow_widths() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    let mut h =
+        Harness::builder().with_size(vec2(480.0, 768.0)).build_ui_state(|ui, app: &mut CadApp| cadcraft_ui_egui::ribbon::render::show(app, ui), app);
+    h.run_steps(3);
+    assert!(h.query_by_label("Next ribbon groups").is_some(), "collapsed groups still have a scroll control");
+    h.get_by_label("Draw").click();
+    h.run_steps(3);
+    h.get_by_label(cadcraft_engine::find_command("line").unwrap().label).click();
+    h.run_steps(3);
+    assert_eq!(running(h.state()), Some("line"));
+}
+
+#[test]
+fn ribbon_context_menu_pins_and_removes_through_layout_commands() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    let mut h =
+        Harness::builder().with_size(vec2(1366.0, 768.0)).build_ui_state(|ui, app: &mut CadApp| cadcraft_ui_egui::ribbon::render::show(app, ui), app);
+    h.run_steps(3);
+    let label = cadcraft_engine::find_command("line").unwrap().label;
+    h.get_by_label(label).click_button(egui::PointerButton::Secondary);
+    h.run_steps(3);
+    h.get_by_label("Add to Quick Access").click();
+    h.run_steps(3);
+    assert!(h.state().ws.effective.layout.quick_access.iter().any(|id| id == "line"));
+    h.get_by_label(label).click_button(egui::PointerButton::Secondary);
+    h.run_steps(3);
+    h.get_by_label("Remove from Ribbon").click();
+    h.run_steps(3);
+    assert!(
+        !h.state()
+            .ws
+            .effective
+            .layout
+            .ribbon
+            .tabs
+            .iter()
+            .find(|tab| tab.id == "home")
+            .unwrap()
+            .groups
+            .first()
+            .unwrap()
+            .commands
+            .iter()
+            .any(|id| id == "line")
+    );
+    assert_eq!(running(h.state()), None);
+    assert!(!h.state().session.state().unwrap().is_dirty());
 }

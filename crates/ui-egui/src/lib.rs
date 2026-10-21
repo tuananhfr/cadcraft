@@ -19,6 +19,7 @@ pub mod cmdline;
 pub mod context_menu;
 pub mod control;
 pub mod credits;
+pub mod customize;
 pub mod dialogs;
 pub mod docking;
 pub mod fontmgr;
@@ -46,6 +47,7 @@ pub mod parametric;
 pub mod plotstyles;
 pub mod quick;
 pub mod quick_access;
+pub mod ribbon;
 pub mod shortcut_menus;
 pub mod shortcuts;
 pub mod theme;
@@ -257,6 +259,7 @@ pub struct CadApp {
     pub bedit: bedit::State,
     /// Workspace profile layers, layout undo and their storage ([`wsprofile`]).
     pub ws: wsprofile::WsState,
+    pub customize: customize::State,
 }
 
 impl CadApp {
@@ -298,6 +301,7 @@ impl CadApp {
             hatch_dlg: None,
             bedit: bedit::State::default(),
             ws: wsprofile::WsState::default(),
+            customize: customize::State::default(),
         }
     }
 
@@ -665,6 +669,7 @@ impl CadApp {
         if self.ui.in_window_menu {
             menus::menu_bar(self, ui);
         }
+        ribbon::render::show(self, ui);
         if self.ui.show_status_bar {
             chrome::status_bar(self, ui);
         }
