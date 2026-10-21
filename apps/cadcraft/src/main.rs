@@ -132,19 +132,17 @@ pub fn install_io() {
 }
 
 /// Add Font...: a font file chosen in the system dialog, with its contents.
-fn pick_font() -> Option<(String, Vec<u8>)> {
-    let path = rfd::FileDialog::new()
+fn pick_font() -> cadcraft_ui_egui::fontmgr::PickFontResult {
+    let Some(path) = rfd::FileDialog::new()
         .add_filter("Fonts (TTF, OTF, TTC, SHX)", &["ttf", "otf", "ttc", "otc", "shx"])
         .add_filter(i18n::t("All files"), &["*"])
-        .pick_file()?;
-    let name = path.file_name()?.to_string_lossy().into_owned();
-    match std::fs::read(&path) {
-        Ok(bytes) => Some((name, bytes)),
-        Err(e) => {
-            log::warn!("font {}: {e}", path.display());
-            None
-        }
-    }
+        .pick_file()
+    else {
+        return Ok(None);
+    };
+    let Some(name) = path.file_name().map(|name| name.to_string_lossy().into_owned()) else { return Ok(None) };
+    let bytes = cadcraft_ui_egui::fontstore::read_font_file(&path).map_err(|e| e.to_string())?;
+    Ok(Some((name, bytes)))
 }
 
 fn services() -> Services {

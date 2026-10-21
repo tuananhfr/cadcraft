@@ -23,8 +23,11 @@ pub enum FontChange {
     Removed { stem: String },
 }
 
+/// A picked font's name and contents, cancellation, or an error to show in Fonts.
+pub type PickFontResult = Result<Option<(String, Vec<u8>)>, String>;
+
 /// Reads a font file chosen by the user: its name and contents. Set by a host with a file picker.
-pub type PickFont = Box<dyn Fn() -> Option<(String, Vec<u8>)>>;
+pub type PickFont = Box<dyn Fn() -> PickFontResult>;
 
 #[derive(Default)]
 pub struct State {
@@ -77,6 +80,12 @@ impl CadApp {
         std::mem::take(&mut self.fontmgr.changes)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn retry_font_changes(&mut self, mut changes: Vec<FontChange>) {
+        changes.append(&mut self.fontmgr.changes);
+        self.fontmgr.changes = changes;
+    }
+
     /// Whether the user asked to add a font file and the host has no picker of its own.
     pub fn take_font_pick_request(&mut self) -> bool {
         std::mem::take(&mut self.fontmgr.pick_wanted)
@@ -110,10 +119,14 @@ impl CadApp {
             self.fontmgr.pick_wanted = true;
             return;
         };
-        if let Some((name, bytes)) = pick()
-            && let Err(e) = self.add_font(&name, bytes)
-        {
-            self.font_add_failed(e);
+        match pick() {
+            Ok(Some((name, bytes))) => {
+                if let Err(e) = self.add_font(&name, bytes) {
+                    self.font_add_failed(e);
+                }
+            }
+            Ok(None) => {}
+            Err(e) => self.font_add_failed(e),
         }
     }
 
@@ -404,6 +417,21 @@ fn choices(ui: &mut egui::Ui, mut item: impl FnMut(&mut egui::Ui, &str, &str)) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desktop_font_read_failure_is_reported_without_registering_a_font() {
+        let mut app = CadApp::new(cadcraft_engine::Session::new(), crate::Services::default());
+        app.fontmgr.pick_file = Some(Box::new(|| Err("hostile.shx is larger than 48 MB".into())));
+        app.request_font_file();
+        assert_eq!(app.fontmgr.note.as_deref(), Some("hostile.shx is larger than 48 MB"));
+        assert_eq!(app.status.as_ref().map(|status| status.0.as_str()), Some("hostile.shx is larger than 48 MB"));
+        assert!(app.take_font_changes().is_empty());
+        assert!(!ttf::user_fonts().iter().any(|font| font.stem == "hostile.shx"));
+
+        app.fontmgr.pick_file = Some(Box::new(|| Ok(None)));
+        app.request_font_file();
+        assert!(app.take_font_changes().is_empty());
+    }
 
     #[test]
     fn fonts_are_grouped_with_missing_ones_in_use_first() {
