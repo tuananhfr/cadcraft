@@ -328,6 +328,31 @@ fn shapes_diameter_uses_legacy_slot_with_default_and_cp1258() {
 }
 
 #[test]
+fn degree_and_plus_minus_keep_legacy_slots_when_unmappable() {
+    let _s = serial();
+    let image =
+        shapes_image("FCSYMBOLS", 10, &[(176, glyph("DEGREE", &[0xA4])), (177, glyph("PLUSMINUS", &[0x82])), (0x3F, glyph("QUESTION", &[0x50]))]);
+    let name = "fc-symbols.shx";
+    ttf::add_user_font(name, image).unwrap();
+    for enc in [encoding_rs::WINDOWS_874, encoding_rs::WINDOWS_1252] {
+        let f = TextFont::for_style(name, "").with_codepage(Some(enc));
+        for (text, symbol, slot, end, advance) in [("%%d", "°", 0xB0, (0.0, 10.0), 0.0), ("%%p", "±", 0xB1, (8.0, 8.0), 8.0)] {
+            let (bytes, _, unmappable) = enc.encode(symbol);
+            if enc == encoding_rs::WINDOWS_874 {
+                assert!(unmappable, "{symbol}");
+            } else {
+                assert!(!unmappable, "{symbol}");
+                assert_eq!(bytes.as_ref(), &[slot]);
+            }
+            let sh = shape_line(&f, text, 10.0, 1.0, 0.0);
+            assert!(same_points(&sh.strokes, &[&[(0.0, 0.0), end]]), "{text}: {:?}", sh.strokes);
+            assert!(near(sh.width, advance) && near(text_width(&f, text, 10.0, 1.0), sh.width));
+        }
+    }
+    assert!(ttf::remove_user_font(name));
+}
+
+#[test]
 fn unencodable_char_falls_back() {
     let _s = serial();
     let question = glyph("QUESTION", &[0x50]);

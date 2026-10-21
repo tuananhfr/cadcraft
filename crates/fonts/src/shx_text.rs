@@ -14,9 +14,10 @@ fn code(font: &ShxFont, enc: &'static Encoding, c: char) -> Option<u32> {
     }
     let mut buf = [0; 4];
     let (bytes, _, had_unmappable) = enc.encode(c.encode_utf8(&mut buf));
-    // Preserve the legacy SHX diameter slot when the codepage cannot encode decoded %%c.
-    if had_unmappable && c == '\u{2300}' {
-        return Some(178);
+    // Preserve legacy SHX symbol slots only when the codepage cannot encode decoded controls.
+    const LEGACY_SLOTS: &[(char, u32)] = &[('\u{00B0}', 176), ('\u{00B1}', 177), ('\u{2300}', 178)];
+    if had_unmappable && let Some((_, slot)) = LEGACY_SLOTS.iter().find(|(symbol, _)| *symbol == c) {
+        return Some(*slot);
     }
     // Unmappable characters produce HTML references; neither those nor DBCS bytes are glyph codes.
     if had_unmappable || bytes.len() != 1 {

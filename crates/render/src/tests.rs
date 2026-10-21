@@ -927,6 +927,14 @@ fn cancelled_build_stops_early() {
 
 #[test]
 fn drawing_codepage_reaches_text_font() {
+    struct FontGuard(&'static str);
+
+    impl Drop for FontGuard {
+        fn drop(&mut self) {
+            cadcraft_fonts::ttf::remove_user_font(self.0);
+        }
+    }
+
     let name = "f5-render.shx";
     let entries = [(0u16, b"F5RENDER\0\x0A\x02\0\0\0".to_vec()), (0x3F, vec![0, 0x50, 0]), (0xC3, vec![0, 0xA4, 0])];
     let mut image = b"AutoCAD-86 shapes 1.0\r\n\x1a".to_vec();
@@ -942,6 +950,7 @@ fn drawing_codepage_reaches_text_font() {
     }
     image.extend_from_slice(b"EOF");
     cadcraft_fonts::ttf::add_user_font(name, image).unwrap();
+    let _font_guard = FontGuard(name);
 
     let mut d = Drawing::new_imperial();
     let ts = cadcraft_doc::TextStyle { name: "F5".into(), font: name.into(), ..Default::default() };
@@ -973,7 +982,7 @@ fn drawing_codepage_reaches_text_font() {
     assert_eq!(text_font(&d, &ts).codepage(), encoding_rs::WINDOWS_1252);
     d.header.set_str("DWGCODEPAGE", " ansi_1258 ");
     assert_eq!(text_font(&d, &ts).codepage(), encoding_rs::WINDOWS_1258);
-    for value in ["", "not-a-codepage"] {
+    for value in ["", "not-a-codepage", "UTF8", "UTF-8"] {
         d.header.set_str("DWGCODEPAGE", value);
         assert!(drawing_codepage(&d).is_none());
         assert_eq!(text_font(&d, &ts).codepage(), encoding_rs::WINDOWS_1252);

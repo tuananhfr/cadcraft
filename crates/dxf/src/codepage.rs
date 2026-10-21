@@ -62,13 +62,12 @@ pub(crate) fn decoder(code_page: &str) -> Option<Decoder> {
     Some(Decoder::Encoding(enc))
 }
 
-/// The encoding for a `$DWGCODEPAGE` value, when it is supported by `encoding_rs`.
-/// DOS table decoders have no corresponding `Encoding` and return `None`.
+/// The legacy encoding for a `$DWGCODEPAGE` value, when it is supported by `encoding_rs`.
+/// UTF-8 has no legacy glyph slots; DOS table decoders have no corresponding `Encoding`.
 pub fn code_page_encoding(code_page: &str) -> Option<&'static Encoding> {
     match decoder(code_page)? {
-        Decoder::Utf8 => Some(encoding_rs::UTF_8),
         Decoder::Encoding(enc) => Some(enc),
-        Decoder::Table(_) => None,
+        Decoder::Utf8 | Decoder::Table(_) => None,
     }
 }
 
@@ -268,6 +267,23 @@ mod tests {
         assert_eq!(d(b"x", "ANSI_1361"), None);
         assert_eq!(d(b"x", "EBCDIC"), None);
         assert_eq!(d(b"x", ""), None);
+    }
+
+    #[test]
+    fn code_page_encoding_names() {
+        for (name, enc) in [
+            ("ANSI_1252", encoding_rs::WINDOWS_1252),
+            ("ANSI_1258", encoding_rs::WINDOWS_1258),
+            ("ANSI_932", encoding_rs::SHIFT_JIS),
+            (" ansi_1252 ", encoding_rs::WINDOWS_1252),
+            ("AnSi_1258", encoding_rs::WINDOWS_1258),
+            ("ansi_932", encoding_rs::SHIFT_JIS),
+        ] {
+            assert_eq!(code_page_encoding(name), Some(enc), "{name}");
+        }
+        for name in ["UTF8", "UTF-8", "utf8", "UNICODE", "", "unknown", "DOS437", "DOS850", "DOS852"] {
+            assert_eq!(code_page_encoding(name), None, "{name}");
+        }
     }
 
     #[test]

@@ -1291,17 +1291,7 @@ fn drawing_codepage(d: &Drawing) -> Option<&'static encoding_rs::Encoding> {
     if name.len() > 32 {
         return None;
     }
-    // Cache by header value so text entities share the lookup and header edits cannot leave it stale.
-    static CACHE: std::sync::Mutex<Option<(String, Option<&'static encoding_rs::Encoding>)>> = std::sync::Mutex::new(None);
-    let mut cache = CACHE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    if let Some((cached, enc)) = &*cache
-        && cached == name
-    {
-        return *enc;
-    }
-    let enc = cadcraft_dxf::code_page_encoding(name);
-    *cache = Some((name.to_owned(), enc));
-    enc
+    cadcraft_dxf::code_page_encoding(name)
 }
 
 fn text_font(d: &Drawing, ts: &cadcraft_doc::TextStyle) -> cadcraft_fonts::TextFont {
