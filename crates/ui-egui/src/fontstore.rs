@@ -2,10 +2,12 @@
 //! directory. [`FontStore::load`] adds them at startup and [`FontStore::sync`] writes or deletes
 //! files as [`CadApp::take_font_changes`] reports. The web keeps them in the browser instead.
 
+use std::cell::Cell;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use cadcraft_fonts::ttf;
 
@@ -30,19 +32,29 @@ fn read_font_bytes(reader: impl Read, name: &str) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
+/// A failed keep is retried after this long: each try may write 48 MB and sync it on the UI thread.
+const RETRY_DELAY: Duration = Duration::from_secs(10);
+const TEMPORARY_PREFIX: &str = ".cadcraft-font-";
+
 pub struct FontStore {
     dir: PathBuf,
+    retry_at: Cell<Option<Instant>>,
 }
 
 impl FontStore {
     pub fn new(dir: PathBuf) -> Self {
-        FontStore { dir }
+        FontStore { dir, retry_at: Cell::new(None) }
     }
 
     /// Add the fonts kept from earlier runs. A file that can't be read or isn't a font is skipped.
     pub fn load(&self, app: &mut CadApp) {
         let Ok(entries) = std::fs::read_dir(&self.dir) else { return };
-        let mut files: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| is_font_file(p)).collect();
+        let paths: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
+        // A run that stopped mid-write leaves its temporary copy behind.
+        for path in paths.iter().filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with(TEMPORARY_PREFIX))) {
+            let _ = std::fs::remove_file(path);
+        }
+        let mut files: Vec<PathBuf> = paths.into_iter().filter(|p| is_font_file(p)).collect();
         files.sort();
         for path in files {
             let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else { continue };
@@ -60,10 +72,15 @@ impl FontStore {
     /// Keep what the user added or removed since the last call. A failure shows in the status bar:
     /// the font still works for this run.
     pub fn sync(&self, app: &mut CadApp) {
-        self.sync_with(app, Self::write);
+        if self.retry_at.get().is_some_and(|at| Instant::now() < at) {
+            return;
+        }
+        let failed = self.sync_with(app, Self::write);
+        self.retry_at.set(failed.then(|| Instant::now() + RETRY_DELAY));
     }
 
-    fn sync_with(&self, app: &mut CadApp, mut write: impl FnMut(&Self, &str, &[u8]) -> io::Result<()>) {
+    /// Returns whether a change failed and was put back for a later try.
+    fn sync_with(&self, app: &mut CadApp, mut write: impl FnMut(&Self, &str, &[u8]) -> io::Result<()>) -> bool {
         let mut changes = app.take_font_changes().into_iter();
         while let Some(change) = changes.next() {
             let r = match &change {
@@ -76,9 +93,10 @@ impl FontStore {
                 let mut pending = vec![change];
                 pending.extend(changes);
                 app.retry_font_changes(pending);
-                break;
+                return true;
             }
         }
+        false
     }
 
     fn write(&self, file_name: &str, bytes: &[u8]) -> io::Result<()> {
@@ -117,7 +135,7 @@ impl FontStore {
     fn temporary(&self) -> io::Result<(PathBuf, File)> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         for _ in 0..32 {
-            let path = self.dir.join(format!(".cadcraft-font-{}-{}.tmp", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+            let path = self.dir.join(format!("{TEMPORARY_PREFIX}{}-{}.tmp", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
             match OpenOptions::new().write(true).create_new(true).open(&path) {
                 Ok(file) => return Ok((path, file)),
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -168,6 +186,21 @@ mod tests {
             buffer.fill(0);
             Ok(buffer.len())
         }
+    }
+
+    #[test]
+    fn a_failed_keep_is_not_retried_every_frame() {
+        let blocker = std::env::temp_dir().join(format!("cadcraft-font-blocker-{}", std::process::id()));
+        std::fs::write(&blocker, b"a file where the font folder should be").unwrap();
+        let store = FontStore::new(blocker.clone());
+        let mut app = CadApp::new(Session::new(), crate::Services::default());
+        let change = FontChange::Added { file_name: "kept.ttf".into(), bytes: b"bytes".to_vec() };
+        app.retry_font_changes(vec![change.clone()]);
+        store.sync(&mut app);
+        assert!(store.retry_at.get().is_some());
+        store.sync(&mut app);
+        assert_eq!(app.take_font_changes(), vec![change], "still pending, not tried again yet");
+        std::fs::remove_file(blocker).unwrap();
     }
 
     #[test]
