@@ -67,7 +67,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.newtemplate", "New from Template...", &["File", "New from Template..."], None),
     ("ui.saveas", "Save As...", &[], None),
     ("ui.sample", "Open Sample Drawing", &["Help", "Open Sample Drawing"], None),
-    ("ui.toggle.toolsets", "Tool Sets", &["Window", "Tool Sets"], Some("Cmd+3")),
+    ("ui.toggle.toolsets", "Tool Sets", &[], Some("Cmd+3")),
     ("ui.panel.properties", "Properties Inspector", &["Window", "Properties Inspector"], Some("Cmd+1")),
     ("ui.panel.layers", "Layers Palette", &["Window", "Layers Palette"], None),
     ("ui.panel.quickcalc", "QuickCalc", &["Window", "QuickCalc"], Some("Cmd+8")),
@@ -116,6 +116,11 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.noop", "", &[], None),
     ("ui.quit", "Quit CADCraft", &[], Some("Cmd+Q")),
 ];
+
+/// Parameter-only panel actions remain available to control calls without offering unusable buttons.
+pub(crate) fn command_hidden(id: &str) -> bool {
+    matches!(id, "ui.panel.autohide" | "ui.panel.pin" | "ui.panel.peek")
+}
 
 pub fn is_ui_command(id: &str) -> bool {
     UI_COMMANDS.iter().any(|c| c.0 == id)

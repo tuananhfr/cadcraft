@@ -9,12 +9,12 @@ pub fn body(ui: &mut egui::Ui, app: &mut CadApp) {
     if files.is_empty() {
         ui.label(crate::i18n::t("No applications loaded in this session"));
     }
-    egui::ScrollArea::vertical().id_salt("lisp-loaded-files").show(ui, |ui| {
+    egui::ScrollArea::vertical().id_salt("lisp-loaded-files").max_height((ui.available_height() - 36.0).max(0.0)).show(ui, |ui| {
         for name in files {
             ui.label(name);
         }
     });
-    if ui.button(crate::i18n::t("Load Application…")).clicked() {
+    if ui.button(crate::i18n::t("Load Application...")).clicked() {
         app.start("appload");
     }
 }

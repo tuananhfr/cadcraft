@@ -156,7 +156,12 @@ fn commands(_app: &CadApp, ui: &mut egui::Ui, state: &mut State) {
         state.commands = cadcraft_engine::cmd::registry::command_registry()
             .iter()
             .map(|command| (command.stable_id, command.label))
-            .chain(crate::menus::UI_COMMANDS.iter().filter(|command| !command.1.is_empty()).map(|command| (command.0, command.1)))
+            .chain(
+                crate::menus::UI_COMMANDS
+                    .iter()
+                    .filter(|command| !command.1.is_empty() && !crate::menus::command_hidden(command.0))
+                    .map(|command| (command.0, command.1)),
+            )
             .filter(|(id, label)| id.contains(&query) || label.to_lowercase().contains(&query))
             .collect();
         state.commands.sort_by_key(|(id, _)| *id);

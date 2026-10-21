@@ -1,5 +1,6 @@
 //! Auto-hide keeps placement in the profile and only the temporary peek in memory.
 
+use craft_ui::docking::{Location, Placement, Zone};
 use serde_json::{Value, json};
 
 use crate::CadApp;
@@ -54,6 +55,10 @@ fn command(app: &mut CadApp, id: &str, params: &Value) -> Result<Value, String> 
         }
         return Ok(json!({"panel": panel.id()}));
     }
+    let pin = id == "ui.panel.pin";
+    if pin && app.ui.docking.layout.contains(&panel) && app.ui.docking.layout.floating.iter().all(|group| !group.panels.contains(&panel)) {
+        return Ok(json!({"panel": panel.id(), "mode": "dock"}));
+    }
     if !can_change(app, panel) {
         return Err(crate::wsprofile::LOCKED_MESSAGE.into());
     }
@@ -61,21 +66,36 @@ fn command(app: &mut CadApp, id: &str, params: &Value) -> Result<Value, String> 
     if side == Some(Dock::Floating) {
         return Err("Auto-hide needs a dock edge".into());
     }
-    crate::wsprofile::edit_layout(app, |layout| {
-        let index = match layout.panels.iter().position(|state| state.id == panel.id()) {
-            Some(index) => index,
-            None => {
-                layout.panels.push(PanelState { id: panel.id().into(), ..PanelState::default() });
-                layout.panels.len().saturating_sub(1)
-            }
+    let before = app.ws.effective.layout.panels.iter().find(|state| state.id == panel.id());
+    let default_side = if panel == Panel::ToolSets { Dock::Left } else { Dock::Right };
+    let saved_side = before.and_then(|state| state.side).filter(|side| *side != Dock::Floating).unwrap_or(default_side);
+    let dock = side.unwrap_or(saved_side);
+    let mut workspace = app.ui.docking.clone();
+    workspace.set_visible(panel, false)?;
+    if side.is_some_and(|side| side != saved_side) || before.is_none_or(|state| state.side == Some(Dock::Floating)) {
+        let zone = match dock {
+            Dock::Left => Zone::Left,
+            Dock::Top => Zone::Top,
+            Dock::Bottom => Zone::Bottom,
+            Dock::Right | Dock::Floating => Zone::Right,
         };
-        let state = layout.panels.get_mut(index).ok_or("Panel placement is missing")?;
-        let default_side = if panel == Panel::ToolSets { Dock::Left } else { Dock::Right };
-        state.side = Some(side.or(state.side).filter(|side| *side != Dock::Floating).unwrap_or(default_side));
-        state.mode = if id == "ui.panel.pin" { PanelMode::Dock } else { PanelMode::AutoHide };
+        workspace.hidden.retain(|(id, _)| *id != panel);
+        workspace.hidden.push((
+            panel,
+            Location { floating: None, anchor: Some(Panel::Canvas), placement: Placement::Split(zone), size: None, stack: None, sibling: Vec::new() },
+        ));
+    }
+    if pin {
+        workspace.set_visible(panel, true)?;
+    }
+    let (panels, tree) = crate::wsprofile::apply::capture_docking(&workspace, app.ws.area, &app.ws.effective.layout.panels);
+    crate::wsprofile::edit_layout(app, |layout| {
+        layout.panels = panels;
+        layout.dock_tree = Some(tree);
+        let state = layout.panels.iter_mut().find(|state| state.id == panel.id()).ok_or("Panel placement is missing")?;
+        state.side = Some(dock);
+        state.mode = if pin { PanelMode::Dock } else { PanelMode::AutoHide };
         state.visible = true;
-        // The flat list now owns this placement; an old tree would reopen the hidden tab.
-        layout.dock_tree = None;
         Ok(())
     })?;
     app.autohide = State::default();
@@ -129,13 +149,16 @@ pub fn edges(app: &mut CadApp, ui: &mut egui::Ui) {
 
 fn edge_button(ui: &mut egui::Ui, panel: Panel, vertical: bool) -> egui::Response {
     let label = crate::i18n::t(panel.label());
+    let accessible = crate::tf!("Show {panel}", panel = label);
     if !vertical {
-        return ui.button(label);
+        let response = ui.button(label);
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &accessible));
+        return response;
     }
     let t = crate::theme::Tokens::get();
     let galley = ui.painter().layout_no_wrap(label.to_string(), crate::theme::body(), t.text);
     let (rect, response) = ui.allocate_exact_size(egui::vec2(EDGE, galley.size().x + 16.0), egui::Sense::click());
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &accessible));
     if response.hovered() || response.has_focus() {
         ui.painter().rect_filled(rect, 2.0, t.tab_active);
     }
@@ -169,6 +192,7 @@ pub fn overlay(app: &mut CadApp, ctx: &egui::Context) {
         _ => area.min,
     };
     let mut pin = false;
+    let popup_before = ctx.any_popup_open();
     let shown =
         egui::Area::new(egui::Id::new(("cc_autohide_overlay", panel))).order(egui::Order::Foreground).fixed_pos(pos).movable(false).show(ctx, |ui| {
             egui::Frame::new().fill(crate::theme::Tokens::get().panel).show(ui, |ui| {
@@ -198,13 +222,21 @@ pub fn overlay(app: &mut CadApp, ctx: &egui::Context) {
         .memory(|memory| memory.focused())
         .and_then(|id| ctx.read_response(id))
         .is_some_and(|response| response.layer_id == shown.response.layer_id);
-    let focus_left = app.autohide.focus_owned && !owns_focus;
-    app.autohide.focus_owned = owns_focus;
+    // Popups render on their own layer; those created by this body still belong to its peek.
+    let body_popup = !popup_before && ctx.any_popup_open();
+    let editing = owns_focus && ctx.text_edit_focused();
+    let focus_left = app.autohide.focus_owned && !owns_focus && !body_popup;
+    if !body_popup {
+        app.autohide.focus_owned = owns_focus;
+    }
+    if body_popup || editing {
+        app.autohide.last_inside = Some(now);
+    }
     let last = *app.autohide.last_inside.get_or_insert(now);
     let dismissed = ctx.input(|input| {
-        input.key_pressed(egui::Key::Escape) || !input.focused || input.events.iter().any(|event| matches!(event, egui::Event::WindowFocused(false)))
+        (input.key_pressed(egui::Key::Escape) && !body_popup) || input.events.iter().any(|event| matches!(event, egui::Event::WindowFocused(false)))
     });
-    if focus_left || now - last >= CLOSE_DELAY || dismissed {
+    if focus_left || (!body_popup && !editing && now - last >= CLOSE_DELAY) || dismissed {
         app.autohide = State::default();
     } else {
         ctx.request_repaint_after(std::time::Duration::from_millis(50));

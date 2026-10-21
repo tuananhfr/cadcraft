@@ -109,6 +109,7 @@ pub struct LispState {
     active: bool,
     /// Files loaded by APPLOAD, by name, for `(load name)` where there is no file system.
     files: HashMap<String, String>,
+    loaded_files: HashMap<String, String>,
     /// Where startup files are read from (see `startup.rs`).
     support_dir: Option<std::path::PathBuf>,
     /// Drawings that had their startup files.
@@ -143,6 +144,7 @@ impl std::fmt::Debug for LispState {
 /// A routine on its way: the machine, what it waits for, and its undo step.
 struct Run {
     machine: Machine,
+    loaded_file: Option<String>,
     /// The drawing it runs in.
     uid: u64,
     waiting: Option<Need>,
@@ -242,6 +244,7 @@ impl Session {
         let uid = st.uid;
         self.lisp.run = Some(Box::new(Run {
             machine,
+            loaded_file: None,
             uid,
             waiting: None,
             print,
@@ -415,6 +418,12 @@ impl Session {
     fn lisp_end(&mut self, result: std::result::Result<Value, String>) {
         let Some(run) = self.lisp.run.take() else { return };
         self.lisp.active = false;
+        if result.is_ok()
+            && !run.handler
+            && let Some(name) = &run.loaded_file
+        {
+            self.lisp_loaded(name);
+        }
         let mut env = self.lisp.envs.remove(&run.uid).unwrap_or_default();
         self.lisp_flush(&mut env, true);
         self.lisp.envs.insert(run.uid, env);
@@ -583,9 +592,9 @@ impl Session {
 pub(crate) use drawing::from_json as drawing_from_json;
 pub(crate) use drawing::load_source;
 
-/// Session-cached application names, sorted independently of hash-map iteration order.
+/// Successfully loaded application names, with original spelling and deterministic order.
 pub fn loaded_files(session: &Session) -> Vec<String> {
-    let mut names: Vec<_> = session.lisp.files.keys().map(|name| format!("{name}.lsp")).collect();
+    let mut names: Vec<_> = session.lisp.loaded_files.values().cloned().collect();
     names.sort();
     names
 }
@@ -603,11 +612,23 @@ impl Session {
     pub fn lisp_load(&mut self, name: &str, text: &str, blocking: bool) -> crate::Result<Option<std::result::Result<Value, String>>> {
         self.lisp.files.insert(file_key(name), text.to_string());
         let r = self.lisp_eval(text, false, blocking, Vec::new())?;
-        if !matches!(r, Some(Err(_))) {
-            let shown = std::path::Path::new(name).file_name().and_then(|n| n.to_str()).unwrap_or(name).to_string();
-            self.echo(format!("{shown} successfully loaded."));
+        match &r {
+            Some(Ok(_)) => self.lisp_loaded(name),
+            None => {
+                if let Some(run) = self.lisp.run.as_mut() {
+                    run.loaded_file = Some(name.to_string());
+                }
+            }
+            Some(Err(_)) => {}
         }
         Ok(r)
+    }
+
+    fn lisp_loaded(&mut self, name: &str) {
+        let path = name.replace('\\', "/");
+        let shown = std::path::Path::new(&path).file_name().and_then(|name| name.to_str()).unwrap_or(name).to_string();
+        self.lisp.loaded_files.insert(file_key(name), shown.clone());
+        self.echo(format!("{shown} successfully loaded."));
     }
 }
 

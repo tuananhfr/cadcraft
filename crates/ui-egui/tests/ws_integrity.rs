@@ -12,7 +12,7 @@ use cadcraft_ui_egui::{CadApp, Services, autohide, fontmgr};
 use craft_ui::docking::Placement;
 use egui::{Event, PointerButton, vec2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{Queryable, by};
 use serde_json::{Value, json};
 
 static LOCK: Mutex<()> = Mutex::new(());
@@ -107,7 +107,7 @@ fn autohide_round_trip() {
     assert_eq!(app.ws.effective.layout.panels.iter().find(|panel| panel.id == "properties").unwrap().mode, PanelMode::AutoHide);
     let drawing = app.session.doc().unwrap().clone();
     let mut h = harness(app);
-    h.get_by_role_and_label(egui::accesskit::Role::Button, "Properties").click();
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Show Properties").click();
     h.run_steps(3);
     assert_eq!(h.state().autohide.active, Some(Panel::Properties));
     assert!(h.query_by_label("Pin panel").is_some());
@@ -129,7 +129,7 @@ fn autohide_hover_delay_and_focus_leave_close_overlay() {
     let mut app = attached(MemoryStore::default());
     app.run("ui.panel.autohide", json!({"panel": "properties"})).unwrap();
     let mut h = harness(app);
-    let edge = h.get_by_role_and_label(egui::accesskit::Role::Button, "Properties").rect().center();
+    let edge = h.get_by_role_and_label(egui::accesskit::Role::Button, "Show Properties").rect().center();
     h.event(Event::PointerMoved(edge));
     h.run_steps(3);
     assert_eq!(h.state().autohide.active, Some(Panel::Properties));
@@ -235,7 +235,7 @@ fn lisp_panel_lists_engine_files_and_starts_appload() {
     assert!(h.query_by_label("alpha.lsp").is_some());
     assert!(h.query_by_label("zeta.lsp").is_some());
     assert!(h.query_by_label("Startup files load from <settings>/support only").is_some());
-    h.get_by_label("Load Application…").click();
+    h.get_by_label("Load Application...").click();
     h.run_steps(2);
     assert_eq!(h.state().session.running.as_ref().map(|command| command.id.as_str()), Some("appload"));
     assert!(!h.state().session.state().unwrap().is_dirty());
@@ -280,4 +280,187 @@ fn moving_unlocked_panel_gives_space_to_unlocked_sibling() {
     assert_eq!(app.ws.effective.layout.panels.iter().find(|panel| panel.id == "properties"), Some(&before));
     let fonts = app.ws.effective.layout.panels.iter().find(|panel| panel.id == "fonts").unwrap();
     assert!((fonts.height_ratio - 0.6).abs() < 0.00001, "the unlocked sibling receives the freed space");
+}
+
+#[test]
+fn autohide_keeps_other_panels_tree() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.dock", json!({"operation": "move", "panel": "layers", "target": "toolSets", "zone": "center", "before": "toolSets"})).unwrap();
+    app.run("ui.dock", json!({"operation": "activate", "panel": "toolSets"})).unwrap();
+    app.run("ui.dock", json!({"operation": "resizeSplit", "path": [], "size": {"FixedFirst": 256.0}})).unwrap();
+    let before = app.ui.docking.clone();
+    let others: Vec<_> = app.ws.effective.layout.panels.iter().filter(|panel| panel.id != "properties").cloned().collect();
+    let mut hidden = before.clone();
+    hidden.set_visible(Panel::Properties, false).unwrap();
+    app.run("ui.panel.autohide", json!({"panel": "properties"})).unwrap();
+    assert_eq!(app.ui.docking.layout, hidden.layout, "only Properties leaves the live tree");
+    assert!(app.ws.user.layout.dock_tree.is_some());
+    let mut app = restart(&mut app);
+    assert_eq!(app.ui.docking.layout, hidden.layout, "the remaining tree survives restart");
+    app.run("ui.panel.pin", json!({"panel": "properties"})).unwrap();
+    assert_eq!(app.ui.docking.layout, before.layout, "all split sizes, tab order and active tabs survive pinning");
+    assert_eq!(app.ws.effective.layout.panels.iter().filter(|panel| panel.id != "properties").cloned().collect::<Vec<_>>(), others);
+    assert_eq!(restart(&mut app).ui.docking.layout, before.layout);
+}
+
+#[test]
+fn pin_docked_panel_is_noop() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.dock", json!({"operation": "move", "panel": "layers", "target": "toolSets", "zone": "center"})).unwrap();
+    let before = app.ws.user.layout.clone();
+    let tree = app.ui.docking.layout.clone();
+    let history = (app.ws.history.undo_len(), app.ws.history.redo_len());
+    app.run("ui.panel.pin", json!({"panel": "properties", "side": "left"})).unwrap();
+    assert_eq!(app.ws.user.layout, before);
+    assert_eq!(app.ui.docking.layout, tree);
+    assert_eq!((app.ws.history.undo_len(), app.ws.history.redo_len()), history);
+}
+
+#[test]
+fn autohide_hover_works_in_steady_unfocused_window() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.panel.autohide", json!({"panel": "properties"})).unwrap();
+    let mut h = harness(app);
+    h.input_mut().focused = false;
+    h.event(Event::WindowFocused(false));
+    h.run_steps(2);
+    let edge = h.get_by_role_and_label(egui::accesskit::Role::Button, "Show Properties").rect().center();
+    h.event(Event::PointerMoved(edge));
+    h.run_steps(40);
+    assert!(!h.ctx.input(|input| input.focused));
+    assert_eq!(h.state().autohide.active, Some(Panel::Properties));
+}
+
+#[test]
+fn autohide_popup_keeps_overlay_open() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.panel.autohide", json!({"panel": "properties"})).unwrap();
+    app.run("ui.panel.peek", json!({"panel": "properties"})).unwrap();
+    let mut h = harness(app);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "■ ByLayer").click();
+    h.run_steps(3);
+    let item = h.get_by_role_and_label(egui::accesskit::Role::Button, "Red").rect().center();
+    h.event(Event::PointerMoved(item));
+    h.run_steps(40);
+    assert!(h.ctx.any_popup_open());
+    assert_eq!(h.state().autohide.active, Some(Panel::Properties));
+    h.event(Event::PointerGone);
+    h.run_steps(40);
+    assert_eq!(h.state().autohide.active, Some(Panel::Properties), "a body popup suspends pointer dismissal");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert!(!h.ctx.any_popup_open());
+    assert_eq!(h.state().autohide.active, Some(Panel::Properties));
+    h.run_steps(40);
+    assert!(h.state().autohide.active.is_none());
+}
+
+#[test]
+fn autohide_text_edit_keeps_overlay_open() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.panel.autohide", json!({"panel": "quickCalc"})).unwrap();
+    app.run("ui.panel.peek", json!({"panel": "quickCalc"})).unwrap();
+    let mut h = harness(app);
+    h.get(by().role(egui::accesskit::Role::TextInput).predicate(|node| node.placeholder() == Some("Expression"))).focus();
+    h.run_steps(2);
+    h.event(Event::PointerGone);
+    h.run_steps(40);
+    assert!(h.ctx.text_edit_focused());
+    assert_eq!(h.state().autohide.active, Some(Panel::QuickCalc));
+    h.get_by_label("Command line input").focus();
+    h.run_steps(2);
+    assert!(h.state().autohide.active.is_none());
+}
+
+#[test]
+fn parameter_only_panel_commands_are_hidden_but_callable() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    for id in ["ui.panel.autohide", "ui.panel.pin", "ui.panel.peek"] {
+        assert!(menus::is_ui_command(id));
+        assert!(cadcraft_ui_egui::quick_access::search(&app, id).is_empty());
+        assert!(app.run(id, json!({})).is_err(), "panel is required");
+    }
+    app.run("ui.customize.open", json!({})).unwrap();
+    let mut h = harness(app);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Keyboard").click();
+    h.run_steps(2);
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Find command").type_text("ui.panel.");
+    h.run_steps(2);
+    for label in ["Auto-hide (ui.panel.autohide)", "Pin panel (ui.panel.pin)", "Show Auto-hide Panel (ui.panel.peek)"] {
+        assert!(h.query_by_label(label).is_none(), "{label}");
+    }
+    h.state_mut().run("ui.panel.autohide", json!({"panel": "properties"})).unwrap();
+    h.state_mut().run("ui.panel.peek", json!({"panel": "properties"})).unwrap();
+    assert_eq!(h.state().autohide.active, Some(Panel::Properties));
+    h.state_mut().run("ui.panel.pin", json!({"panel": "properties"})).unwrap();
+    assert!(h.state().ui.docking.layout.contains(&Panel::Properties));
+}
+
+#[test]
+fn window_menu_has_one_toolsets_entry_and_legacy_toggle_works() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    let tree = menus::tree(&app);
+    let window = &tree.iter().find(|(label, _)| label == "Window").unwrap().1;
+    assert!(window.iter().all(|entry| !matches!(entry, Entry::Item { label, .. } if label == "Tool Sets")));
+    let panels = window
+        .iter()
+        .find_map(|entry| match entry {
+            Entry::Sub { label, children } if label == "Panels" => Some(children),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(panels.iter().filter(|entry| matches!(entry, Entry::Item { label, .. } if label == "Tool Sets")).count(), 1);
+    app.run("ui.toggle.toolsets", json!({"on": false})).unwrap();
+    assert!(!app.ui.docking.layout.contains(&Panel::ToolSets));
+    app.run("ui.toggle.toolsets", json!({"on": true})).unwrap();
+    assert!(app.ui.docking.layout.contains(&Panel::ToolSets));
+}
+
+#[test]
+fn loaded_files_preserve_case_and_exclude_failed_loads() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.session.lisp_load("Tools/MiXeD.LSP", "(princ)", true).unwrap();
+    assert!(app.session.lisp_load("SyntaxError.LSP", "(", true).is_err());
+    assert!(matches!(app.session.lisp_load("RuntimeError.LSP", "(/ 1 0)", true).unwrap(), Some(Err(_))));
+    assert_eq!(lisp::loaded_files(&app.session), ["MiXeD.LSP"]);
+    assert!(app.session.lisp_load("Later.LSP", "(getstring \"Value: \")", false).unwrap().is_none());
+    assert_eq!(lisp::loaded_files(&app.session), ["MiXeD.LSP"], "waiting is not success");
+    app.session.input(cadcraft_engine::Input::Text("done".into())).unwrap();
+    assert_eq!(lisp::loaded_files(&app.session), ["Later.LSP", "MiXeD.LSP"]);
+    app.session.lisp_load("Cancelled.LSP", "(getstring \"Value: \")", false).unwrap();
+    app.session.lisp_abort("Function cancelled");
+    assert_eq!(lisp::loaded_files(&app.session), ["Later.LSP", "MiXeD.LSP"]);
+    app.session.lisp_eval("(defun *error* (msg) (getstring \"Handle: \"))", false, true, Vec::new()).unwrap();
+    app.session.lisp_load("HandledError.LSP", "(/ 1 0)", false).unwrap();
+    app.session.input(cadcraft_engine::Input::Text("handled".into())).unwrap();
+    assert_eq!(lisp::loaded_files(&app.session), ["Later.LSP", "MiXeD.LSP"]);
+    app.run("ui.panel.lisp", json!({})).unwrap();
+    let h = harness(app);
+    assert!(h.query_by_label("MiXeD.LSP").is_some());
+    assert!(h.query_by_label("SyntaxError.LSP").is_none());
+    assert!(h.query_by_label("RuntimeError.LSP").is_none());
+}
+
+#[test]
+fn lisp_load_button_stays_visible_with_many_files() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    for index in 0..64 {
+        app.session.lisp_load(&format!("Application-{index:02}.LSP"), "(princ)", true).unwrap();
+    }
+    app.run("ui.panel.lisp", json!({})).unwrap();
+    let mut h = harness(app);
+    let button = h.get_by_role_and_label(egui::accesskit::Role::Button, "Load Application...").rect();
+    assert!(h.ctx.content_rect().contains_rect(button));
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Load Application...").click();
+    h.run_steps(2);
+    assert_eq!(h.state().session.running.as_ref().map(|command| command.id.as_str()), Some("appload"));
 }

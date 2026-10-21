@@ -48,8 +48,12 @@ impl Session {
             }
             self.lisp.files.insert(name.trim_end_matches(".lsp").to_string(), text.clone());
             // Startup files don't ask for input: they run to the end. Errors are shown.
-            if let Err(e) = self.lisp_eval(&text, false, true, Vec::new()) {
-                self.echo(format!("{name}: {e}"));
+            match self.lisp_eval(&text, false, true, Vec::new()) {
+                Ok(Some(Ok(_))) => {
+                    self.lisp.loaded_files.insert(super::file_key(name), name.to_string());
+                }
+                Err(e) => self.echo(format!("{name}: {e}")),
+                _ => {}
             }
         }
         if matches!(self.lisp_var("S::STARTUP"), Value::Func(_) | Value::Subr(_)) {

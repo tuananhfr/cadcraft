@@ -20,7 +20,7 @@ pub fn search(app: &CadApp, prefix: &str) -> Vec<Suggestion> {
         add(command.stable_id, command.label);
     }
     for (id, label, _, _) in crate::menus::UI_COMMANDS {
-        if !label.is_empty() {
+        if !label.is_empty() && !crate::menus::command_hidden(id) {
             add(id, label);
         }
     }

@@ -346,6 +346,11 @@ fn floating_rect(ratio: [f32; 4], area: egui::Rect) -> [f32; 4] {
     rect_array(from_ratio([x, y, width.max(min.x), height.max(min.y)], area, MIN_VISIBLE))
 }
 
+// Capture before committing so a policy rejection leaves the live tree untouched.
+pub(crate) fn capture_docking(workspace: &Workspace, area: egui::Rect, previous: &[PanelState]) -> (Vec<PanelState>, Value) {
+    (panels_from_docking(workspace, area, previous), dock_tree(workspace, area))
+}
+
 /// The tree as stored: floating rectangles as fractions of `area`, no null members.
 fn dock_tree(workspace: &Workspace, area: egui::Rect) -> Value {
     let mut copy = workspace.clone();
