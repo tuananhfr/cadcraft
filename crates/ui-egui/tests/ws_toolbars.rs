@@ -323,7 +323,8 @@ fn applying_a_workspace_mid_drag_cancels_the_toolbar_drag() {
     let start = grip(&h, "Draw");
     drag(&mut h, start, Pos2::new(600.0, 756.0), false);
     assert!(matches!(h.state().ws.toolbar_drag, DragPhase::Dragging { .. }));
-    run(h.state_mut(), "ui.workspace.select", json!({"id": "SIMPLE"}));
+    // Selecting the active workspace is a no-op, so switch to another one.
+    run(h.state_mut(), "ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"}));
     assert_eq!(h.state().ws.toolbar_drag, DragPhase::Idle);
     h.drop_at(Pos2::new(600.0, 756.0));
     h.run_steps(4);

@@ -1190,7 +1190,8 @@ fn dock_tree_cannot_override_locked_panel_geometry() {
                 "width_ratio" | "whole_panel" => Action::ResizeSplit { path: vec![true], size: SplitSize::FixedSecond(640.0) },
                 "height_ratio" => Action::ResizeStack { panel: Panel::Layers, height: Some(640.0) },
                 "side" => Action::Move { panel: Panel::Properties, anchor: Panel::ToolSets, placement: Placement::Split(Zone::Bottom) },
-                "tab_group" => Action::Move { panel: Panel::Properties, anchor: Panel::Layers, placement: Placement::Tab { before: None } },
+                // Layers and Properties share a stack, not a tab group; tabbing Properties onto Layers changes nothing.
+                "tab_group" => Action::Move { panel: Panel::Properties, anchor: Panel::ToolSets, placement: Placement::Tab { before: None } },
                 "float_width" => Action::MoveFloating { panel: Panel::Properties, rect: [128.0, 80.0, 640.0, 240.0] },
                 "float_height" => Action::MoveFloating { panel: Panel::Properties, rect: [128.0, 80.0, 320.0, 400.0] },
                 "x_ratio" => Action::MoveFloating { panel: Panel::Properties, rect: [640.0, 80.0, 320.0, 240.0] },
