@@ -19,6 +19,13 @@ use serde_json::{Value, json};
 
 const SPEC_SAMPLE: &str = r#"{"schema_version":"1.0.0","profile_id":"uuid","revision":12,"base_id":"AUTOCAD_FAMILIAR","panels":[{"id":"properties","mode":"dock","side":"right","width_ratio":0.24}],"command_line":{"side":"bottom","height_ratio":0.15},"shortcuts":{"line":"L"}}"#;
 
+/// User aliases live in one engine store per process; a test that sets them or counts layout undo
+/// steps after an engine command holds this, or a parallel test's aliases show up as its own edit.
+fn alias_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn attached(store: MemoryStore) -> CadApp {
     let mut app = CadApp::new(Session::new(), Services::default());
     app.skip_first_run_picker = true;
@@ -100,6 +107,7 @@ fn commit_writes_snapshot_and_keeps_20() {
 
 #[test]
 fn crash_recovery_ux04() {
+    let _aliases = alias_lock();
     let mut app = attached(MemoryStore::default());
     let set = |pointer: &str, value: Value| ("ui.workspace.set", json!({"pointer": pointer, "value": value}));
     let steps: Vec<(&str, Value)> = vec![
@@ -245,6 +253,7 @@ fn autosave_commits_from_the_frame_loop_after_the_debounce() {
 
 #[test]
 fn layout_undo_is_separate_ux() {
+    let _aliases = alias_lock();
     let mut app = attached(MemoryStore::default());
     run(&mut app, "line", json!({"points": [[0, 0], [10, 0]]}));
     let undo_len = app.session.state().unwrap().undo.len();
@@ -615,6 +624,7 @@ fn dock_sizes_are_stored_as_fractions_of_the_window() {
 
 #[test]
 fn set_value_cannot_brick_restart() {
+    let _aliases = alias_lock();
     let mut app = attached(MemoryStore::default());
     run(&mut app, "ui.workspace.set", json!({"pointer": "/aliases/ln", "value": "line"}));
     app.commit_workspace_now().unwrap();
