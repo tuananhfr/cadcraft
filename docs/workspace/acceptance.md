@@ -31,11 +31,11 @@ Test paths are under `crates/ui-egui/tests/`; each reference is `test_file::test
 
 | Metric | Samples / SLO | Result |
 |---|---|---|
-| Restore P95 | 50 restores, 200 ribbon/toolbar command controls; ≤1500 ms | TBD (lead) |
-| Switch P95 | 100 preset switches with sample drawing; ≤500 ms | TBD (lead) |
-| Local commit P95 | 100 commits to FileProfileStore in a temporary directory; ≤250 ms | TBD (lead) |
+| Restore P95 | 50 restores, 200 ribbon/toolbar command controls; ≤1500 ms | 8.0 ms (50 samples) |
+| Switch P95 | 100 preset switches with sample drawing; ≤500 ms | 3.1 ms (100 samples; history 100, snapshots 20, egui textures 1→1) |
+| Local commit P95 | 100 commits to FileProfileStore in a temporary directory; ≤250 ms | 2.1 ms (100 samples, real disk) |
 
-Manual release command (not executed):
+Release command (run by the `Workspace SLO` job):
 
 ```text
 cargo test --release -p cadcraft-ui-egui --test ws_perf -- --ignored --nocapture
@@ -47,21 +47,21 @@ cargo test --release -p cadcraft-ui-egui --test ws_perf -- --ignored --nocapture
 
 `restore_p95` and `switch_p95` are ignored tests in `crates/ui-egui/tests/ws_perf.rs`; `commit_p95` is an ignored unit test in `apps/cadcraft/src/profile_store.rs`, because `FileProfileStore` is private to the desktop binary. All three run in the on-demand `Workspace SLO` job of `.github/workflows/ubotbuild-ci.yml` (`workflow_dispatch` with `perf: true`, release build).
 
-Record release build/revision, hardware/OS, command output, sample counts and each P95 here after running. The final gate also needs fmt, native/wasm clippy, layers/assets, the affected fonts/engine/render/UI/native/web tests, and the trunk build. All gate results: TBD (lead).
+Measured on GitHub Actions ubuntu-24.04 (shared runner, indicative), release build of d4dd370, run 39584899889 job "Workspace SLO". Gate on the same commit (run 39583913358): fmt, native and wasm clippy, workspace tests, layers and the trunk web build all green. Later fix commits are gated by their own CI runs.
 
 ## Visual QA
 
-TBD (lead). Use the CI web artifact; record artifact/revision, browser, viewport, DSF, screenshot paths and observations after opening every image. No screenshots were produced by W13a.
+CI web artifact of dae2395 served locally, Chrome driven through DevTools (pointer input injected on the canvas, keyboard real), real DSF 1.5 from OS scaling, 2026-10-21. Only screenshots that were opened count as evidence. Findings fixed afterwards: ribbon buttons without an icon showed "..." (now sized to their label) and the picker list was clipped (now scrolls).
 
 | Scenario | Evidence / verdict |
 |---|---|
-| Fresh storage → picker → AUTOCAD_FAMILIAR | TBD (lead) |
-| Toolbar dock Top/Bottom/Left/Right, float, hide/show and lock | TBD (lead) |
-| Add ribbon tab/reorder group; Quick Access and Customize | TBD (lead) |
-| Reload web page preserves committed state | TBD (lead) |
-| Fill actual localStorage quota; save reports failure and app continues | TBD (lead) |
-| DSF 1.5/2, 1366×768 and 3840×2160; expanded/collapsed ribbon, accessible controls | TBD (lead) |
-| Font/LISP panels, auto-hide peek/pin, dark/light, keyboard/IME | TBD (lead) |
+| Fresh storage → picker → AUTOCAD_FAMILIAR | Verified: picker lists all nine presets; AutoCAD Familiar gives ribbon, Properties and command line. |
+| Toolbar dock Top/Bottom/Left/Right, float, hide/show and lock | Verified dock on all four edges, float, and clamp inside the window; lock not exercised. |
+| Add ribbon tab/reorder group; Quick Access and Customize | Partial: tabs switch, Minimize Ribbon works, Quick Access and Customize open/close; tab add/reorder and double-click collapse not exercised. |
+| Reload web page preserves committed state | Verified: floating Draw toolbar and status-bar item survive reload; preset switch and back keeps the drawing. |
+| Fill actual localStorage quota; save reports failure and app continues | Partial: with the quota full the app keeps running, evicts the oldest snapshots and still saves the current set ("Saved locally" is true); a refused current write was not reproduced in the browser. |
+| DSF 1.5/2, 1366×768 and 3840×2160; expanded/collapsed ribbon, accessible controls | Partial: DSF 1.5 at 1366×768 and 2555×934 verified; DSF 2 and true 3840×2160 not available on the QA machine. Below the 1366 minimum (1024×640) the menu bar clips. |
+| Font/LISP panels, auto-hide peek/pin, dark/light, keyboard/IME | Not exercised in the browser; covered by ws_integrity tests only. |
 
 `ws_persist::store_write_failure_keeps_running` uses `MemoryStore::fail_writes`; it is not evidence of a browser quota experiment. Physical monitor QA and crash video remain separate deliverables.
 
