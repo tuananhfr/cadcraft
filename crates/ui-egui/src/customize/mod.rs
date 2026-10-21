@@ -28,6 +28,7 @@ pub struct State {
     error: Option<String>,
     focus_label: bool,
     focused: bool,
+    ime_composing: bool,
 }
 
 pub(crate) fn run(app: &mut CadApp, command: &str, params: Value, state: &mut State) -> Option<Value> {
@@ -79,6 +80,15 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     let mut state = std::mem::take(&mut app.customize);
     let mut close = false;
     let editing = ctx.text_edit_focused();
+    // egui keeps composition state private; preedit lasts until commit or focus loss.
+    state.ime_composing = editing
+        && ctx.input(|input| {
+            input.events.iter().fold(state.ime_composing, |composing, event| match event {
+                egui::Event::Ime(egui::ImeEvent::Preedit { text, .. }) => !text.is_empty(),
+                egui::Event::Ime(egui::ImeEvent::Commit(_)) => false,
+                _ => composing,
+            })
+        });
     egui::Window::new(crate::tl!("Customize Workspace..."))
         .id(egui::Id::new(DIALOG))
         .open(open)
@@ -122,7 +132,18 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                 }
             });
         });
-    if close || (!editing && !ctx.text_edit_focused() && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Escape))) {
+    if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Escape)) {
+        if editing || ctx.text_edit_focused() {
+            if !state.ime_composing
+                && let Some(id) = ctx.memory(|memory| memory.focused())
+            {
+                ctx.memory_mut(|memory| memory.surrender_focus(id));
+            }
+        } else {
+            close = true;
+        }
+    }
+    if close {
         *open = false;
     }
     app.customize = state;
@@ -147,18 +168,13 @@ fn commands(_app: &CadApp, ui: &mut egui::Ui, state: &mut State) {
     {
         state.command = (*id).into();
     }
-    egui::ScrollArea::vertical().id_salt("command_list").max_height(110.0).show_rows(
-        ui,
-        ui.spacing().interact_size.y,
-        state.commands.len(),
-        |ui, range| {
-            for &(id, label) in state.commands.get(range).unwrap_or_default() {
-                ui.push_id(id, |ui| {
-                    if row(ui, state.command == id, &format!("{} ({id})", crate::i18n::t(label))) {
-                        state.command = id.into();
-                    }
-                });
-            }
-        },
-    );
+    egui::ScrollArea::vertical().id_salt("command_list").max_height(110.0).show(ui, |ui| {
+        for &(id, label) in &state.commands {
+            ui.push_id(id, |ui| {
+                if row(ui, state.command == id, &format!("{} ({id})", crate::i18n::t(label))) {
+                    state.command = id.into();
+                }
+            });
+        }
+    });
 }

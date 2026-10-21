@@ -97,14 +97,10 @@ fn focus_is_visible_on_ribbon() {
     assert!(button.is_focused());
     let focused = h.ctx.memory(|memory| memory.focused()).unwrap();
     assert_eq!(focused.accesskit_id(), button.accesskit_node().locate().0);
-    let ctx = h.ctx.clone();
-    let output = ctx.run_ui(
-        egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1366.0, 768.0))), ..Default::default() },
-        |ui| {
-            ribbon::render::show(h.state_mut(), ui);
-        },
-    );
-    assert!(output.shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Rect(rect) if rect.stroke.color == theme::Tokens::get().accent)));
+    let accent = theme::Tokens::get().accent;
+    let focus = button.rect().shrink(2.0);
+    assert!(h.output().shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Rect(rect)
+        if rect.stroke.color == accent && rect.rect.center().distance(focus.center()) < 1.0)));
 }
 
 #[test]
@@ -151,10 +147,20 @@ fn customize_escape_preserves_focused_text_and_ime() {
     h.run_steps(3);
     h.get_by_role_and_label(Role::TextInput, "Tab or group name").click();
     h.run_steps(2);
+    h.get_by_role_and_label(Role::TextInput, "Tab or group name").type_text("Draft");
+    h.run_steps(2);
     h.key_press(Key::Escape);
     h.run_steps(2);
     assert_eq!(h.state().ui.dialog.as_deref(), Some(customize::DIALOG));
-    assert!(h.get_by_role_and_label(Role::TextInput, "Tab or group name").is_focused());
+    assert!(!h.get_by_role_and_label(Role::TextInput, "Tab or group name").is_focused());
+    assert_eq!(h.get_by_role_and_label(Role::TextInput, "Tab or group name").value().as_deref(), Some("Draft"));
+    h.key_press(Key::Escape);
+    h.run_steps(2);
+    assert!(h.state().ui.dialog.is_none(), "the second Escape closes Customize");
+    h.state_mut().run("ui.customize.open", json!({})).unwrap();
+    h.run_steps(3);
+    h.get_by_role_and_label(Role::TextInput, "Tab or group name").click();
+    h.run_steps(2);
     h.event(Event::Ime(ImeEvent::Preedit { text: "Bản vẽ".into(), active_range_chars: None }));
     h.run_steps(2);
     h.key_press(Key::Escape);
@@ -163,6 +169,11 @@ fn customize_escape_preserves_focused_text_and_ime() {
     assert!(h.get_by_role_and_label(Role::TextInput, "Tab or group name").is_focused());
     h.event(Event::Ime(ImeEvent::Commit("Bản vẽ kiến trúc".into())));
     h.run_steps(2);
+    h.key_press(Key::Escape);
+    h.run_steps(2);
+    assert_eq!(h.state().ui.dialog.as_deref(), Some(customize::DIALOG));
+    assert!(!h.get_by_role_and_label(Role::TextInput, "Tab or group name").is_focused());
+    assert_eq!(h.get_by_role_and_label(Role::TextInput, "Tab or group name").value().as_deref(), Some("Bản vẽ kiến trúc"));
     h.get_by_label("Rename Tab").click();
     h.run_steps(2);
     assert_eq!(h.state().ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.id == "home").unwrap().label, "Bản vẽ kiến trúc");

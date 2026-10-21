@@ -93,7 +93,7 @@ impl NativeMenu {
 
     pub fn poll(&mut self, app: &mut CadApp, ctx: &egui::Context) {
         while let Ok(ev) = MenuEvent::receiver().try_recv() {
-            if ev.id.as_ref() == "cc-ribbon-minimize" {
+            if ev.id == "cc-ribbon-minimize" {
                 menus::activate(app, "ui.ribbon.collapse");
                 ctx.request_repaint();
             } else if let Some((cmd, _, _)) = self.items.get(ev.id.as_ref()) {

@@ -465,6 +465,35 @@ fn customize_keyboard_only_ux14() {
 }
 
 #[test]
+fn customize_command_list_reachable_by_keyboard() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.customize.open", json!({})).unwrap();
+    let mut h = customize_harness(app);
+    keyboard_activate(&mut h, "Keyboard", false);
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Find command").value().unwrap_or_default().is_empty());
+    let commands: Vec<_> = cadcraft_engine::cmd::registry::command_registry()
+        .iter()
+        .map(|command| (command.stable_id, command.label))
+        .chain(cadcraft_ui_egui::menus::UI_COMMANDS.iter().filter(|command| !command.1.is_empty()).map(|command| (command.0, command.1)))
+        .collect();
+    let &(first_id, first_label) = commands.iter().min_by_key(|(id, _)| *id).unwrap();
+    let &(last_id, last_label) = commands.iter().max_by_key(|(id, _)| *id).unwrap();
+    let first = format!("{} ({first_id})", cadcraft_ui_egui::i18n::t(first_label));
+    let last = format!("{} ({last_id})", cadcraft_ui_egui::i18n::t(last_label));
+    let list_top = h.get_by_label(&first).rect().top();
+    assert!(h.query_by_label(&last).is_none_or(|node| node.rect().top() > list_top + 110.0), "the last command starts outside the viewport");
+    for _ in 0..commands.len() + 20 {
+        if h.query_by_label(&last).is_some_and(|node| node.is_focused()) {
+            break;
+        }
+        h.key_press(Key::Tab);
+        h.run_steps(2);
+    }
+    assert!(h.get_by_label(&last).is_focused(), "Tab reaches the last command without filtering or pointer input");
+}
+
+#[test]
 fn ribbon_edits_obey_policy_and_layout_undo() {
     let _guard = test_lock();
     let policy = json!({"layers": [{"level": "company", "patch": {}, "locks": ["/ribbon"]}]});
