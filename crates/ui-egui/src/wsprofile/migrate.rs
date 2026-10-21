@@ -431,7 +431,7 @@ mod tests {
         let profile: WorkspaceProfile = serde_json::from_value(value).unwrap();
         assert_eq!(profile.layout, WorkspaceLayout::default());
         assert_eq!(profile.base_id.as_deref(), Some("SIMPLE"));
-        assert_eq!(profile.layout.command_line.dock, Dock::Bottom);
+        assert_eq!(profile.layout.command_line.dock, Dock::Floating);
     }
 
     #[test]

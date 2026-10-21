@@ -133,6 +133,7 @@ struct UiChanges {
     save_format: Option<crate::SaveFormat>,
     system_cursor: Option<bool>,
     history_lines: Option<usize>,
+    ui_scale: Option<f32>,
     model_background: Option<Option<Color32>>,
     paper_background: Option<Option<Color32>>,
     selection_color: Option<Option<Color32>>,
@@ -163,6 +164,10 @@ fn parse_ui(key: &str, v: &Value, c: &mut UiChanges) -> Result<bool, String> {
         }
         "saveFormat" => c.save_format = Some(crate::SaveFormat::parse(text()?).ok_or("saveFormat must be dxf or dwg")?),
         "systemCursor" => c.system_cursor = Some(v.as_bool().ok_or("systemCursor must be true or false")?),
+        "ui_scale" => {
+            let scale = v.as_f64().filter(|scale| scale.is_finite() && (0.75..=2.0).contains(scale)).ok_or("ui_scale must be from 0.75 to 2.0")?;
+            c.ui_scale = Some(scale as f32);
+        }
         "historyLines" => {
             let n = v.as_u64().filter(|n| *n <= crate::cmdline::MAX_LINES as u64).ok_or("historyLines must be a whole number from 0 to 12")?;
             c.history_lines = Some(n as usize);
@@ -206,6 +211,7 @@ fn ui_json(app: &CadApp) -> Map<String, Value> {
     m.insert("saveFormat".into(), json!(app.ui.save_format.as_str()));
     m.insert("systemCursor".into(), json!(app.ui.system_cursor));
     m.insert("historyLines".into(), json!(app.ui.history_lines));
+    m.insert("ui_scale".into(), json!(app.ws.user.ui_scale));
     m.insert("modelBackground".into(), color_json(o.model_background));
     m.insert("paperBackground".into(), color_json(o.paper_background));
     m.insert("selectionColor".into(), color_json(o.selection_color));
@@ -241,6 +247,9 @@ fn run_json(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     app.session.execute("options", &Value::Object(engine)).map_err(|e| e.to_string())?;
     if reset {
         reset_ui(app);
+    }
+    if let Some(scale) = ui.ui_scale {
+        app.run("ui.workspace.set", json!({"pointer": "/ui_scale", "value": scale}))?;
     }
     if let Some(t) = ui.theme {
         app.ui.theme = t;

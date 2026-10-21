@@ -178,6 +178,52 @@ pub fn apply(app: &mut CadApp, layout: &WorkspaceLayout, area: egui::Rect) -> Ap
     report(layout)
 }
 
+/// Applies profile zoom once, then observes egui keyboard zoom through the debounced profile path.
+pub(crate) fn sync_scale(app: &mut CadApp, ctx: &egui::Context) {
+    let wanted = app.ws.user.ui_scale.clamp(0.75, 2.0);
+    if !wanted.is_finite() {
+        return;
+    }
+    if app.ws.shown_scale != Some(wanted) {
+        ctx.set_zoom_factor(wanted);
+        app.ws.shown_scale = Some(wanted);
+        return;
+    }
+    let actual = ctx.zoom_factor();
+    if !actual.is_finite() || actual == wanted {
+        return;
+    }
+    let scale = actual.clamp(0.75, 2.0);
+    if scale != wanted {
+        if let Err(error) = app.run("ui.workspace.set", serde_json::json!({"pointer": "/ui_scale", "value": scale})) {
+            app.set_status(error);
+            ctx.set_zoom_factor(wanted);
+            return;
+        }
+        app.ws.shown_scale = Some(scale);
+    }
+    if actual != scale {
+        ctx.set_zoom_factor(scale);
+    }
+}
+
+/// Remaps live floating panels when the window or zoom changes, including after startup.
+pub(crate) fn remap_screen(app: &mut CadApp, ctx: &egui::Context) {
+    let area = ctx.content_rect();
+    let previous = app.ws.area;
+    if !app.ws.area_known || area == previous || !area.is_finite() || !area.is_positive() {
+        return;
+    }
+    for group in &mut app.ui.docking.layout.floating {
+        group.rect = floating_rect(to_ratio(rect_points(group.rect), previous), area);
+    }
+    for (_, location) in &mut app.ui.docking.hidden {
+        if let Some(rect) = &mut location.floating {
+            *rect = floating_rect(to_ratio(rect_points(*rect), previous), area);
+        }
+    }
+}
+
 /// Panels whose `panels[]` entry outranks the user's dock tree: locked by policy or placed by
 /// the session layer.
 fn pinned_panels(app: &CadApp, layout: &WorkspaceLayout) -> Vec<String> {

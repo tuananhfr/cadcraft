@@ -1,0 +1,9 @@
+# Workspace limitations
+
+Floating panels, toolbars and the command line stay inside the main application window. Native floating windows on a second monitor are not supported. On a PC, when a second monitor is disconnected, the operating system moves the main window back to an available screen; floating controls follow that window and are clamped to its work area. This monitor-disconnection behavior has not been tested on physical hardware (UX07 partial).
+
+Status-bar item visibility belongs to the workspace profile. Hiding a drafting toggle does not change its system variable; those settings continue to persist through `PROFILE_VARS`. The schema IDs `lineweight`, `transparency`, `quickprops`, `annotation`, `workspace`, and `settings` address the existing lineweight, transparency, Quick Properties, annotation visibility/scale, workspace picker, and Drafting Settings controls. `layouts` hides the layout tabs and their add/list buttons; `coordinates` hides the coordinate readout. Unknown status-bar IDs have no control to render: they are retained in the profile and ignored without a placeholder.
+
+SIMPLE has neither a ribbon nor Quick Access buttons. Its default command line floats at the bottom centre with the existing 48% width rule (360–760 points, bounded by the canvas). Top and Bottom command lines reserve their own row, sized by `height_ratio` and constrained to leave room for the drawing. Interface scale is 0.75–2.0; the Options slider uses steps of 0.05, and egui keyboard zoom is saved through the normal workspace debounce.
+
+The in-window menu bar scrolls horizontally when its menus and Quick Access exceed the available width. When zoom or a shorter window leaves insufficient height for the drawing, the ribbon renders as tabs only. The saved expanded/collapsed preference is preserved, so groups reappear when the window has enough room.

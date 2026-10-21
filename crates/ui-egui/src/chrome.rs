@@ -199,11 +199,48 @@ fn visible_tabs(widths: &[f32], active: Option<usize>, room: f32) -> std::ops::R
     start..active + 1
 }
 
+fn status_item_visible(app: &CadApp, id: &str) -> bool {
+    app.ws.effective.layout.status_bar.items.get(id).copied().unwrap_or(true)
+}
+
+const STATUS_ITEMS: &[(&str, &str)] = &[
+    ("annotation", "Annotation Visibility"),
+    ("coordinates", "Coordinates"),
+    ("dynmode", "Dynamic Input (F12)"),
+    ("grid", "Grid (F7)"),
+    ("isodraft", "Isometric Drafting"),
+    ("layouts", "Layout tabs"),
+    ("lineweight", "Show/Hide Lineweight"),
+    ("ortho", "Ortho Mode (F8)"),
+    ("osnap", "Object Snap (F3)"),
+    ("otrack", "Object Snap Tracking (F11)"),
+    ("polar", "Polar Tracking (F10)"),
+    ("quickprops", "Quick Properties"),
+    ("settings", "Drafting Settings"),
+    ("snap", "Snap Mode (F9)"),
+    ("transparency", "Show/Hide Transparency"),
+    ("workspace", "Workspace Switching"),
+];
+
+fn status_command_item(command: &str) -> &str {
+    match command {
+        "lwdisplay" => "lineweight",
+        "transparencydisplay" => "transparency",
+        "qpmode" => "quickprops",
+        "annovisible.toggle" => "annotation",
+        "ui.workspace.select" => "workspace",
+        "ui.dialog.dsettings" => "settings",
+        other => other,
+    }
+}
+
 /// Status bar: layout tabs on the left, coordinates and drafting toggles on the right.
 pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
-    egui::Panel::bottom("cc_status").exact_size(26.0).frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |ui| {
+    let panel = egui::Panel::bottom("cc_status").exact_size(26.0).frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |ui| {
         let r = ui.max_rect();
+        let body = ui.interact(r, ui.id().with("status_bar"), Sense::click());
+        body.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Panel, true, crate::tl!("Status bar")));
         let p = ui.painter().clone();
         let mut x = r.left() + 8.0;
         // Clear the status message on time even when no input arrives (the app only repaints on input).
@@ -213,8 +250,9 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
             let left = std::time::Duration::try_from_secs_f64((5000.0 - (crate::now_ms() - at)) / 1000.0).unwrap_or_default();
             ui.ctx().request_repaint_after(left);
         }
+        let layouts_visible = status_item_visible(app, "layouts");
         let mut list_button = None;
-        for (icon, tip) in [(Icon::Plus, "New layout"), (Icon::Menu, "Layout list")] {
+        for (icon, tip) in [(Icon::Plus, "New layout"), (Icon::Menu, "Layout list")].into_iter().filter(|_| layouts_visible) {
             let br = Rect::from_min_size(pos2(x, r.top() + 4.0), vec2(18.0, 18.0));
             let resp = ui.interact(br, ui.id().with(("sb", tip)), Sense::click());
             icons::paint(&p, br.shrink(2.0), icon, false);
@@ -229,7 +267,9 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
             }
             x += 22.0;
         }
-        x = x.max(r.left() + if app.ui.show_toolsets { 232.0 } else { 60.0 });
+        if layouts_visible {
+            x = x.max(r.left() + if app.ui.show_toolsets { 232.0 } else { 60.0 });
+        }
         // Right side: toggles, right-aligned.
         let s = app.session.settings.clone();
         let anno_all = app.session.doc().is_ok_and(|d| d.anno_all_visible());
@@ -250,10 +290,11 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
             (Icon::Workspace, false, "ui.workspace.select", "Workspace Switching"),
             (Icon::Gear, false, "ui.dialog.dsettings", "Drafting Settings"),
         ];
+        let toggles: Vec<_> = toggles.into_iter().filter(|(_, _, command, _)| status_item_visible(app, status_command_item(command))).collect();
         let size = 20.0;
         let mut rx = r.right() - 8.0 - toggles.len() as f32 * (size + 4.0);
         // Coordinates.
-        let coord = app.canvas.cursor.map(|c| {
+        let coord = app.canvas.cursor.filter(|_| status_item_visible(app, "coordinates")).map(|c| {
             let (lu, lp) = app.session.doc().map(|d| (d.header.i64("LUNITS", 2), d.header.i64("LUPREC", 4))).unwrap_or((2, 4));
             format!(
                 "{}, {}, {}",
@@ -266,7 +307,9 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
         let mut coord_right = content_right - 8.0;
         // MODEL / PAPER (layouts only): toggles MSPACE and PSPACE like AutoCAD's status button.
         // The annotation scale list (model space).
-        coord_right = annoscale::status(app, ui, coord_right, r.center().y);
+        if status_item_visible(app, "annotation") {
+            coord_right = annoscale::status(app, ui, coord_right, r.center().y);
+        }
         if matches!(app.session.layout_space(), cadcraft_doc::Space::Paper(_)) {
             let model = app.session.state().is_ok_and(|st| st.mspace.is_some());
             let label = if model { "MODEL" } else { "PAPER" };
@@ -285,95 +328,99 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
         }
         // Layout tabs: Model, "+", then the layouts that fit before the right-hand controls (the
         // current one always); the layout list reaches the rest.
-        let mut tabs: Vec<String> = vec!["Model".into()];
-        let cur = app.session.state().map(|s| match &s.space {
-            cadcraft_doc::Space::Model => "Model".to_string(),
-            cadcraft_doc::Space::Paper(n) => n.clone(),
-        });
-        if let Ok(st) = app.session.state() {
-            let mut ls: Vec<_> = st.doc.layouts.iter().collect();
-            ls.sort_by_key(|l| l.tab_order);
-            tabs.extend(ls.iter().map(|l| l.name.clone()));
-        }
-        let shown_name = |i: usize, name: &str| if i == 0 { crate::tl!("Model").to_string() } else { name.to_string() };
-        let limit = (coord_right - STATUS_READOUT_MIN).max(x);
-        let labels: Vec<_> =
-            tabs.iter().enumerate().map(|(i, n)| elided(&p, &shown_name(i, n), crate::theme::body(), t.text, LAYOUT_TAB_TEXT)).collect();
-        let widths: Vec<f32> = labels.iter().map(|(g, _)| g.size().x + 26.0 + 2.0).collect();
-        let active_tab = tabs.iter().position(|n| cur.as_deref().is_ok_and(|c| c == n));
-        // Model and "+" stay; the layouts share what is left.
-        let layouts = widths.get(1..).unwrap_or_default();
-        let room = limit - x - widths.first().copied().unwrap_or(0.0) - 22.0;
-        let active_layout = active_tab.and_then(|a| a.checked_sub(1));
-        let mut shown = visible_tabs(layouts, active_layout, room);
-        let hidden = shown.len() < layouts.len();
-        if hidden {
-            shown = visible_tabs(layouts, active_layout, room - 22.0);
-        }
-        let clip = Rect::from_min_max(r.min, pos2(limit.max(r.left()), r.bottom()));
-        let tp = p.with_clip_rect(clip);
-        let mut switch = None;
-        for (i, (name, (g, cut))) in tabs.iter().zip(labels).enumerate() {
-            if i > 0 && !shown.contains(&(i - 1)) {
-                continue;
-            }
-            let w = g.size().x + 26.0;
-            let tr = Rect::from_min_size(pos2(x, r.top() + 1.0), vec2(w, r.height() - 2.0)).intersect(clip);
-            let active = active_tab == Some(i);
-            let resp = ui.interact(tr, ui.id().with(("lt", i)), Sense::click());
-            if active {
-                tp.rect_filled(tr, 2.0, t.tab_active);
-            } else if resp.hovered() {
-                tp.rect_filled(tr, 2.0, t.control.gamma_multiply(0.5));
-            }
-            tp.galley(pos2(tr.left() + 13.0, tr.center().y - g.size().y / 2.0), g, if active { t.text } else { t.text_dim });
-            icons::describe_control(ui, &resp, name, Some(active), true);
-            let resp = if cut { resp.on_hover_text(shown_name(i, name)) } else { resp };
-            if resp.clicked() {
-                switch = Some(name.clone());
-            }
-            crate::shortcut_menus::attach(app, &resp, |app| crate::shortcut_menus::layout_tab_entries(app, name));
-            x += w + 2.0;
-            if i == 0 {
-                let pr = Rect::from_min_size(pos2(x, r.top() + 5.0), vec2(16.0, 16.0));
-                let presp = ui.interact(pr, ui.id().with("layout_plus"), Sense::click());
-                icons::paint(&p, pr.shrink(2.0), Icon::Plus, false);
-                icons::describe_control(ui, &presp, "New layout", None, false);
-                if presp.on_hover_text(crate::tl!("New layout")).clicked()
-                    && let Ok(v) = app.run("layout.new", json!({}))
-                    && let Some(n) = v.get("name").and_then(serde_json::Value::as_str)
-                {
-                    switch = Some(n.to_string());
-                }
-                x += 22.0;
-            }
-        }
-        // The layouts that didn't fit, behind a button after the last tab shown.
-        let more = hidden.then(|| {
-            let mr = Rect::from_min_size(pos2(x + 2.0, r.top() + 5.0), vec2(16.0, 16.0));
-            let resp = ui.interact(mr, ui.id().with("layout_more"), Sense::click());
-            if resp.hovered() {
-                p.rect_filled(mr, 3.0, t.control_hover.gamma_multiply(0.5));
-            }
-            icons::paint(&p, mr.shrink(2.0), Icon::ChevronDown, false);
-            icons::describe_control(ui, &resp, "Layout list", None, false);
-            x += 22.0;
-            resp.on_hover_text(crate::tl!("Layout list"))
-        });
-        for resp in list_button.iter().chain(&more) {
-            egui::Popup::from_toggle_button_response(resp).width(200.0).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
-                egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
-                    for (i, name) in tabs.iter().enumerate() {
-                        if ui.add(egui::Button::selectable(active_tab == Some(i), shown_name(i, name)).truncate()).clicked() {
-                            switch = Some(name.clone());
-                            ui.close();
-                        }
-                    }
-                });
+        if layouts_visible {
+            let mut tabs: Vec<String> = vec!["Model".into()];
+            let cur = app.session.state().map(|s| match &s.space {
+                cadcraft_doc::Space::Model => "Model".to_string(),
+                cadcraft_doc::Space::Paper(n) => n.clone(),
             });
-        }
-        if let Some(n) = switch {
-            let _ = app.run("layout.set", json!({ "name": n }));
+            if let Ok(st) = app.session.state() {
+                let mut ls: Vec<_> = st.doc.layouts.iter().collect();
+                ls.sort_by_key(|l| l.tab_order);
+                tabs.extend(ls.iter().map(|l| l.name.clone()));
+            }
+            let shown_name = |i: usize, name: &str| if i == 0 { crate::tl!("Model").to_string() } else { name.to_string() };
+            let limit = (coord_right - STATUS_READOUT_MIN).max(x);
+            let labels: Vec<_> =
+                tabs.iter().enumerate().map(|(i, n)| elided(&p, &shown_name(i, n), crate::theme::body(), t.text, LAYOUT_TAB_TEXT)).collect();
+            let widths: Vec<f32> = labels.iter().map(|(g, _)| g.size().x + 26.0 + 2.0).collect();
+            let active_tab = tabs.iter().position(|n| cur.as_deref().is_ok_and(|c| c == n));
+            // Model and "+" stay; the layouts share what is left.
+            let layouts = widths.get(1..).unwrap_or_default();
+            let room = limit - x - widths.first().copied().unwrap_or(0.0) - 22.0;
+            let active_layout = active_tab.and_then(|a| a.checked_sub(1));
+            let mut shown = visible_tabs(layouts, active_layout, room);
+            let hidden = shown.len() < layouts.len();
+            if hidden {
+                shown = visible_tabs(layouts, active_layout, room - 22.0);
+            }
+            let clip = Rect::from_min_max(r.min, pos2(limit.max(r.left()), r.bottom()));
+            let tp = p.with_clip_rect(clip);
+            let mut switch = None;
+            for (i, (name, (g, cut))) in tabs.iter().zip(labels).enumerate() {
+                if i > 0 && !shown.contains(&(i - 1)) {
+                    continue;
+                }
+                let w = g.size().x + 26.0;
+                let tr = Rect::from_min_size(pos2(x, r.top() + 1.0), vec2(w, r.height() - 2.0)).intersect(clip);
+                let active = active_tab == Some(i);
+                let resp = ui.interact(tr, ui.id().with(("lt", i)), Sense::click());
+                if active {
+                    tp.rect_filled(tr, 2.0, t.tab_active);
+                } else if resp.hovered() {
+                    tp.rect_filled(tr, 2.0, t.control.gamma_multiply(0.5));
+                }
+                tp.galley(pos2(tr.left() + 13.0, tr.center().y - g.size().y / 2.0), g, if active { t.text } else { t.text_dim });
+                icons::describe_control(ui, &resp, name, Some(active), true);
+                let resp = if cut { resp.on_hover_text(shown_name(i, name)) } else { resp };
+                if resp.clicked() {
+                    switch = Some(name.clone());
+                }
+                crate::shortcut_menus::attach(app, &resp, |app| crate::shortcut_menus::layout_tab_entries(app, name));
+                x += w + 2.0;
+                if i == 0 {
+                    let pr = Rect::from_min_size(pos2(x, r.top() + 5.0), vec2(16.0, 16.0));
+                    let presp = ui.interact(pr, ui.id().with("layout_plus"), Sense::click());
+                    icons::paint(&p, pr.shrink(2.0), Icon::Plus, false);
+                    icons::describe_control(ui, &presp, "New layout", None, false);
+                    if presp.on_hover_text(crate::tl!("New layout")).clicked()
+                        && let Ok(v) = app.run("layout.new", json!({}))
+                        && let Some(n) = v.get("name").and_then(serde_json::Value::as_str)
+                    {
+                        switch = Some(n.to_string());
+                    }
+                    x += 22.0;
+                }
+            }
+            // The layouts that didn't fit, behind a button after the last tab shown.
+            let more = hidden.then(|| {
+                let mr = Rect::from_min_size(pos2(x + 2.0, r.top() + 5.0), vec2(16.0, 16.0));
+                let resp = ui.interact(mr, ui.id().with("layout_more"), Sense::click());
+                if resp.hovered() {
+                    p.rect_filled(mr, 3.0, t.control_hover.gamma_multiply(0.5));
+                }
+                icons::paint(&p, mr.shrink(2.0), Icon::ChevronDown, false);
+                icons::describe_control(ui, &resp, "Layout list", None, false);
+                x += 22.0;
+                resp.on_hover_text(crate::tl!("Layout list"))
+            });
+            for resp in list_button.iter().chain(&more) {
+                egui::Popup::from_toggle_button_response(resp).width(200.0).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(
+                    |ui| {
+                        egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+                            for (i, name) in tabs.iter().enumerate() {
+                                if ui.add(egui::Button::selectable(active_tab == Some(i), shown_name(i, name)).truncate()).clicked() {
+                                    switch = Some(name.clone());
+                                    ui.close();
+                                }
+                            }
+                        });
+                    },
+                );
+            }
+            if let Some(n) = switch {
+                let _ = app.run("layout.set", json!({ "name": n }));
+            }
         }
         // A transient message occupies the same bounded readout slot as coordinates.
         // Ellipsis and a tooltip keep either value readable without covering layout tabs.
@@ -430,6 +477,25 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
                 .show(|ui| action = crate::wsprofile::picker::menu(ui, &app.ws));
             if let Some(action) = action {
                 crate::wsprofile::picker::run_menu_action(app, action);
+            }
+        }
+        body
+    });
+    let open = if panel.inner.secondary_clicked() {
+        Some(egui::SetOpenCommand::Bool(true))
+    } else if panel.inner.clicked() {
+        Some(egui::SetOpenCommand::Toggle)
+    } else {
+        None
+    };
+    egui::Popup::menu(&panel.inner).open_memory(open).show(|ui| {
+        for &(id, label) in STATUS_ITEMS {
+            let mut visible = status_item_visible(app, id);
+            if ui.checkbox(&mut visible, crate::i18n::t(label)).changed() {
+                let pointer = format!("/status_bar/items/{id}");
+                if let Err(error) = app.run("ui.workspace.set", json!({"pointer": pointer, "value": visible})) {
+                    app.set_status(error);
+                }
             }
         }
     });

@@ -658,15 +658,18 @@ pub fn menu_bar(app: &mut CadApp, ui: &mut egui::Ui) {
     egui::Panel::top("cc_menubar").exact_size(22.0).frame(egui::Frame::NONE.fill(t.chrome_dark).inner_margin(egui::Margin::symmetric(6, 0))).show(
         ui,
         |ui| {
-            egui::MenuBar::new().ui(ui, |ui| {
-                crate::chrome::quick_access(app, ui);
-                for (name, entries) in &tree {
-                    ui.menu_button(crate::i18n::menu(name), |ui| {
-                        for e in entries {
-                            entry_ui_with_ribbon(ui, e, &mut clicked, Some(app.ws.effective.layout.ribbon.collapsed));
-                        }
-                    });
-                }
+            // Zoom can leave less room than the menu names and Quick Access need together.
+            egui::ScrollArea::horizontal().id_salt("cc_menubar_scroll").auto_shrink([false, false]).show(ui, |ui| {
+                egui::MenuBar::new().ui(ui, |ui| {
+                    crate::chrome::quick_access(app, ui);
+                    for (name, entries) in &tree {
+                        ui.menu_button(crate::i18n::menu(name), |ui| {
+                            for e in entries {
+                                entry_ui_with_ribbon(ui, e, &mut clicked, Some(app.ws.effective.layout.ribbon.collapsed));
+                            }
+                        });
+                    }
+                });
             });
         },
     );

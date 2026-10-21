@@ -394,13 +394,66 @@ fn visible_lines(app: &CadApp, canvas: Rect, bar: Rect) -> usize {
     app.ui.history_lines.min(MAX_LINES).min(available)
 }
 
+/// Docked command lines reserve a row before the drawing is laid out.
+pub fn show_docked(app: &mut CadApp, ui: &mut egui::Ui) {
+    use crate::wsprofile::schema::Dock;
+    let dock = app.ws.effective.layout.command_line.dock;
+    let panel = match dock {
+        Dock::Top => egui::Panel::top("cc_cmdline_top"),
+        Dock::Bottom => egui::Panel::bottom("cc_cmdline_bottom"),
+        _ => return,
+    };
+    let free = ui.available_rect_before_wrap();
+    let ratio = app.ws.effective.layout.command_line.height_ratio;
+    let height = if ratio.is_finite() { ui.ctx().content_rect().height() * ratio } else { 34.0 };
+    let height = height.clamp(34.0, (free.height() - 150.0).max(34.0));
+    panel.exact_size(height).frame(egui::Frame::NONE.fill(Tokens::get().cmd_history)).show(ui, |ui| {
+        let area = ui.max_rect();
+        let bar = Rect::from_min_size(pos2(area.left() + 4.0, area.bottom() - 28.0), vec2((area.width() - 8.0).max(0.0), 24.0));
+        show_at(app, ui, area, bar);
+    });
+}
+
+fn dock_menu(app: &mut CadApp, response: &egui::Response) {
+    egui::Popup::menu(response).show(|ui| {
+        for (dock, label) in [("top", "Dock command line at top"), ("bottom", "Dock command line at bottom"), ("floating", "Float command line")] {
+            if ui.button(crate::i18n::t(label)).clicked() {
+                if let Err(error) = app.run("ui.workspace.set", serde_json::json!({"pointer": "/command_line/dock", "value": dock})) {
+                    app.set_status(error);
+                }
+                ui.close();
+            }
+        }
+    });
+}
+
 pub fn show(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
-    let t = Tokens::get();
+    if app.ws.effective.layout.command_line.dock != crate::wsprofile::schema::Dock::Floating {
+        return;
+    }
     let w = (canvas.width() * 0.48).clamp(360.0, 760.0).min((canvas.width() - 8.0).max(0.0));
     let h = 24.0;
     let bar = Rect::from_min_size(pos2(canvas.center().x - w / 2.0, canvas.bottom() - h - 10.0), vec2(w, h));
+    let state = &app.ws.effective.layout.command_line;
+    let bar = if state.x_ratio == 0.0 && state.y_ratio == 0.0 {
+        bar
+    } else {
+        let top = canvas.top() + (app.ui.history_lines.min(MAX_LINES) as f32 * LINE_H + 8.0).min((canvas.height() - h).max(0.0));
+        let left = canvas.left() + state.x_ratio * (canvas.width() - w).max(0.0);
+        let y = top + state.y_ratio * (canvas.bottom() - h - top).max(0.0);
+        Rect::from_min_size(pos2(left, y), vec2(w, h))
+    };
+    show_at(app, ui, canvas, bar);
+}
+
+fn show_at(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect, bar: Rect) {
+    let t = Tokens::get();
+    let (w, h) = (bar.width(), bar.height());
     let p = ui.painter_at(canvas);
     history(app, ui, canvas, bar);
+    let input = ui.interact(bar, ui.id().with("cmdline_input"), Sense::hover());
+    input.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, crate::tl!("Command line input")));
+    crate::control::record_widget(ui, &input, "Command line input", "text", None);
     // History lines above the bar (the expanded window replaces them).
     let n = if app.cmd.expanded { 0 } else { visible_lines(app, canvas, bar) };
     let lines: Vec<String> = app.session.log.iter().rev().take(n).rev().cloned().collect();
@@ -414,6 +467,31 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
     }
     p.rect_filled(bar, 3.0, t.cmd_bg);
     p.rect_stroke(bar, 3.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
+    let grip_rect = Rect::from_min_size(pos2(bar.left(), bar.top() + 4.0), vec2(7.0, 16.0));
+    let grip = ui.interact(grip_rect, ui.id().with("cmdline_move"), Sense::click_and_drag());
+    crate::icons::describe_control(ui, &grip, "Command line grip", None, false);
+    for y in [5.0, 10.0, 15.0] {
+        p.circle_filled(pos2(bar.left() + 3.0, bar.top() + y), 0.8, t.text_dim);
+    }
+    dock_menu(app, &grip);
+    if app.ws.effective.layout.command_line.dock == crate::wsprofile::schema::Dock::Floating && grip.dragged() {
+        let delta = grip.drag_delta();
+        let top = canvas.top() + (app.ui.history_lines.min(MAX_LINES) as f32 * LINE_H + 8.0).min((canvas.height() - h).max(0.0));
+        let x_room = (canvas.width() - w).max(0.0);
+        let y_room = (canvas.bottom() - h - top).max(0.0);
+        let x = if x_room > 0.0 { ((bar.left() + delta.x - canvas.left()) / x_room).clamp(0.0, 1.0) } else { 0.5 };
+        let y = if y_room > 0.0 { ((bar.top() + delta.y - top) / y_room).clamp(0.0, 1.0) } else { 1.0 };
+        let mut state = app.ws.effective.layout.command_line.clone();
+        // Zero coordinates retain the legacy default placement.
+        state.x_ratio = if x == 0.0 && y == 0.0 { f32::EPSILON } else { x };
+        state.y_ratio = y;
+        if let Err(error) = app.run("ui.workspace.set", serde_json::json!({"pointer": "/command_line", "value": state})) {
+            app.set_status(error);
+        }
+    }
+    if grip.drag_stopped() {
+        app.ws.autosave.interaction_ended();
+    }
     // Prompt glyph.
     p.text(pos2(bar.left() + 8.0, bar.center().y), egui::Align2::LEFT_CENTER, ">_", crate::theme::mono(), t.text_dim);
     let mut x = bar.left() + 30.0;
@@ -605,10 +683,20 @@ fn history(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect, bar: Rect) {
             let n = (n0 as f32 + (y0 - p.y) / LINE_H).round().clamp(0.0, MAX_LINES as f32) as usize;
             if n != app.ui.history_lines {
                 let _ = app.run("ui.cmdline.lines", serde_json::json!({ "lines": n }));
+                if app.ws.effective.layout.command_line.dock != crate::wsprofile::schema::Dock::Floating {
+                    let height = ui.ctx().content_rect().height();
+                    if height.is_finite() && height > 0.0 {
+                        let ratio = ((n as f32 * LINE_H + 38.0) / height).clamp(0.0, 1.0);
+                        let _ = app.run("ui.workspace.set", serde_json::json!({"pointer": "/command_line/height_ratio", "value": ratio}));
+                    }
+                }
             }
         } else {
             app.cmd.resize_from = None;
         }
+    }
+    if resp.drag_stopped() {
+        app.ws.autosave.interaction_ended();
     }
     if resp.clicked() && resp.interact_pointer_pos().is_some_and(on_toggle) {
         let _ = app.run("ui.toggle.history", serde_json::json!({}));

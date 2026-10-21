@@ -149,6 +149,15 @@ fn display(app: &CadApp, ui: &mut egui::Ui, changes: &mut Map<String, Value>) {
         }
         ui.end_row();
 
+        ui.label(crate::tl!("Interface scale"));
+        let mut scale = app.ws.user.ui_scale;
+        let response = ui.add(egui::Slider::new(&mut scale, 0.75..=2.0).step_by(0.05));
+        response.widget_info(|| egui::WidgetInfo::slider(true, f64::from(scale), crate::tl!("Interface scale")));
+        if response.changed() {
+            changes.insert("ui_scale".into(), json!(scale));
+        }
+        ui.end_row();
+
         ui.label(crate::tl!("Animation effects"));
         let mut animations = app.ui.animations;
         egui::ComboBox::from_id_salt("options_animations").selected_text(animations_label(animations)).show_ui(ui, |ui| {

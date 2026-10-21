@@ -193,7 +193,7 @@ pub struct CommandLineState {
 
 impl Default for CommandLineState {
     fn default() -> Self {
-        Self { dock: Dock::Bottom, height_ratio: 0.1, lines: 3, visible: true, x_ratio: 0.0, y_ratio: 0.0 }
+        Self { dock: Dock::Floating, height_ratio: 0.1, lines: 3, visible: true, x_ratio: 0.0, y_ratio: 0.0 }
     }
 }
 

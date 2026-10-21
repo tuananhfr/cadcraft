@@ -82,7 +82,7 @@
     ],
     "dock_tree": null,
     "command_line": {
-      "dock": "bottom",
+      "dock": "floating",
       "height_ratio": 0.1,
       "lines": 3,
       "visible": true,

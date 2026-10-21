@@ -36,8 +36,8 @@ pub fn to_ratio(rect: egui::Rect, area: egui::Rect) -> [f32; 4] {
     [unit((rect.min.x - area.min.x) / width), unit((rect.min.y - area.min.y) / height), unit(rect.width() / width), unit(rect.height() / height)]
 }
 
-/// The rectangle `r` describes in `area`, no larger than `area` and moved so that at least
-/// `min_visible` points of it (or all of it, when smaller) stay inside.
+/// The rectangle `r` describes in `area`, sized to at least `min_visible` points where possible
+/// and moved entirely inside the work area so its controls remain reachable.
 pub fn from_ratio(r: [f32; 4], area: egui::Rect, min_visible: f32) -> egui::Rect {
     if !usable(area) {
         return egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1.0, 1.0));
@@ -46,9 +46,7 @@ pub fn from_ratio(r: [f32; 4], area: egui::Rect, min_visible: f32) -> egui::Rect
     let min_visible = if min_visible.is_finite() { min_visible.max(1.0) } else { 1.0 };
     let width = (w * area.width()).clamp(min_visible.min(area.width()), area.width());
     let height = (h * area.height()).clamp(min_visible.min(area.height()), area.height());
-    let keep_x = min_visible.min(width);
-    let keep_y = min_visible.min(height);
-    let left = (area.min.x + x * area.width()).clamp(area.min.x - (width - keep_x), area.max.x - keep_x);
-    let top = (area.min.y + y * area.height()).clamp(area.min.y, area.max.y - keep_y);
+    let left = (area.min.x + x * area.width()).clamp(area.min.x, area.max.x - width);
+    let top = (area.min.y + y * area.height()).clamp(area.min.y, area.max.y - height);
     egui::Rect::from_min_size(egui::pos2(left, top), egui::vec2(width, height))
 }

@@ -619,6 +619,8 @@ impl CadApp {
         managers::plot_window_resume(self, ctx);
         hatchdlg::resume(self);
         self.autosave_tick(ctx);
+        wsprofile::apply::sync_scale(self, ctx);
+        wsprofile::apply::remap_screen(self, ctx);
         wsprofile::tick(self, ctx);
         menus::shortcuts(self, ctx);
         #[cfg(not(target_arch = "wasm32"))]
@@ -680,6 +682,9 @@ impl CadApp {
         toolbars::show_docked(ui, self, wsprofile::schema::Dock::Left);
         toolbars::show_docked(ui, self, wsprofile::schema::Dock::Right);
         let has_doc = !self.session.docs.is_empty() && !self.ui.start_tab;
+        if has_doc && self.ui.show_command_line {
+            cmdline::show_docked(self, ui);
+        }
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {
             if has_doc {
                 docking::show(self, ui);

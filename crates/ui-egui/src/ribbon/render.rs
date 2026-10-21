@@ -17,7 +17,11 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
     if !tabs.iter().any(|tab| tab.id == active) {
         active = tabs.first().map(|tab| tab.id.clone()).unwrap_or_default();
     }
-    let collapsed = app.ws.effective.layout.ribbon.collapsed;
+    // Keep a drawing area when interface zoom leaves too little height for expanded groups.
+    let reserved = 204.0 + if app.ui.show_status_bar { 26.0 } else { 0.0 } + if app.ui.show_file_tabs { 26.0 } else { 0.0 };
+    let reserved = reserved + if app.ui.show_command_line { 34.0 } else { 0.0 };
+    let compact = ui.available_height() < 142.0 + reserved;
+    let collapsed = app.ws.effective.layout.ribbon.collapsed || compact;
     egui::Panel::top("cc_ribbon").exact_size(if collapsed { 28.0 } else { 142.0 }).frame(egui::Frame::NONE.fill(Tokens::get().chrome)).show(
         ui,
         |ui| {

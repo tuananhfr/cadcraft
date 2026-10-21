@@ -321,7 +321,7 @@ fn simple_equals_current_ui() {
     assert!(!simple.layout.ribbon.visible);
     assert!(simple.layout.status_bar.visible);
     assert!(simple.layout.command_line.visible);
-    assert_eq!(simple.layout.command_line.dock, Dock::Bottom);
+    assert_eq!(simple.layout.command_line.dock, Dock::Floating);
     assert_eq!(simple.layout.command_line.lines, 3);
     let panel_ids: Vec<&str> = simple.layout.panels.iter().map(|panel| panel.id.as_str()).collect();
     assert_eq!(panel_ids, ["toolSets", "layers", "properties", "externalReferences"]);
