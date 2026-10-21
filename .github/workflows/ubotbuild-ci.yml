@@ -1,0 +1,77 @@
+name: UbotBuild CI
+
+# Gate for UbotBuild work branches: Linux fmt, clippy (native + wasm), release tests and the layer check.
+# Upstream workflows stay untouched; this one only runs on wip/** pushes and on demand.
+on:
+  push:
+    branches: ["wip/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ubotbuild-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CRAFT_FONTS_REF: b7dfde98c6d9d5db761c405732f9ef6d58bec192
+
+jobs:
+  linux:
+    name: Linux gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out craft-fonts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: tuananhfr/craft-fonts
+          ref: ${{ env.CRAFT_FONTS_REF }}
+          path: craft-fonts
+      - name: Install Linux build dependencies (winit, wgpu, rfd)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev \
+            libxi-dev libgtk-3-dev libfontconfig1-dev libfreetype-dev mesa-vulkan-drivers
+      - name: Install Rust (stable + clippy, rustfmt, wasm32)
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt --target wasm32-unknown-unknown
+          rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: rustfmt
+        if: ${{ !cancelled() }}
+        run: cargo fmt --all -- --check
+      - name: clippy (native)
+        if: ${{ !cancelled() }}
+        env:
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+        run: cargo clippy --release --workspace --all-targets -- -D warnings
+      - name: clippy (web, wasm32)
+        if: ${{ !cancelled() }}
+        env:
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+        run: cargo clippy --release -p cadcraft-ui-egui -p cadcraft-web --target wasm32-unknown-unknown
+      # Release mode: the ui-egui integration suite in debug needs tens of GB of disk.
+      - name: tests
+        if: ${{ !cancelled() }}
+        env:
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+        run: |
+          set -o pipefail
+          cargo test --release --no-fail-fast --workspace 2>&1 | tee test.log
+      - name: layers
+        if: ${{ !cancelled() }}
+        run: cargo xtask layers
+      - name: Summary of failing tests
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "### Failing tests"
+            grep -E '^test .* \.\.\. FAILED$' test.log | sed 's/^test /- /; s/ \.\.\. FAILED$//' || echo "none"
+            grep -E '^test result' test.log | awk '{p+=$4; f+=$6} END {print "\npassed=" p " failed=" f}'
+          } >> "$GITHUB_STEP_SUMMARY"
