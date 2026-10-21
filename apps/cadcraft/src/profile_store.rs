@@ -419,4 +419,27 @@ mod tests {
         assert_eq!(kept.last().map(Vec::as_slice), Some(b"{14".as_slice()));
         fs::remove_dir_all(dir).unwrap();
     }
+
+    // Lives here rather than in ui-egui's ws_perf.rs because the SLO covers the real disk store.
+    #[test]
+    #[ignore = "manual release performance measurement"]
+    fn commit_p95() {
+        let dir = temp_dir();
+        let mut app = cadcraft_ui_egui::CadApp::new(cadcraft_engine::Session::new(), cadcraft_ui_egui::Services::default());
+        app.skip_first_run_picker = true;
+        app.attach_profile_store(Box::new(FileProfileStore::new(dir.join("workspace"))));
+        let mut samples = Vec::with_capacity(100);
+        for n in 0..100u64 {
+            app.run("ui.cmdline.lines", serde_json::json!({"lines": n % 10 + 1})).unwrap();
+            let started = std::time::Instant::now();
+            app.commit_workspace_now().unwrap();
+            samples.push(started.elapsed());
+        }
+        assert!(app.ws.store.as_deref().unwrap().snapshots().len() <= KEEP_SNAPSHOTS);
+        fs::remove_dir_all(dir).unwrap();
+        samples.sort_unstable();
+        let p95 = samples[samples.len() * 95 / 100 - 1];
+        println!("commit_p95: samples={}, P95={:.3} ms, SLO=250 ms", samples.len(), p95.as_secs_f64() * 1000.0);
+        assert!(p95 <= std::time::Duration::from_millis(250), "commit_p95: P95 {p95:?} exceeds 250 ms");
+    }
 }

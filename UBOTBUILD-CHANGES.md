@@ -19,3 +19,11 @@ This branch (`tuananhfr`) is UbotCAD, the UbotBuild build of [CADCraft](https://
   - the dialog lists the fonts the open drawing's text styles ask for, which of them this computer lacks, and lets the user pick what to draw instead; a drawing that opens with missing fonts in use says so on the command line. The replacement table (keyed by font file name), FONTALT and FONTFALLBACK are user settings saved in the profile; they only decide what is drawn and never change the drawing;
   - the user can add font files (`cadcraft_fonts::ttf::add_user_font`, found by file name or by family): the desktop copies them to `<settings dir>/fonts`, the web keeps them in localStorage (3 MB per font, 4 MB in all; a larger one works for that visit only). Fonts never leave the computer. The web build also lists installed fonts where the browser has `queryLocalFonts` (Chromium);
   - the interface text of this dialog is English only; it is not in the translated sources.
+
+- V2.1 workspace client (acceptance and release gate pending; see `docs/workspace/acceptance.md`):
+  - nine presets, layered profiles/policy, versioned local persistence, first-run picker, clone/save/reset/import/export, migration and layout undo; four-edge/floating toolbars, ribbon/context tabs, Quick Access, favorites, Customize, shortcuts and aliases;
+  - command-line docking, status-item persistence, interface scale and screen remap; dockable Font/LISP panels and auto-hide. Floating controls stay inside the main window; discipline presets await CAD Manager review;
+  - offline/conflict sync is exercised through MemoryRemote only. OpenAPI/schema, security notes and migration documentation are present; real HTTP, tenant authorization, signed publication, LPC and business registries remain outstanding. Performance numbers, browser reload/quota/DPI captures and human sign-off are pending.
+- SHX drawing fonts (user-supplied files; no SHX assets bundled):
+  - shape/unifont readers and drawing-codepage glyph lookup, including legacy `%%c`/`%%d`/`%%p` symbol slots; added files feed the existing font selection/rendering path;
+  - bigfont is unsupported; six known files are rejected as truncated. Output has not been black-box compared with AutoCAD, and Vietnamese precomposed letters are not decomposed under cp1258.

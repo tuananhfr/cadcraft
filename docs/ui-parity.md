@@ -1,6 +1,6 @@
 # UI parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (animation effects follow the operating system's setting) · **Target:** Autodesk AutoCAD 2027 for Mac (26.0)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-21 · **Change:** minor (workspace client inventory; acceptance pending) · **Target:** Autodesk AutoCAD 2027 for Mac (26.0)
 
 How CADCraft's interaction compares with AutoCAD's: point entry, object snaps, tracking, dynamic
 input, grips, selection, the command line, chrome and navigation. A drafter's speed in AutoCAD
@@ -149,24 +149,26 @@ down-arrow options menu (DYNPROMPT), and DYNDIM.
 | UNDO with Mark, Back, BEgin, End, Auto, Control | yes | count only, whole-document snapshots capped at 2,000 (`lib.rs:477`, `edit.rs:56`) |
 | SETVAR for every system variable | ~1,000 sysvars | about 60 session/header variables by name (`sysvars.rs`) |
 | Scripts (SCRIPT, `.scr`) | yes | script text via CLI/MCP/control; no `.scr` file command |
-| Floating/docked command window, transparency, lines of history | yes | floating overlay, history lines setting |
+| Floating/docked command window, transparency, lines of history | yes | top/bottom dock or in-window floating; placement, height and history lines persist in workspace profiles; visual QA pending |
 
 ## Chrome and palettes (≈ 45%)
 
 | Feature | AutoCAD for Mac | CADCraft |
 |---|---|---|
 | Menu bar | 11 menus, 491 leaf items | same 11 menus; 245/491 items covered (233 by `cargo xtask parity`, which counts engine commands only, plus 12 UI-only items: see [parity-checklist.md](parity-checklist.md)) |
-| Tool Bar, File tabs, Start tab, layout tabs | yes | yes |
+| Tool Bar, File tabs, Start tab, layout tabs | yes | yes; data-driven toolbars dock on four edges or float inside the window, with hide/show, lock and reorder; persistence test source in `ws_toolbars.rs`, gate/visual QA pending |
+| Ribbon and Quick Access | yes | seven standard tabs, Dimension/Hatch context, custom tabs/groups, overflow/collapse, pin/unpin/reorder and favorites; `ws_ribbon.rs` coverage, acceptance pending |
 | Tool Sets palette (Drafting, Modeling, … with flyouts) | yes | yes for 2D groups |
 | Properties Inspector, Quick Properties | yes | yes (every control acts or is visibly unavailable, #182); block references show read-only Position X/Y/Z from their stored insertion point; coordinate editing is still missing |
 | Layer Properties Manager (filters, states, VP overrides) | yes | yes |
 | Blocks palette, Content | yes | Blocks window (click to insert, #28) |
-| Status bar toggles | ~25 | most toggles; Annotation Visibility and Workspace do nothing |
+| Status bar toggles | ~25 | workspace picker/save status and per-item visibility persist with profiles; hiding a toggle leaves its drafting sysvar unchanged |
 | ViewCube | interactive 3D | clickable for 2D (Top/Home → extents); dragging does nothing (#7) |
 | Navigation bar, SteeringWheels | yes | no |
-| Workspaces | Drafting & Annotation, 3D Modeling | no |
+| Workspaces | Drafting & Annotation, 3D Modeling | nine presets (seven discipline drafts), picker, clone/save/reset/import/export, local versioned persistence, migration and separate layout undo; sync uses MemoryRemote only; [acceptance](workspace/acceptance.md) pending |
 | Options / Preferences dialog | many tabs | **no** (issue #23) |
-| Customisation (CUI, aliases editor, tool palettes) | yes | no |
+| Customisation (CUI, aliases editor, tool palettes) | yes | Customize edits ribbon, toolbars, Quick Access and shortcuts; ALIASEDIT aliases persist; Font/LISP dockable panels and auto-hide implemented; full CUI parity, tenant registries and Sheet Set remain unavailable |
+| Drawing fonts / Font panel | SHX and TrueType | user SHX shapes/unifont plus drawing codepage and legacy symbol slots; Font panel shares dialog content. Bigfont unsupported; six known truncated files rejected; cp1258 precomposed letters not decomposed; AutoCAD output comparison pending |
 | Themes | Dark, Light | Dark, Light, System (#179) |
 | Accessibility | VoiceOver basics | AccessKit through eframe; screen-reader coverage untested; magnifier issue #39; animation effects follow the OS setting (View ▸ Accessibility ▸ Animation Effects: System, On, Off) |
 
@@ -202,6 +204,7 @@ down-arrow options menu (DYNPROMPT), and DYNDIM.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-21 | minor | Workspace/ribbon/toolbar/customization and Font/LISP panel source inventory updated; SHX support limits recorded; no acceptance or parity percentage uplift claimed before QA |
 | 2026-10-12 | minor | Selected and hovered objects redrawn in the selection colour (text and arrowheads included); Options ▸ Selection laid out as AutoCAD's: Object grouping, Show grips, grip object limit, selection preview, Visual Effect Settings (selection area, preview filter) |
 | 2026-10-12 | minor | Animation effects (dialog and menu fades, smoothed wheel scrolling and ⌘/Ctrl+wheel zoom) follow the operating system's setting; View ▸ Accessibility ▸ Animation Effects chooses System, On or Off |
 | 2026-10-12 | minor | Hatch and Gradient / Hatch Edit dialogs (HATCH, GRADIENT, HATCHEDIT, double-click a hatch; HPDLGMODE) |

@@ -6,6 +6,11 @@ on:
   push:
     branches: ["wip/**"]
   workflow_dispatch:
+    inputs:
+      perf:
+        description: Run the ignored workspace SLO measurements (release build)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -113,3 +118,35 @@ jobs:
           name: cadcraft-web-${{ github.sha }}
           path: dist/web
           retention-days: 7
+
+  perf:
+    # On demand only: release builds of two test binaries; shared runners make the numbers indicative.
+    name: Workspace SLO
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.perf }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Linux build dependencies (winit, wgpu, rfd)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev \
+            libxi-dev libgtk-3-dev libfontconfig1-dev libfreetype-dev
+      - name: Install Rust (stable)
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: perf
+      - name: restore / switch / commit P95
+        run: |
+          set -o pipefail
+          {
+            cargo test --release -p cadcraft-ui-egui --test ws_perf -- --ignored --nocapture --test-threads=1
+            cargo test --release -p cadcraft --bin cadcraft commit_p95 -- --ignored --nocapture
+          } 2>&1 | tee perf.log
+      - name: Summary
+        if: ${{ !cancelled() }}
+        run: grep -E 'P95=|proxies:|FAILED|panicked' perf.log >> "$GITHUB_STEP_SUMMARY" || true
