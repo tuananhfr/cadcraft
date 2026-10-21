@@ -783,12 +783,14 @@ fn ribbon_home_text_buttons_show_full_labels_at_1920() {
             .filter(|node| node.accesskit_node().label().as_deref() == Some(label) && node.rect().top() >= 28.0)
             .collect();
         assert!(!buttons.is_empty(), "{id} must be expanded with its full accessible label {label}");
+        // Another command with an icon may share the label (Clipboard "Copy" next to Modify "Copy").
+        let needed = text_width + 2.0 * style.spacing.button_padding.x;
+        assert!(
+            buttons.iter().any(|button| button.rect().width() >= needed),
+            "{id} is truncated: {:?} < {needed}",
+            buttons.iter().map(|button| button.rect()).collect::<Vec<_>>()
+        );
         for button in buttons {
-            assert!(
-                button.rect().width() >= text_width + 2.0 * style.spacing.button_padding.x,
-                "{id} is truncated: {:?} < {text_width}",
-                button.rect()
-            );
             assert!(h.ctx.content_rect().contains_rect(button.rect()), "{id} extends beyond the screen");
         }
     }

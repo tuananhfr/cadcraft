@@ -29,7 +29,9 @@ fn a_long_routine_runs_across_frames() {
     }
     assert!(!app.session.lisp_running());
     assert!(frames > 1, "it took more than one frame");
-    assert_eq!(app.session.log.last().map(String::as_str), Some("done"));
+    // The load is reported once the routine's own output is flushed.
+    let tail: Vec<_> = app.session.log.iter().rev().take(2).rev().map(String::as_str).collect();
+    assert_eq!(tail, ["done", "loop.lsp successfully loaded."]);
 }
 
 /// A click on the canvas answers a routine's `getpoint`. No command runs while a routine waits,
