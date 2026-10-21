@@ -18,8 +18,11 @@ pub const MAX_SUBSHAPE_DEPTH: u32 = 10;
 pub const MAX_POINTS: usize = 20_000;
 pub const ARC_SEGMENTS_PER_OCTANT: u32 = 4;
 
-/// Total decoded commands per glyph; stops fan-out of subshape calls that draw nothing.
-const MAX_STEPS: u32 = 100_000;
+/// Shared work allowance per glyph, charged per decoded or scanned byte, sequence entry and arc
+/// segment, so no program shape (fan-out, long sequences, tiny arcs) can run away.
+const WORK_BUDGET: u32 = 3_000_000;
+/// Coordinates beyond this are garbage (a runaway scale); stopping here keeps f32 output finite.
+const MAX_COORD: f64 = 1e7;
 /// The public description allows four saved positions; extra room costs nothing and keeps
 /// slightly deeper fonts working.
 const MAX_STACK: usize = 16;
@@ -90,8 +93,13 @@ impl<'a> Cursor<'a> {
         Some(*first)
     }
 
-    fn signed(&mut self) -> Option<i8> {
-        self.byte().map(|b| i8::from_le_bytes([b]))
+    /// An operand byte; running out of program here is malformed.
+    fn operand(&mut self) -> Result<u8, Halt> {
+        self.byte().ok_or(Halt)
+    }
+
+    fn signed_operand(&mut self) -> Result<i8, Halt> {
+        self.operand().map(|b| i8::from_le_bytes([b]))
     }
 
     /// Operand bytes of the pair/triple sequences (codes 9 and 0xD), up to their (0,0)
@@ -117,42 +125,45 @@ impl<'a> Cursor<'a> {
         all.get(..end).unwrap_or_default()
     }
 
-    /// `None` at the end of the program or at an undefined code.
-    fn next_op(&mut self) -> Option<Op<'a>> {
-        let code = self.byte()?;
-        Some(match code {
+    /// `Ok(None)` when the program simply ends; an undefined code or a missing operand halts the
+    /// whole glyph.
+    fn next_op(&mut self) -> Result<Option<Op<'a>>, Halt> {
+        let Some(code) = self.byte() else { return Ok(None) };
+        Ok(Some(match code {
             0 => Op::End,
             1 => Op::PenDown,
             2 => Op::PenUp,
-            3 => Op::Divide(self.byte()?),
-            4 => Op::Multiply(self.byte()?),
+            3 => Op::Divide(self.operand()?),
+            4 => Op::Multiply(self.operand()?),
             5 => Op::Push,
             6 => Op::Pop,
             7 => {
-                let lo = u32::from(self.byte()?);
+                let first = u32::from(self.operand()?);
                 if self.wide_subshapes {
-                    let hi = u32::from(self.byte()?);
-                    Op::Subshape(hi << 8 | lo)
+                    // Unifont numbers are stored high byte first: in the local corpus every
+                    // unifont subshape reference resolves that way and none the other way.
+                    let second = u32::from(self.operand()?);
+                    Op::Subshape(first << 8 | second)
                 } else {
-                    Op::Subshape(lo)
+                    Op::Subshape(first)
                 }
             }
-            8 => Op::Xy(self.signed()?, self.signed()?),
+            8 => Op::Xy(self.signed_operand()?, self.signed_operand()?),
             9 => Op::XySequence(self.sequence(2)),
-            0xA => Op::OctantArc { radius: self.byte()?, spec: self.byte()? },
+            0xA => Op::OctantArc { radius: self.operand()?, spec: self.operand()? },
             0xB => {
-                let start_offset = self.byte()?;
-                let end_offset = self.byte()?;
-                let high = u16::from(self.byte()?);
-                let low = u16::from(self.byte()?);
-                Op::FractionalArc { start_offset, end_offset, radius: high << 8 | low, spec: self.byte()? }
+                let start_offset = self.operand()?;
+                let end_offset = self.operand()?;
+                let high = u16::from(self.operand()?);
+                let low = u16::from(self.operand()?);
+                Op::FractionalArc { start_offset, end_offset, radius: high << 8 | low, spec: self.operand()? }
             }
-            0xC => Op::BulgeArc { dx: self.signed()?, dy: self.signed()?, bulge: self.signed()? },
+            0xC => Op::BulgeArc { dx: self.signed_operand()?, dy: self.signed_operand()?, bulge: self.signed_operand()? },
             0xD => Op::BulgeSequence(self.sequence(3)),
             0xE => Op::VerticalOnly,
-            0xF => return None,
+            0xF => return Err(Halt),
             _ => Op::Vector { length: code >> 4, direction: usize::from(code & 0xF) },
-        })
+        }))
     }
 }
 
@@ -165,7 +176,7 @@ struct Machine<'f> {
     strokes: Vec<Vec<[f64; 2]>>,
     current: Vec<[f64; 2]>,
     points: usize,
-    steps: u32,
+    work: u32,
 }
 
 impl<'f> Machine<'f> {
@@ -179,7 +190,7 @@ impl<'f> Machine<'f> {
             strokes: Vec::new(),
             current: Vec::new(),
             points: 0,
-            steps: 0,
+            work: WORK_BUDGET,
         }
     }
 
@@ -187,8 +198,16 @@ impl<'f> Machine<'f> {
         self.end_stroke();
         // `above` is a height in drawing units; a font that declares 0 is treated as 1.
         let unit = if self.font.above == 0 { 1.0 } else { f64::from(self.font.above) };
-        let out = |p: &[f64; 2]| [(p[0] / unit) as f32, (p[1] / unit) as f32];
-        ShxGlyph { strokes: self.strokes.iter().map(|s| s.iter().map(out).collect()).collect(), advance: out(&self.pos) }
+        // Coordinates are bounded already; the check after the cast is the last line of defence.
+        let out = |p: &[f64; 2]| Some([(p[0] / unit) as f32, (p[1] / unit) as f32]).filter(|q| q.iter().all(|v| v.is_finite()));
+        let strokes: Vec<Vec<[f32; 2]>> = self.strokes.iter().map(|s| s.iter().map_while(out).collect::<Vec<_>>()).filter(|s| s.len() >= 2).collect();
+        ShxGlyph { strokes, advance: out(&self.pos).unwrap_or_default() }
+    }
+
+    fn charge(&mut self, units: usize) -> Result<(), Halt> {
+        let units = u32::try_from(units).unwrap_or(u32::MAX);
+        self.work = self.work.checked_sub(units).ok_or(Halt)?;
+        Ok(())
     }
 
     fn end_stroke(&mut self) {
@@ -200,23 +219,24 @@ impl<'f> Machine<'f> {
 
     fn run(&mut self, body: &[u8], depth: u32) -> Result<(), Halt> {
         // Stored bodies are "name NUL program"; the name is not part of the program.
-        let program = body.iter().position(|b| *b == 0).and_then(|nul| body.get(nul + 1..)).unwrap_or_default();
+        let nul = body.iter().position(|b| *b == 0);
+        self.charge(nul.map_or(body.len(), |n| n + 1))?;
+        let program = nul.and_then(|n| body.get(n + 1..)).unwrap_or_default();
         let mut cursor = Cursor { rest: program, wide_subshapes: self.font.kind == ShxKind::Unifont };
         let mut skip_next = false;
-        while let Some(op) = cursor.next_op() {
-            self.steps += 1;
-            if self.steps > MAX_STEPS {
-                return Err(Halt);
-            }
+        loop {
+            let before = cursor.rest.len();
+            let Some(op) = cursor.next_op()? else { return Ok(()) };
+            self.charge(before.saturating_sub(cursor.rest.len()))?;
             match op {
                 Op::End => return Ok(()),
-                // Glyphs are laid out horizontally, so the command after 0xE never runs.
-                Op::VerticalOnly => skip_next = true,
+                // Glyphs are laid out horizontally, so the command after 0xE never runs
+                // (a second 0xE counts as that command).
                 _ if skip_next => skip_next = false,
+                Op::VerticalOnly => skip_next = true,
                 op => self.apply(op, depth)?,
             }
         }
-        Ok(())
     }
 
     fn apply(&mut self, op: Op<'_>, depth: u32) -> Result<(), Halt> {
@@ -253,6 +273,7 @@ impl<'f> Machine<'f> {
             Op::Xy(dx, dy) => self.line_by(f64::from(dx), f64::from(dy))?,
             Op::XySequence(bytes) => {
                 for &[dx, dy] in bytes.as_chunks::<2>().0 {
+                    self.charge(1)?;
                     self.line_by(f64::from(i8::from_le_bytes([dx])), f64::from(i8::from_le_bytes([dy])))?;
                 }
             }
@@ -261,15 +282,20 @@ impl<'f> Machine<'f> {
                 self.line_by(ux * f64::from(length), uy * f64::from(length))?;
             }
             Op::OctantArc { radius, spec } => {
+                // Negative arcs carry a sign bit (the local corpus has it on nearly all of them,
+                // with counts never above 8); any other count is not an octant arc.
                 let octants = match spec & 0xF {
                     0 => 8,
-                    n => n,
+                    n @ 1..=8 => n,
+                    _ => return Err(Halt),
                 };
                 let start = f64::from((spec >> 4) & 7) * FRAC_PI_4;
                 let sweep = f64::from(octants) * FRAC_PI_4;
                 let sweep = if spec & 0x80 != 0 { -sweep } else { sweep };
                 self.arc_from_angle(f64::from(radius) * self.scale, start, sweep)?;
             }
+            // UNVERIFIED: which octant the end offset is read in (S+C here, versus S+C-1) cannot
+            // be told from the corpus.
             Op::FractionalArc { start_offset, end_offset, radius, spec } => {
                 let octant = f64::from((spec >> 4) & 7);
                 let count = f64::from(spec & 0xF);
@@ -292,6 +318,7 @@ impl<'f> Machine<'f> {
             Op::BulgeArc { dx, dy, bulge } => self.bulge_by(f64::from(dx), f64::from(dy), bulge)?,
             Op::BulgeSequence(bytes) => {
                 for &[dx, dy, bulge] in bytes.as_chunks::<3>().0 {
+                    self.charge(1)?;
                     let signed = |b: u8| i8::from_le_bytes([b]);
                     self.bulge_by(f64::from(signed(dx)), f64::from(signed(dy)), signed(bulge))?;
                 }
@@ -315,7 +342,7 @@ impl<'f> Machine<'f> {
     /// Moves the pen, drawing when it is down. The start of a stroke is the position before the
     /// first drawn segment.
     fn move_to(&mut self, to: [f64; 2]) -> Result<(), Halt> {
-        if !to[0].is_finite() || !to[1].is_finite() {
+        if to.iter().any(|v| !v.is_finite() || v.abs() > MAX_COORD) {
             return Err(Halt);
         }
         if self.pen_down {
@@ -374,10 +401,11 @@ impl<'f> Machine<'f> {
             [centre[0] + from_centre[0] * c - from_centre[1] * s, centre[1] + from_centre[0] * s + from_centre[1] * c]
         };
         let end = exact_end.unwrap_or_else(|| rotate(sweep));
+        let segments = ((sweep.abs() / FRAC_PI_4 * f64::from(ARC_SEGMENTS_PER_OCTANT)).ceil() as u32).max(1);
+        self.charge(segments as usize)?;
         if !self.pen_down {
             return self.move_to(end);
         }
-        let segments = ((sweep.abs() / FRAC_PI_4 * f64::from(ARC_SEGMENTS_PER_OCTANT)).ceil() as u32).max(1);
         for i in 1..segments {
             self.move_to(rotate(sweep * f64::from(i) / f64::from(segments)))?;
         }

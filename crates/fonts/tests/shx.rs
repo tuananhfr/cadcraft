@@ -73,7 +73,7 @@ fn two_glyph_shapes() -> Vec<u8> {
 fn two_glyph_unifont() -> Vec<u8> {
     unifont_image(
         font_header("UNITEST", 21, 7, 2),
-        &[(0x41, glyph("A", &[0x02, 0x08, 0x04, 0x06])), (0x20ac, glyph("EURO", &[0x02, 0x08, 0x08, 0x00]))],
+        &[(0x41, glyph("A", &[0x02, 0x08, 0x04, 0x06])), (0x1ea0, glyph("A_DOT", &[0x02, 0x08, 0x08, 0x00]))],
     )
 }
 
@@ -141,7 +141,7 @@ fn parses_synthetic_unifont() {
     assert_eq!(font.name, "UNITEST");
     assert_eq!((font.above, font.below, font.modes), (21, 7, 2));
     assert_eq!(font.len(), 2);
-    assert_eq!(font.glyph_bytes(0x20ac), Some(&glyph("EURO", &[0x02, 0x08, 0x08, 0x00])[..]));
+    assert_eq!(font.glyph_bytes(0x1ea0), Some(&glyph("A_DOT", &[0x02, 0x08, 0x08, 0x00])[..]));
     assert_eq!(font.glyph_bytes(0x42), None);
 }
 
@@ -428,14 +428,27 @@ fn zero_divisor_pop_underflow_and_push_overflow_stop_the_glyph() {
 
 #[test]
 fn scale_overflow_stops_instead_of_going_infinite() {
-    let mut prog: Vec<u8> = Vec::new();
-    for _ in 0..400 {
-        prog.extend([4, 255]);
+    for repeats in [1usize, 2, 3, 4, 8, 17, 30, 60, 127, 400] {
+        let mut prog: Vec<u8> = Vec::new();
+        for _ in 0..repeats {
+            prog.extend([4, 255]);
+        }
+        prog.extend([0x10, 0xF0, 0xA, 255, 0x04]);
+        let g = run(&prog);
+        assert!(g.strokes.iter().flatten().all(|p| p[0].is_finite() && p[1].is_finite()), "{repeats}");
+        assert!(g.advance.iter().all(|v| v.is_finite()), "{repeats}");
     }
-    prog.push(0x10);
-    let g = run(&prog);
-    assert!(g.strokes.iter().flatten().all(|p| p[0].is_finite() && p[1].is_finite()));
-    assert!(g.advance.iter().all(|v| v.is_finite()));
+    // 255^2 x 15 is still a sane coordinate and is drawn; 255^17 is not and ends the glyph first.
+    let g = run(&[4, 255, 4, 255, 0xF0]);
+    assert_eq!(g.advance, [65025.0 * 15.0, 0.0]);
+    let mut far = Vec::new();
+    for _ in 0..17 {
+        far.extend([4, 255]);
+    }
+    far.push(0x10);
+    let g = run(&far);
+    assert!(g.strokes.is_empty());
+    assert_eq!(g.advance, [0.0, 0.0]);
 }
 
 #[test]
@@ -480,6 +493,12 @@ fn octant_arc_sign_start_octant_and_full_circle() {
     let pts = &g.strokes[0];
     assert_eq!(pts.len() as u32, 1 + 8 * ARC_SEGMENTS_PER_OCTANT);
     assert!(close(*pts.last().unwrap(), [0.0, 0.0]));
+}
+
+#[test]
+fn octant_count_above_eight_stops_the_glyph() {
+    let g = run(&[0x30, 0xA, 1, 0x0F, 0x30]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0]]]);
 }
 
 #[test]
@@ -543,6 +562,9 @@ fn vertical_only_code_skips_next() {
     assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [0.0, 1.0]]]);
     let g = run(&[0xE, 0xA, 2, 0x02, 0x14]);
     assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [0.0, 1.0]]]);
+    // A second 0xE is itself the skipped command, so what follows runs.
+    let g = run(&[0xE, 0xE, 0x14]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [0.0, 1.0]]]);
 }
 
 #[test]
@@ -555,11 +577,16 @@ fn subshape_is_followed_and_missing_ones_are_skipped() {
 }
 
 #[test]
-fn unifont_subshape_number_is_two_bytes() {
-    let image = unifont_image(font_header("U", 1, 0, 0), &[(0x41, glyph("A", &[7, 0xac, 0x20, 0x14])), (0x20ac, glyph("EURO", &[0x30]))]);
+fn unifont_subshape_u16() {
+    // The number is stored high byte first: U+1EA0 is 0x1E, 0xA0 (confirmed by corpus counts).
+    let image = unifont_image(font_header("U", 1, 0, 0), &[(0x41, glyph("A", &[7, 0x1e, 0xa0, 0x14])), (0x1ea0, glyph("A_DOT", &[0x30]))]);
     let f = ShxFont::parse(&image).unwrap();
     let g = f.glyph(0x41).unwrap();
     assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0], [3.0, 1.0]]]);
+    // The other byte order names glyph 0xA01E, which does not exist and is skipped.
+    let image = unifont_image(font_header("U", 1, 0, 0), &[(0x41, glyph("A", &[7, 0xa0, 0x1e, 0x14])), (0x1ea0, glyph("A_DOT", &[0x30]))]);
+    let g = ShxFont::parse(&image).unwrap().glyph(0x41).unwrap();
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [0.0, 1.0]]]);
 }
 
 #[test]
@@ -618,6 +645,57 @@ fn malformed_programs_return_what_was_built() {
     assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0]]]);
     let g = run(&[0x30, 0x0F, 0x30]);
     assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0]]]);
+    // Both halt the whole glyph, also from inside a subshape: nothing after the call runs.
+    for bad in [&[0x30, 0x0F][..], &[0x30, 8][..]] {
+        let f = font(1, &[(0x41, &[7, 0x42, 0x14]), (0x42, bad)]);
+        let g = f.glyph(0x41).unwrap();
+        assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0]]]);
+    }
+    // A subshape that merely runs off its end (no 0) returns to the caller.
+    let body = glyph("G", &[0x30]);
+    let mut open_ended = body.clone();
+    open_ended.pop();
+    let image = shapes_image(SHAPES_10, Some(font_header("T", 1, 0, 0)), &[(0x41, glyph("G", &[7, 0x42, 0x14])), (0x42, open_ended)]);
+    let g = ShxFont::parse(&image).unwrap().glyph(0x41).unwrap();
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0], [3.0, 1.0]]]);
+}
+
+/// Subshape fan-out whose callees scan long sequences, bulge sequences at a tiny scale and bodies
+/// with no NUL: only a shared work budget keeps this fast.
+#[test]
+fn hostile_fan_out_is_bounded_by_work() {
+    let mut pairs = vec![9u8];
+    for _ in 0..31_000 {
+        pairs.extend([1, 1]);
+    }
+    pairs.extend([0, 0]);
+    let mut bulges = vec![3u8, 255, 3, 255, 3, 255, 0xD];
+    for _ in 0..20_000 {
+        bulges.extend([127, 127, 127]);
+    }
+    bulges.extend([0, 0]);
+    let mut caller = vec![2u8];
+    for callee in [0x42u8, 0x43, 0x44] {
+        for _ in 0..10_000 {
+            caller.extend([7, callee]);
+        }
+    }
+    let list = vec![(0x41u16, glyph("G", &caller)), (0x42, glyph("G", &pairs)), (0x43, glyph("G", &bulges)), (0x44, vec![b'x'; 60_000])];
+    let f = ShxFont::parse(&shapes_image(SHAPES_10, Some(font_header("T", 1, 0, 0)), &list)).unwrap();
+    let started = std::time::Instant::now();
+    let g = f.glyph(0x41).expect("hostile fan-out still yields a glyph");
+    let elapsed = started.elapsed();
+    assert!(elapsed.as_millis() < 1500, "took {elapsed:?}");
+    assert!(points(&g) <= MAX_POINTS);
+    assert!(g.advance.iter().all(|v| v.is_finite()));
+
+    // The same sequences with the pen down must stop at the point budget quickly too.
+    let list = [(0x41u16, glyph("G", &[1, 7, 0x42, 7, 0x42])), (0x42, glyph("G", &pairs))];
+    let f = ShxFont::parse(&shapes_image(SHAPES_10, Some(font_header("T", 1, 0, 0)), &list)).unwrap();
+    let started = std::time::Instant::now();
+    let g = f.glyph(0x41).unwrap();
+    assert!(started.elapsed().as_millis() < 1500);
+    assert!(points(&g) <= MAX_POINTS);
 }
 
 #[test]
@@ -643,6 +721,105 @@ fn hostile_programs_never_panic_and_respect_the_budget() {
     }
 }
 
+/// Counts what the glyph programs of a corpus contain; nothing but numbers is kept.
+#[derive(Default)]
+struct Probe {
+    ops: [u64; 16],
+    octant_spec: Vec<u64>,
+    fractional_spec: Vec<u64>,
+    shapes_sub_hit: u64,
+    shapes_sub_miss: u64,
+    uni_sub_le_hit: u64,
+    uni_sub_be_hit: u64,
+    uni_sub_total: u64,
+}
+
+impl Probe {
+    fn new() -> Self {
+        Probe { octant_spec: vec![0; 256], fractional_spec: vec![0; 256], ..Probe::default() }
+    }
+
+    /// A linear walk over a "name NUL program" body using only the public code table.
+    fn scan(&mut self, font: &ShxFont, body: &[u8]) {
+        let wide = font.kind == ShxKind::Unifont;
+        let Some(nul) = body.iter().position(|b| *b == 0) else { return };
+        let p = &body[nul + 1..];
+        let mut i = 0usize;
+        while let Some(&code) = p.get(i) {
+            i += 1;
+            if code < 16 {
+                self.ops[code as usize] += 1;
+            }
+            match code {
+                0 | 0xF => break,
+                3 | 4 => i += 1,
+                7 => {
+                    let lo = u32::from(p.get(i).copied().unwrap_or(0));
+                    if wide {
+                        let hi = u32::from(p.get(i + 1).copied().unwrap_or(0));
+                        i += 2;
+                        self.uni_sub_total += 1;
+                        self.uni_sub_le_hit += u64::from(font.glyph_bytes(hi << 8 | lo).is_some());
+                        self.uni_sub_be_hit += u64::from(font.glyph_bytes(lo << 8 | hi).is_some());
+                    } else {
+                        i += 1;
+                        if font.glyph_bytes(lo).is_some() {
+                            self.shapes_sub_hit += 1;
+                        } else {
+                            self.shapes_sub_miss += 1;
+                        }
+                    }
+                }
+                8 => i += 2,
+                9 | 0xD => {
+                    let entry = if code == 9 { 2 } else { 3 };
+                    while let (Some(&a), Some(&b)) = (p.get(i), p.get(i + 1)) {
+                        if a == 0 && b == 0 {
+                            break;
+                        }
+                        i += entry;
+                    }
+                    i += 2;
+                }
+                0xA => {
+                    if let Some(&spec) = p.get(i + 1) {
+                        self.octant_spec[spec as usize] += 1;
+                    }
+                    i += 2;
+                }
+                0xB => {
+                    if let Some(&spec) = p.get(i + 4) {
+                        self.fractional_spec[spec as usize] += 1;
+                    }
+                    i += 5;
+                }
+                0xC => i += 3,
+                _ => {}
+            }
+        }
+    }
+
+    fn report(&self) {
+        let by_value = |h: &[u64]| h.iter().enumerate().filter(|(_, n)| **n > 0).map(|(v, n)| format!("{v:#04x}:{n}")).collect::<Vec<_>>().join(" ");
+        println!(
+            "op usage 0xA={} 0xB={} 0xC={} 0xD={} 0xE={} 7={} 9={} 8={}",
+            self.ops[0xA], self.ops[0xB], self.ops[0xC], self.ops[0xD], self.ops[0xE], self.ops[7], self.ops[9], self.ops[8]
+        );
+        println!("0xA spec byte histogram (value:count): {}", by_value(&self.octant_spec));
+        let o = &self.octant_spec;
+        println!(
+            "0xA spec classes: total={} low_nibble_gt8={} sign_bit={} sign_bit_with_low_nibble_gt8={}",
+            o.iter().sum::<u64>(),
+            (0..256).filter(|v| v & 0xF > 8).map(|v| o[v]).sum::<u64>(),
+            (0x80..256).map(|v| o[v]).sum::<u64>(),
+            (0x80..256).filter(|v| v & 0xF > 8).map(|v| o[v]).sum::<u64>()
+        );
+        println!("0xB spec byte histogram (value:count): {}", by_value(&self.fractional_spec));
+        println!("subshape refs shapes: hit={} miss={}", self.shapes_sub_hit, self.shapes_sub_miss);
+        println!("subshape refs unifont: total={} resolve_LE={} resolve_BE={}", self.uni_sub_total, self.uni_sub_le_hit, self.uni_sub_be_hit);
+    }
+}
+
 /// Builds every glyph of every parsed shapes/unifont file; prints counts only.
 #[test]
 #[ignore = "needs SHX_TEST_DIR pointing at a folder of .shx files"]
@@ -654,7 +831,9 @@ fn real_corpus_glyphs_build() {
     assert!(!files.is_empty(), "no .shx files under {dir}");
 
     let started = std::time::Instant::now();
-    let (mut fonts, mut built, mut empty, mut at_budget, mut a_checked) = (0usize, 0usize, 0usize, 0usize, Vec::new());
+    let (mut fonts, mut built, mut empty, mut at_budget) = (0usize, 0usize, 0usize, 0usize);
+    let (mut a_shapes, mut a_unifont) = (0usize, 0usize);
+    let mut probe = Probe::new();
     for path in &files {
         let bytes = std::fs::read(path).unwrap();
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
@@ -664,6 +843,9 @@ fn real_corpus_glyphs_build() {
         for code in 1..=0xFFFFu32 {
             let Some(g) = font.glyph(code) else { continue };
             built += 1;
+            if let Some(body) = font.glyph_bytes(code) {
+                probe.scan(&font, body);
+            }
             let n = points(&g);
             assert!(n <= MAX_POINTS, "{name} code {code}");
             assert!(g.strokes.iter().flatten().all(|p| p[0].is_finite() && p[1].is_finite()), "{name} code {code}");
@@ -682,9 +864,14 @@ fn real_corpus_glyphs_build() {
             let ys: Vec<f32> = g.strokes.iter().flatten().map(|p| p[1]).collect();
             let height = ys.iter().copied().fold(f32::MIN, f32::max) - ys.iter().copied().fold(f32::MAX, f32::min);
             assert!(height > 0.5 && height < 1.5, "{name}: 'A' is {height} above-units tall");
-            a_checked.push(name.clone());
+            if font.kind == ShxKind::Unifont {
+                a_unifont += 1;
+            } else {
+                a_shapes += 1;
+            }
         }
     }
     println!("SHX glyph corpus {dir}: fonts={fonts} glyphs_built={built} empty={empty} at_point_budget={at_budget} elapsed={:?}", started.elapsed());
-    println!("'A' height checked in {} files: {}", a_checked.len(), a_checked.join(" "));
+    println!("'A' height checked: shapes_files={a_shapes} unifont_files={a_unifont}");
+    probe.report();
 }
