@@ -1500,3 +1500,17 @@
 	Status bar	Рядок стану
 	Coordinates	Координати
 	Layout tabs	Вкладки аркушів
+	Workspace sync conflict	Конфлікт синхронізації робочого простору
+	Field	Поле
+	My value	Моє значення
+	Server value	Значення сервера
+	Keep mine	Залишити моє
+	Use server	Використати версію сервера
+	Keep both	Зберегти обидва
+	Whole workspace	Увесь робочий простір
+	Workspace sync is offline	Синхронізація робочого простору недоступна
+	Workspace sync was forbidden: {reason}	Синхронізацію робочого простору заборонено: {reason}
+	The remote workspace was not found	Віддалений робочий простір не знайдено
+	The remote workspace changed; sync again to retry	Віддалений робочий простір змінено; повторіть синхронізацію
+	Workspace sync failed: {reason}	Не вдалося синхронізувати робочий простір: {reason}
+	{name} (my copy)	{name} (моя копія)

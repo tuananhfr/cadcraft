@@ -694,6 +694,7 @@ impl CadApp {
         });
         toolbars::show_floating(ui.ctx(), self);
         dialogs::show(self, ui.ctx());
+        wsprofile::conflict::show_conflict_dialog(ui.ctx(), self);
         palettes::patterns::prompt_picker(self, ui.ctx());
         closing::prompt(self, ui.ctx());
         autosave::show(self, ui.ctx());
