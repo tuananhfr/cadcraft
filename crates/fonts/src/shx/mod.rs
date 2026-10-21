@@ -2,11 +2,14 @@
 //!
 //! Layouts follow public descriptions plus black-box structure checks (counts only) on local fonts;
 //! anything that does not fit exactly is a typed error.
+mod interp;
 mod shapes;
 
 use std::collections::BTreeMap;
 
 use shapes::{FontHeader, Reader};
+
+pub use interp::{ARC_SEGMENTS_PER_OCTANT, MAX_POINTS, MAX_SUBSHAPE_DEPTH, ShxGlyph};
 
 pub const MAX_GLYPHS: usize = 65_536;
 pub const MAX_SHX_BYTES: usize = 8 << 20;

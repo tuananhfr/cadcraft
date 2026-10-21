@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use cadcraft_fonts::shx::{MAX_GLYPHS, MAX_SHX_BYTES, ShxError, ShxFont, ShxKind};
+use cadcraft_fonts::shx::{ARC_SEGMENTS_PER_OCTANT, MAX_GLYPHS, MAX_POINTS, MAX_SHX_BYTES, MAX_SUBSHAPE_DEPTH, ShxError, ShxFont, ShxGlyph, ShxKind};
 
 const SHAPES_10: &[u8] = b"AutoCAD-86 shapes 1.0\r\n\x1a";
 const SHAPES_11: &[u8] = b"AutoCAD-86 shapes 1.1\r\n\x1a";
@@ -351,4 +351,340 @@ fn real_corpus_parses() {
         "SHX corpus {dir}: files={} shapes_ok={shapes} unifont_ok={unifont} bigfont_unsupported={bigfont} damaged_refused={damaged} not_shx={foreign} glyphs={glyphs}",
         files.len()
     );
+}
+
+// ---- interpreter ----
+
+/// A shapes font with the given `above` and glyphs; programs omit the closing 0 (`glyph` adds it).
+fn font(above: u8, glyphs: &[(u16, &[u8])]) -> ShxFont {
+    let list: Vec<(u16, Vec<u8>)> = glyphs.iter().map(|(c, ops)| (*c, glyph("G", ops))).collect();
+    ShxFont::parse(&shapes_image(SHAPES_10, Some(font_header("T", above, 0, 0)), &list)).unwrap()
+}
+
+/// Draws one program as glyph 'A' of a font whose `above` is 1, so output units equal raw units.
+fn run(ops: &[u8]) -> ShxGlyph {
+    font(1, &[(0x41, ops)]).glyph(0x41).unwrap()
+}
+
+fn close(a: [f32; 2], b: [f32; 2]) -> bool {
+    (a[0] - b[0]).abs() < 1e-4 && (a[1] - b[1]).abs() < 1e-4
+}
+
+fn dist(a: [f32; 2], b: [f32; 2]) -> f32 {
+    ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt()
+}
+
+fn points(g: &ShxGlyph) -> usize {
+    g.strokes.iter().map(Vec::len).sum()
+}
+
+#[test]
+fn vector_codes() {
+    // Direction 0 is east and 4 is north (16 directions, 22.5 degrees apart).
+    let g = run(&[0x1, 0x40, 0x44]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [4.0, 0.0], [4.0, 4.0]]]);
+    assert_eq!(g.advance, [4.0, 4.0]);
+}
+
+#[test]
+fn diagonal_and_shallow_directions() {
+    // Documented unit vectors: 2 = (1,1), 1 = (1,0.5), 3 = (0.5,1), 8 = (-1,0), 12 = (0,-1).
+    let g = run(&[0x22, 0x21, 0x23, 0x28, 0x2C]);
+    let pts = &g.strokes[0];
+    assert!(close(pts[1], [2.0, 2.0]));
+    assert!(close(pts[2], [4.0, 3.0]));
+    assert!(close(pts[3], [5.0, 5.0]));
+    assert!(close(pts[4], [3.0, 5.0]));
+    assert!(close(pts[5], [3.0, 3.0]));
+}
+
+#[test]
+fn pen_up_moves_without_stroke() {
+    let g = run(&[0x2, 0x30, 0x1, 0x32, 0x2, 0x30, 0x1, 0x34]);
+    assert_eq!(g.strokes, vec![vec![[3.0, 0.0], [6.0, 3.0]], vec![[9.0, 3.0], [9.0, 6.0]]]);
+    assert_eq!(g.advance, [9.0, 6.0]);
+}
+
+#[test]
+fn scale_push_pop() {
+    // Multiply by 2, draw, push, divide by 2, draw, pop back, draw at scale 1.
+    let g = run(&[4, 2, 0x30, 5, 3, 2, 0x14, 6, 0x30]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [6.0, 0.0], [6.0, 1.0]], vec![[6.0, 0.0], [9.0, 0.0]]]);
+    assert_eq!(g.advance, [9.0, 0.0]);
+}
+
+#[test]
+fn zero_divisor_pop_underflow_and_push_overflow_stop_the_glyph() {
+    let g = run(&[0x30, 3, 0, 0x30]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0]]]);
+    let g = run(&[0x30, 6, 0x30]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0]]]);
+    let mut prog = vec![0x30];
+    prog.extend(std::iter::repeat_n(5u8, 200));
+    prog.push(0x30);
+    let g = run(&prog);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0]]]);
+}
+
+#[test]
+fn scale_overflow_stops_instead_of_going_infinite() {
+    let mut prog: Vec<u8> = Vec::new();
+    for _ in 0..400 {
+        prog.extend([4, 255]);
+    }
+    prog.push(0x10);
+    let g = run(&prog);
+    assert!(g.strokes.iter().flatten().all(|p| p[0].is_finite() && p[1].is_finite()));
+    assert!(g.advance.iter().all(|v| v.is_finite()));
+}
+
+#[test]
+fn xy_and_xy_sequence() {
+    // 8: one (dx, dy) pair of signed bytes.
+    let g = run(&[8, 3, 4, 8, 0xFE, 0xFF]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 4.0], [1.0, 3.0]]]);
+    // 9: pairs until (0,0); the terminator itself moves nothing.
+    let g = run(&[2, 9, 1, 1, 2, 0xFE, 0, 0, 1, 0x30]);
+    assert_eq!(g.strokes, vec![vec![[3.0, -1.0], [6.0, -1.0]]]);
+    assert_eq!(g.advance, [6.0, -1.0]);
+    // A sequence cut off before its terminator keeps the pairs it has.
+    let g = run(&[9, 1, 1, 2, 2]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [1.0, 1.0], [3.0, 3.0]]]);
+}
+
+#[test]
+fn octant_arc_quarter_circle() {
+    // Pen at (2,0); radius 2, start octant 0, two octants counter-clockwise: the centre is the origin.
+    let g = run(&[2, 8, 2, 0, 1, 0xA, 2, 0x02]);
+    let pts = &g.strokes[0];
+    assert!(close(pts[0], [2.0, 0.0]));
+    assert!(close(*pts.last().unwrap(), [0.0, 2.0]), "end {:?}", pts.last());
+    assert!(pts.iter().all(|p| (dist(*p, [0.0, 0.0]) - 2.0).abs() < 1e-4));
+    assert_eq!(pts.len() as u32, 1 + 2 * ARC_SEGMENTS_PER_OCTANT);
+    let mid = pts[pts.len() / 2];
+    assert!(close(mid, [2.0f32.sqrt(), 2.0f32.sqrt()]), "mid {mid:?}");
+    assert!(close(g.advance, [0.0, 2.0]));
+}
+
+#[test]
+fn octant_arc_sign_start_octant_and_full_circle() {
+    // Negative sign bit = clockwise: (2,0) round to (0,-2).
+    let g = run(&[2, 8, 2, 0, 1, 0xA, 2, 0x82]);
+    assert!(close(*g.strokes[0].last().unwrap(), [0.0, -2.0]));
+    // Start octant 2 (90 degrees) on a circle of radius 1 about the origin: pen at (0,1), one octant ccw.
+    let g = run(&[2, 8, 0, 1, 1, 0xA, 1, 0x21]);
+    let end = *g.strokes[0].last().unwrap();
+    assert!(close(end, [-(0.5f32.sqrt()), 0.5f32.sqrt()]), "end {end:?}");
+    // Octant count 0 means all eight.
+    let g = run(&[0xA, 3, 0x00]);
+    let pts = &g.strokes[0];
+    assert_eq!(pts.len() as u32, 1 + 8 * ARC_SEGMENTS_PER_OCTANT);
+    assert!(close(*pts.last().unwrap(), [0.0, 0.0]));
+}
+
+#[test]
+fn arcs_scale_with_the_scale_factor() {
+    let g = run(&[4, 2, 0xA, 1, 0x04]);
+    let pts = &g.strokes[0];
+    assert!(pts.iter().all(|p| (dist(*p, [-2.0, 0.0]) - 2.0).abs() < 1e-4));
+}
+
+#[test]
+fn fractional_arc_uses_offsets_in_256ths_of_an_octant() {
+    // Radius 2 = high 0, low 2. Start offset 0, end offset 128 and one octant: 0 to 67.5 degrees.
+    let g = run(&[2, 8, 2, 0, 1, 0xB, 0, 128, 0, 2, 0x01]);
+    let pts = &g.strokes[0];
+    let a = 67.5f32.to_radians();
+    assert!(close(*pts.last().unwrap(), [2.0 * a.cos(), 2.0 * a.sin()]), "end {:?}", pts.last());
+    assert!(pts.iter().all(|p| (dist(*p, [0.0, 0.0]) - 2.0).abs() < 1e-4));
+    // Zero octants: the arc stays inside the starting octant (0 to 22.5 degrees).
+    let g = run(&[2, 8, 2, 0, 1, 0xB, 0, 128, 0, 2, 0x00]);
+    let a = 22.5f32.to_radians();
+    assert!(close(*g.strokes[0].last().unwrap(), [2.0 * a.cos(), 2.0 * a.sin()]));
+    // The two radius bytes form a 16-bit value: high 1, low 0 = 256.
+    let g = run(&[0xB, 0, 0, 1, 0, 0x01]);
+    let pts = &g.strokes[0];
+    assert!(pts.iter().all(|p| (dist(*p, [-256.0, 0.0]) - 256.0).abs() < 1e-2));
+}
+
+#[test]
+fn bulge_arc_half_circle() {
+    // Bulge 127 is a half circle, counter-clockwise: (0,0) to (4,0) passing below the chord.
+    let g = run(&[0xC, 4, 0, 127]);
+    let pts = &g.strokes[0];
+    assert!(close(pts[0], [0.0, 0.0]));
+    assert!(close(*pts.last().unwrap(), [4.0, 0.0]));
+    assert!(pts.iter().all(|p| (dist(*p, [2.0, 0.0]) - 2.0).abs() < 1e-3));
+    assert!(pts.iter().any(|p| close(*p, [2.0, -2.0])), "{pts:?}");
+    assert_eq!(g.advance, [4.0, 0.0]);
+    // A negative bulge is the clockwise mirror.
+    let g = run(&[0xC, 4, 0, 0x81]);
+    assert!(g.strokes[0].iter().any(|p| p[1] > 1.5), "{:?}", g.strokes[0]);
+    // Bulge 0 is a straight line.
+    let g = run(&[0xC, 4, 0, 0]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [4.0, 0.0]]]);
+}
+
+#[test]
+fn bulge_sequence_ends_at_a_zero_pair() {
+    let g = run(&[0xD, 4, 0, 0, 0, 4, 127, 0, 0, 1, 0x30]);
+    let pts = &g.strokes[0];
+    assert!(close(pts[0], [0.0, 0.0]));
+    assert!(pts.iter().any(|p| close(*p, [4.0, 4.0])));
+    assert!(close(*pts.last().unwrap(), [7.0, 4.0]));
+}
+
+#[test]
+fn vertical_only_code_skips_next() {
+    // Text is horizontal here, so the command after 0xE is skipped together with its operands.
+    let g = run(&[0xE, 0x30, 0x14]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [0.0, 1.0]]]);
+    let g = run(&[0xE, 8, 5, 5, 0x14]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [0.0, 1.0]]]);
+    let g = run(&[0xE, 0xA, 2, 0x02, 0x14]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [0.0, 1.0]]]);
+}
+
+#[test]
+fn subshape_is_followed_and_missing_ones_are_skipped() {
+    let f = font(1, &[(0x41, &[7, 0x42, 0x14]), (0x42, &[0x30])]);
+    let g = f.glyph(0x41).unwrap();
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0], [3.0, 1.0]]]);
+    let g = run(&[7, 0x99, 0x30]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0]]]);
+}
+
+#[test]
+fn unifont_subshape_number_is_two_bytes() {
+    let image = unifont_image(font_header("U", 1, 0, 0), &[(0x41, glyph("A", &[7, 0xac, 0x20, 0x14])), (0x20ac, glyph("EURO", &[0x30]))]);
+    let f = ShxFont::parse(&image).unwrap();
+    let g = f.glyph(0x41).unwrap();
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0], [3.0, 1.0]]]);
+}
+
+#[test]
+fn subshape_cycle_is_bounded() {
+    let f = font(1, &[(0x41, &[0x10, 7, 0x41])]);
+    let g = f.glyph(0x41).expect("a self-calling shape still yields a glyph");
+    assert!(points(&g) <= MAX_POINTS);
+    // One step per nesting level plus the top level, then the depth limit stops the glyph.
+    assert_eq!(points(&g), MAX_SUBSHAPE_DEPTH as usize + 2);
+
+    // Wide fan-out: every level calls itself many times, which would never finish unbounded.
+    let mut prog = vec![0x10];
+    for _ in 0..200 {
+        prog.extend([7, 0x41]);
+    }
+    let f = font(1, &[(0x41, &prog)]);
+    let started = std::time::Instant::now();
+    let g = f.glyph(0x41).unwrap();
+    assert!(started.elapsed().as_secs() < 5);
+    assert!(points(&g) <= MAX_POINTS);
+}
+
+#[test]
+fn point_budget_stops_the_glyph_and_keeps_what_exists() {
+    // Zigzag so that no point is dropped as a duplicate.
+    let mut prog = Vec::new();
+    for _ in 0..10_000 {
+        prog.extend([0x10, 0x14, 0x18, 0x1C]);
+    }
+    let g = run(&prog);
+    assert_eq!(points(&g), MAX_POINTS);
+}
+
+#[test]
+fn output_is_in_units_of_above() {
+    let f = font(8, &[(0x41, &[0x80, 0x84])]);
+    let g = f.glyph(0x41).unwrap();
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]]]);
+    assert_eq!(g.advance, [1.0, 1.0]);
+    let f = font(0, &[(0x41, &[0x40])]);
+    let g = f.glyph(0x41).unwrap();
+    assert_eq!(g.advance, [4.0, 0.0]);
+}
+
+#[test]
+fn missing_glyph_is_none_and_empty_program_is_some() {
+    let f = font(1, &[(0x41, &[])]);
+    assert!(f.glyph(0x42).is_none());
+    assert_eq!(f.glyph(0x41).unwrap(), ShxGlyph::default());
+}
+
+#[test]
+fn malformed_programs_return_what_was_built() {
+    // Operand missing at the end of the program, and an undefined code in the middle.
+    let g = run(&[0x30, 8]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0]]]);
+    let g = run(&[0x30, 0x0F, 0x30]);
+    assert_eq!(g.strokes, vec![vec![[0.0, 0.0], [3.0, 0.0]]]);
+}
+
+#[test]
+fn hostile_programs_never_panic_and_respect_the_budget() {
+    let mut rng = Rng(0x1234_5678_9abc_def1);
+    for round in 0..3000 {
+        let prog: Vec<u8> = (0..rng.below(120)).map(|_| rng.next() as u8).collect();
+        let sub: Vec<u8> = (0..rng.below(60)).map(|_| rng.next() as u8).collect();
+        let f = if round % 2 == 0 {
+            font(rng.next() as u8, &[(0x41, &prog), (0x42, &sub), (0, &sub)])
+        } else {
+            let image = unifont_image(font_header("U", rng.next() as u8, 0, 0), &[(0x41, glyph("A", &prog)), (0x42, glyph("B", &sub))]);
+            ShxFont::parse(&image).unwrap()
+        };
+        for code in [0x41, 0x42] {
+            if let Some(g) = f.glyph(code) {
+                assert!(points(&g) <= MAX_POINTS);
+                assert!(g.strokes.iter().flatten().all(|p| p[0].is_finite() && p[1].is_finite()));
+                assert!(g.advance.iter().all(|v| v.is_finite()));
+                assert!(g.strokes.iter().all(|s| s.len() >= 2));
+            }
+        }
+    }
+}
+
+/// Builds every glyph of every parsed shapes/unifont file; prints counts only.
+#[test]
+#[ignore = "needs SHX_TEST_DIR pointing at a folder of .shx files"]
+fn real_corpus_glyphs_build() {
+    let dir = std::env::var("SHX_TEST_DIR").expect("set SHX_TEST_DIR to a folder of .shx files to run this test");
+    let mut files = Vec::new();
+    shx_files(Path::new(&dir), &mut files);
+    files.sort();
+    assert!(!files.is_empty(), "no .shx files under {dir}");
+
+    let started = std::time::Instant::now();
+    let (mut fonts, mut built, mut empty, mut at_budget, mut a_checked) = (0usize, 0usize, 0usize, 0usize, Vec::new());
+    for path in &files {
+        let bytes = std::fs::read(path).unwrap();
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
+        let Ok(font) = ShxFont::parse(&bytes) else { continue };
+        fonts += 1;
+        // Codes of every glyph: the table is private, so probe the whole 16-bit range.
+        for code in 1..=0xFFFFu32 {
+            let Some(g) = font.glyph(code) else { continue };
+            built += 1;
+            let n = points(&g);
+            assert!(n <= MAX_POINTS, "{name} code {code}");
+            assert!(g.strokes.iter().flatten().all(|p| p[0].is_finite() && p[1].is_finite()), "{name} code {code}");
+            assert!(g.advance.iter().all(|v| v.is_finite()), "{name} code {code}");
+            if n == 0 {
+                empty += 1;
+            }
+            if n == MAX_POINTS {
+                at_budget += 1;
+            }
+        }
+        if (name.starts_with("vn") || name.starts_with("vh"))
+            && font.above > 0
+            && let Some(g) = font.glyph(0x41)
+        {
+            let ys: Vec<f32> = g.strokes.iter().flatten().map(|p| p[1]).collect();
+            let height = ys.iter().copied().fold(f32::MIN, f32::max) - ys.iter().copied().fold(f32::MAX, f32::min);
+            assert!(height > 0.5 && height < 1.5, "{name}: 'A' is {height} above-units tall");
+            a_checked.push(name.clone());
+        }
+    }
+    println!("SHX glyph corpus {dir}: fonts={fonts} glyphs_built={built} empty={empty} at_point_budget={at_budget} elapsed={:?}", started.elapsed());
+    println!("'A' height checked in {} files: {}", a_checked.len(), a_checked.join(" "));
 }
