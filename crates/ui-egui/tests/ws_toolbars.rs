@@ -574,7 +574,7 @@ fn shift_f10_in_overflow_popup_opens_menu() {
     let mut h = harness_sized(app, 600.0, 600.0);
     h.get_by_label("More toolbar commands").click();
     h.run_steps(3);
-    focus_toolbar_control(&mut h, "Line");
+    focus_toolbar_control(&mut h, "List");
     h.key_press_modifiers(Modifiers::SHIFT, Key::F10);
     h.run_steps(3);
     assert!(h.get_by_label("Hide").is_focused(), "the overflow button opens its toolbar's context menu");
@@ -588,6 +588,7 @@ fn escape_on_toolbar_focus_cancels_command() {
     assert_eq!(h.state().session.running.as_ref().map(|command| command.id.as_str()), Some("line"));
     focus_toolbar_control(&mut h, "New Drawing (Ctrl+N)");
     h.state_mut().cmd.buffer = "unfinished".into();
+    // egui clears focus on Escape before our handlers run.
     h.key_press(Key::Escape);
     h.run_steps(3);
     assert!(h.state().session.running.is_none());

@@ -16,10 +16,6 @@ const MENU_KEY: &str = "cc_toolbar_menu_key";
 pub(crate) fn claim_menu_key(ctx: &egui::Context) {
     let Some(focused) = ctx.memory(|memory| memory.focused()) else { return };
     let Some(owner) = render::last(ctx).stops.iter().find(|(stop, _)| *stop == focused).map(|(_, owner)| *owner) else { return };
-    // Toolbar focus must let Escape reach the command line's cancellation path.
-    if ctx.input(|input| input.key_pressed(Key::Escape)) {
-        ctx.memory_mut(|memory| memory.surrender_focus(focused));
-    }
     if ctx.input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::F10)) {
         ctx.data_mut(|data| data.insert_temp(Id::new(MENU_KEY), Some(owner)));
     }
