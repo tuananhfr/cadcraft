@@ -378,8 +378,10 @@ fn unencodable_char_falls_back() {
         let sh = shape_line(&f, text, 10.0, 1.0, 0.0);
         let stroke = shape_stroke(text, 10.0, 1.0, 0.0);
         assert_eq!(sh.strokes, stroke.strokes, "{c}");
-        // A TTF fallback glyph (when CRAFT_FONTS_DIR is set) has its own advance, not char_advance.
-        assert!(near(sh.width, stroke.width) && near(text_width(&f, text, 10.0, 1.0), sh.width), "{c}");
+        // SHX text keeps the stroke font's trailing gap; a TTF fallback glyph (CRAFT_FONTS_DIR set)
+        // has none, so it matches the stroke line width instead of char_advance.
+        let advance = near(sh.width, char_advance(c) * 10.0) || near(sh.width, stroke.width);
+        assert!(advance && near(text_width(&f, text, 10.0, 1.0), sh.width), "{c}: {} vs {}", sh.width, stroke.width);
     }
     assert!(ttf::remove_user_font("f5-no-question.shx"));
 }
