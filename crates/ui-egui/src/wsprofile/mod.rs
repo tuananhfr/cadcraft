@@ -5,6 +5,7 @@
 pub mod apply;
 pub mod autosave;
 pub mod commands;
+pub mod conflict;
 pub mod history;
 pub mod merge;
 pub mod migrate;
@@ -14,6 +15,7 @@ pub mod schema;
 pub mod screen;
 pub mod startup;
 pub mod store;
+pub mod sync;
 pub mod validate;
 
 use serde_json::{Map, Value, json};
@@ -87,6 +89,7 @@ pub struct WsState {
     pub history: LayoutHistory,
     pub autosave: Autosave,
     pub status: SaveStatus,
+    pub sync: sync::SyncState,
     /// `None`: nothing is persisted, as before workspace profiles.
     pub store: Option<Box<dyn ProfileStore>>,
     pub fallback: Option<Fallback>,
@@ -135,6 +138,7 @@ impl Default for WsState {
             history: LayoutHistory::default(),
             autosave: Autosave::default(),
             status: SaveStatus::Unsaved,
+            sync: sync::SyncState::default(),
             store: None,
             fallback: None,
             active: SAFE_PRESET.into(),
@@ -548,6 +552,7 @@ impl CadApp {
                 self.ws.status = SaveStatus::SavedLocally;
                 self.ws.autosave.clear();
                 self.ws.failed_commits = 0;
+                self.sync_now();
                 Ok(())
             }
             Err(error) => {
