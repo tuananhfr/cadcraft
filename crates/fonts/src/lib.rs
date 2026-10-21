@@ -17,6 +17,7 @@ pub mod bidi;
 mod complex;
 mod legacy_vi;
 mod mtext;
+pub mod shx;
 mod stroke;
 pub mod subset;
 mod substitution;
