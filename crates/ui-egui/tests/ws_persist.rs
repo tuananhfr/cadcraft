@@ -8,13 +8,15 @@ use cadcraft_ui_egui::theme::ThemePref;
 use cadcraft_ui_egui::wsprofile::SaveStatus;
 use cadcraft_ui_egui::wsprofile::merge::Level;
 use cadcraft_ui_egui::wsprofile::presets::{PRESET_IDS, preset};
-use cadcraft_ui_egui::wsprofile::schema::{Dock, WorkspaceProfile};
+use cadcraft_ui_egui::wsprofile::schema::{Dock, OwnerType, ProfileStatus, WorkspaceProfile};
 use cadcraft_ui_egui::wsprofile::startup::{FALLBACK_MESSAGE, Fallback, parse_set};
 use cadcraft_ui_egui::wsprofile::store::{CORRUPT_SNAPSHOT, MAX_USER_PROFILES, MemoryStore, ProfileSet, ProfileStore};
 use cadcraft_ui_egui::wsprofile::validate::{Mode, validate};
 use cadcraft_ui_egui::{CadApp, Services};
 use craft_ui::docking::Node;
 use craft_ui::layout::SplitSize;
+use egui_kittest::Harness;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::{Value, json};
 
 const SPEC_SAMPLE: &str = r#"{"schema_version":"1.0.0","profile_id":"uuid","revision":12,"base_id":"AUTOCAD_FAMILIAR","panels":[{"id":"properties","mode":"dock","side":"right","width_ratio":0.24}],"command_line":{"side":"bottom","height_ratio":0.15},"shortcuts":{"line":"L"}}"#;
@@ -885,4 +887,389 @@ fn second_damaged_start_keeps_both_copies() {
     assert!(!store(&app).snapshots().contains(&CORRUPT_SNAPSHOT));
     // The same damage seen twice is kept once.
     assert_eq!(shared.0.borrow_mut().keep_damaged(b"{"), Ok("damaged-1".to_string()));
+}
+
+fn two_profiles() -> MemoryStore {
+    let mut a = preset("SIMPLE").unwrap();
+    a.profile_id = "user.A".into();
+    a.base_id = Some("SIMPLE".into());
+    a.name = "A".into();
+    a.owner_type = OwnerType::User;
+    a.status = ProfileStatus::Draft;
+    let mut b = preset("AUTOCAD_FAMILIAR").unwrap();
+    b.profile_id = "user.B".into();
+    b.base_id = Some("AUTOCAD_FAMILIAR".into());
+    b.name = "B".into();
+    b.owner_type = OwnerType::User;
+    b.status = ProfileStatus::Draft;
+    b.layout.status_bar.visible = false;
+    let set = ProfileSet { active: a.profile_id.clone(), user: Some(a.clone()), profiles: vec![a, b], ..Default::default() };
+    MemoryStore { current: Some(serde_json::to_string(&set).unwrap()), ..Default::default() }
+}
+
+#[test]
+fn restore_across_profiles_undo_preserves_identity_and_saved_layouts() {
+    let _aliases = alias_lock();
+    let mut app = attached(two_profiles());
+    app.commit_workspace_now().unwrap();
+    let a = app.ws.user.clone();
+    run(&mut app, "ui.workspace.select", json!({"id": "user.B"}));
+    let b = app.ws.user.clone();
+    run(&mut app, "ui.workspace.restore", json!({"revision": a.revision}));
+    let restored_revision = app.ws.user.revision;
+    assert!(restored_revision > b.revision);
+    assert_eq!(app.ws.active, "user.A");
+    run(&mut app, "ui.layout.undo", json!({}));
+    app.commit_workspace_now().unwrap();
+    assert!(app.ws.user.revision > restored_revision);
+    let again = restarted(&app, None);
+    assert_eq!(again.ws.active, "user.B");
+    assert_eq!(again.ws.user.profile_id, b.profile_id);
+    assert_eq!(again.ws.user.base_id, b.base_id);
+    assert_eq!(again.ws.user.layout, b.layout);
+    let saved = current_set(&app);
+    assert_eq!(saved.profiles.iter().find(|profile| profile.profile_id == a.profile_id).unwrap().layout, a.layout);
+    assert_eq!(saved.profiles.iter().find(|profile| profile.profile_id == b.profile_id).unwrap().layout, b.layout);
+    let undone_revision = app.ws.user.revision;
+    run(&mut app, "ui.layout.redo", json!({}));
+    app.commit_workspace_now().unwrap();
+    assert!(app.ws.user.revision > undone_revision);
+    let again = restarted(&app, None);
+    assert_eq!(again.ws.active, "user.A");
+    assert_eq!(again.ws.user.profile_id, a.profile_id);
+    assert_eq!(again.ws.user.base_id, a.base_id);
+    assert_eq!(again.ws.user.layout, a.layout);
+    assert_eq!(again.ws.profiles.iter().find(|profile| profile.profile_id == b.profile_id).unwrap().layout, b.layout);
+}
+
+#[test]
+fn import_base_change_undo_restores_identity_and_preferences() {
+    let _aliases = alias_lock();
+    let mut app = attached(MemoryStore::default());
+    run(&mut app, "ui.workspace.set", json!({"pointer": "/ui_scale", "value": 1.25}));
+    app.commit_workspace_now().unwrap();
+    let before = app.ws.user.clone();
+    run(&mut app, "ui.workspace.import", json!({"text": SPEC_SAMPLE}));
+    let imported = app.ws.user.clone();
+    assert_eq!(app.ws.active, "AUTOCAD_FAMILIAR");
+    assert_eq!(imported.base_id.as_deref(), Some("AUTOCAD_FAMILIAR"));
+    run(&mut app, "ui.layout.undo", json!({}));
+    app.commit_workspace_now().unwrap();
+    let again = restarted(&app, None);
+    assert_eq!(again.ws.active, "SIMPLE");
+    assert_eq!(again.ws.user.profile_id, before.profile_id);
+    assert_eq!(again.ws.user.base_id, before.base_id);
+    assert_eq!(again.ws.user.layout, before.layout);
+    assert_eq!(again.ws.user.ui_scale, before.ui_scale);
+    run(&mut app, "ui.layout.redo", json!({}));
+    assert_eq!(app.ws.active, "AUTOCAD_FAMILIAR");
+    assert_eq!(app.ws.user.base_id, imported.base_id);
+    assert_eq!(app.ws.user.layout, imported.layout);
+    assert_eq!(app.ws.user.ui_scale, imported.ui_scale);
+}
+
+#[test]
+fn save_as_undo_restores_source_identity_before_earlier_edits() {
+    let _aliases = alias_lock();
+    let mut app = attached(two_profiles());
+    run(&mut app, "ui.toggle.toolbar", json!({"on": false}));
+    let copy = run(&mut app, "ui.workspace.saveas", json!({"name": "Copy"}))["profile_id"].as_str().unwrap().to_string();
+    assert_eq!(app.ws.active, copy);
+    run(&mut app, "ui.layout.undo", json!({}));
+    assert_eq!(app.ws.active, "user.A");
+    assert_eq!(app.ws.user.profile_id, "user.A");
+    assert!(!app.ui.show_toolbar);
+    run(&mut app, "ui.layout.undo", json!({}));
+    app.commit_workspace_now().unwrap();
+    assert!(app.ui.show_toolbar);
+    let again = restarted(&app, None);
+    assert_eq!(again.ws.active, "user.A");
+    assert!(!standard_toolbar_visible(again.ws.profiles.iter().find(|profile| profile.profile_id == copy).unwrap()));
+    run(&mut app, "ui.layout.redo", json!({}));
+    run(&mut app, "ui.layout.redo", json!({}));
+    assert_eq!(app.ws.active, copy);
+    assert_eq!(app.ws.user.profile_id, copy);
+    assert!(!app.ui.show_toolbar);
+}
+
+struct RefuseOutgoingOnce {
+    inner: MemoryStore,
+    snapshot: bool,
+    armed: std::rc::Rc<std::cell::Cell<bool>>,
+}
+
+impl ProfileStore for RefuseOutgoingOnce {
+    fn read_current(&self) -> Option<String> {
+        self.inner.read_current()
+    }
+    fn write_current(&mut self, text: &str) -> Result<(), String> {
+        if !self.snapshot && self.armed.replace(false) {
+            return Err("current write refused".into());
+        }
+        self.inner.write_current(text)
+    }
+    fn push_snapshot(&mut self, revision: u64, text: &str) -> Result<(), String> {
+        if self.snapshot && self.armed.replace(false) {
+            return Err("snapshot write refused".into());
+        }
+        self.inner.push_snapshot(revision, text)
+    }
+    fn snapshots(&self) -> Vec<u64> {
+        self.inner.snapshots()
+    }
+    fn read_snapshot(&self, revision: u64) -> Option<String> {
+        self.inner.read_snapshot(revision)
+    }
+}
+
+#[test]
+fn failed_outgoing_save_blocks_workspace_switch() {
+    let _aliases = alias_lock();
+    for snapshot in [true, false] {
+        for action in ["select", "saveas", "restore", "import", "undo", "redo"] {
+            let armed = std::rc::Rc::new(std::cell::Cell::new(false));
+            let mut app = CadApp::new(Session::new(), Services::default());
+            app.skip_first_run_picker = true;
+            app.attach_profile_store(Box::new(RefuseOutgoingOnce { inner: two_profiles(), snapshot, armed: armed.clone() }));
+            let ctx = egui::Context::default();
+            frame(&mut app, &ctx, 1.0);
+            app.commit_workspace_now().unwrap();
+            let revision = app.ws.user.revision;
+            if matches!(action, "undo" | "redo") {
+                run(&mut app, "ui.workspace.select", json!({"id": "user.B"}));
+                if action == "redo" {
+                    run(&mut app, "ui.layout.undo", json!({}));
+                }
+            }
+            run(&mut app, "ui.workspace.set", json!({"pointer": "/ui_scale", "value": 1.25}));
+            let before = app.ws.user.clone();
+            let active = app.ws.active.clone();
+            let profiles = app.ws.profiles.clone();
+            let history = (app.ws.history.undo_len(), app.ws.history.redo_len());
+            let current = store(&app).read_current();
+            armed.set(true);
+            let (command, params) = match action {
+                "select" => ("ui.workspace.select", json!({"id": "user.B"})),
+                "saveas" => ("ui.workspace.saveas", json!({"name": "Copy"})),
+                "restore" => ("ui.workspace.restore", json!({"revision": revision})),
+                "import" => ("ui.workspace.import", json!({"text": SPEC_SAMPLE})),
+                "undo" => ("ui.layout.undo", json!({})),
+                _ => ("ui.layout.redo", json!({})),
+            };
+            assert!(app.run(command, params).is_err(), "{action}, snapshot={snapshot}");
+            assert_eq!(app.ws.active, active);
+            assert_eq!(app.ws.user, before);
+            assert_eq!(app.ws.profiles, profiles);
+            assert_eq!((app.ws.history.undo_len(), app.ws.history.redo_len()), history);
+            assert_eq!(store(&app).read_current(), current);
+            assert!(matches!(app.ws.status, SaveStatus::Failed(_)));
+            assert!(app.status.as_ref().is_some_and(|(text, _)| text.contains("write refused")));
+            assert!(app.ws.autosave.pending());
+            assert_eq!(app.ws.autosave.wait_secs(), 5.0);
+            frame(&mut app, &ctx, 4.0);
+            assert!(app.ws.autosave.pending(), "the retry still waits");
+            frame(&mut app, &ctx, 7.0);
+            assert_eq!(app.ws.status, SaveStatus::SavedLocally);
+            assert!(!app.ws.needs_flush());
+            let again = restarted(&app, None);
+            assert_eq!(again.ws.active, active);
+            assert_eq!(again.ws.user.profile_id, before.profile_id);
+            assert_eq!(again.ws.user.layout, before.layout);
+            assert_eq!(again.ws.user.ui_scale, 1.25);
+        }
+    }
+}
+
+fn picker_only(app: CadApp) -> Harness<'static, CadApp> {
+    let mut harness = Harness::builder().with_size(egui::vec2(1280.0, 800.0)).build_ui_state(
+        |ui, app: &mut CadApp| {
+            let mut open = true;
+            if app.ui.dialog.as_deref() == Some("workspace_picker") {
+                cadcraft_ui_egui::wsprofile::picker::dialog(app, ui.ctx(), &mut open);
+            }
+        },
+        app,
+    );
+    harness.run_steps(4);
+    harness
+}
+
+fn click_simple(harness: &mut Harness<'static, CadApp>) {
+    harness.query_all_by_label("Simple").find(|node| node.accesskit_node().role() == egui::accesskit::Role::Button).unwrap().click();
+    harness.run_steps(4);
+}
+
+#[test]
+fn picker_reselect_active_preserves_committed_overrides() {
+    let _aliases = alias_lock();
+    let mut app = attached(MemoryStore::default());
+    run(&mut app, "ui.toggle.toolbar", json!({"on": false}));
+    app.commit_workspace_now().unwrap();
+    let before = app.ws.user.clone();
+    let stored = store(&app).read_current();
+    let history = (app.ws.history.undo_len(), app.ws.history.redo_len());
+    run(&mut app, "ui.workspace.select", Value::Null);
+    let mut harness = picker_only(app);
+    click_simple(&mut harness);
+    let app = harness.state_mut();
+    assert_eq!(app.ui.dialog, None);
+    assert!(!app.ui.show_toolbar);
+    assert_eq!(app.ws.user, before);
+    assert_eq!(store(app).read_current(), stored);
+    assert_eq!((app.ws.history.undo_len(), app.ws.history.redo_len()), history);
+    run(app, "ui.workspace.select", json!({"id": "SIMPLE"}));
+    assert_eq!(app.ws.user, before);
+    assert_eq!(store(app).read_current(), stored);
+}
+
+#[test]
+fn select_active_saved_profile_preserves_pending_edit() {
+    let _aliases = alias_lock();
+    let mut app = attached(two_profiles());
+    run(&mut app, "ui.toggle.toolbar", json!({"on": false}));
+    let before = app.ws.user.clone();
+    let stored = store(&app).read_current();
+    let autosave = app.ws.autosave.clone();
+    let history = (app.ws.history.undo_len(), app.ws.history.redo_len());
+    run(&mut app, "ui.workspace.select", json!({"id": "user.A"}));
+    assert_eq!(app.ws.user, before);
+    assert_eq!(app.ws.active, "user.A");
+    assert_eq!(app.ws.autosave, autosave);
+    assert_eq!(store(&app).read_current(), stored);
+    assert_eq!((app.ws.history.undo_len(), app.ws.history.redo_len()), history);
+    app.commit_workspace_now().unwrap();
+    assert!(!restarted(&app, None).ui.show_toolbar);
+}
+
+#[test]
+fn picker_select_active_first_run_records_choice() {
+    let _aliases = alias_lock();
+    let mut app = attached(MemoryStore::default());
+    run(&mut app, "ui.workspace.select", Value::Null);
+    let mut harness = picker_only(app);
+    click_simple(&mut harness);
+    let app = harness.state();
+    assert_eq!(app.ui.dialog, None);
+    assert_eq!(app.ws.active, "SIMPLE");
+    assert!(!app.ws.first_run);
+    assert_eq!(app.ws.history.undo_len(), 0);
+    let again = restarted(app, None);
+    assert_eq!(again.ws.active, "SIMPLE");
+    assert!(!again.ws.first_run);
+    assert!(again.ws.fallback.is_none());
+}
+
+#[test]
+fn dock_tree_cannot_override_locked_panel_geometry() {
+    use cadcraft_ui_egui::wsprofile::conflict::Resolution;
+    use cadcraft_ui_egui::wsprofile::sync::MemoryRemote;
+    use craft_ui::docking::{Action, Placement, Zone};
+
+    let _aliases = alias_lock();
+    for field in ["width_ratio", "height_ratio", "side", "tab_group", "float_width", "float_height", "x_ratio", "y_ratio", "whole_panel"] {
+        for route in ["set", "import", "restore", "sync"] {
+            let floats = matches!(field, "float_width" | "float_height" | "x_ratio" | "y_ratio");
+            let lock_field = match field {
+                "float_width" => "width_ratio",
+                "float_height" => "height_ratio",
+                other => other,
+            };
+            let pointer = if field == "whole_panel" { "/panels/properties".to_string() } else { format!("/panels/properties/{lock_field}") };
+            let panel = if floats {
+                json!({"id": "properties", "mode": "float", "side": "floating", "x_ratio": 0.1, "y_ratio": 0.1,
+                    "width_ratio": 0.25, "height_ratio": 0.3})
+            } else {
+                json!({"id": "properties", "width_ratio": 0.21, "height_ratio": 0.6})
+            };
+            let policy = json!({"layers": [{"level": "company", "patch": {"panels": [panel]}, "locks": [pointer]}]});
+            let mut app = attached(MemoryStore { policy: Some(policy.to_string()), ..Default::default() });
+            app.commit_workspace_now().unwrap();
+            let expected = app.ui.docking.layout.clone();
+            let mut malicious = app.ui.docking.clone();
+            let action = match field {
+                "width_ratio" | "whole_panel" => Action::ResizeSplit { path: vec![true], size: SplitSize::FixedSecond(640.0) },
+                "height_ratio" => Action::ResizeStack { panel: Panel::Layers, height: Some(640.0) },
+                "side" => Action::Move { panel: Panel::Properties, anchor: Panel::ToolSets, placement: Placement::Split(Zone::Bottom) },
+                "tab_group" => Action::Move { panel: Panel::Properties, anchor: Panel::Layers, placement: Placement::Tab { before: None } },
+                "float_width" => Action::MoveFloating { panel: Panel::Properties, rect: [128.0, 80.0, 640.0, 240.0] },
+                "float_height" => Action::MoveFloating { panel: Panel::Properties, rect: [128.0, 80.0, 320.0, 400.0] },
+                "x_ratio" => Action::MoveFloating { panel: Panel::Properties, rect: [640.0, 80.0, 320.0, 240.0] },
+                _ => Action::MoveFloating { panel: Panel::Properties, rect: [128.0, 400.0, 320.0, 240.0] },
+            };
+            malicious.apply(action).unwrap();
+            assert_ne!(malicious.layout, expected, "{field}");
+            let mut tree = serde_json::to_value(&malicious).unwrap();
+            cadcraft_ui_egui::wsprofile::merge::strip_nulls(&mut tree);
+            let mut incoming = app.ws.user.clone();
+            incoming.layout.dock_tree = Some(tree.clone());
+            match route {
+                "set" => {
+                    run(&mut app, "ui.workspace.set", json!({"pointer": "/dock_tree", "value": tree}));
+                }
+                "import" => {
+                    run(&mut app, "ui.workspace.import", json!({"text": serde_json::to_string(&incoming).unwrap()}));
+                }
+                "restore" => {
+                    let set = ProfileSet { active: app.ws.active.clone(), user: Some(incoming), ..Default::default() };
+                    app.ws.store.as_mut().unwrap().push_snapshot(100, &serde_json::to_string(&set).unwrap()).unwrap();
+                    run(&mut app, "ui.workspace.restore", json!({"revision": 100}));
+                }
+                _ => {
+                    incoming.etag = Some("server:2".into());
+                    let remote = MemoryRemote {
+                        profiles: std::collections::BTreeMap::from([(incoming.profile_id.clone(), incoming)]),
+                        online: true,
+                        ..Default::default()
+                    };
+                    app.attach_remote(Box::new(remote));
+                    app.sync_now();
+                    assert_eq!(app.ws.status, SaveStatus::Conflict);
+                    app.resolve_conflict(Resolution::UseServer);
+                    assert_eq!(app.ws.status, SaveStatus::Synced);
+                }
+            }
+            assert_eq!(app.ui.docking.layout, expected, "{route}: {field} must respect policy");
+            app.commit_workspace_now().unwrap();
+            let again = restarted(&app, Some(policy));
+            assert!(again.ws.fallback.is_none(), "{route}: {field}: {:?}", again.ws.fallback);
+            assert_eq!(again.ui.docking.layout, expected, "{route}: {field} after restart");
+        }
+    }
+}
+
+#[test]
+fn dock_tree_preserves_unlocked_geometry_with_panel_lock() {
+    use craft_ui::docking::Action;
+
+    let _aliases = alias_lock();
+    let policy = json!({"layers": [{"level": "company", "patch": {}, "locks": ["/panels/properties/width_ratio"]}]});
+    let mut app = attached(MemoryStore { policy: Some(policy.to_string()), ..Default::default() });
+    let mut tree = app.ui.docking.clone();
+    tree.apply(Action::ResizeSplit { path: vec![], size: SplitSize::FixedFirst(320.0) }).unwrap();
+    tree.apply(Action::ResizeStack { panel: Panel::Layers, height: Some(240.0) }).unwrap();
+    let expected = tree.layout.clone();
+    let mut value = serde_json::to_value(tree).unwrap();
+    cadcraft_ui_egui::wsprofile::merge::strip_nulls(&mut value);
+    run(&mut app, "ui.workspace.set", json!({"pointer": "/dock_tree", "value": value}));
+    assert_eq!(app.ui.docking.layout, expected, "a width lock leaves other dimensions editable");
+    app.commit_workspace_now().unwrap();
+    let again = restarted(&app, Some(policy));
+    assert_eq!(again.ui.docking.layout, expected);
+}
+
+#[test]
+fn dock_tree_locked_geometry_tolerates_rounding() {
+    use craft_ui::docking::Action;
+
+    let _aliases = alias_lock();
+    let policy = json!({"layers": [{"level": "company", "patch": {}, "locks": ["/panels/properties/width_ratio"]}]});
+    let mut app = attached(MemoryStore { policy: Some(policy.to_string()), ..Default::default() });
+    let mut tree = app.ui.docking.clone();
+    let width = (0.21 + 0.0000005) * app.ws.area.width();
+    tree.apply(Action::ResizeSplit { path: vec![true], size: SplitSize::FixedSecond(width) }).unwrap();
+    let expected = tree.layout.clone();
+    let mut value = serde_json::to_value(tree).unwrap();
+    cadcraft_ui_egui::wsprofile::merge::strip_nulls(&mut value);
+    run(&mut app, "ui.workspace.set", json!({"pointer": "/dock_tree", "value": value}));
+    assert_eq!(app.ui.docking.layout, expected, "normalized rounding within tolerance must keep the tree");
 }

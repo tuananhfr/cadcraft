@@ -178,7 +178,7 @@ pub fn apply(app: &mut CadApp, layout: &WorkspaceLayout, area: egui::Rect) -> Ap
 
     let pinned = pinned_panels(app, layout);
     let mut docking = docking_from_tree(layout, area)
-        .filter(|tree| tree_agrees(tree, layout, &pinned, area))
+        .filter(|tree| tree_agrees(app, tree, layout, &pinned, area))
         .unwrap_or_else(|| docking_from_panels(&layout.panels, area));
     if !layout.toolsets.visible {
         let _ = docking.set_visible(Panel::ToolSets, false);
@@ -273,19 +273,90 @@ fn placement(state: &PanelState) -> (bool, bool, Option<Dock>) {
 }
 
 /// Whether `tree` places each pinned panel where `layout.panels` says.
-fn tree_agrees(tree: &Workspace, layout: &WorkspaceLayout, pinned: &[String], area: egui::Rect) -> bool {
+fn tree_agrees(app: &CadApp, tree: &Workspace, layout: &WorkspaceLayout, pinned: &[String], area: egui::Rect) -> bool {
     if pinned.is_empty() {
         return true;
     }
     let shown = panels_from_docking(tree, area, &layout.panels);
+    let flat = docking_from_panels(&layout.panels, area);
+    let expected = panels_from_docking(&flat, area, &layout.panels);
     pinned.iter().all(|id| {
-        let Some(wanted) = layout.panels.iter().find(|state| state.id == *id) else { return true };
+        let Some(wanted) = expected.iter().find(|state| state.id == *id) else { return true };
+        let locked = |field| pinned_field(app, id, field);
         let wanted_side = |side: Option<Dock>| panel_of(id).map(|panel| zone_of(side, panel));
         shown.iter().find(|state| state.id == *id).is_some_and(|state| {
             let (now, want) = (placement(state), placement(wanted));
-            now.0 == want.0 && now.1 == want.1 && (!now.0 || now.1 || wanted_side(now.2) == wanted_side(want.2))
+            if (locked("visible") && now.0 != want.0)
+                || (locked("mode") && (now.0 != want.0 || now.1 != want.1))
+                || (locked("side") && (now.1 != want.1 || wanted_side(state.side) != wanted_side(wanted.side)))
+                || (locked("tab_group") && !same_tab_members(tree, &flat, id))
+            {
+                return false;
+            }
+            let Some([x, y, width, height]) = panel_ratios(tree, state, area, &layout.panels) else { return false };
+            let Some([want_x, want_y, want_width, want_height]) = panel_ratios(&flat, wanted, area, &layout.panels) else { return false };
+            // Compare normalized geometry so split rounding and minimum floating sizes do not reject a valid tree.
+            [("width_ratio", width, want_width), ("height_ratio", height, want_height), ("x_ratio", x, want_x), ("y_ratio", y, want_y)]
+                .iter()
+                .all(|(field, actual, expected)| !locked(field) || (actual - expected).abs() <= 0.000001)
         })
     })
+}
+
+fn panel_ratios(workspace: &Workspace, state: &PanelState, area: egui::Rect, previous: &[PanelState]) -> Option<[f32; 4]> {
+    let mut state = state.clone();
+    if let Some(panel) = panel_of(&state.id)
+        && workspace.hidden.iter().any(|(hidden, _)| *hidden == panel)
+    {
+        // Hidden locations also carry geometry; copying the prior flat entry would conceal a changed restore size.
+        let mut opened = workspace.clone();
+        opened.set_visible(panel, true).ok()?;
+        state = panels_from_docking(&opened, area, previous).into_iter().find(|placed| placed.id == state.id)?;
+    }
+    Some([state.x_ratio, state.y_ratio, state.width_ratio, state.height_ratio])
+}
+
+fn pinned_field(app: &CadApp, id: &str, field: &str) -> bool {
+    let pointer = format!("/panels/{}/{field}", super::merge::escape_token(id));
+    super::merge::check(&app.ws.effective, &pointer).is_err()
+        || app.ws.layers.iter().filter(|layer| layer.level == Level::Session).any(|layer| {
+            layer
+                .patch
+                .get("panels")
+                .and_then(Value::as_array)
+                .is_some_and(|items| items.iter().any(|item| item.get("id").and_then(Value::as_str) == Some(id) && item.get(field).is_some()))
+        })
+}
+
+fn same_tab_members(tree: &Workspace, flat: &Workspace, id: &str) -> bool {
+    fn members(workspace: &Workspace, id: &str) -> Option<Vec<Panel>> {
+        let mut workspace = workspace.clone();
+        if let Some(panel) = panel_of(id) {
+            workspace.set_visible(panel, true).ok()?;
+        }
+        for group in &workspace.layout.floating {
+            if group.panels.iter().any(|panel| panel.id() == id) {
+                return Some(group.panels.clone());
+            }
+        }
+        let mut visit: Vec<_> = workspace.layout.root.iter().collect();
+        while let Some(node) = visit.pop() {
+            match node {
+                Node::Split { first, second, .. } => {
+                    visit.push(first);
+                    visit.push(second);
+                }
+                Node::Tabs { panels, .. } if panels.iter().any(|panel| panel.id() == id) => return Some(panels.clone()),
+                Node::Stack { entries } if entries.iter().any(|entry| entry.panel.id() == id) => {
+                    return Some(entries.iter().filter(|entry| entry.panel.id() == id).map(|entry| entry.panel).collect());
+                }
+                Node::Tabs { .. } | Node::Stack { .. } => {}
+            }
+        }
+        Some(Vec::new())
+    }
+    let (actual, expected) = (members(tree, id), members(flat, id));
+    actual.zip(expected).is_some_and(|(actual, expected)| actual.len() == expected.len() && actual.iter().all(|panel| expected.contains(panel)))
 }
 
 fn set_standard_toolbar(layout: &mut WorkspaceLayout, visible: bool) {

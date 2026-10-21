@@ -36,6 +36,13 @@ fn commit_now(app: &mut CadApp) -> bool {
     app.ws.store.is_some() && app.commit_workspace_now().is_ok()
 }
 
+fn save_outgoing(app: &mut CadApp) -> Result<(), String> {
+    if app.ws.store.is_some() && app.ws.needs_flush() {
+        app.commit_workspace_now()?;
+    }
+    Ok(())
+}
+
 fn issues_text(issues: &[Issue]) -> String {
     issues
         .iter()
@@ -54,6 +61,21 @@ fn select(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     }
     let ids = || app.ws.choices().iter().map(|choice| choice.id.clone()).collect::<Vec<_>>().join(", ");
     let Some(id) = params.get("id").and_then(Value::as_str).map(str::trim) else { return Err(format!("id is required: {}", ids())) };
+    if id == app.ws.active {
+        let choosing = app.ws.store.as_ref().is_some_and(|store| store.read_current().is_none());
+        app.ws.first_run = false;
+        app.ws.first_run_picker_open = false;
+        if app.ui.dialog.as_deref() == Some(super::picker::PICKER_DIALOG) {
+            app.ui.dialog = None;
+        }
+        let saved = choosing && commit_now(app);
+        return Ok(json!({"active": app.ws.active, "base_id": app.ws.user.base_id, "saved": saved}));
+    }
+    if preset_json(id).is_none() && !app.ws.profiles.iter().any(|profile| profile.profile_id == id) {
+        return Err(format!("Unknown workspace: {}", id.chars().take(MAX_NAME).collect::<String>()));
+    }
+    observe(app, true);
+    save_outgoing(app)?;
     let next = if preset_json(id).is_some() {
         startup::fresh_user(id, &app.ws.policy())
     } else if let Some(saved) = app.ws.profiles.iter().find(|profile| profile.profile_id == id) {
@@ -61,11 +83,6 @@ fn select(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     } else {
         return Err(format!("Unknown workspace: {}", id.chars().take(MAX_NAME).collect::<String>()));
     };
-    observe(app, true);
-    // The layer being left is kept as a snapshot before it is replaced.
-    if app.ws.autosave.pending() {
-        commit_now(app);
-    }
     let revision = app.ws.user.revision.max(next.revision);
     let next = WorkspaceProfile { revision, ..next };
     // One undo step that also gives back which workspace this was, so a later commit cannot write
@@ -75,6 +92,7 @@ fn select(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     }
     app.ws.user = next;
     app.ws.active = id.to_string();
+    app.ws.first_run = false;
     app.ws.first_run_picker_open = false;
     if app.ui.dialog.as_deref() == Some(super::picker::PICKER_DIALOG) {
         app.ui.dialog = None;
@@ -135,6 +153,7 @@ fn save_as(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         return Err(format!("A workspace named {name} already exists"));
     }
     observe(app, true);
+    save_outgoing(app)?;
     let now = rfc3339(crate::now_ms());
     let profile = WorkspaceProfile {
         profile_id: new_profile_id(app, name),
@@ -145,6 +164,7 @@ fn save_as(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         updated_at: now,
         ..app.ws.user.clone()
     };
+    app.ws.history.record_switch(app.ws.active.clone(), app.ws.user.clone());
     app.ws.profiles.push(profile.clone());
     app.ws.active = profile.profile_id.clone();
     app.ws.user = profile;
@@ -231,7 +251,8 @@ fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     if params.get("dry_run").and_then(Value::as_bool) == Some(true) {
         return Ok(json!({"dry_run": true, "changes": changes}));
     }
-    app.ws.history.record(app.ws.user.layout.clone());
+    save_outgoing(app)?;
+    app.ws.history.record_switch(app.ws.active.clone(), app.ws.user.clone());
     if let Some(base) = profile.base_id.as_deref().filter(|base| preset_json(base).is_some()) {
         if preset_json(&app.ws.active).is_some() {
             app.ws.active = base.to_string();
@@ -263,7 +284,8 @@ fn restore_revision(app: &mut CadApp, params: &Value) -> Result<Value, String> {
             None => startup::fresh_user(&set.active, &app.ws.policy()),
         },
     };
-    app.ws.history.record(app.ws.user.layout.clone());
+    save_outgoing(app)?;
+    app.ws.history.record_switch(app.ws.active.clone(), app.ws.user.clone());
     let current = app.ws.user.revision;
     app.ws.user = WorkspaceProfile { revision: current, ..restored };
     app.ws.active = set.active;
@@ -336,6 +358,10 @@ fn optional_choice(value: &Value, valid: impl Fn(&str) -> bool, error: &str) -> 
 
 fn step_history(app: &mut CadApp, undo: bool) -> Result<Value, String> {
     observe(app, true);
+    let switching = matches!(if undo { app.ws.history.peek_undo() } else { app.ws.history.peek_redo() }, Some(Entry::Switch { .. }));
+    if switching {
+        save_outgoing(app)?;
+    }
     let pending = if undo { app.ws.history.peek_undo() } else { app.ws.history.peek_redo() };
     let now = match pending {
         Some(Entry::Switch { .. }) => Entry::Switch { active: app.ws.active.clone(), user: Box::new(app.ws.user.clone()) },
