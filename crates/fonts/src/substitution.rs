@@ -3,8 +3,9 @@
 //! drawing: it only decides what is drawn.
 
 use std::collections::BTreeMap;
-use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
+use crate::shx::{self, ShxFont, is_standard_shx};
 use crate::{BUILTIN_FONT, LegacyVi, ttf};
 
 /// Entries and name length a replacement table keeps (it is read from untrusted saved settings).
@@ -65,17 +66,28 @@ pub struct FontInfo {
 
 pub(crate) struct Resolved {
     pub face: Option<ttf::Face>,
+    pub shx: Option<Arc<ShxFont>>,
     pub info: FontInfo,
 }
 
-/// Look a style's font up: its file, then its family, then a replacement.
+/// A stroke-font name nobody ships (`vhtime.shx`) is reported missing; the stroke font still
+/// draws it. The standard names, the built-in font and "no font" stay silent.
+fn missing_state(k: &str) -> FontState {
+    if ttf::is_stroke_name(k) && !(k.ends_with(".shx") && !is_standard_shx(k)) { FontState::Stroke } else { FontState::Missing }
+}
+
+/// Look a style's font up: its file, then its family, then a user's SHX font, then a replacement.
 pub(crate) fn resolve(font: &str, family: &str) -> Resolved {
     let family = family.trim();
     if let Some(f) = ttf::find(font).or_else(|| if family.is_empty() { None } else { ttf::find(family) }) {
-        return Resolved { face: Some(f), info: FontInfo { state: FontState::Found, with: None, mapped: false, legacy: None } };
+        return Resolved { face: Some(f), shx: None, info: FontInfo { state: FontState::Found, with: None, mapped: false, legacy: None } };
+    }
+    // Glyphs are looked up by the text's own character codes, so no legacy decoding applies.
+    if let Some(shx) = shx::store::find(font) {
+        return Resolved { face: None, shx: Some(shx), info: FontInfo { state: FontState::Found, with: None, mapped: false, legacy: None } };
     }
     let legacy = LegacyVi::from_name(family).or_else(|| LegacyVi::from_name(font));
-    let state = if ttf::is_stroke_name(&ttf::key(font)) { FontState::Stroke } else { FontState::Missing };
+    let state = missing_state(&ttf::key(font));
     let chosen = replacement(font).or_else(|| replacement(family));
     let (face, with, mapped) = match chosen {
         Some(r) if r.eq_ignore_ascii_case(BUILTIN_FONT) => (None, None, true),
@@ -85,7 +97,7 @@ pub(crate) fn resolve(font: &str, family: &str) -> Resolved {
         },
         None => alternative(font),
     };
-    Resolved { face, info: FontInfo { state, with, mapped, legacy } }
+    Resolved { face, shx: None, info: FontInfo { state, with, mapped, legacy } }
 }
 
 /// FONTALT, for a font that isn't the built-in one.

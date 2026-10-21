@@ -4,12 +4,16 @@
 //! anything that does not fit exactly is a typed error.
 mod interp;
 mod shapes;
+mod standard;
+pub(crate) mod store;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use shapes::{FontHeader, Reader};
 
 pub use interp::{ARC_SEGMENTS_PER_OCTANT, MAX_POINTS, MAX_SUBSHAPE_DEPTH, ShxGlyph};
+pub use standard::{STANDARD_SHX, is_standard_shx};
 
 pub const MAX_GLYPHS: usize = 65_536;
 pub const MAX_SHX_BYTES: usize = 8 << 20;
@@ -47,6 +51,40 @@ impl std::fmt::Display for ShxError {
 
 impl std::error::Error for ShxError {}
 
+/// Whether `bytes` start with any SHX signature, readable or not.
+pub fn has_shx_signature(bytes: &[u8]) -> bool {
+    [SHAPES_10, SHAPES_11, UNIFONT_10, BIGFONT_10].iter().any(|magic| bytes.starts_with(magic))
+}
+
+/// Glyphs built so far, by code. The interpreter's work budget is per glyph, so text drawing
+/// builds each glyph once and shares it.
+#[derive(Default)]
+struct GlyphCache(Mutex<HashMap<u32, Arc<ShxGlyph>>>);
+
+/// Bounds memory for fonts with tens of thousands of glyphs; dropping the cache only costs a rebuild.
+const MAX_CACHED_GLYPHS: usize = 4096;
+
+impl Clone for GlyphCache {
+    fn clone(&self) -> Self {
+        GlyphCache::default()
+    }
+}
+
+impl std::fmt::Debug for GlyphCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("GlyphCache")
+    }
+}
+
+// The cache never changes what a font is, so it takes no part in comparing fonts.
+impl PartialEq for GlyphCache {
+    fn eq(&self, _: &GlyphCache) -> bool {
+        true
+    }
+}
+
+impl Eq for GlyphCache {}
+
 /// A parsed font. Glyph bodies are kept as stored (name, NUL, shape bytes); decoding them is the
 /// job of the layers above.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -57,6 +95,7 @@ pub struct ShxFont {
     pub below: u8,
     pub modes: u8,
     glyphs: BTreeMap<u32, Vec<u8>>,
+    built: GlyphCache,
 }
 
 impl ShxFont {
@@ -77,11 +116,24 @@ impl ShxFont {
             ShxKind::Unifont => parse_unifont(body)?,
             _ => shapes::parse(body)?,
         };
-        Ok(ShxFont { kind, name: header.name, above: header.above, below: header.below, modes: header.modes, glyphs })
+        Ok(ShxFont { kind, name: header.name, above: header.above, below: header.below, modes: header.modes, glyphs, built: GlyphCache::default() })
     }
 
     pub fn glyph_bytes(&self, code: u32) -> Option<&[u8]> {
         self.glyphs.get(&code).map(Vec::as_slice)
+    }
+
+    /// [`ShxFont::glyph`], built on first use and shared afterwards.
+    pub fn glyph_shared(&self, code: u32) -> Option<Arc<ShxGlyph>> {
+        if let Some(g) = self.built.0.lock().unwrap_or_else(PoisonError::into_inner).get(&code) {
+            return Some(g.clone());
+        }
+        let built = Arc::new(self.glyph(code)?);
+        let mut cache = self.built.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if cache.len() >= MAX_CACHED_GLYPHS {
+            cache.clear();
+        }
+        Some(cache.entry(code).or_insert(built).clone())
     }
 
     pub fn len(&self) -> usize {

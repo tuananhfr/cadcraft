@@ -18,16 +18,19 @@ mod complex;
 mod legacy_vi;
 mod mtext;
 pub mod shx;
+mod shx_text;
 mod stroke;
 pub mod subset;
 mod substitution;
 pub mod ttf;
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use cadcraft_geom::{Bounds2, Vec2};
 
 pub use legacy_vi::LegacyVi;
+pub use shx::{STANDARD_SHX, is_standard_shx};
 pub use substitution::{FontInfo, FontState, font_info, font_map, replacement, set_font_map};
 
 pub use mtext::para::{DEFAULT_TAB, ListStyle, MTextColumnSpec, ParaAlign, ParaProps, Paragraphs, TabKind, list_contents};
@@ -271,6 +274,9 @@ pub fn line_width(s: &str, height: f64, width_factor: f64) -> f64 {
 /// Width of the gap MTEXT leaves between two words. Words are measured without their trailing
 /// letter gap, so the stroke font's gap is added on both sides of the space, as TEXT lays it out.
 pub fn space_width(font: &TextFont, height: f64, width_factor: f64) -> f64 {
+    if let Some(shx) = font.shx() {
+        return shx_text::width(shx, " ", height, width_factor);
+    }
     if let Some(face) = font.face()
         && let Some(w) = ttf::width(face, " ", height, width_factor)
     {
@@ -279,23 +285,26 @@ pub fn space_width(font: &TextFont, height: f64, width_factor: f64) -> f64 {
     stroke_advance(' ', height, width_factor) + stroke::GAP / stroke::CAP * height * width_factor
 }
 
-/// The font a piece of text is set in: the built-in stroke font or an installed TrueType /
-/// OpenType face (outlines). Either way, characters the font lacks come from a fallback font.
+/// The font a piece of text is set in: the built-in stroke font, an installed TrueType /
+/// OpenType face (outlines) or an SHX font the user added. Either way, characters the font lacks
+/// come from a fallback font.
 #[derive(Clone, Debug, Default)]
 pub struct TextFont {
     /// `None`: the stroke font.
     face: Option<ttf::Face>,
+    /// An SHX font; it keeps the glyphs it built, so every text in the style shares them.
+    shx: Option<Arc<shx::ShxFont>>,
     /// The text was typed for a legacy Vietnamese font that isn't here: shown decoded.
     legacy: Option<LegacyVi>,
 }
 
 impl TextFont {
-    pub const STROKE: TextFont = TextFont { face: None, legacy: None };
+    pub const STROKE: TextFont = TextFont { face: None, shx: None, legacy: None };
 
     pub fn outline(face: ttf::Face) -> TextFont {
-        TextFont { face: Some(face), legacy: None }
+        TextFont { face: Some(face), shx: None, legacy: None }
     }
-    /// Resolve a text style font name: an installed TTF/OTF/TTC when found; else, for a font we
+    /// Resolve a text style font name: an installed TTF/OTF/TTC or an SHX font the user added when found; else, for a font we
     /// can't find (an SHX file, a missing TTF), the FONTALT font ([`ttf::font_alt`]) when set;
     /// else the stroke font.
     pub fn resolve(name: &str) -> TextFont {
@@ -306,10 +315,16 @@ impl TextFont {
     /// font the names point to is shown decoded to Unicode.
     pub fn for_style(font: &str, family: &str) -> TextFont {
         let r = substitution::resolve(font, family);
-        TextFont { face: r.face, legacy: r.info.legacy }
+        TextFont { face: r.face, shx: r.shx, legacy: r.info.legacy }
     }
     pub fn is_outline(&self) -> bool {
         self.face.is_some()
+    }
+    pub fn is_shx(&self) -> bool {
+        self.shx.is_some()
+    }
+    fn shx(&self) -> Option<&shx::ShxFont> {
+        self.shx.as_deref()
     }
     pub fn face(&self) -> Option<&ttf::Face> {
         self.face.as_ref()
@@ -435,6 +450,9 @@ pub(crate) fn decorations(spans: &[(f64, f64, bool, bool)], h: f64) -> Vec<Vec<V
 /// fall back to the stroke font.
 pub fn shape_line(font: &TextFont, s: &str, height: f64, width_factor: f64, oblique: f64) -> Shaped {
     let s = font.text(s);
+    if let Some(shx) = font.shx() {
+        return shx_text::shape(shx, &s, height, width_factor, oblique);
+    }
     if let Some(face) = font.face()
         && let Some(sh) = ttf::shape(face, &s, height, width_factor, oblique)
     {
@@ -446,6 +464,9 @@ pub fn shape_line(font: &TextFont, s: &str, height: f64, width_factor: f64, obli
 /// Width of one line in `font`.
 pub fn text_width(font: &TextFont, s: &str, height: f64, width_factor: f64) -> f64 {
     let s = font.text(s);
+    if let Some(shx) = font.shx() {
+        return shx_text::width(shx, &s, height, width_factor);
+    }
     if let Some(face) = font.face()
         && let Some(w) = ttf::width(face, &s, height, width_factor)
     {

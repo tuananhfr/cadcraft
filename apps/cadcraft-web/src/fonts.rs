@@ -15,7 +15,7 @@ use web_sys::js_sys;
 use crate::font_index::{Entry, Index};
 
 const INPUT_ID: &str = "cadcraft_font_input";
-const ACCEPT: &str = ".ttf,.otf,.ttc,.otc";
+const ACCEPT: &str = ".ttf,.otf,.ttc,.otc,.shx";
 /// localStorage: the index of kept fonts, and one entry per font (its bytes as base64).
 const INDEX_KEY: &str = "cadcraft.fonts";
 const FONT_KEY: &str = "cadcraft.font:";

@@ -7,7 +7,7 @@
 //!
 //! Two process-wide settings (like AutoCAD's profile variables) control substitution:
 //! - [`font_alt`] (`FONTALT`): the font used for a text style font that can't be found (an SHX
-//!   file we don't read, a missing TTF). Empty = the built-in stroke font.
+//!   file the user did not add, a missing TTF). Empty = the built-in stroke font.
 //! - [`fallback_fonts`] (`FONTFALLBACK`): fonts tried first for characters the text's font
 //!   lacks (CJK in an SHX big font, for example), before the automatic system font search.
 //!
@@ -320,6 +320,7 @@ impl Db {
         self.user.retain(|u| u.stem != stem);
         self.families.retain(|_, s| s != stem);
         self.files.remove(stem);
+        crate::shx::store::remove(stem);
     }
 
     /// Forget answers that a changed font set may have changed.
@@ -532,14 +533,49 @@ pub struct UserFont {
     pub bytes: usize,
 }
 
+impl UserFont {
+    /// An SHX font keeps its `.shx` extension in `stem`, so it never shares a name with a TrueType
+    /// font, and has no families.
+    pub fn is_shx(&self) -> bool {
+        self.stem.ends_with(SHX_EXT)
+    }
+}
+
+const SHX_EXT: &str = ".shx";
+
 /// The largest font file, the most fonts and the most bytes in all that can be added.
 pub const MAX_USER_FONT_BYTES: usize = 48 << 20;
 const MAX_USER_FONTS: usize = 64;
 const MAX_USER_TOTAL_BYTES: usize = 128 << 20;
 
+/// Refuse a font that would take the user fonts over a limit.
+fn check_user_limits(g: &Db, stem: &str, len: usize) -> Result<(), String> {
+    let others: usize = g.user.iter().filter(|u| u.stem != stem).map(|u| u.bytes).sum();
+    if g.user.iter().filter(|u| u.stem != stem).count() >= MAX_USER_FONTS || others + len > MAX_USER_TOTAL_BYTES {
+        return Err(format!("too many fonts added (at most {MAX_USER_FONTS}, {} MB in all)", MAX_USER_TOTAL_BYTES >> 20));
+    }
+    Ok(())
+}
+
+/// Add an SHX font file under `stem` (which ends in `.shx`).
+fn add_shx_font(base: &str, stem: String, bytes: &[u8]) -> Result<UserFont, String> {
+    let font = crate::shx::ShxFont::parse(bytes).map_err(|e| match e {
+        crate::shx::ShxError::Unsupported(crate::shx::ShxKind::Bigfont) => format!("{base} is an SHX bigfont; bigfont is not supported yet"),
+        _ => "Not a readable SHX file".to_string(),
+    })?;
+    let user = UserFont { stem: stem.clone(), families: Vec::new(), bytes: bytes.len() };
+    let mut g = lock();
+    check_user_limits(&g, &stem, bytes.len())?;
+    g.forget_user(&stem);
+    crate::shx::store::insert(&stem, font);
+    g.user.push(user.clone());
+    Ok(user)
+}
+
 /// Add a font file the user chose, found afterwards by `file_name` (like an installed font) and by
 /// its family names; it takes the place of an installed font of the same name. Replaces a
-/// font added under the same name.
+/// font added under the same name. A file that is an SHX font by its content (or by its
+/// `.shx` name) is added as one, found by its file name only.
 pub fn add_user_font(file_name: &str, bytes: Vec<u8>) -> Result<UserFont, String> {
     let base = file_name.rsplit(['/', '\\']).next().unwrap_or("");
     let stem = key(base);
@@ -548,6 +584,10 @@ pub fn add_user_font(file_name: &str, bytes: Vec<u8>) -> Result<UserFont, String
     }
     if bytes.len() > MAX_USER_FONT_BYTES {
         return Err(format!("{base} is larger than {} MB", MAX_USER_FONT_BYTES >> 20));
+    }
+    if stem.ends_with(SHX_EXT) || crate::shx::has_shx_signature(&bytes) {
+        let stem = if stem.ends_with(SHX_EXT) { stem } else { format!("{stem}{SHX_EXT}") };
+        return add_shx_font(base, stem, &bytes);
     }
     let len = bytes.len();
     let bytes = Arc::new(bytes);
@@ -563,10 +603,7 @@ pub fn add_user_font(file_name: &str, bytes: Vec<u8>) -> Result<UserFont, String
     }
     let font = UserFont { stem: stem.clone(), families, bytes: len };
     let mut g = lock();
-    let others: usize = g.user.iter().filter(|u| u.stem != stem).map(|u| u.bytes).sum();
-    if g.user.iter().filter(|u| u.stem != stem).count() >= MAX_USER_FONTS || others + len > MAX_USER_TOTAL_BYTES {
-        return Err(format!("too many fonts added (at most {MAX_USER_FONTS}, {} MB in all)", MAX_USER_TOTAL_BYTES >> 20));
-    }
+    check_user_limits(&g, &stem, len)?;
     g.forget_user(&stem);
     for face in &fs {
         for n in face.names() {
@@ -622,6 +659,7 @@ pub fn font_choices() -> Vec<FontChoice> {
     let mut out: Vec<FontChoice> = g
         .user
         .iter()
+        .filter(|u| !u.is_shx())
         .map(|u| FontChoice { name: u.families.first().cloned().unwrap_or_else(|| u.stem.clone()), origin: FontOrigin::Added })
         .collect();
     for f in crate::CRAFT_FONTS.iter().filter(|f| f.style == "Regular") {

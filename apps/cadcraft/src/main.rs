@@ -134,7 +134,7 @@ pub fn install_io() {
 /// Add Font...: a font file chosen in the system dialog, with its contents.
 fn pick_font() -> Option<(String, Vec<u8>)> {
     let path = rfd::FileDialog::new()
-        .add_filter("Fonts (TTF, OTF, TTC)", &["ttf", "otf", "ttc", "otc"])
+        .add_filter("Fonts (TTF, OTF, TTC, SHX)", &["ttf", "otf", "ttc", "otc", "shx"])
         .add_filter(i18n::t("All files"), &["*"])
         .pick_file()?;
     let name = path.file_name()?.to_string_lossy().into_owned();

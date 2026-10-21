@@ -269,7 +269,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
             ui.add_space(8.0);
             ui.heading("Fonts you added");
             if added.is_empty() {
-                ui.label(RichText::new("None yet. Add the font files a drawing needs (.ttf, .otf, .ttc).").color(t.text_dim));
+                ui.label(RichText::new("None yet. Add the font files a drawing needs (.ttf, .otf, .ttc, .shx).").color(t.text_dim));
             }
             for f in &added {
                 ui.horizontal(|ui| {

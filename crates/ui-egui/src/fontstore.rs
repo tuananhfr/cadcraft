@@ -9,7 +9,7 @@ use cadcraft_fonts::ttf;
 use crate::CadApp;
 use crate::fontmgr::FontChange;
 
-const FONT_EXTENSIONS: &[&str] = &["ttf", "otf", "ttc", "otc"];
+const FONT_EXTENSIONS: &[&str] = &["ttf", "otf", "ttc", "otc", "shx"];
 
 pub struct FontStore {
     dir: PathBuf,
