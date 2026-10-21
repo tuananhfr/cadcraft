@@ -1405,6 +1405,7 @@
 	Search commands...	Пошук команд...
 	The workspace cannot be stored: {reason}	Неможливо зберегти робочий простір: {reason}
 	Workspace: {name}	Робочий простір: {name}
+	Unknown command: {id}	Невідома команда: {id}
 	command is required	Потрібно вказати команду
 	key is required	Потрібно вказати клавіші
 	id is required	Потрібно вказати ідентифікатор

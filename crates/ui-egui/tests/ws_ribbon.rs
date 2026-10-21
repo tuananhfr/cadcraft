@@ -10,7 +10,7 @@ use cadcraft_ui_egui::wsprofile::store::MemoryStore;
 use cadcraft_ui_egui::{CadApp, Services};
 use egui::{Key, KeyboardShortcut, Modifiers, vec2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::json;
 
 #[test]
@@ -116,6 +116,16 @@ fn bind_rejects_reserved_and_reports_conflict() {
     assert_eq!(map.get("line").map(String::as_str), Some("Ctrl+S"));
     assert!(!map.contains_key("qsave"));
     assert_eq!(shortcuts::bind(&mut map, "line", "Ctrl+not-a-key", false), Err(BindError::Unparsable));
+    let before = map.clone();
+    for key in ["L", "1", "Delete", "Tab", "Space", "F13"] {
+        assert_eq!(shortcuts::bind(&mut map, "line", key, false), Err(BindError::Unparsable), "{key}");
+        assert_eq!(map, before);
+    }
+    for key in ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "Shift+L", "Alt+L"] {
+        let mut map = BTreeMap::new();
+        shortcuts::bind(&mut map, "line", key, false).unwrap();
+        assert_eq!(map.get("line").map(String::as_str), Some(key));
+    }
     assert_eq!(shortcuts::format(&shortcuts::parse("Cmd+Shift+L").unwrap()), "Ctrl+Shift+L");
     assert_eq!(BindError::Reserved.to_string(), "Reserved key");
     assert_eq!(BindError::Conflict { other: "qsave".into() }.to_string(), "Already used by qsave");
@@ -142,6 +152,8 @@ fn aliases_persist() {
     app.run("aliasedit", json!({"set": {"LL": "line"}})).unwrap();
     assert_eq!(app.ws.user.layout.aliases.get("ll").map(String::as_str), Some("line"));
     assert!(!app.session.state().unwrap().is_dirty());
+    cadcraft_engine::cmd::file::pgp::set_aliases(&[]);
+    assert!(cadcraft_engine::cmd::file::pgp::aliases().is_empty());
     let mut restored = restarted(&mut app);
     assert_eq!(cadcraft_engine::cmd::file::pgp::aliases(), vec![("ll".to_string(), "line".to_string())]);
     assert!(restored.run("aliasedit", json!({"set": {"line": "circle"}})).is_err());
@@ -154,8 +166,9 @@ fn aliases_persist() {
 fn quick_access_pin_unpin_reorder() {
     let _guard = test_lock();
     let mut app = attached(MemoryStore::default());
-    assert_eq!(app.ws.effective.layout.quick_access, quick_access::DEFAULT_ITEMS);
-    for id in quick_access::DEFAULT_ITEMS {
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    assert_eq!(app.ws.effective.layout.quick_access, ["new", "open", "qsave", "saveas", "plot", "u", "redo"]);
+    for id in &app.ws.effective.layout.quick_access {
         assert!(cadcraft_engine::find_command(id).is_some(), "{id}");
     }
     app.run("ui.quickaccess.pin", json!({"id": "line"})).unwrap();
@@ -181,15 +194,21 @@ fn quick_access_pin_unpin_reorder() {
 fn favorites_rank_first_in_search() {
     let _guard = test_lock();
     let mut app = attached(MemoryStore::default());
-    app.run("ui.favorite.add", json!({"id": "hatch"})).unwrap();
-    app.run("ui.favorite.add", json!({"id": "hatch"})).unwrap();
-    assert_eq!(app.ws.user.layout.favorites, ["hatch"]);
-    assert_eq!(quick_access::search(&app, "h").first().map(|entry| entry.id.as_str()), Some("HATCH"));
+    let baseline: Vec<_> = quick_access::search(&app, "atch").into_iter().map(|entry| entry.id).collect();
+    assert!(baseline.iter().any(|id| id == "HATCHEDIT"));
+    assert_ne!(baseline.first().map(String::as_str), Some("HATCHEDIT"));
+    app.run("ui.favorite.add", json!({"id": "hatchedit"})).unwrap();
+    app.run("ui.favorite.add", json!({"id": "hatchedit"})).unwrap();
+    assert_eq!(app.ws.user.layout.favorites, ["hatchedit"]);
+    let ranked: Vec<_> = quick_access::search(&app, "atch").into_iter().map(|entry| entry.id).collect();
+    assert_eq!(ranked.first().map(String::as_str), Some("HATCHEDIT"));
+    assert_ne!(ranked, baseline);
     assert!(quick_access::search(&app, "workspace").iter().any(|entry| entry.id.starts_with("UI.WORKSPACE.")), "UI commands are searchable");
     let mut restored = restarted(&mut app);
-    assert_eq!(restored.ws.effective.layout.favorites, ["hatch"]);
-    assert_eq!(quick_access::search(&restored, "h").first().map(|entry| entry.id.as_str()), Some("HATCH"));
-    restored.run("ui.favorite.remove", json!({"id": "hatch"})).unwrap();
+    assert_eq!(restored.ws.effective.layout.favorites, ["hatchedit"]);
+    assert_eq!(quick_access::search(&restored, "atch").into_iter().map(|entry| entry.id).collect::<Vec<_>>(), ranked);
+    restored.run("ui.favorite.remove", json!({"id": "hatchedit"})).unwrap();
+    assert_eq!(quick_access::search(&restored, "atch").into_iter().map(|entry| entry.id).collect::<Vec<_>>(), baseline);
     assert!(restored.ws.effective.layout.favorites.is_empty());
     assert!(!restored.session.state().unwrap().is_dirty());
 }
@@ -252,4 +271,71 @@ fn quick_access_unknown_id_remains_a_placeholder() {
     let h = harness(restored);
     assert!(h.get_by_label("Sheet Set — not available in this version").accesskit_node().is_disabled());
     assert_eq!(h.state().ws.effective.layout.quick_access.first().map(String::as_str), Some("sheetset"));
+}
+
+#[test]
+fn shortcut_bind_rejects_unknown_commands() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    let before = app.ws.user.layout.clone();
+    for key in ["Ctrl+Shift+L", "Escape"] {
+        assert_eq!(app.run("ui.shortcut.bind", json!({"command": "not.a.command", "key": key})).unwrap_err(), "Unknown command: not.a.command");
+        assert_eq!(app.ws.user.layout, before);
+    }
+    assert_eq!(app.run("ui.shortcut.bind", json!({"command": "line", "key": "L"})).unwrap_err(), "Not a key combination");
+    assert_eq!(app.ws.user.layout, before);
+    assert_eq!(app.ws.history.undo_len(), 0);
+}
+
+#[test]
+fn imported_reserved_shortcuts_are_ignored() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    let mut profile = app.ws.user.clone();
+    profile.layout.shortcuts = [
+        ("line".into(), "Escape".into()),
+        ("circle".into(), "Ctrl+Q".into()),
+        ("arc".into(), "Esc, Ctrl+Shift+L".into()),
+        ("pline".into(), "Cmd+Q".into()),
+    ]
+    .into_iter()
+    .collect();
+    app.run("ui.workspace.import", json!({"text": serde_json::to_string(&profile).unwrap()})).unwrap();
+    for id in ["line", "circle", "pline"] {
+        assert!(!app.ws.effective.layout.shortcuts.contains_key(id));
+        assert!(!shortcuts::active(&app).contains_key(id));
+    }
+    assert_eq!(app.ws.effective.layout.shortcuts.get("arc").map(String::as_str), Some("Ctrl+Shift+L"));
+    let restored = restarted(&mut app);
+    assert_eq!(restored.ws.effective.layout.shortcuts, app.ws.effective.layout.shortcuts);
+    let mut h = harness(restored);
+    h.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::L);
+    h.run_steps(3);
+    assert_eq!(running(h.state()), Some("arc"));
+    h.key_press(Key::Escape);
+    h.run_steps(3);
+    assert_eq!(running(h.state()), None);
+}
+
+#[test]
+fn empty_quick_access_draws_nothing() {
+    let _guard = test_lock();
+    let app = attached(MemoryStore::default());
+    assert!(app.ws.effective.layout.quick_access.is_empty());
+    let mut h = Harness::builder().build_ui_state(|ui, app: &mut CadApp| quick_access::show(app, ui), app);
+    h.run_steps(3);
+    for label in ["Search commands...", "Workspace: Simple", "Open (Ctrl+O)", "More Quick Access commands"] {
+        assert!(h.query_by_label(label).is_none(), "{label}");
+    }
+}
+
+#[test]
+fn quick_access_labels_include_shortcuts() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    let mut h = Harness::builder().build_ui_state(|ui, app: &mut CadApp| quick_access::show(app, ui), app);
+    h.run_steps(3);
+    assert!(h.query_by_label("Save").is_none());
+    assert!(h.query_by_label("Save (Ctrl+S)").is_some() || h.query_by_label("Save (⌘S)").is_some());
 }

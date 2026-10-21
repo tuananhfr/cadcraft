@@ -5,8 +5,6 @@ use serde_json::{Value, json};
 use crate::CadApp;
 use crate::cmdline::Suggestion;
 
-pub const DEFAULT_ITEMS: &[&str] = &["new", "open", "qsave", "u", "redo"];
-
 pub fn search(app: &CadApp, prefix: &str) -> Vec<Suggestion> {
     if prefix.is_empty() || prefix.contains(char::is_whitespace) {
         return Vec::new();
@@ -26,7 +24,20 @@ pub fn search(app: &CadApp, prefix: &str) -> Vec<Suggestion> {
             add(id, label);
         }
     }
-    out.sort_by_key(|entry| !app.ws.effective.layout.favorites.iter().any(|id| entry.id.eq_ignore_ascii_case(id)));
+    let resolved = cadcraft_engine::cmd::resolve_alias(&prefix);
+    out.sort_by_key(|entry| {
+        let id = entry.id.to_ascii_lowercase();
+        let tier = if id == resolved || id == prefix {
+            0
+        } else if id.starts_with(&prefix) {
+            1
+        } else if cadcraft_engine::find_command(&id).is_some_and(|spec| spec.aliases.iter().any(|alias| alias.starts_with(&prefix))) {
+            2
+        } else {
+            3
+        };
+        (tier, !app.ws.effective.layout.favorites.iter().any(|favorite| entry.id.eq_ignore_ascii_case(favorite)))
+    });
     out.truncate(8);
     out
 }
@@ -76,10 +87,14 @@ fn button(app: &mut CadApp, ui: &mut egui::Ui, id: &str) {
         return;
     }
     let label = crate::i18n::t(&command.label);
+    let label = match command.shortcut {
+        Some(shortcut) => format!("{label} ({})", crate::menus::shortcut_label(shortcut, ui.ctx().os().is_mac())),
+        None => label.to_string(),
+    };
     let enabled = cadcraft_engine::find_command(id).is_none_or(|spec| (spec.enabled)(&app.session).is_ok());
     let response = ui
         .add_enabled_ui(enabled, |ui| {
-            if let Some(icon) = command.icon { crate::icons::button(ui, icon, 18.0, label, false) } else { ui.small_button(label) }
+            if let Some(icon) = command.icon { crate::icons::button(ui, icon, 18.0, &label, false) } else { ui.small_button(&label) }
         })
         .inner;
     if response.clicked() {
@@ -104,6 +119,9 @@ fn button(app: &mut CadApp, ui: &mut egui::Ui, id: &str) {
 
 pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
     let items = app.ws.effective.layout.quick_access.clone();
+    if items.is_empty() {
+        return;
+    }
     ui.push_id("quick_access", |ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         for id in items.iter().take(5) {

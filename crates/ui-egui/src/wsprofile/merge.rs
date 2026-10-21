@@ -88,7 +88,9 @@ pub fn effective(layers: &[Layer]) -> Effective {
             }
         }
     }
-    Effective { layout: WorkspaceLayout::deserialize(&value).unwrap_or_default(), locked }
+    let mut layout = WorkspaceLayout::deserialize(&value).unwrap_or_default();
+    crate::shortcuts::remove_reserved(&mut layout.shortcuts);
+    Effective { layout, locked }
 }
 
 /// Whether the user may change `pointer`: a lock on it, above it, or below it (a replacement would

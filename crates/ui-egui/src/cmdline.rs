@@ -163,13 +163,6 @@ pub(crate) fn all_suggestions(prefix: &str) -> Vec<Suggestion> {
     out
 }
 
-#[cfg(test)]
-fn suggestions(prefix: &str) -> Vec<Suggestion> {
-    let mut out = all_suggestions(prefix);
-    out.truncate(8);
-    out
-}
-
 impl CmdLine {
     /// Track the selection: a new selection starts with nothing typed since.
     pub fn watch_selection(&mut self, sel: &[cadcraft_doc::Handle]) {
@@ -784,6 +777,21 @@ mod delete_key_tests {
 #[cfg(test)]
 mod autocomplete_tests {
     use super::*;
+
+    fn suggestions(prefix: &str) -> Vec<Suggestion> {
+        let app = CadApp::new(cadcraft_engine::Session::empty(), crate::Services::default());
+        crate::quick_access::search(&app, prefix)
+    }
+
+    #[test]
+    fn favorite_substring_keeps_exact_alias_first() {
+        let mut app = CadApp::new(cadcraft_engine::Session::empty(), crate::Services::default());
+        app.ws.effective.layout.favorites.push("hatch".into());
+        assert_eq!(crate::quick_access::search(&app, "c").first().map(|entry| entry.id.as_str()), Some("CIRCLE"));
+        app.cmd.buffer = "c".into();
+        tab(&mut app);
+        assert_eq!(app.cmd.buffer, "CIRCLE");
+    }
 
     #[test]
     fn exact_alias_is_first_suggestion_with_alias_display() {

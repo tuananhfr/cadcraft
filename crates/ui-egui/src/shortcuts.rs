@@ -116,10 +116,34 @@ fn combos(keys: &str) -> impl Iterator<Item = KeyCombo> + '_ {
     keys.split(',').filter_map(|key| parse(key.trim()))
 }
 
+fn is_reserved(key: &KeyCombo) -> bool {
+    RESERVED.iter().filter_map(|s| parse(s)).any(|reserved| reserved == *key)
+}
+
+pub(crate) fn remove_reserved(map: &mut BTreeMap<String, String>) {
+    map.retain(|_, keys| {
+        if !combos(keys).any(|key| is_reserved(&key)) {
+            return true;
+        }
+        *keys = keys.split(',').map(str::trim).filter(|key| !parse(key).is_some_and(|key| is_reserved(&key))).collect::<Vec<_>>().join(", ");
+        !keys.trim().is_empty()
+    });
+}
+
 pub fn bind(map: &mut BTreeMap<String, String>, command: &str, key: &str, replace: bool) -> Result<(), BindError> {
     let key = parse(key).ok_or(BindError::Unparsable)?;
-    if RESERVED.iter().filter_map(|s| parse(s)).any(|reserved| reserved == key) {
+    if is_reserved(&key) {
         return Err(BindError::Reserved);
+    }
+    if !key.ctrl
+        && !key.shift
+        && !key.alt
+        && !matches!(
+            key.key,
+            Key::F1 | Key::F2 | Key::F3 | Key::F4 | Key::F5 | Key::F6 | Key::F7 | Key::F8 | Key::F9 | Key::F10 | Key::F11 | Key::F12
+        )
+    {
+        return Err(BindError::Unparsable);
     }
     let conflicts: Vec<String> =
         map.iter().filter(|(id, keys)| id.as_str() != command && combos(keys).any(|held| held == key)).map(|(id, _)| id.clone()).collect();
@@ -144,6 +168,7 @@ pub fn bind(map: &mut BTreeMap<String, String>, command: &str, key: &str, replac
 pub fn active(app: &CadApp) -> BTreeMap<String, String> {
     let mut map = defaults();
     map.extend(app.ws.effective.layout.shortcuts.clone());
+    remove_reserved(&mut map);
     map
 }
 
@@ -158,6 +183,9 @@ pub(crate) fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result
         let before = active(app);
         let mut map = before.clone();
         if id == "ui.shortcut.bind" {
+            if !crate::wsprofile::apply::command_known(command) {
+                return Err(crate::tf!("Unknown command: {id}", id = command));
+            }
             let key = params.get("key").and_then(Value::as_str).ok_or_else(|| crate::tl!("key is required").to_string())?;
             bind(&mut map, command, key, params.get("replace").and_then(Value::as_bool).unwrap_or(false)).map_err(|error| error.to_string())?;
         } else {
