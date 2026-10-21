@@ -32,7 +32,7 @@ pub(super) fn show(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State) {
     if ui.button(crate::tl!("Add to Quick Access")).clicked() {
         let _ = run(app, "ui.quickaccess.pin", json!({"id": state.command}), state);
     }
-    let mut favorite = app.ws.effective.layout.favorites.iter().any(|id| *id == state.command);
+    let mut favorite = app.ws.effective.layout.favorites.contains(&state.command);
     if ui.checkbox(&mut favorite, crate::tl!("Favorite")).changed() {
         let _ = run(app, if favorite { "ui.favorite.add" } else { "ui.favorite.remove" }, json!({"id": state.command}), state);
     }

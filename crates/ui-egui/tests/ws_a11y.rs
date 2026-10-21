@@ -72,7 +72,6 @@ fn rename_tab_accepts_vietnamese_ime() {
     h.run_steps(5);
     h.get_by_role_and_label(Role::TextInput, "Tab or group name").click();
     h.run_steps(2);
-    h.event(Event::Ime(ImeEvent::Enabled));
     h.event(Event::Ime(ImeEvent::Commit("Bản vẽ kiến trúc".into())));
     h.run_steps(3);
     h.get_by_label("Rename Tab").click();
@@ -97,7 +96,7 @@ fn focus_is_visible_on_ribbon() {
     let button = h.get_by_role_and_label(Role::Button, label);
     assert!(button.is_focused());
     let focused = h.ctx.memory(|memory| memory.focused()).unwrap();
-    assert_eq!(focused.accesskit_id(), button.accesskit_node().id());
+    assert_eq!(focused.accesskit_id(), button.accesskit_node().locate().0);
     let ctx = h.ctx.clone();
     let output = ctx.run_ui(
         egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1366.0, 768.0))), ..Default::default() },
