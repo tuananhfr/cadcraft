@@ -77,3 +77,39 @@ jobs:
             grep -E '^test .* \.\.\. FAILED$' test.log | sed 's/^test /- /; s/ \.\.\. FAILED$//' || echo "none"
             grep -E '^test result' test.log | awk '{p+=$4; f+=$6} END {print "\npassed=" p " failed=" f}'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  web:
+    # Release web bundle for local visual QA (downloaded as an artifact); nothing is deployed from CI.
+    name: Web build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out craft-fonts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: tuananhfr/craft-fonts
+          ref: ${{ env.CRAFT_FONTS_REF }}
+          path: craft-fonts
+      - name: Install Rust (stable + wasm32)
+        run: |
+          rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
+          rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: web
+      - name: Install trunk 0.21.14
+        run: |
+          curl -fsSL https://github.com/trunk-rs/trunk/releases/download/v0.21.14/trunk-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C "$HOME/.cargo/bin" trunk
+          trunk --version
+      - name: trunk build --release
+        working-directory: apps/cadcraft-web
+        env:
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+        run: trunk build --release
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cadcraft-web-${{ github.sha }}
+          path: dist/web
+          retention-days: 7
