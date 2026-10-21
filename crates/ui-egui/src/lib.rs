@@ -45,7 +45,9 @@ pub mod palettes;
 pub mod parametric;
 pub mod plotstyles;
 pub mod quick;
+pub mod quick_access;
 pub mod shortcut_menus;
+pub mod shortcuts;
 pub mod theme;
 pub mod toolbars;
 pub mod viewcube;
@@ -325,7 +327,9 @@ impl CadApp {
         if let Some(r) = menus::run_ui_command(self, id, &params) {
             return r;
         }
+        let aliases = cadcraft_engine::cmd::file::pgp::aliases();
         let r = self.session.execute(id, &params).map_err(|e| e.to_string());
+        wsprofile::sync_aliases(self, &aliases)?;
         if let Ok(v) = &r
             && let Some(m) = v.get("message").and_then(Value::as_str)
         {
@@ -344,8 +348,12 @@ impl CadApp {
         if menus::run_ui_command(self, name, &Value::Null).is_some() {
             return;
         }
+        let aliases = cadcraft_engine::cmd::file::pgp::aliases();
         if let Err(e) = self.session.start(name) {
             self.session.echo(e.to_string());
+        }
+        if let Err(error) = wsprofile::sync_aliases(self, &aliases) {
+            self.session.echo(error);
         }
     }
 
@@ -360,7 +368,10 @@ impl CadApp {
                 return None;
             }
         }
-        let e = self.session.cmdline(text).err()?.to_string();
+        let aliases = cadcraft_engine::cmd::file::pgp::aliases();
+        let result = self.session.cmdline(text).map_err(|error| error.to_string());
+        let sync = wsprofile::sync_aliases(self, &aliases);
+        let e = result.and(sync).err()?;
         self.session.echo(e.clone());
         Some(e)
     }

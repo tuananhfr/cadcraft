@@ -22,6 +22,13 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.dock.reset", "Reset Panel Layout", &["Window", "Reset Panel Layout"], None),
     ("ui.layout.undo", "Undo Layout Change", &["Window", "Undo Layout Change"], None),
     ("ui.layout.redo", "Redo Layout Change", &["Window", "Redo Layout Change"], None),
+    ("ui.shortcut.bind", "Assign Shortcut", &[], None),
+    ("ui.shortcut.unbind", "Remove Shortcut", &[], None),
+    ("ui.quickaccess.pin", "Add to Quick Access", &[], None),
+    ("ui.quickaccess.unpin", "Remove from Quick Access", &[], None),
+    ("ui.quickaccess.move", "Move Quick Access Item", &[], None),
+    ("ui.favorite.add", "Add Favorite", &[], None),
+    ("ui.favorite.remove", "Remove Favorite", &[], None),
     ("ui.toolbar.hide", "Hide Toolbar", &[], None),
     ("ui.toolbar.show", "Show Toolbar", &[], None),
     ("ui.toolbar.lock", "Lock Toolbar", &[], None),
@@ -109,6 +116,12 @@ pub fn run_ui_command(app: &mut CadApp, id: &str, params: &Value) -> Option<Resu
 
 fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
     if let Some(result) = crate::wsprofile::commands::route(app, id, params) {
+        return Some(result);
+    }
+    if let Some(result) = crate::shortcuts::route(app, id, params) {
+        return Some(result);
+    }
+    if let Some(result) = crate::quick_access::route(app, id, params) {
         return Some(result);
     }
     if let Some(result) = crate::toolbars::route(app, id, params) {
@@ -509,7 +522,10 @@ pub fn tree(app: &CadApp) -> Vec<(String, Vec<Entry>)> {
                 cur.push(Entry::Item {
                     label: if seg.is_empty() { label.to_string() } else { seg.to_string() },
                     id: id.to_string(),
-                    shortcut: shortcut.map(str::to_string),
+                    shortcut: match app.ws.effective.layout.shortcuts.get(id) {
+                        Some(keys) => keys.split(',').next().map(str::trim).filter(|key| !key.is_empty()).map(|key| key.replace("Ctrl+", "Cmd+")),
+                        None => shortcut.map(str::to_string),
+                    },
                     enabled,
                 });
             } else {
@@ -614,6 +630,7 @@ pub fn menu_bar(app: &mut CadApp, ui: &mut egui::Ui) {
         ui,
         |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
+                crate::chrome::quick_access(app, ui);
                 for (name, entries) in &tree {
                     ui.menu_button(crate::i18n::menu(name), |ui| {
                         for e in entries {
@@ -637,56 +654,14 @@ pub fn activate(app: &mut CadApp, id: &str) {
 
 /// Keyboard shortcuts and function keys.
 pub fn shortcuts(app: &mut CadApp, ctx: &egui::Context) {
-    use egui::{Key, KeyboardShortcut, Modifiers};
-    let sc = |m: Modifiers, k: Key| KeyboardShortcut::new(m, k);
-    let cmd = Modifiers::COMMAND;
-    let cmd_shift = Modifiers::COMMAND | Modifiers::SHIFT;
-    let pairs: &[(KeyboardShortcut, &str)] = &[
-        (sc(cmd_shift, Key::A), "pickstyle"),
-        (sc(cmd_shift, Key::Z), "redo"),
-        (sc(cmd, Key::Z), "u"),
-        (sc(cmd, Key::Y), "redo"),
-        (sc(cmd, Key::N), "new"),
-        (sc(cmd, Key::O), "ui.open"),
-        (sc(cmd_shift, Key::S), "ui.saveas"),
-        (sc(cmd, Key::S), "qsave"),
-        (sc(cmd, Key::P), "plot"),
-        (sc(cmd, Key::A), "selectall"),
-        (sc(cmd_shift, Key::C), "copybase"),
-        (sc(cmd, Key::C), "copyclip"),
-        (sc(cmd, Key::X), "cutclip"),
-        (sc(cmd_shift, Key::V), "pasteblock"),
-        (sc(cmd, Key::V), "pasteclip"),
-        (sc(cmd, Key::Num1), "ui.panel.properties"),
-        (sc(cmd, Key::Num3), "ui.toggle.toolsets"),
-        (sc(cmd, Key::Num9), "ui.toggle.cmdline"),
-        (sc(Modifiers::NONE, Key::F1), "ui.dialog.commands"),
-        (sc(Modifiers::NONE, Key::F2), "ui.toggle.history"),
-        (sc(Modifiers::NONE, Key::F3), "osnap"),
-        (sc(Modifiers::NONE, Key::F5), "isoplane"),
-        (sc(cmd, Key::E), "isoplane"),
-        (sc(Modifiers::NONE, Key::F7), "grid"),
-        (sc(Modifiers::NONE, Key::F8), "ortho"),
-        (sc(Modifiers::NONE, Key::F9), "snap"),
-        (sc(Modifiers::NONE, Key::F10), "polar"),
-        (sc(Modifiers::NONE, Key::F11), "otrack"),
-        (sc(Modifiers::NONE, Key::F12), "dynmode"),
-    ];
     crate::clipboard::mirror(app, ctx);
     crate::toolbars::claim_menu_key(ctx);
     if ctx.egui_wants_keyboard_input() || app.closing.is_some() {
         return;
     }
-    // Cmd/Ctrl+C, X and V arrive as clipboard events, not key presses.
-    let mut fire = crate::clipboard::shortcut_commands(app, ctx);
-    ctx.input_mut(|i| {
-        for (s, id) in pairs {
-            if i.consume_shortcut(s) && !fire.contains(id) {
-                fire.push(*id);
-            }
-        }
-    });
-    for id in fire {
+    let fire = crate::shortcuts::pressed(app, ctx);
+    for id in &fire {
+        let id = id.as_str();
         // ISOPLANE (F5, Ctrl+E) switches the plane without cancelling the active command.
         if id == "isoplane" {
             if let Some(m) = app.session.execute(id, &json!({})).ok().and_then(|v| v.get("message").and_then(Value::as_str).map(str::to_string)) {

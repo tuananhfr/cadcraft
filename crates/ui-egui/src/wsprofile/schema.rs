@@ -342,7 +342,7 @@ impl Default for WorkspaceLayout {
             ],
             dock_tree: None,
             command_line: CommandLineState::default(),
-            quick_access: Vec::new(),
+            quick_access: crate::quick_access::DEFAULT_ITEMS.iter().map(|id| (*id).to_string()).collect(),
             status_bar: StatusBarState::default(),
             shortcuts: BTreeMap::new(),
             aliases: BTreeMap::new(),

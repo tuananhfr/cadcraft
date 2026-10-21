@@ -2,7 +2,7 @@
 //! registered by the host (desktop/CLI) via [`crate::cmd::file::set_io`]. On the web, where there is
 //! no file system, saved files reach the user through the host's [`crate::cmd::file::set_deliver`].
 
-mod pgp;
+pub mod pgp;
 mod template;
 
 use std::sync::OnceLock;

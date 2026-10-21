@@ -1391,3 +1391,22 @@
 	Dock Toolbar	Прикріпити панель інструментів
 	Float Toolbar	Зробити панель інструментів плаваючою
 	Move Toolbar	Пересунути панель інструментів
+	Assign Shortcut	Призначити клавіші
+	Remove Shortcut	Видалити сполучення клавіш
+	Add to Quick Access	Додати до швидкого доступу
+	Remove from Quick Access	Видалити зі швидкого доступу
+	Move Quick Access Item	Перемістити елемент швидкого доступу
+	Add Favorite	Додати до обраного
+	Remove Favorite	Видалити з обраного
+	Reserved key	Зарезервована клавіша
+	Already used by {other}	Уже використовується командою {other}
+	Not a key combination	Некоректне сполучення клавіш
+	More Quick Access commands	Інші команди швидкого доступу
+	Search commands...	Пошук команд...
+	The workspace cannot be stored: {reason}	Неможливо зберегти робочий простір: {reason}
+	Workspace: {name}	Робочий простір: {name}
+	command is required	Потрібно вказати команду
+	key is required	Потрібно вказати клавіші
+	id is required	Потрібно вказати ідентифікатор
+	to must be a whole number	to має бути цілим числом
+	Quick Access item is not pinned	Елемент швидкого доступу не закріплено

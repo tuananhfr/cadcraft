@@ -293,6 +293,59 @@ pub(crate) fn edit_toolbars(app: &mut CadApp, change: impl FnOnce(&mut Vec<schem
     Ok(true)
 }
 
+/// Profile-only edits use the same policy, history and autosave path as docked controls.
+pub(crate) fn edit_layout(app: &mut CadApp, change: impl FnOnce(&mut WorkspaceLayout) -> Result<(), String>) -> Result<bool, String> {
+    observe(app, true);
+    let mut next = app.ws.user.layout.clone();
+    change(&mut next)?;
+    if next == app.ws.user.layout {
+        return Ok(false);
+    }
+    let delta = diff_patch(&app.ws.user.layout, &next);
+    if merge::changed_pointers(&delta).iter().any(|pointer| merge::check(&app.ws.effective, pointer).is_err()) {
+        return Err(LOCKED_MESSAGE.into());
+    }
+    let profile = WorkspaceProfile { layout: next, ..app.ws.user.clone() };
+    startup::check_profile(&profile, &app.ws.policy()).map_err(|reason| crate::tf!("The workspace cannot be stored: {reason}", reason = reason))?;
+    app.ws.history.record(std::mem::replace(&mut app.ws.user.layout, profile.layout));
+    app.ws.rebuild();
+    app.apply_workspace();
+    app.ws.mark_changed();
+    Ok(true)
+}
+
+pub(crate) fn apply_aliases(app: &CadApp) {
+    let aliases: Vec<_> = app.ws.effective.layout.aliases.iter().map(|(alias, command)| (alias.clone(), command.clone())).collect();
+    cadcraft_engine::cmd::file::pgp::set_aliases(&aliases);
+}
+
+/// Alias commands mutate the engine store first; a refused profile edit restores the active map.
+pub(crate) fn sync_aliases(app: &mut CadApp, before: &[(String, String)]) -> Result<(), String> {
+    let aliases = cadcraft_engine::cmd::file::pgp::aliases();
+    if aliases == before {
+        return Ok(());
+    }
+    let after: std::collections::BTreeMap<_, _> = aliases.into_iter().collect();
+    let before: std::collections::BTreeMap<_, _> = before.iter().cloned().collect();
+    let result = edit_layout(app, |layout| {
+        for alias in before.keys().chain(after.keys()) {
+            if before.get(alias) != after.get(alias) {
+                if let Some(command) = after.get(alias) {
+                    layout.aliases.insert(alias.clone(), command.clone());
+                } else {
+                    layout.aliases.remove(alias);
+                }
+            }
+        }
+        Ok(())
+    });
+    if let Err(error) = result {
+        apply_aliases(app);
+        return Err(error);
+    }
+    Ok(())
+}
+
 /// Opens the picker once on a first run, unless the host asked to skip it (UX01).
 fn offer_picker(app: &mut CadApp) {
     if !app.ws.first_run {
@@ -437,6 +490,7 @@ impl CadApp {
         let layout = self.ws.effective.layout.clone();
         let area = self.ws.area;
         self.ws.report = apply::apply(self, &layout, area);
+        apply_aliases(self);
         self.ws.cancel_drag = true;
         self.ws.toolbar_drag = crate::toolbars::DragPhase::Idle;
     }

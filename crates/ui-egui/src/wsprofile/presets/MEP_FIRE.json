@@ -362,7 +362,7 @@
       "x_ratio": 0.0,
       "y_ratio": 0.0
     },
-    "quick_access": ["new", "open", "qsave", "saveas", "plot", "u", "redo"],
+    "quick_access": ["new", "open", "qsave", "u", "redo"],
     "status_bar": {
       "visible": true,
       "items": {

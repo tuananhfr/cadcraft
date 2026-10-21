@@ -10,6 +10,10 @@ use crate::wsprofile::schema::Dock;
 
 pub mod annoscale;
 
+pub(crate) fn quick_access(app: &mut CadApp, ui: &mut egui::Ui) {
+    crate::quick_access::show(app, ui);
+}
+
 /// Height of the macOS integrated title row (#161). AppKit draws the traffic lights itself,
 /// centred in the standard 28 pt title-bar band at the top of the window; moving them would take
 /// AppKit calls (`unsafe`, which the workspace forbids). So the title row is that band, and what

@@ -37,6 +37,22 @@ fn store() -> MutexGuard<'static, Aliases> {
     USER.get_or_init(|| Mutex::new(Aliases::default())).lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// A snapshot of user aliases; built-in aliases remain in the command catalog.
+pub fn aliases() -> Vec<(String, String)> {
+    store().map.iter().map(|(alias, command)| (alias.clone(), command.clone())).collect()
+}
+
+/// Unknown targets stay in the profile until available; command names always keep their meaning.
+pub fn set_aliases(aliases: &[(String, String)]) {
+    let map: BTreeMap<String, String> =
+        aliases.iter().take(MAX_ALIASES).filter_map(|(alias, target)| Some((alias_name(alias).ok()?, command_id(target)?))).collect();
+    let mut st = store();
+    if st.map != map {
+        st.map = map;
+        st.file = None;
+    }
+}
+
 /// The command a user alias stands for (`name` in lower case).
 pub(crate) fn user_alias(name: &str) -> Option<String> {
     store().map.get(name).cloned()
