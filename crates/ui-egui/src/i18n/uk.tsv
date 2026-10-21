@@ -1514,3 +1514,18 @@
 	The remote workspace changed; sync again to retry	Віддалений робочий простір змінено; повторіть синхронізацію
 	Workspace sync failed: {reason}	Не вдалося синхронізувати робочий простір: {reason}
 	{name} (my copy)	{name} (моя копія)
+	Fonts	Шрифти
+	LISP	LISP
+	Panels	Панелі
+	Auto-hide	Автоматично приховувати
+	Pin panel	Закріпити панель
+	Show Auto-hide Panel	Показати автоматично приховану панель
+	Load Application…	Завантажити застосунок…
+	Startup files load from <settings>/support only	Файли запуску завантажуються лише з <settings>/support
+	No applications loaded in this session	У цьому сеансі застосунки не завантажено
+	Sheet Set (not available in this version)	Набір аркушів (недоступно в цій версії)
+	{name} (not available in this version)	{name} (недоступно в цій версії)
+	The drawing cannot auto-hide	Креслення не можна автоматично приховати
+	The panel is not in auto-hide mode	Панель не перебуває в режимі автоматичного приховування
+	Auto-hide needs a dock edge	Для автоматичного приховування потрібен край закріплення
+	Panel placement is missing	Розташування панелі відсутнє

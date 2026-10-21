@@ -208,14 +208,30 @@ enum Act {
     AddLocal(String),
 }
 
-pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
+pub fn report(app: &mut CadApp) -> Value {
     let revision = app.session.state().map_or(0, |st| st.revision);
     let table = cadcraft_fonts::font_map().len();
     let stale = !matches!(&app.fontmgr.report, Some((r, t, _)) if *r == revision && *t == table);
     if stale {
         app.fontmgr.report = Some((revision, table, cadcraft_engine::cmd::fonts::report(&app.session)));
     }
-    let report = app.fontmgr.report.as_ref().map(|r| r.2.clone()).unwrap_or(Value::Null);
+    app.fontmgr.report.as_ref().map(|r| r.2.clone()).unwrap_or(Value::Null)
+}
+
+pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
+    egui::Window::new("Fonts")
+        .id(egui::Id::new("cc_fonts"))
+        .open(open)
+        .collapsible(false)
+        .resizable(true)
+        .default_width(640.0)
+        .pivot(egui::Align2::CENTER_CENTER)
+        .default_pos(ctx.content_rect().center())
+        .show(ctx, |ui| body(ui, app));
+}
+
+pub fn body(ui: &mut egui::Ui, app: &mut CadApp) {
+    let report = report(app);
     let rows = rows(&report);
     let alt = report["alt"].as_str().unwrap_or_default().to_string();
     let added = ttf::user_fonts();
@@ -225,81 +241,72 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     let local_supported = app.fontmgr.local_supported;
     let local = app.fontmgr.local_fonts.clone();
     let can_pick = app.fontmgr.pick_file.is_some() || cfg!(target_arch = "wasm32");
-    egui::Window::new("Fonts")
-        .id(egui::Id::new("cc_fonts"))
-        .open(open)
-        .collapsible(false)
-        .resizable(true)
-        .default_width(640.0)
-        .pivot(egui::Align2::CENTER_CENTER)
-        .default_pos(ctx.content_rect().center())
-        .show(ctx, |ui| {
-            ui.label(RichText::new("Fonts stay on this computer. They are not uploaded and never change the drawing.").color(t.text_dim));
-            ui.add_space(6.0);
-            ui.heading("In this drawing");
-            if rows.is_empty() {
-                ui.label(RichText::new("No drawing is open.").color(t.text_dim));
-            } else {
-                egui::ScrollArea::vertical().max_height(260.0).auto_shrink([false, true]).id_salt("fonts-rows").show(ui, |ui| {
-                    egui::Grid::new("fonts-grid").num_columns(4).striped(true).spacing([12.0, 6.0]).show(ui, |ui| {
-                        for h in ["Font", "Used by", "Status", "Draw with"] {
-                            ui.label(RichText::new(h).color(t.text_dim));
-                        }
-                        ui.end_row();
-                        for r in &rows {
-                            font_row(ui, r, &mut act);
-                        }
-                    });
-                });
-            }
-            ui.add_space(8.0);
-            ui.heading("Any other missing font");
-            ui.horizontal(|ui| {
-                ui.label("Draw with");
-                let shown = if alt.is_empty() { "Built-in stroke font".to_string() } else { alt.clone() };
-                egui::ComboBox::from_id_salt("fonts-alt").selected_text(shown).width(260.0).show_ui(ui, |ui| {
-                    if ui.selectable_label(alt.is_empty(), "Built-in stroke font").clicked() {
-                        act = Some(Act::Alt(String::new()));
-                    }
-                    choices(ui, |ui, label, name| {
-                        if ui.selectable_label(alt.eq_ignore_ascii_case(name), label).clicked() {
-                            act = Some(Act::Alt(name.to_string()));
-                        }
-                    });
-                });
-            });
-            ui.add_space(8.0);
-            ui.heading("Fonts you added");
-            if added.is_empty() {
-                ui.label(RichText::new("None yet. Add the font files a drawing needs (.ttf, .otf, .ttc, .shx).").color(t.text_dim));
-            }
-            for f in &added {
-                ui.horizontal(|ui| {
-                    ui.label(f.families.first().unwrap_or(&f.stem));
-                    ui.label(RichText::new(format!("{} · {} KB", f.stem, f.bytes.div_ceil(1024))).color(t.text_dim));
-                    if ui.small_button("Remove").clicked() {
-                        act = Some(Act::Remove(f.stem.clone()));
-                    }
-                });
-            }
-            if let Some(list) = &local {
-                ui.add_space(4.0);
-                ui.label(RichText::new("Fonts installed on this computer (click to add)").color(t.text_dim));
-                local_list(ui, list, &mut act);
-            }
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                if ui.add_enabled(can_pick, egui::Button::new("Add font file...")).clicked() {
-                    act = Some(Act::Add);
+    ui.label(RichText::new("Fonts stay on this computer. They are not uploaded and never change the drawing.").color(t.text_dim));
+    ui.add_space(6.0);
+    ui.heading("In this drawing");
+    if rows.is_empty() {
+        ui.label(RichText::new("No drawing is open.").color(t.text_dim));
+    } else {
+        egui::ScrollArea::vertical().max_height(260.0).auto_shrink([false, true]).id_salt("fonts-rows").show(ui, |ui| {
+            egui::Grid::new("fonts-grid").num_columns(4).striped(true).spacing([12.0, 6.0]).show(ui, |ui| {
+                for h in ["Font", "Used by", "Status", "Draw with"] {
+                    ui.label(RichText::new(h).color(t.text_dim));
                 }
-                if local_supported && ui.button("Add installed font...").clicked() {
-                    act = Some(Act::ListLocal);
-                }
-                if let Some(n) = &note {
-                    ui.label(RichText::new(n).color(t.text_dim));
+                ui.end_row();
+                for r in &rows {
+                    font_row(ui, r, &mut act);
                 }
             });
         });
+    }
+    ui.add_space(8.0);
+    ui.heading("Any other missing font");
+    ui.horizontal(|ui| {
+        ui.label("Draw with");
+        let shown = if alt.is_empty() { "Built-in stroke font".to_string() } else { alt.clone() };
+        egui::ComboBox::from_id_salt("fonts-alt").selected_text(shown).width(260.0).show_ui(ui, |ui| {
+            if ui.selectable_label(alt.is_empty(), "Built-in stroke font").clicked() {
+                act = Some(Act::Alt(String::new()));
+            }
+            choices(ui, |ui, label, name| {
+                if ui.selectable_label(alt.eq_ignore_ascii_case(name), label).clicked() {
+                    act = Some(Act::Alt(name.to_string()));
+                }
+            });
+        });
+    });
+    ui.add_space(8.0);
+    ui.heading("Fonts you added");
+    if added.is_empty() {
+        ui.label(RichText::new("None yet. Add the font files a drawing needs (.ttf, .otf, .ttc, .shx).").color(t.text_dim));
+    }
+    for f in &added {
+        ui.horizontal(|ui| {
+            ui.label(f.families.first().unwrap_or(&f.stem));
+            ui.label(RichText::new(format!("{} · {} KB", f.stem, f.bytes.div_ceil(1024))).color(t.text_dim));
+            if ui.small_button("Remove").clicked() {
+                act = Some(Act::Remove(f.stem.clone()));
+            }
+        });
+    }
+    if let Some(list) = &local {
+        ui.add_space(4.0);
+        ui.label(RichText::new("Fonts installed on this computer (click to add)").color(t.text_dim));
+        local_list(ui, list, &mut act);
+    }
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        if ui.add_enabled(can_pick, egui::Button::new("Add font file...")).clicked() {
+            act = Some(Act::Add);
+        }
+        if local_supported && ui.button("Add installed font...").clicked() {
+            act = Some(Act::ListLocal);
+        }
+        if let Some(n) = &note {
+            ui.label(RichText::new(n).color(t.text_dim));
+        }
+    });
+
     match act {
         Some(Act::Map(font, to)) => apply(app, json!({ "map": { font: to } })),
         Some(Act::Alt(name)) => apply(app, json!({ "alt": name })),

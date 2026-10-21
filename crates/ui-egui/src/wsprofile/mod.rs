@@ -485,6 +485,7 @@ impl CadApp {
 
     /// Shows the effective layout and the profile's theme and language (when it names them).
     pub fn apply_workspace(&mut self) {
+        self.autohide = crate::autohide::State::default();
         if let Some(theme) = self.ws.user.theme.as_deref().and_then(crate::theme::ThemePref::parse) {
             self.ui.theme = theme;
         }

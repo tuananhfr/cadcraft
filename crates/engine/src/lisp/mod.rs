@@ -583,6 +583,13 @@ impl Session {
 pub(crate) use drawing::from_json as drawing_from_json;
 pub(crate) use drawing::load_source;
 
+/// Session-cached application names, sorted independently of hash-map iteration order.
+pub fn loaded_files(session: &Session) -> Vec<String> {
+    let mut names: Vec<_> = session.lisp.files.keys().map(|name| format!("{name}.lsp")).collect();
+    names.sort();
+    names
+}
+
 impl Session {
     /// A file APPLOAD loaded, by its name (with or without `.lsp`, any case).
     pub(crate) fn lisp_file(&self, name: &str) -> Option<String> {

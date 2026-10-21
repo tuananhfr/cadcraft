@@ -135,7 +135,21 @@ pub fn capture(app: &CadApp, area: egui::Rect) -> WorkspaceLayout {
     }
     if moved(|a, b| a.docking == b.docking && a.hidden == b.hidden) {
         let workspace = now.workspace();
-        layout.panels = panels_from_docking(&workspace, area, &layout.panels);
+        let previous = layout.panels.clone();
+        layout.panels = panels_from_docking(&workspace, area, &previous);
+        for state in &mut layout.panels {
+            let Some(before) = previous.iter().find(|panel| panel.id == state.id) else { continue };
+            for (name, value, prior) in [
+                ("width_ratio", &mut state.width_ratio, before.width_ratio),
+                ("height_ratio", &mut state.height_ratio, before.height_ratio),
+                ("x_ratio", &mut state.x_ratio, before.x_ratio),
+                ("y_ratio", &mut state.y_ratio, before.y_ratio),
+            ] {
+                if (*value - prior).abs() <= 0.000001 && super::merge::check(&app.ws.effective, &format!("/panels/{}/{name}", state.id)).is_err() {
+                    *value = prior;
+                }
+            }
+        }
         layout.dock_tree = Some(dock_tree(&workspace, area));
     }
     layout
@@ -168,6 +182,13 @@ pub fn apply(app: &mut CadApp, layout: &WorkspaceLayout, area: egui::Rect) -> Ap
         .unwrap_or_else(|| docking_from_panels(&layout.panels, area));
     if !layout.toolsets.visible {
         let _ = docking.set_visible(Panel::ToolSets, false);
+    }
+    for state in layout.panels.iter().filter(|state| state.mode == PanelMode::AutoHide) {
+        if let Some(panel) = panel_of(&state.id)
+            && panel != Panel::Canvas
+        {
+            let _ = docking.set_visible(panel, false);
+        }
     }
     app.ui.show_toolsets = docking.layout.contains(&Panel::ToolSets);
     app.ui.show_palettes = docking.layout.contains(&Panel::Layers) || docking.layout.contains(&Panel::Properties);
@@ -459,7 +480,6 @@ fn docking_from_panels(panels: &[PanelState], area: egui::Rect) -> Workspace {
         }
         let ratio = [state.x_ratio, state.y_ratio, state.width_ratio, state.height_ratio];
         let floats = state.mode == PanelMode::Float || state.side == Some(Dock::Floating);
-        // Auto-hide arrives later (W10); until then such a panel waits closed, like a hidden one.
         if !state.visible || matches!(state.mode, PanelMode::Hidden | PanelMode::AutoHide) {
             let zone = zone_of(state.side, panel);
             let location = if floats {
@@ -713,4 +733,77 @@ fn panels_from_docking(workspace: &Workspace, area: egui::Rect, previous: &[Pane
     let rank = |state: &PanelState| previous.iter().position(|earlier| earlier.id == state.id).unwrap_or(usize::MAX);
     out.sort_by_key(rank);
     out
+}
+
+/// A removed accordion member gives its space to unlocked siblings; policy sizes keep their
+/// prior fractions instead of changing when a formerly flexible member becomes the last one.
+pub(crate) fn keep_locked_stack_sizes(app: &CadApp, next: &mut Workspace) {
+    let mut old_stacks = Vec::new();
+    let mut visit: Vec<_> = app.ui.docking.layout.root.iter().collect();
+    while let Some(node) = visit.pop() {
+        match node {
+            Node::Split { first, second, .. } => {
+                visit.push(first);
+                visit.push(second);
+            }
+            Node::Stack { entries } => old_stacks.push(entries.iter().map(|entry| entry.panel).collect::<Vec<_>>()),
+            Node::Tabs { .. } => {}
+        }
+    }
+    let mut placed = Vec::new();
+    if let Some(root) = &next.layout.root {
+        collect_docked(root, None, 1.0, 1.0, app.ws.area, &mut placed, 0);
+    }
+    let height = app.ws.area.height().max(1.0);
+    let mut visit: Vec<_> = next.layout.root.iter_mut().collect();
+    while let Some(node) = visit.pop() {
+        match node {
+            Node::Split { first, second, .. } => {
+                visit.push(first);
+                visit.push(second);
+            }
+            Node::Stack { entries } => {
+                let changed = old_stacks.iter().any(|old| {
+                    old.iter().any(|panel| entries.iter().any(|entry| entry.panel == *panel))
+                        && old.iter().any(|panel| !entries.iter().any(|entry| entry.panel == *panel))
+                });
+                if !changed {
+                    continue;
+                }
+                let fixed: f32 = entries.iter().filter_map(|entry| entry.height).sum();
+                let flexible = entries.iter().filter(|entry| entry.height.is_none()).count().max(1) as f32;
+                let locked = |panel: Panel| {
+                    let pointer = format!("/panels/{}/height_ratio", panel.id());
+                    super::merge::check(&app.ws.effective, &pointer).is_err()
+                };
+                if !entries.iter().any(|entry| locked(entry.panel)) {
+                    continue;
+                }
+                let mut locked_height = 0.0;
+                let mut unlocked_weight = 0.0;
+                for entry in entries.iter_mut() {
+                    let part = entry.height.map_or_else(|| ((height - fixed) / height).max(0.0) / flexible, |points| points / height);
+                    if locked(entry.panel) {
+                        if let Some(previous) = app.ws.applied.panels.iter().find(|state| state.id == entry.panel.id())
+                            && let Some(now) = placed.iter().find(|item| item.panel == entry.panel)
+                            && part > 0.0
+                            && now.share > 0.0
+                        {
+                            entry.height = Some(previous.height_ratio * height * part / now.share);
+                        }
+                        locked_height += entry.height.unwrap_or(0.0);
+                    } else {
+                        entry.height = Some(part.max(0.001));
+                        unlocked_weight += part.max(0.001);
+                    }
+                }
+                if unlocked_weight > 0.0 {
+                    for entry in entries.iter_mut().filter(|entry| !locked(entry.panel)) {
+                        entry.height = Some((height - locked_height).max(0.0) * entry.height.unwrap_or(0.0) / unlocked_weight);
+                    }
+                }
+            }
+            Node::Tabs { .. } => {}
+        }
+    }
 }

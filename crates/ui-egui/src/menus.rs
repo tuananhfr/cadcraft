@@ -19,6 +19,13 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.spacemouse.calibrate", "Calibrate 3D Mouse", &[], None),
     ("ui.spacemouse.navigate", "3D Mouse Navigation", &[], None),
     ("ui.dock", "Arrange Panel", &[], None),
+    ("ui.panel.autohide", "Auto-hide", &[], None),
+    ("ui.panel.pin", "Pin panel", &[], None),
+    ("ui.panel.peek", "Show Auto-hide Panel", &[], None),
+    ("ui.panel.fonts", "Fonts", &[], None),
+    ("ui.panel.lisp", "LISP", &[], None),
+    ("ui.panel.toolsets", "Tool Sets", &[], None),
+    ("ui.panel.externalreferences", "External References", &[], None),
     ("ui.dock.reset", "Reset Panel Layout", &["Window", "Reset Panel Layout"], None),
     ("ui.layout.undo", "Undo Layout Change", &["Window", "Undo Layout Change"], None),
     ("ui.layout.redo", "Redo Layout Change", &["Window", "Redo Layout Change"], None),
@@ -127,6 +134,9 @@ pub fn run_ui_command(app: &mut CadApp, id: &str, params: &Value) -> Option<Resu
 }
 
 fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
+    if let Some(result) = crate::autohide::route(app, id, params) {
+        return Some(result);
+    }
     if let Some(result) = crate::wsprofile::commands::route(app, id, params) {
         return Some(result);
     }
@@ -163,8 +173,15 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
     if matches!(id, "ui.dock" | "ui.dock.reset") {
         return Some(crate::docking::command(app, id == "ui.dock.reset", params));
     }
-    if matches!(id, "ui.panel.properties" | "ui.panel.layers") {
-        let panel = if id == "ui.panel.properties" { "properties" } else { "layers" };
+    if matches!(
+        id,
+        "ui.panel.properties" | "ui.panel.layers" | "ui.panel.fonts" | "ui.panel.lisp" | "ui.panel.toolsets" | "ui.panel.externalreferences"
+    ) {
+        let panel = match id {
+            "ui.panel.toolsets" => "toolSets",
+            "ui.panel.externalreferences" => "externalReferences",
+            _ => id.strip_prefix("ui.panel.").unwrap_or_default(),
+        };
         return Some(crate::docking::command(app, false, &json!({"operation":"open", "panel":panel})));
     }
     // QUICKCALC typed or from a menu opens the palette; with parameters it is CAL.
@@ -573,6 +590,7 @@ pub fn tree(app: &CadApp) -> Vec<(String, Vec<Entry>)> {
     if let Some((_, window)) = out.iter_mut().find(|(m, _)| m == "Window") {
         let at = window.iter().position(|e| matches!(e, Entry::Item { id, .. } if id == "ui.toggle.toolbar")).map_or(window.len(), |i| i + 1);
         window.insert(at, Entry::Sub { label: "Toolbars".into(), children: crate::toolbars::menu_entries(app) });
+        window.push(Entry::Sub { label: "Panels".into(), children: panel_entries(app) });
     }
     if let Some((_, file)) = out.iter_mut().find(|(m, _)| m == "File") {
         let at = file.iter().position(|e| matches!(e, Entry::Item { id, .. } if id == "open")).map_or(0, |i| i + 1);
@@ -718,6 +736,30 @@ pub fn shortcuts(app: &mut CadApp, ctx: &egui::Context) {
             activate(app, id);
         }
     }
+}
+
+/// Unknown capabilities remain visible as disabled entries and stay in the profile.
+pub fn panel_entries(app: &CadApp) -> Vec<Entry> {
+    let mut entries: Vec<_> = crate::docking::Panel::ALL
+        .iter()
+        .chain(crate::docking::Panel::ON_DEMAND)
+        .filter(|panel| **panel != crate::docking::Panel::Canvas)
+        .map(|panel| Entry::Item {
+            label: panel.label().into(),
+            id: format!("ui.panel.{}", panel.id().to_ascii_lowercase()),
+            shortcut: None,
+            enabled: true,
+        })
+        .collect();
+    for id in &app.ws.report.unknown_panels {
+        let label = if id.eq_ignore_ascii_case("sheetset") {
+            "Sheet Set (not available in this version)".to_string()
+        } else {
+            crate::tf!("{name} (not available in this version)", name = id)
+        };
+        entries.push(Entry::Item { label, id: "ui.noop".into(), shortcut: None, enabled: false });
+    }
+    entries
 }
 
 #[cfg(test)]

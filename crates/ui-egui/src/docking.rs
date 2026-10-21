@@ -1,7 +1,7 @@
 //! Application panel identities and persistence around the shared docking renderer.
 //! Document contents remain owned by their existing view implementations.
 
-use craft_ui::docking::{Action, DockArea, DockStyle, Layout, Location, Node, PanelLimits, Permissions, Placement, Zone};
+use craft_ui::docking::{Action, DockArea, DockContent, DockStyle, Layout, Location, Node, PanelLimits, Permissions, Placement, Zone};
 use craft_ui::layout::{SplitAxis, SplitSize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -16,6 +16,8 @@ pub enum Panel {
     Properties,
     #[serde(rename = "externalReferences")]
     ExternalRefs,
+    Fonts,
+    Lisp,
 }
 
 impl Panel {
@@ -28,9 +30,11 @@ impl Panel {
             Self::Layers => "layers",
             Self::Properties => "properties",
             Self::ExternalRefs => "externalReferences",
+            Self::Fonts => "fonts",
+            Self::Lisp => "lisp",
         }
     }
-    fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::Canvas => "Drawing",
             Self::ToolSets => "Tool Sets",
@@ -38,6 +42,8 @@ impl Panel {
             Self::Layers => "Layers",
             Self::Properties => "Properties",
             Self::ExternalRefs => "External References",
+            Self::Fonts => "Fonts",
+            Self::Lisp => "LISP",
         }
     }
     fn default_side(self) -> Zone {
@@ -47,12 +53,12 @@ impl Panel {
             Self::QuickCalc => Zone::Right,
             Self::Layers => Zone::Right,
             Self::Properties => Zone::Right,
-            Self::ExternalRefs => Zone::Right,
+            Self::ExternalRefs | Self::Fonts | Self::Lisp => Zone::Right,
         }
     }
-    /// Palettes outside the default arrangement, opened on request (QUICKCALC).
-    pub const ON_DEMAND: &[Self] = &[Self::QuickCalc];
-    fn parse(id: &str) -> Result<Self, String> {
+    /// Palettes outside the default arrangement, opened on request.
+    pub const ON_DEMAND: &[Self] = &[Self::QuickCalc, Self::Fonts, Self::Lisp];
+    pub fn parse(id: &str) -> Result<Self, String> {
         Self::ALL.iter().chain(Self::ON_DEMAND).copied().find(|panel| panel.id() == id).ok_or_else(|| format!("Unknown panel: {id}"))
     }
 }
@@ -310,6 +316,7 @@ pub fn command(app: &mut crate::CadApp, reset: bool, params: &Value) -> Result<V
         sync(&mut workspace, app)?;
         workspace.command(params)?;
     }
+    crate::wsprofile::apply::keep_locked_stack_sizes(app, &mut workspace);
     publish_visibility(app, &workspace);
     app.ui.docking = workspace;
     Ok(json!({"docking": app.ui.docking}))
@@ -340,36 +347,17 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
     style.border = egui::Stroke::new(1.0, t.border);
     style.accent = t.accent;
     style.font = crate::theme::body();
-    let output = DockArea::new(egui::Id::new("cadcraft-docking")).show_with_limits(
+    let mut content = Content { app, auto_hide: None };
+    let output = DockArea::new(egui::Id::new("cadcraft-docking")).show_customized(
         ui,
         &workspace.layout,
         &style,
         |panel| crate::i18n::t(panel.label()).into(),
         permissions,
         panel_limits,
-        |ui, panel| match panel {
-            Panel::Canvas => {
-                ui.painter().rect_filled(ui.max_rect(), 0.0, t.canvas);
-                crate::canvas::show(app, ui);
-            }
-            Panel::ToolSets => crate::palettes::toolsets(app, ui),
-            Panel::QuickCalc => crate::palettes::quickcalc::show(app, ui),
-            Panel::Layers => {
-                egui::ScrollArea::vertical()
-                    .id_salt("dock-layers")
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| crate::palettes::layers_section(app, ui));
-            }
-            Panel::Properties => {
-                egui::ScrollArea::vertical().id_salt("dock-properties").auto_shrink([false, false]).show(ui, |ui| {
-                    crate::shortcut_menus::palette(app, ui, crate::palettes::properties_section, crate::shortcut_menus::properties_entries)
-                });
-            }
-            Panel::ExternalRefs => {
-                egui::ScrollArea::both().id_salt("dock-xrefs").auto_shrink([false, false]).show(ui, |ui| crate::xrefs::section(app, ui));
-            }
-        },
+        &mut content,
     );
+    let auto_hide = content.auto_hide;
     // Existing panel close buttons and commands still own their visibility switches.
     let rendered = workspace;
     let mut workspace = app.ui.docking.clone();
@@ -390,6 +378,11 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
             app.set_status(format!("Panel move was not applied: {error}"));
         }
     }
+    if let Some(panel) = auto_hide
+        && let Err(error) = app.run("ui.panel.autohide", json!({"panel": panel.id()}))
+    {
+        app.set_status(error);
+    }
 }
 
 fn panel_limits(panel: &Panel) -> PanelLimits {
@@ -397,7 +390,60 @@ fn panel_limits(panel: &Panel) -> PanelLimits {
         Panel::Canvas => (egui::vec2(300.0, 180.0), 1_000_000.0),
         Panel::QuickCalc => (egui::vec2(240.0, 160.0), 600.0),
         Panel::ToolSets => (egui::vec2(220.0, 150.0), 480.0),
+        Panel::Fonts => (egui::vec2(260.0, 180.0), 900.0),
+        Panel::Lisp => (egui::vec2(240.0, 140.0), 720.0),
         Panel::Layers | Panel::Properties | Panel::ExternalRefs => (egui::vec2(220.0, 100.0), 720.0),
     };
     PanelLimits { min, max: egui::vec2(max_width, 1_000_000.0) }
+}
+
+struct Content<'a> {
+    app: &'a mut crate::CadApp,
+    auto_hide: Option<Panel>,
+}
+
+impl DockContent<Panel> for Content<'_> {
+    fn body(&mut self, ui: &mut egui::Ui, panel: &Panel) {
+        body(self.app, ui, *panel);
+    }
+
+    fn panel_menu(&mut self, ui: &mut egui::Ui, panel: &Panel) {
+        if *panel != Panel::Canvas {
+            let unlocked = crate::autohide::can_change(self.app, *panel);
+            let response = ui.add_enabled(unlocked, egui::Button::new(crate::i18n::t("Auto-hide")));
+            if response.clicked() {
+                self.auto_hide = Some(*panel);
+                ui.close();
+            }
+            if !unlocked {
+                response.on_disabled_hover_text(crate::i18n::t(crate::wsprofile::LOCKED_MESSAGE));
+            }
+        }
+    }
+}
+
+pub(crate) fn body(app: &mut crate::CadApp, ui: &mut egui::Ui, panel: Panel) {
+    match panel {
+        Panel::Canvas => {
+            ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::Tokens::get().canvas);
+            crate::canvas::show(app, ui);
+        }
+        Panel::ToolSets => crate::palettes::toolsets(app, ui),
+        Panel::QuickCalc => crate::palettes::quickcalc::show(app, ui),
+        Panel::Layers => {
+            egui::ScrollArea::vertical().id_salt("dock-layers").auto_shrink([false, false]).show(ui, |ui| crate::palettes::layers_section(app, ui));
+        }
+        Panel::Properties => {
+            egui::ScrollArea::vertical().id_salt("dock-properties").auto_shrink([false, false]).show(ui, |ui| {
+                crate::shortcut_menus::palette(app, ui, crate::palettes::properties_section, crate::shortcut_menus::properties_entries)
+            });
+        }
+        Panel::ExternalRefs => {
+            egui::ScrollArea::both().id_salt("dock-xrefs").auto_shrink([false, false]).show(ui, |ui| crate::xrefs::section(app, ui));
+        }
+        Panel::Fonts => {
+            egui::ScrollArea::both().id_salt("dock-fonts").auto_shrink([false, false]).show(ui, |ui| crate::fontmgr::body(ui, app));
+        }
+        Panel::Lisp => crate::lisp_panel::body(ui, app),
+    }
 }

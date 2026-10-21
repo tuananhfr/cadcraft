@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 
 pub mod animation;
+pub mod autohide;
 pub mod autosave;
 pub mod bedit;
 pub mod canvas;
@@ -38,6 +39,7 @@ pub mod grip_dyn;
 pub mod i18n;
 pub mod icons;
 pub mod layers;
+pub mod lisp_panel;
 pub mod managers;
 pub mod menus;
 pub mod opening;
@@ -213,6 +215,7 @@ pub struct CadApp {
     /// Desktop HID status and navigation preferences; the web host supplies no HID backend.
     /// Fonts the user added and the replacement dialog ([`fontmgr`]).
     pub fontmgr: fontmgr::State,
+    pub autohide: autohide::State,
     pub spacemouse: spacemouse::State,
     pub cmd: cmdline::CmdLine,
     pub status: Option<(String, f64)>,
@@ -273,6 +276,7 @@ impl CadApp {
             services,
             canvas: canvas::CanvasState::default(),
             fontmgr: fontmgr::State::default(),
+            autohide: autohide::State::default(),
             spacemouse: spacemouse::State::default(),
             cmd: cmdline::CmdLine::default(),
             status: None,
@@ -685,6 +689,9 @@ impl CadApp {
         if has_doc && self.ui.show_command_line {
             cmdline::show_docked(self, ui);
         }
+        if has_doc {
+            autohide::edges(self, ui);
+        }
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {
             if has_doc {
                 docking::show(self, ui);
@@ -692,6 +699,9 @@ impl CadApp {
                 chrome::start_page(self, ui);
             }
         });
+        if has_doc {
+            autohide::overlay(self, ui.ctx());
+        }
         toolbars::show_floating(ui.ctx(), self);
         dialogs::show(self, ui.ctx());
         wsprofile::conflict::show_conflict_dialog(ui.ctx(), self);
