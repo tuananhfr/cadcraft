@@ -1,6 +1,6 @@
 name: UbotBuild CI
 
-# Gate for UbotBuild work branches: Linux fmt, clippy (native + wasm), release tests and the layer check.
+# Gate for UbotBuild work branches: Linux fmt, clippy (native + wasm), tests and the layer check.
 # Upstream workflows stay untouched; this one only runs on wip/** pushes and on demand.
 on:
   push:
@@ -17,6 +17,9 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  # Dev profile without debug info: release LTO links each of ~45 test binaries for tens of
+  # minutes, and debug info would fill the runner disk.
+  CARGO_PROFILE_DEV_DEBUG: "0"
   CRAFT_FONTS_REF: b7dfde98c6d9d5db761c405732f9ef6d58bec192
 
 jobs:
@@ -50,20 +53,19 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
-        run: cargo clippy --release --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
       - name: clippy (web, wasm32)
         if: ${{ !cancelled() }}
         env:
           CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
-        run: cargo clippy --release -p cadcraft-ui-egui -p cadcraft-web --target wasm32-unknown-unknown
-      # Release mode: the ui-egui integration suite in debug needs tens of GB of disk.
+        run: cargo clippy -p cadcraft-ui-egui -p cadcraft-web --target wasm32-unknown-unknown
       - name: tests
         if: ${{ !cancelled() }}
         env:
           CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
         run: |
           set -o pipefail
-          cargo test --release --no-fail-fast --workspace 2>&1 | tee test.log
+          cargo test --no-fail-fast --workspace 2>&1 | tee test.log
       - name: layers
         if: ${{ !cancelled() }}
         run: cargo xtask layers
