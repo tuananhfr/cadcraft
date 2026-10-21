@@ -18,29 +18,35 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         active = tabs.first().map(|tab| tab.id.clone()).unwrap_or_default();
     }
     // Keep a drawing area when interface zoom leaves too little height for expanded groups.
-    let reserved = 204.0 + if app.ui.show_status_bar { 26.0 } else { 0.0 } + if app.ui.show_file_tabs { 26.0 } else { 0.0 };
-    let reserved = reserved + if app.ui.show_command_line { 34.0 } else { 0.0 };
-    let compact = ui.available_height() < 142.0 + reserved;
+    let mut reserved = crate::cmdline::MIN_CANVAS_HEIGHT + crate::toolbars::render::docked_height(app, crate::wsprofile::schema::Dock::Bottom);
+    if app.ui.show_status_bar {
+        reserved += crate::chrome::STATUS_BAR_HEIGHT;
+    }
+    if app.ui.show_file_tabs {
+        reserved += crate::chrome::FILE_TABS_HEIGHT;
+    }
+    if app.ui.show_command_line && app.ws.effective.layout.command_line.dock != crate::wsprofile::schema::Dock::Floating {
+        reserved += crate::cmdline::docked_height(app, ui.ctx().content_rect().height());
+    }
+    let compact = ui.available_height() < EXPANDED_HEIGHT + reserved;
     let collapsed = app.ws.effective.layout.ribbon.collapsed || compact;
-    egui::Panel::top("cc_ribbon").exact_size(if collapsed { 28.0 } else { 142.0 }).frame(egui::Frame::NONE.fill(Tokens::get().chrome)).show(
-        ui,
-        |ui| {
-            ui.horizontal(|ui| {
-                for tab in &tabs {
-                    let response = ui.add(egui::Button::selectable(active == tab.id, crate::i18n::t(&tab.label)));
-                    if response.clicked() || response.double_clicked() {
-                        active = tab.id.clone();
-                    }
-                    if response.double_clicked() {
-                        run(app, "ui.ribbon.collapse", json!({"collapsed": !collapsed}));
-                    }
+    let height = if collapsed { TAB_HEIGHT } else { EXPANDED_HEIGHT };
+    egui::Panel::top("cc_ribbon").exact_size(height).frame(egui::Frame::NONE.fill(Tokens::get().chrome)).show(ui, |ui| {
+        ui.horizontal(|ui| {
+            for tab in &tabs {
+                let response = ui.add(egui::Button::selectable(active == tab.id, crate::i18n::t(&tab.label)));
+                if response.clicked() || response.double_clicked() {
+                    active = tab.id.clone();
                 }
-            });
-            if !collapsed && let Some(tab) = tabs.iter().find(|tab| tab.id == active) {
-                groups(app, ui, tab);
+                if response.double_clicked() && !compact {
+                    run(app, "ui.ribbon.collapse", json!({"collapsed": !collapsed}));
+                }
             }
-        },
-    );
+        });
+        if !collapsed && let Some(tab) = tabs.iter().find(|tab| tab.id == active) {
+            groups(app, ui, tab);
+        }
+    });
     ui.ctx().data_mut(|data| data.insert_temp(state_id, active));
 }
 
@@ -56,6 +62,7 @@ fn scroll_button(ui: &mut egui::Ui, glyph: &str, label: &str, enabled: bool) -> 
     response.on_hover_text(label)
 }
 
+const TAB_HEIGHT: f32 = 28.0;
 const BUTTON_HEIGHT: f32 = 24.0;
 const COLUMN_WIDTH: f32 = 28.0;
 const COLUMN_GAP: f32 = 6.0;
@@ -65,6 +72,7 @@ const COLUMNS_HEIGHT: f32 = ROWS as f32 * BUTTON_HEIGHT + (ROWS - 1) as f32 * RO
 const LABEL_HEIGHT: f32 = 18.0;
 const GROUP_HEIGHT: f32 = COLUMNS_HEIGHT + ROW_GAP + LABEL_HEIGHT;
 const GROUP_PADDING: f32 = 6.0;
+const EXPANDED_HEIGHT: f32 = TAB_HEIGHT + GROUP_HEIGHT + 2.0 * GROUP_PADDING;
 const GROUP_GAP: f32 = 8.0;
 const MIN_GROUP_WIDTH: f32 = 90.0;
 const COMPACT_WIDTH: f32 = 76.0;

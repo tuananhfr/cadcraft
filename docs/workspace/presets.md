@@ -44,7 +44,7 @@ The window as it is today.
 | Tool bars | `standard`, top, 25 commands (see `chrome::TOOLBAR`) |
 | Panels | `toolSets` left (dock); `layers` and `properties` right (dock); `externalReferences` hidden |
 | Tool Sets | visible, tab Drafting |
-| Command line | bottom, 3 lines |
+| Command line | floating, 3 lines |
 
 ## AUTOCAD_FAMILIAR
 

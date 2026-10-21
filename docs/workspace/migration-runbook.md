@@ -85,3 +85,9 @@ The backup serializes to the same bytes as the original input.
 
 A profile that fails to migrate is not deleted: the app loads `SIMPLE` and keeps the broken snapshot so it
 can be repaired or restored.
+
+## Pre-release ws-v21 command-line docking
+
+Profiles saved by pre-release ws-v21 builds with SIMPLE `"dock":"bottom"` render a docked
+command line. Current SIMPLE defaults to floating. No migration rewrites these stored choices
+because ws-v21 was never released.

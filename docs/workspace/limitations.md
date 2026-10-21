@@ -21,3 +21,7 @@ and sensitive paths in Import mode. It is not general secret-content detection o
 unknown inert text can be preserved without execution. Local storage and policy files are not
 authorization boundaries or encrypted credential stores. UX12 end-to-end loaded-files/command-history
 evidence remains outstanding until the profile_import_never_runs_lisp_ux12 test lands with the LISP panel.
+
+The supported minimum working area is 640×360 logical points (window size divided by display scale and interface scale). Below
+that, for example 1366×768 at 200% display scale with interface scale 2.0 (about 341×192 points), the menu bar, status bar and
+command line leave no usable drawing area; the layout is not guaranteed there.

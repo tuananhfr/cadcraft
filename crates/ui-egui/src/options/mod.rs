@@ -18,6 +18,7 @@
 //! | `timeSensitiveRightClick` | while a command runs, a quick right-click is Enter and holding the button opens the shortcut menu (default); `false`: a right-click always opens the menu |
 //! | `systemCursor` | keep the system cursor visible over the drawing area |
 //! | `historyLines` | command-line history lines, 0–12 |
+//! | `uiScale` | interface zoom, 0.75–2.0 (`ui_scale` is accepted on input) |
 //! | `modelBackground`, `paperBackground` | `"#rrggbb"`, or `null` for the default |
 //! | `selectionColor` | the colour selected objects are highlighted in: `"#rrggbb"`, or `null` for the theme's |
 //! | `snapMarkerSize` | object snap marker size in points, 5–31 |
@@ -164,8 +165,8 @@ fn parse_ui(key: &str, v: &Value, c: &mut UiChanges) -> Result<bool, String> {
         }
         "saveFormat" => c.save_format = Some(crate::SaveFormat::parse(text()?).ok_or("saveFormat must be dxf or dwg")?),
         "systemCursor" => c.system_cursor = Some(v.as_bool().ok_or("systemCursor must be true or false")?),
-        "ui_scale" => {
-            let scale = v.as_f64().filter(|scale| scale.is_finite() && (0.75..=2.0).contains(scale)).ok_or("ui_scale must be from 0.75 to 2.0")?;
+        "uiScale" | "ui_scale" => {
+            let scale = v.as_f64().filter(|scale| scale.is_finite() && (0.75..=2.0).contains(scale)).ok_or("uiScale must be from 0.75 to 2.0")?;
             c.ui_scale = Some(scale as f32);
         }
         "historyLines" => {
@@ -211,7 +212,7 @@ fn ui_json(app: &CadApp) -> Map<String, Value> {
     m.insert("saveFormat".into(), json!(app.ui.save_format.as_str()));
     m.insert("systemCursor".into(), json!(app.ui.system_cursor));
     m.insert("historyLines".into(), json!(app.ui.history_lines));
-    m.insert("ui_scale".into(), json!(app.ws.user.ui_scale));
+    m.insert("uiScale".into(), json!(app.ws.user.ui_scale));
     m.insert("modelBackground".into(), color_json(o.model_background));
     m.insert("paperBackground".into(), color_json(o.paper_background));
     m.insert("selectionColor".into(), color_json(o.selection_color));
@@ -248,7 +249,7 @@ fn run_json(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     if reset {
         reset_ui(app);
     }
-    if let Some(scale) = ui.ui_scale {
+    if let Some(scale) = ui.ui_scale.or(reset.then_some(1.0)) {
         app.run("ui.workspace.set", json!({"pointer": "/ui_scale", "value": scale}))?;
     }
     if let Some(t) = ui.theme {

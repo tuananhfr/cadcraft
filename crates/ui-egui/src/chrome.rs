@@ -10,6 +10,9 @@ use crate::wsprofile::schema::Dock;
 
 pub mod annoscale;
 
+pub(crate) const FILE_TABS_HEIGHT: f32 = 26.0;
+pub(crate) const STATUS_BAR_HEIGHT: f32 = 26.0;
+
 pub(crate) fn quick_access(app: &mut CadApp, ui: &mut egui::Ui) {
     crate::quick_access::show(app, ui);
 }
@@ -82,7 +85,7 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
 /// File tabs: switcher, "+", Start, open drawings.
 pub fn file_tabs(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
-    egui::Panel::top("cc_file_tabs").exact_size(26.0).frame(egui::Frame::NONE.fill(t.chrome_dark)).show(ui, |ui| {
+    egui::Panel::top("cc_file_tabs").exact_size(FILE_TABS_HEIGHT).frame(egui::Frame::NONE.fill(t.chrome_dark)).show(ui, |ui| {
         let r = ui.max_rect();
         let mut x = r.left() + 4.0;
         let ib = Rect::from_min_size(pos2(x, r.top() + 4.0), vec2(18.0, 18.0));
@@ -203,24 +206,27 @@ fn status_item_visible(app: &CadApp, id: &str) -> bool {
     app.ws.effective.layout.status_bar.items.get(id).copied().unwrap_or(true)
 }
 
-const STATUS_ITEMS: &[(&str, &str)] = &[
-    ("annotation", "Annotation Visibility"),
-    ("coordinates", "Coordinates"),
-    ("dynmode", "Dynamic Input (F12)"),
-    ("grid", "Grid (F7)"),
-    ("isodraft", "Isometric Drafting"),
-    ("layouts", "Layout tabs"),
-    ("lineweight", "Show/Hide Lineweight"),
-    ("ortho", "Ortho Mode (F8)"),
-    ("osnap", "Object Snap (F3)"),
-    ("otrack", "Object Snap Tracking (F11)"),
-    ("polar", "Polar Tracking (F10)"),
-    ("quickprops", "Quick Properties"),
-    ("settings", "Drafting Settings"),
-    ("snap", "Snap Mode (F9)"),
-    ("transparency", "Show/Hide Transparency"),
-    ("workspace", "Workspace Switching"),
-];
+fn status_item_label(id: &str) -> Option<&'static str> {
+    match id {
+        "annotation" => Some("Annotation Visibility"),
+        "coordinates" => Some("Coordinates"),
+        "dynmode" => Some("Dynamic Input (F12)"),
+        "grid" => Some("Grid (F7)"),
+        "isodraft" => Some("Isometric Drafting"),
+        "layouts" => Some("Layout tabs"),
+        "lineweight" => Some("Show/Hide Lineweight"),
+        "ortho" => Some("Ortho Mode (F8)"),
+        "osnap" => Some("Object Snap (F3)"),
+        "otrack" => Some("Object Snap Tracking (F11)"),
+        "polar" => Some("Polar Tracking (F10)"),
+        "quickprops" => Some("Quick Properties"),
+        "settings" => Some("Drafting Settings"),
+        "snap" => Some("Snap Mode (F9)"),
+        "transparency" => Some("Show/Hide Transparency"),
+        "workspace" => Some("Workspace Switching"),
+        _ => None,
+    }
+}
 
 fn status_command_item(command: &str) -> &str {
     match command {
@@ -237,7 +243,7 @@ fn status_command_item(command: &str) -> &str {
 /// Status bar: layout tabs on the left, coordinates and drafting toggles on the right.
 pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
-    let panel = egui::Panel::bottom("cc_status").exact_size(26.0).frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |ui| {
+    let panel = egui::Panel::bottom("cc_status").exact_size(STATUS_BAR_HEIGHT).frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |ui| {
         let r = ui.max_rect();
         let body = ui.interact(r, ui.id().with("status_bar"), Sense::click());
         body.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Panel, true, crate::tl!("Status bar")));
@@ -481,15 +487,10 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
         }
         body
     });
-    let open = if panel.inner.secondary_clicked() {
-        Some(egui::SetOpenCommand::Bool(true))
-    } else if panel.inner.clicked() {
-        Some(egui::SetOpenCommand::Toggle)
-    } else {
-        None
-    };
+    let open = if panel.inner.secondary_clicked() { Some(egui::SetOpenCommand::Bool(true)) } else { None };
     egui::Popup::menu(&panel.inner).open_memory(open).show(|ui| {
-        for &(id, label) in STATUS_ITEMS {
+        for &id in crate::wsprofile::schema::STATUS_BAR_ITEMS {
+            let Some(label) = status_item_label(id) else { continue };
             let mut visible = status_item_visible(app, id);
             if ui.checkbox(&mut visible, crate::i18n::t(label)).changed() {
                 let pointer = format!("/status_bar/items/{id}");

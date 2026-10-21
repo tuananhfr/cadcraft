@@ -387,11 +387,6 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
         }
     }
     app.ws.area_known = true;
-    let scale = app.ws.user.ui_scale;
-    if app.ws.shown_scale != Some(scale) && scale.is_finite() && (0.5..=4.0).contains(&scale) {
-        ctx.set_zoom_factor(scale);
-        app.ws.shown_scale = Some(scale);
-    }
     if down {
         if app.ws.drag_before.is_none() && app.ws.synced.as_ref() != Some(&Fingerprint::of(app)) {
             app.ws.drag_before = Some(app.ws.user.layout.clone());

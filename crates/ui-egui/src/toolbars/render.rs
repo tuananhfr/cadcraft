@@ -353,6 +353,10 @@ fn flat_edge(dock: Dock, free: Rect) -> Rect {
     }
 }
 
+pub(crate) fn docked_height(app: &CadApp, dock: Dock) -> f32 {
+    distinct_rows(&visible_docked(app, dock)).len() as f32 * BAR
+}
+
 /// The tool bars docked to `dock`, in a panel as thick as its rows.
 pub fn show_docked(ui: &mut egui::Ui, app: &mut CadApp, dock: Dock) {
     let Some(edge) = edge_index(dock) else { return };
@@ -404,7 +408,7 @@ pub fn show_docked(ui: &mut egui::Ui, app: &mut CadApp, dock: Dock) {
     });
 }
 
-/// Where the floating bar `bar` is drawn in `content`: at its ratios, pulled back until `MIN_VISIBLE` of it is inside.
+/// Places the floating bar at its stored ratios, clamped entirely inside the content area.
 pub fn floating_rect(bar: &ToolbarState, content: Rect) -> Rect {
     let fit = fitted(bar, &groups_of(bar), 100_000.0);
     let size = vec2(extent(bar, &fit).max(GRIP), BAR);
