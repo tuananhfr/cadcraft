@@ -569,19 +569,7 @@ fn ribbon_home_groups_fit_or_scroll_at_1366() {
     let _guard = test_lock();
     let mut app = attached(MemoryStore::default());
     app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
-    let commands: Vec<_> = app
-        .ws
-        .effective
-        .layout
-        .ribbon
-        .tabs
-        .iter()
-        .find(|tab| tab.id == "home")
-        .unwrap()
-        .groups
-        .iter()
-        .flat_map(|group| group.commands.clone())
-        .collect();
+    let groups = app.ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.id == "home").unwrap().groups.clone();
     let panel_id = egui::Id::new("ribbon_test_rect");
     let mut h = Harness::builder().with_size(vec2(1366.0, 768.0)).build_ui_state(
         move |ui, app: &mut CadApp| {
@@ -604,9 +592,17 @@ fn ribbon_home_groups_fit_or_scroll_at_1366() {
             assert!(!rect.intersects(*other_rect), "{label} overlaps {other_label}: {rect:?} vs {other_rect:?}");
         }
     }
-    for id in commands {
-        let label = cadcraft_engine::find_command(&id).unwrap().label;
-        assert!(h.query_all_by_label(label).any(|node| panel.contains_rect(node.rect())) || scroll, "{id} is neither reachable nor scrollable");
+    for group in groups {
+        let collapsed = h
+            .query_all_by_role(egui::accesskit::Role::Button)
+            .any(|node| node.accesskit_node().label().as_deref() == Some(group.label.as_str()) && node.rect().top() >= panel.top() + 28.0);
+        for id in group.commands {
+            let label = cadcraft_engine::find_command(&id).unwrap().label;
+            assert!(
+                h.query_all_by_label(label).any(|node| panel.contains_rect(node.rect())) || collapsed || scroll,
+                "{id} is neither expanded, in a collapsed group nor scrollable"
+            );
+        }
     }
 }
 
@@ -736,4 +732,64 @@ fn window_minimize_ribbon_is_checkable() {
     h.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Minimize Ribbon").click();
     h.run_steps(3);
     assert!(!h.state().ws.effective.layout.ribbon.collapsed);
+}
+
+#[test]
+fn ribbon_home_text_buttons_show_full_labels_at_1920() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    let mut icon_ids: std::collections::BTreeSet<_> = cadcraft_ui_egui::toolbars::BUILTIN
+        .iter()
+        .filter_map(|(id, _)| cadcraft_ui_egui::toolbars::builtin_groups(id))
+        .flatten()
+        .flatten()
+        .map(|(_, id, _, _)| id)
+        .collect();
+    icon_ids.extend(
+        cadcraft_ui_egui::palettes::DRAFTING
+            .iter()
+            .chain(cadcraft_ui_egui::palettes::MODELING.iter())
+            .flat_map(|(_, large, small)| large.iter().chain(small.iter()))
+            .map(|(_, id, _)| *id),
+    );
+    let text_commands: Vec<_> = app
+        .ws
+        .effective
+        .layout
+        .ribbon
+        .tabs
+        .iter()
+        .find(|tab| tab.id == "home")
+        .unwrap()
+        .groups
+        .iter()
+        .flat_map(|group| group.commands.iter())
+        .filter(|id| !icon_ids.contains(id.as_str()))
+        .cloned()
+        .collect();
+    assert!(!text_commands.is_empty());
+    let mut h = Harness::builder()
+        .with_size(vec2(1920.0, 1080.0))
+        .build_ui_state(|ui, app: &mut CadApp| cadcraft_ui_egui::ribbon::render::show(app, ui), app);
+    h.run_steps(3);
+    let style = h.ctx.style();
+    let font = egui::TextStyle::Button.resolve(&style);
+    for id in text_commands {
+        let label = cadcraft_ui_egui::i18n::t(cadcraft_engine::find_command(&id).unwrap().label);
+        let text_width = h.ctx.fonts_mut(|fonts| fonts.layout_no_wrap(label.to_string(), font.clone(), style.visuals.text_color()).size().x);
+        let buttons: Vec<_> = h
+            .query_all_by_role(egui::accesskit::Role::Button)
+            .filter(|node| node.accesskit_node().label().as_deref() == Some(label) && node.rect().top() >= 28.0)
+            .collect();
+        assert!(!buttons.is_empty(), "{id} must be expanded with its full accessible label {label}");
+        for button in buttons {
+            assert!(
+                button.rect().width() >= text_width + 2.0 * style.spacing.button_padding.x,
+                "{id} is truncated: {:?} < {text_width}",
+                button.rect()
+            );
+            assert!(h.ctx.content_rect().contains_rect(button.rect()), "{id} extends beyond the screen");
+        }
+    }
 }

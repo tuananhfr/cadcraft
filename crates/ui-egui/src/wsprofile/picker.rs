@@ -15,6 +15,7 @@ pub const SAVE_AS_DIALOG: &str = "workspace_saveas";
 
 const PICKER_WIDTH: f32 = 460.0;
 const ROW_HEIGHT: f32 = 48.0;
+const PICKER_CHROME_MARGIN: f32 = 200.0;
 
 /// What the Workspace Switching menu asks for.
 #[derive(Clone, Debug, PartialEq)]
@@ -68,40 +69,47 @@ fn rows(ui: &mut egui::Ui, choices: &[Choice], active: &str) -> Option<String> {
         egui::RichText::new(crate::tl!("Pick the layout that suits your work. You can change it any time from the status bar.")).color(t.text_dim),
     );
     ui.add_space(6.0);
-    egui::ScrollArea::vertical().max_height(420.0).auto_shrink([false, true]).show(ui, |ui| {
-        for choice in choices {
-            let name = display_name(choice);
-            let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_HEIGHT), Sense::click());
-            let fill = if choice.id == active {
-                t.tab_active
-            } else if response.hovered() || response.has_focus() {
-                t.control_hover
-            } else {
-                Color32::TRANSPARENT
-            };
-            let painter = ui.painter();
-            painter.rect_filled(rect, 4.0, fill);
-            if response.has_focus() {
-                painter.rect_stroke(rect.shrink(1.0), 4.0, egui::Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
+    // Leave room for the window title, instructions and review notice outside the scrolling list.
+    let list_height = (ui.ctx().content_rect().height() - PICKER_CHROME_MARGIN).max(ROW_HEIGHT);
+    egui::ScrollArea::vertical()
+        .max_height(list_height)
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            for choice in choices {
+                let name = display_name(choice);
+                let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_HEIGHT), Sense::click());
+                let fill = if choice.id == active {
+                    t.tab_active
+                } else if response.hovered() || response.has_focus() {
+                    t.control_hover
+                } else {
+                    Color32::TRANSPARENT
+                };
+                let painter = ui.painter();
+                painter.rect_filled(rect, 4.0, fill);
+                if response.has_focus() {
+                    response.scroll_to_me(None);
+                    painter.rect_stroke(rect.shrink(1.0), 4.0, egui::Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
+                }
+                let heading = painter.layout_no_wrap(name.clone(), crate::theme::body(), t.text);
+                painter.galley(rect.left_top() + vec2(10.0, 8.0), heading.clone(), t.text);
+                let description = painter.layout(
+                    preset_description(if choice.preset { &choice.id } else { "" }).to_string(),
+                    crate::theme::small(),
+                    t.text_dim,
+                    rect.width() - 20.0,
+                );
+                painter.galley(rect.left_top() + vec2(10.0, 8.0 + heading.size().y + 2.0), description, t.text_dim);
+                response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name.clone()));
+                if choice.id == "AUTOCAD_FAMILIAR" {
+                    familiar_tag(ui, rect, heading.size().x);
+                }
+                if response.clicked() {
+                    chosen = Some(choice.id.clone());
+                }
             }
-            let heading = painter.layout_no_wrap(name.clone(), crate::theme::body(), t.text);
-            painter.galley(rect.left_top() + vec2(10.0, 8.0), heading.clone(), t.text);
-            let description = painter.layout(
-                preset_description(if choice.preset { &choice.id } else { "" }).to_string(),
-                crate::theme::small(),
-                t.text_dim,
-                rect.width() - 20.0,
-            );
-            painter.galley(rect.left_top() + vec2(10.0, 8.0 + heading.size().y + 2.0), description, t.text_dim);
-            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name.clone()));
-            if choice.id == "AUTOCAD_FAMILIAR" {
-                familiar_tag(ui, rect, heading.size().x);
-            }
-            if response.clicked() {
-                chosen = Some(choice.id.clone());
-            }
-        }
-    });
+        });
     ui.add_space(6.0);
     ui.label(egui::RichText::new(crate::tl!("Discipline workspaces are drafts that await CAD Manager review.")).small().color(t.text_faint));
     chosen
@@ -132,6 +140,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     let mut chosen = None;
     egui::Window::new(crate::tl!("Choose a Workspace"))
         .id(egui::Id::new(PICKER_DIALOG))
+        .constrain_to(ctx.content_rect().shrink(16.0))
         .open(open)
         .collapsible(false)
         .resizable(false)
