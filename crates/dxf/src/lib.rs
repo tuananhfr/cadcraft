@@ -167,7 +167,7 @@ const BINARY_SENTINEL: &[u8] = b"AutoCAD Binary DXF\r\n\x1a\0";
 pub const MAX_TAGS: usize = 50_000_000;
 
 mod codepage;
-pub use codepage::decode_code_page;
+pub use codepage::{code_page_encoding, decode_code_page};
 
 /// Parse a DXF file (ASCII or binary).
 pub fn parse(bytes: &[u8]) -> Result<Vec<Tag>> {

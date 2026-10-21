@@ -275,7 +275,7 @@ pub fn line_width(s: &str, height: f64, width_factor: f64) -> f64 {
 /// letter gap, so the stroke font's gap is added on both sides of the space, as TEXT lays it out.
 pub fn space_width(font: &TextFont, height: f64, width_factor: f64) -> f64 {
     if let Some(shx) = font.shx() {
-        return shx_text::width(shx, " ", height, width_factor);
+        return shx_text::width(shx, font.codepage(), " ", height, width_factor);
     }
     if let Some(face) = font.face()
         && let Some(w) = ttf::width(face, " ", height, width_factor)
@@ -296,13 +296,14 @@ pub struct TextFont {
     shx: Option<Arc<shx::ShxFont>>,
     /// The text was typed for a legacy Vietnamese font that isn't here: shown decoded.
     legacy: Option<LegacyVi>,
+    codepage: Option<&'static encoding_rs::Encoding>,
 }
 
 impl TextFont {
-    pub const STROKE: TextFont = TextFont { face: None, shx: None, legacy: None };
+    pub const STROKE: TextFont = TextFont { face: None, shx: None, legacy: None, codepage: None };
 
     pub fn outline(face: ttf::Face) -> TextFont {
-        TextFont { face: Some(face), shx: None, legacy: None }
+        TextFont { face: Some(face), shx: None, legacy: None, codepage: None }
     }
     /// Resolve a text style font name: an installed TTF/OTF/TTC or an SHX font the user added when found; else, for a font we
     /// can't find (an SHX file, a missing TTF), the FONTALT font ([`ttf::font_alt`]) when set;
@@ -315,7 +316,16 @@ impl TextFont {
     /// font the names point to is shown decoded to Unicode.
     pub fn for_style(font: &str, family: &str) -> TextFont {
         let r = substitution::resolve(font, family);
-        TextFont { face: r.face, shx: r.shx, legacy: r.info.legacy }
+        TextFont { face: r.face, shx: r.shx, legacy: r.info.legacy, codepage: None }
+    }
+    /// Set the drawing's encoding for shapes fonts; `None` uses Windows-1252.
+    pub fn with_codepage(mut self, enc: Option<&'static encoding_rs::Encoding>) -> TextFont {
+        self.codepage = enc;
+        self
+    }
+    /// The effective encoding used for shapes fonts; unifonts always use Unicode codes.
+    pub fn codepage(&self) -> &'static encoding_rs::Encoding {
+        self.codepage.unwrap_or(encoding_rs::WINDOWS_1252)
     }
     pub fn is_outline(&self) -> bool {
         self.face.is_some()
@@ -451,7 +461,7 @@ pub(crate) fn decorations(spans: &[(f64, f64, bool, bool)], h: f64) -> Vec<Vec<V
 pub fn shape_line(font: &TextFont, s: &str, height: f64, width_factor: f64, oblique: f64) -> Shaped {
     let s = font.text(s);
     if let Some(shx) = font.shx() {
-        return shx_text::shape(shx, &s, height, width_factor, oblique);
+        return shx_text::shape(shx, font.codepage(), &s, height, width_factor, oblique);
     }
     if let Some(face) = font.face()
         && let Some(sh) = ttf::shape(face, &s, height, width_factor, oblique)
@@ -465,7 +475,7 @@ pub fn shape_line(font: &TextFont, s: &str, height: f64, width_factor: f64, obli
 pub fn text_width(font: &TextFont, s: &str, height: f64, width_factor: f64) -> f64 {
     let s = font.text(s);
     if let Some(shx) = font.shx() {
-        return shx_text::width(shx, &s, height, width_factor);
+        return shx_text::width(shx, font.codepage(), &s, height, width_factor);
     }
     if let Some(face) = font.face()
         && let Some(w) = ttf::width(face, &s, height, width_factor)

@@ -15,7 +15,7 @@
 //! nothing and leave their gap empty.
 
 use cadcraft_doc::{Drawing, Linetype};
-use cadcraft_fonts::{Shaped, TextFont, TextParams};
+use cadcraft_fonts::{Shaped, TextParams};
 use cadcraft_geom::Vec2;
 
 /// Upper bound on the texts drawn along one run (hostile scales; `apply` caps the dashes).
@@ -83,7 +83,7 @@ fn elements(d: &Drawing, lt: &Linetype, scale: f64) -> Vec<Element> {
         if !(height.is_finite() && height > 0.0) {
             continue;
         }
-        let font = TextFont::for_style(&ts.font, &ts.family);
+        let font = crate::text_font(d, &ts);
         let params = TextParams {
             width_factor: if ts.width_factor.is_finite() && ts.width_factor > 0.0 { ts.width_factor } else { 1.0 },
             oblique: if ts.oblique.is_finite() { ts.oblique } else { 0.0 },

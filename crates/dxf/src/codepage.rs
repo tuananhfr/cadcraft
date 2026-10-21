@@ -62,6 +62,16 @@ pub(crate) fn decoder(code_page: &str) -> Option<Decoder> {
     Some(Decoder::Encoding(enc))
 }
 
+/// The encoding for a `$DWGCODEPAGE` value, when it is supported by `encoding_rs`.
+/// DOS table decoders have no corresponding `Encoding` and return `None`.
+pub fn code_page_encoding(code_page: &str) -> Option<&'static Encoding> {
+    match decoder(code_page)? {
+        Decoder::Utf8 => Some(encoding_rs::UTF_8),
+        Decoder::Encoding(enc) => Some(enc),
+        Decoder::Table(_) => None,
+    }
+}
+
 /// Decode `bytes` from the code page `code_page` names (a `$DWGCODEPAGE` value such as
 /// `ANSI_1251`), or `None` when CADCraft doesn't know that code page. Invalid sequences become
 /// U+FFFD; escapes (`\U+XXXX`, `\M+nXXXX`) are left as they are.

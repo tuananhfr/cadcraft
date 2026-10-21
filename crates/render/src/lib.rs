@@ -1286,10 +1286,32 @@ fn text_style(d: &Drawing, name: &str) -> cadcraft_doc::TextStyle {
     d.text_style(name).cloned().unwrap_or_default()
 }
 
+fn drawing_codepage(d: &Drawing) -> Option<&'static encoding_rs::Encoding> {
+    let name = d.header.get("DWGCODEPAGE").and_then(cadcraft_doc::HVal::as_str)?;
+    if name.len() > 32 {
+        return None;
+    }
+    // Cache by header value so text entities share the lookup and header edits cannot leave it stale.
+    static CACHE: std::sync::Mutex<Option<(String, Option<&'static encoding_rs::Encoding>)>> = std::sync::Mutex::new(None);
+    let mut cache = CACHE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some((cached, enc)) = &*cache
+        && cached == name
+    {
+        return *enc;
+    }
+    let enc = cadcraft_dxf::code_page_encoding(name);
+    *cache = Some((name.to_owned(), enc));
+    enc
+}
+
+fn text_font(d: &Drawing, ts: &cadcraft_doc::TextStyle) -> cadcraft_fonts::TextFont {
+    cadcraft_fonts::TextFont::for_style(&ts.font, &ts.family).with_codepage(drawing_codepage(d))
+}
+
 /// Shape a TEXT / ATTRIB / ATTDEF with its style's font and generation flags.
 pub fn place_text_entity(d: &Drawing, t: &cadcraft_doc::Text, value: &str) -> (cadcraft_fonts::Shaped, Bounds2) {
     let ts = text_style(d, &t.style);
-    let font = cadcraft_fonts::TextFont::for_style(&ts.font, &ts.family);
+    let font = text_font(d, &ts);
     let (h, v) = align(t.halign, t.valign);
     let p = cadcraft_fonts::TextParams {
         insert: t.insert.xy(),
@@ -1317,7 +1339,7 @@ pub fn layout_mtext_entity(d: &Drawing, t: &cadcraft_doc::MText) -> cadcraft_fon
         rotation: t.rotation,
         line_spacing: t.line_spacing,
         line_spacing_exact: t.line_spacing_exact,
-        font: cadcraft_fonts::TextFont::for_style(&ts.font, &ts.family),
+        font: text_font(d, &ts),
         width_factor: ts.width_factor,
         oblique: ts.oblique,
         columns: t.columns.as_ref().map(|c| cadcraft_fonts::MTextColumnSpec {
@@ -1354,12 +1376,7 @@ fn mtext(b: &mut Builder, ctx: &Ctx, t: &cadcraft_doc::MText, rgb: Ink, lw: f32)
 /// The font settings of a dimension style's text style.
 pub fn dim_text(d: &Drawing, st: &cadcraft_doc::DimStyle) -> DimText {
     let ts = text_style(d, &st.text_style);
-    DimText {
-        font: cadcraft_fonts::TextFont::for_style(&ts.font, &ts.family),
-        fixed_height: ts.height,
-        width_factor: ts.width_factor,
-        oblique: ts.oblique,
-    }
+    DimText { font: text_font(d, &ts), fixed_height: ts.height, width_factor: ts.width_factor, oblique: ts.oblique }
 }
 
 /// Geometry of a dimension in a drawing: its style, overrides and text font.

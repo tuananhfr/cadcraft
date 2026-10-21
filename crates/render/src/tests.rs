@@ -924,3 +924,63 @@ fn cancelled_build_stops_early() {
     assert!(!crate::hatch::pattern_lines_until(&drawing, &h, &loops, 0.0, None, None).is_empty());
     assert!(crate::hatch::pattern_lines_until(&drawing, &h, &loops, 0.0, None, set.as_deref()).is_empty());
 }
+
+#[test]
+fn drawing_codepage_reaches_text_font() {
+    let name = "f5-render.shx";
+    let entries = [(0u16, b"F5RENDER\0\x0A\x02\0\0\0".to_vec()), (0x3F, vec![0, 0x50, 0]), (0xC3, vec![0, 0xA4, 0])];
+    let mut image = b"AutoCAD-86 shapes 1.0\r\n\x1a".to_vec();
+    for n in [0u16, 0xC3, entries.len() as u16] {
+        image.extend_from_slice(&n.to_le_bytes());
+    }
+    for (code, data) in &entries {
+        image.extend_from_slice(&code.to_le_bytes());
+        image.extend_from_slice(&(data.len() as u16).to_le_bytes());
+    }
+    for (_, data) in &entries {
+        image.extend_from_slice(data);
+    }
+    image.extend_from_slice(b"EOF");
+    cadcraft_fonts::ttf::add_user_font(name, image).unwrap();
+
+    let mut d = Drawing::new_imperial();
+    let ts = cadcraft_doc::TextStyle { name: "F5".into(), font: name.into(), ..Default::default() };
+    d.text_styles.push(ts.clone());
+    d.header.set_str("$DWGCODEPAGE", "ANSI_1258");
+    assert_eq!(drawing_codepage(&d), Some(encoding_rs::WINDOWS_1258));
+    assert_eq!(text_font(&d, &ts).codepage(), encoding_rs::WINDOWS_1258);
+    let dim_style = cadcraft_doc::DimStyle { text_style: ts.name.clone(), ..Default::default() };
+    assert_eq!(dim_text(&d, &dim_style).font.codepage(), encoding_rs::WINDOWS_1258);
+    let t = cadcraft_doc::Text {
+        insert: Vec3::ZERO,
+        align_pt: None,
+        height: 10.0,
+        value: "Ă".into(),
+        rotation: 0.0,
+        width_factor: 1.0,
+        oblique: 0.0,
+        style: ts.name.clone(),
+        halign: Default::default(),
+        valign: Default::default(),
+    };
+    d.add(&Space::Model, Common::default(), EntityKind::Text(t.clone())).unwrap();
+    let shaped = place_text_entity(&d, &t, &t.value).0;
+    assert_eq!(shaped.strokes, vec![vec![Vec2::ZERO, Vec2::new(0.0, 10.0)]]);
+    let list = build(&d, &Space::Model, &Options::default());
+    assert_eq!(list.verts, shaped.strokes.into_iter().flatten().collect::<Vec<_>>());
+
+    d.header.set_str("DWGCODEPAGE", "ANSI_1252");
+    assert_eq!(text_font(&d, &ts).codepage(), encoding_rs::WINDOWS_1252);
+    d.header.set_str("DWGCODEPAGE", " ansi_1258 ");
+    assert_eq!(text_font(&d, &ts).codepage(), encoding_rs::WINDOWS_1258);
+    for value in ["", "not-a-codepage"] {
+        d.header.set_str("DWGCODEPAGE", value);
+        assert!(drawing_codepage(&d).is_none());
+        assert_eq!(text_font(&d, &ts).codepage(), encoding_rs::WINDOWS_1252);
+        assert_eq!(place_text_entity(&d, &t, &t.value).0.strokes, vec![vec![Vec2::ZERO, Vec2::new(5.0, 0.0)]]);
+    }
+    d.header.vars.remove("DWGCODEPAGE");
+    assert!(drawing_codepage(&d).is_none());
+    assert_eq!(text_font(&d, &ts).codepage(), encoding_rs::WINDOWS_1252);
+    assert!(cadcraft_fonts::ttf::remove_user_font(name));
+}

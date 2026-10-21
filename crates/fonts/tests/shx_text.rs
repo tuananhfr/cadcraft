@@ -158,10 +158,12 @@ fn unifont_glyphs_are_looked_up_by_code_point() {
     let _s = serial();
     let img = unifont_image("UNI", 10, &[(0x1EA0, glyph("DOT", &[0xA4, 0x02, 0x08, 5, 0xF6]))]);
     ttf::add_user_font("vhuni.shx", img).unwrap();
-    let f = TextFont::for_style("vhuni.shx", "");
-    let sh = shape_line(&f, "\u{1EA0}", 10.0, 1.0, 0.0);
-    assert!(same_points(&sh.strokes, &[&[(0.0, 0.0), (0.0, 10.0)]]), "{:?}", sh.strokes);
-    assert!(near(sh.width, 5.0));
+    for enc in [None, Some(encoding_rs::WINDOWS_1258), Some(encoding_rs::SHIFT_JIS)] {
+        let f = TextFont::for_style("vhuni.shx", "").with_codepage(enc);
+        let sh = shape_line(&f, "\u{1EA0}", 10.0, 1.0, 0.0);
+        assert!(same_points(&sh.strokes, &[&[(0.0, 0.0), (0.0, 10.0)]]), "{:?}", sh.strokes);
+        assert!(near(sh.width, 5.0) && near(text_width(&f, "\u{1EA0}", 10.0, 1.0), sh.width));
+    }
     ttf::remove_user_font("vhuni.shx");
 }
 
@@ -287,4 +289,104 @@ fn debug_output_of_a_font_is_short() {
     let text = format!("{font:?}");
     assert!(text.len() < 200, "{} bytes: {text}", text.len());
     assert!(text.contains("BIG") && text.contains("50"), "{text}");
+}
+
+#[test]
+fn cp1258_roundtrip_vhtime_like() {
+    let _s = serial();
+    // Ò has no single byte in Windows-1258; Ă distinguishes it from Windows-1252.
+    let (bytes, _, unmappable) = encoding_rs::WINDOWS_1258.encode("Ă");
+    assert!(!unmappable);
+    assert_eq!(bytes.as_ref(), &[0xC3]);
+    let code = u16::from(*bytes.first().unwrap());
+    let image = shapes_image("F5ROUNDTRIP", 10, &[(code, glyph("ABREVE", &[0xA4, 0x02, 0x08, 8, 0xF6])), (0x3F, glyph("QUESTION", &[0x50]))]);
+    ttf::add_user_font("f5-roundtrip.shx", image).unwrap();
+    for enc in [None, Some(encoding_rs::WINDOWS_1258)] {
+        let f = TextFont::for_style("f5-roundtrip.shx", "").with_codepage(enc);
+        let sh = shape_line(&f, "Ă", 10.0, 1.0, 0.0);
+        let (end, advance) = if enc.is_some() { ((0.0, 10.0), 8.0) } else { ((5.0, 0.0), 5.0) };
+        assert!(same_points(&sh.strokes, &[&[(0.0, 0.0), end]]), "{:?}", sh.strokes);
+        assert!(near(sh.width, advance) && near(text_width(&f, "Ă", 10.0, 1.0), sh.width));
+    }
+    assert!(ttf::remove_user_font("f5-roundtrip.shx"));
+}
+
+#[test]
+fn shapes_diameter_uses_legacy_slot_with_default_and_cp1258() {
+    let _s = serial();
+    let image = shapes_image("F5DIAMETER", 10, &[(178, glyph("DIAMETER", &[0x82])), (0x3F, glyph("QUESTION", &[0x50]))]);
+    ttf::add_user_font("f5-diameter.shx", image).unwrap();
+    for enc in [None, Some(encoding_rs::WINDOWS_1258)] {
+        let f = TextFont::for_style("f5-diameter.shx", "").with_codepage(enc);
+        for text in ["%%c", "\u{2300}"] {
+            let sh = shape_line(&f, text, 10.0, 1.0, 0.0);
+            assert!(same_points(&sh.strokes, &[&[(0.0, 0.0), (8.0, 8.0)]]), "{text}: {:?}", sh.strokes);
+            assert!(near(sh.width, 8.0) && near(text_width(&f, text, 10.0, 1.0), sh.width));
+        }
+    }
+    assert!(ttf::remove_user_font("f5-diameter.shx"));
+}
+
+#[test]
+fn unencodable_char_falls_back() {
+    let _s = serial();
+    let question = glyph("QUESTION", &[0x50]);
+    let ampersand = glyph("AMP", &[0xA4]);
+    let with_question = shapes_image("F5FALLBACK", 10, &[(0x3F, question), (0x26, ampersand.clone())]);
+    ttf::add_user_font("f5-fallback.shx", with_question).unwrap();
+    let f = TextFont::for_style("f5-fallback.shx", "").with_codepage(Some(encoding_rs::WINDOWS_1258));
+    for c in ['😀', 'Ò', 'Ắ'] {
+        let mut buf = [0; 4];
+        let text = c.encode_utf8(&mut buf);
+        assert!(encoding_rs::WINDOWS_1258.encode(text).2, "{c}");
+        let sh = shape_line(&f, text, 10.0, 1.0, 0.0);
+        assert!(same_points(&sh.strokes, &[&[(0.0, 0.0), (5.0, 0.0)]]), "{c}: {:?}", sh.strokes);
+        assert!(near(sh.width, 5.0) && near(text_width(&f, text, 10.0, 1.0), sh.width));
+    }
+    assert!(ttf::remove_user_font("f5-fallback.shx"));
+
+    ttf::add_user_font("f5-no-question.shx", shapes_image("F5STROKE", 10, &[(0x26, ampersand)])).unwrap();
+    let f = TextFont::for_style("f5-no-question.shx", "").with_codepage(Some(encoding_rs::WINDOWS_1258));
+    for c in ['😀', 'Ò', 'Ắ'] {
+        let mut buf = [0; 4];
+        let text = c.encode_utf8(&mut buf);
+        let sh = shape_line(&f, text, 10.0, 1.0, 0.0);
+        assert_eq!(sh.strokes, shape_stroke(text, 10.0, 1.0, 0.0).strokes, "{c}");
+        assert!(near(sh.width, char_advance(c) * 10.0) && near(text_width(&f, text, 10.0, 1.0), sh.width));
+    }
+    assert!(ttf::remove_user_font("f5-no-question.shx"));
+}
+
+#[test]
+fn multibyte_shx_codes_fall_back() {
+    let _s = serial();
+    let image = shapes_image("F5DBCS", 10, &[(0x3F, glyph("QUESTION", &[0x50])), (0x90, glyph("LEAD", &[0xA4]))]);
+    ttf::add_user_font("f5-dbcs.shx", image).unwrap();
+    let f = TextFont::for_style("f5-dbcs.shx", "").with_codepage(Some(encoding_rs::SHIFT_JIS));
+    let (bytes, _, unmappable) = encoding_rs::SHIFT_JIS.encode("図");
+    assert!(!unmappable && bytes.len() == 2);
+    let sh = shape_line(&f, "図", 10.0, 1.0, 0.0);
+    assert!(same_points(&sh.strokes, &[&[(0.0, 0.0), (5.0, 0.0)]]));
+    assert!(near(sh.width, 5.0) && near(text_width(&f, "図", 10.0, 1.0), sh.width));
+    assert!(ttf::remove_user_font("f5-dbcs.shx"));
+}
+
+#[test]
+fn mtext_font_switch_retains_codepage() {
+    let _s = serial();
+    let image = shapes_image("F5MTEXT", 10, &[(0xC3, glyph("ABREVE", &[0xA4])), (0x3F, glyph("QUESTION", &[0x50]))]);
+    ttf::add_user_font("f5-mtext.shx", image).unwrap();
+    let base = cadcraft_fonts::MTextParams {
+        font: TextFont::STROKE.with_codepage(Some(encoding_rs::WINDOWS_1258)),
+        ..cadcraft_fonts::MTextParams::new(Vec2::ZERO, 10.0)
+    };
+    let switched = cadcraft_fonts::layout_mtext_with("{\\ff5-mtext.shx;Ă}", &base);
+    let direct = cadcraft_fonts::layout_mtext_with(
+        "Ă",
+        &cadcraft_fonts::MTextParams { font: TextFont::for_style("f5-mtext.shx", "").with_codepage(Some(encoding_rs::WINDOWS_1258)), ..base },
+    );
+    assert!(!direct.strokes.is_empty());
+    assert_eq!(switched.strokes, direct.strokes);
+    assert_eq!(switched.bounds, direct.bounds);
+    assert!(ttf::remove_user_font("f5-mtext.shx"));
 }

@@ -647,6 +647,7 @@ name = "cadcraft-fonts"
 version = "0.8.0"
 dependencies = [
  "cadcraft-geom",
+ "encoding_rs",
  "harfrust",
  "skrifa 0.47.0",
  "unicode-bidi",
@@ -695,8 +696,10 @@ version = "0.8.0"
 dependencies = [
  "cadcraft-color",
  "cadcraft-doc",
+ "cadcraft-dxf",
  "cadcraft-fonts",
  "cadcraft-geom",
+ "encoding_rs",
  "lyon_tessellation",
  "rayon",
  "serde_json",

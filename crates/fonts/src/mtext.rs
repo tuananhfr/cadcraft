@@ -317,7 +317,7 @@ fn parse(contents: &str, base: Fmt) -> (Vec<Atom>, Vec<Fmt>) {
                         let (a, n) = arg(&chars, i);
                         i = n;
                         if let Some(font) = font_switch(&a) {
-                            derive(&mut fmts, &mut cur, &|f| f.font = font.clone());
+                            derive(&mut fmts, &mut cur, &|f| f.font = font.clone().with_codepage(Some(f.font.codepage())));
                         }
                     }
                     'H' => {

@@ -353,7 +353,7 @@ pub(crate) fn draw(b: &mut Builder, ctx: &Ctx, t: &Table, rgb: Ink, lw: f32) {
     }
     for tx in &g.texts {
         let ts = crate::text_style(ctx.d, &tx.style);
-        let font = cadcraft_fonts::TextFont::for_style(&ts.font, &ts.family);
+        let font = crate::text_font(ctx.d, &ts);
         // Cell content is MTEXT (`\P`, `{\Q15;…}`, `\F…;`): laid out as such, at the cell's
         // alignment point (its numbering is MTEXT's attachment).
         let mp = cadcraft_fonts::MTextParams {
