@@ -53,12 +53,17 @@ fn arrange(members: &[(u32, bool)], at: usize) -> Option<Vec<u32>> {
     let after = members.iter().skip(at).map(|member| Some(*member));
     let mut orders = Vec::with_capacity(members.len() + 1);
     let mut previous: Option<(u32, bool)> = None;
+    let mut previous_original = None;
     for slot in before.chain(std::iter::once(None)).chain(after) {
         let (value, free) = match slot {
             None => (previous.map_or(0, |(order, _)| order.saturating_add(1)), true),
             Some((order, false)) => (previous.map_or(order, |(last, _)| if order > last { order } else { last.saturating_add(1) }), true),
             Some((order, true)) => {
-                if previous.is_some_and(|(last, free)| free && order <= last) {
+                if previous.is_some_and(|(last, free)| free && order < last) {
+                    return None;
+                }
+                // Existing ties are valid, but inserting a bar must not create a new tie at a frozen bar.
+                if previous.is_some_and(|(last, free)| free && order == last) && previous_original != Some(order) {
                     return None;
                 }
                 (order, false)
@@ -66,6 +71,7 @@ fn arrange(members: &[(u32, bool)], at: usize) -> Option<Vec<u32>> {
         };
         orders.push(value);
         previous = Some((value, free));
+        previous_original = slot.map(|(order, _)| order);
     }
     Some(orders)
 }
@@ -81,8 +87,30 @@ fn nearest_slot(members: &[(u32, bool)], wanted: usize) -> (usize, Vec<u32>) {
             }
         }
     }
-    // Appending after the last bar always fits; this only guards the arithmetic.
-    (members.len(), arrange(members, members.len()).unwrap_or_default())
+    // Conflicting existing orders can leave no legal slot; preserve them and append after the maximum.
+    let mut orders: Vec<u32> = members.iter().map(|(order, _)| *order).collect();
+    orders.push(members.iter().map(|(order, _)| *order).max().map_or(0, |order| order.saturating_add(1)));
+    (members.len(), orders)
+}
+
+fn edge_plan(toolbars: &[ToolbarState], id: &str, dock: Dock, row: u32, wanted: u32, frozen: &[String]) -> (Vec<usize>, usize, Vec<u32>) {
+    let mut members: Vec<usize> =
+        toolbars.iter().enumerate().filter(|(_, bar)| bar.id != id && bar.dock == dock && bar.row == row).map(|(index, _)| index).collect();
+    members.sort_by_key(|index| toolbars.get(*index).map_or(0, |bar| bar.order));
+    let state: Vec<(u32, bool)> = members.iter().filter_map(|index| toolbars.get(*index)).map(|bar| (bar.order, frozen.contains(&bar.id))).collect();
+    let (slot, orders) = nearest_slot(&state, (wanted as usize).min(state.len()));
+    (members, slot, orders)
+}
+
+/// The legal slot used by both the drag preview and the committed drop.
+fn snapped_target(toolbars: &[ToolbarState], id: &str, target: &DropTarget, frozen: &[String]) -> DropTarget {
+    match target {
+        DropTarget::Edge { dock, row, order } => {
+            let (_, slot, _) = edge_plan(toolbars, id, *dock, *row, *order, frozen);
+            DropTarget::Edge { dock: *dock, row: *row, order: u32::try_from(slot).unwrap_or(u32::MAX) }
+        }
+        DropTarget::Float { .. } => target.clone(),
+    }
 }
 
 /// Puts the bar `id` where `target` says. Bars in `frozen` (order held by policy) are never renumbered;
@@ -103,12 +131,7 @@ pub fn apply_drop(toolbars: &mut [ToolbarState], id: &str, target: &DropTarget, 
             let Some(bar) = toolbars.get_mut(at) else { return Ok(()) };
             bar.dock = *dock;
             bar.row = *row;
-            let mut row_members: Vec<usize> =
-                (0..toolbars.len()).filter(|i| *i != at && toolbars.get(*i).is_some_and(|bar| bar.dock == *dock && bar.row == *row)).collect();
-            row_members.sort_by_key(|i| toolbars.get(*i).map_or(0, |bar| bar.order));
-            let state: Vec<(u32, bool)> =
-                row_members.iter().filter_map(|i| toolbars.get(*i)).map(|bar| (bar.order, frozen.contains(&bar.id))).collect();
-            let (slot, orders) = nearest_slot(&state, (*order as usize).min(state.len()));
+            let (mut row_members, slot, orders) = edge_plan(toolbars, id, *dock, *row, *order, frozen);
             row_members.insert(slot, at);
             for (i, order) in row_members.into_iter().zip(orders) {
                 if let Some(bar) = toolbars.get_mut(i) {
@@ -273,6 +296,7 @@ pub(super) fn tick(ctx: &egui::Context, app: &mut CadApp, content: Rect) {
         let geometry = render::current(ctx);
         let Some(pointer) = pointer else { return };
         let target = target_at(pointer, grab, &id, &app.ws.applied.toolbars, &geometry, content);
+        let target = snapped_target(&app.ws.applied.toolbars, &id, &target, &frozen_orders(app));
         paint_preview(ctx, &target, &id, &app.ws.applied.toolbars, &geometry, content);
         app.ws.toolbar_drag = DragPhase::Dragging { id, grab, target: Some(target) };
         ctx.request_repaint();

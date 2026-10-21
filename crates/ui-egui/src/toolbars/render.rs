@@ -289,6 +289,9 @@ fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect,
                 for (command_id, command) in group {
                     let label = if command.known { crate::i18n::t(&command.label).to_string() } else { placeholder_label(command) };
                     let item = ui.add_enabled(command.known, egui::Button::new(label.as_str()));
+                    if command.known {
+                        building(ui.ctx(), |geometry| geometry.stops.push((item.id, owner)));
+                    }
                     crate::control::record_widget(ui, &item, &label, "button", None);
                     if item.clicked() {
                         clicked = Some(command_id.clone());

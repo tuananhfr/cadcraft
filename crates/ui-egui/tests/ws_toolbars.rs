@@ -491,3 +491,105 @@ fn every_disabled_item_of_a_policy_locked_bar_explains_why() {
         h.run_steps(3);
     }
 }
+
+#[test]
+fn arrange_equal_order_next_to_frozen_bar_still_places() {
+    let make_bar = |id: &str, order: u32| ToolbarState { id: id.into(), order, ..ToolbarState::default() };
+    for free_count in [1, 2] {
+        let mut bars = vec![make_bar("a", 0)];
+        if free_count == 2 {
+            bars.push(make_bar("b", 0));
+        }
+        bars.push(make_bar("frozen", 0));
+        bars.push(ToolbarState { id: "moving".into(), dock: Dock::Left, order: 9, ..ToolbarState::default() });
+        toolbars::drag::apply_drop(&mut bars, "moving", &DropTarget::Edge { dock: Dock::Top, row: 0, order: 0 }, &["frozen".to_string()]).unwrap();
+        assert_eq!(bars.iter().find(|bar| bar.id == "frozen").map(|bar| bar.order), Some(0));
+        assert_eq!(bars.iter().find(|bar| bar.id == "moving").map(|bar| (bar.dock, bar.order)), Some((Dock::Top, 1)));
+    }
+}
+
+#[test]
+fn locking_hidden_shipped_bar_keeps_it_hidden() {
+    for command in ["ui.toolbar.lock", "ui.toolbar.unlock"] {
+        let mut app = attached(MemoryStore::default());
+        assert!(app.ws.user.layout.toolbars.iter().all(|bar| bar.id != "modify"));
+        run(&mut app, command, json!({"id": "modify"}));
+        assert!(!bar(&app, "modify").visible, "{command}");
+        assert_eq!(bar(&app, "modify").locked, command == "ui.toolbar.lock");
+        let mut h = harness(app);
+        assert!(h.query_by_label("Modify toolbar grip").is_none());
+        h.state_mut().commit_workspace_now().unwrap();
+        let restored = restarted(h.state());
+        assert!(!bar(&restored, "modify").visible, "{command} survives restart without showing the bar");
+    }
+}
+
+#[test]
+fn drag_preview_matches_committed_slot_next_to_frozen_bar() {
+    let mut app = attached(company_holds_draw_at(1));
+    run(&mut app, "ui.toolbar.float", json!({"id": "modify", "x_ratio": 0.2, "y_ratio": 0.4}));
+    let mut h = harness(app);
+    let start = grip(&h, "Modify");
+    let draw_rect = h.get_by_label("Draw toolbar grip").rect();
+    let pointer = Pos2::new(draw_rect.left(), draw_rect.center().y);
+    drag(&mut h, start, pointer, false);
+    let target = match &h.state().ws.toolbar_drag {
+        DragPhase::Dragging { target: Some(target), .. } => target.clone(),
+        phase => panic!("expected a preview target, got {phase:?}"),
+    };
+    assert_eq!(target, DropTarget::Edge { dock: Dock::Top, row: 0, order: 2 }, "preview snaps after the frozen bar");
+    h.drop_at(pointer);
+    h.run_steps(4);
+    assert_eq!((bar(h.state(), "modify").dock, order_of(h.state(), "modify")), (Dock::Top, 2));
+    assert_eq!(order_of(h.state(), "draw"), 1);
+    assert!(h.get_by_label("Modify toolbar grip").rect().left() > h.get_by_label("Draw toolbar grip").rect().left());
+}
+
+fn focus_toolbar_control(h: &mut Harness<'_, CadApp>, label: &str) {
+    for _ in 0..120 {
+        if h.query_by_label(label).is_some_and(|node| node.is_focused()) {
+            return;
+        }
+        h.key_press(Key::Tab);
+        h.run_steps(2);
+    }
+    panic!("Tab did not reach {label}");
+}
+
+#[test]
+fn shift_f10_in_overflow_popup_opens_menu() {
+    let mut app = attached(MemoryStore::default());
+    run(
+        &mut app,
+        "ui.workspace.set",
+        json!({
+            "pointer": "/toolbars/standard/commands",
+            "value": [
+                "line", "circle", "arc", "rectang", "erase", "move", "copy", "rotate", "scale", "hatch",
+                "dist", "list", "area", "pan", "zoom.window", "zoom.extents", "plot", "publish", "open", "qsave"
+            ]
+        }),
+    );
+    let polar = app.session.settings.polarmode;
+    let mut h = harness_sized(app, 600.0, 600.0);
+    h.get_by_label("More toolbar commands").click();
+    h.run_steps(3);
+    focus_toolbar_control(&mut h, "Line");
+    h.key_press_modifiers(Modifiers::SHIFT, Key::F10);
+    h.run_steps(3);
+    assert!(h.get_by_label("Hide").is_focused(), "the overflow button opens its toolbar's context menu");
+    assert_eq!(h.state().session.settings.polarmode, polar);
+}
+
+#[test]
+fn escape_on_toolbar_focus_cancels_command() {
+    let mut h = harness(attached(MemoryStore::default()));
+    h.state_mut().start("line");
+    assert_eq!(h.state().session.running.as_ref().map(|command| command.id.as_str()), Some("line"));
+    focus_toolbar_control(&mut h, "New Drawing (Ctrl+N)");
+    h.state_mut().cmd.buffer = "unfinished".into();
+    h.key_press(Key::Escape);
+    h.run_steps(3);
+    assert!(h.state().session.running.is_none());
+    assert!(h.state().cmd.buffer.is_empty(), "Escape reaches the command line's existing handler");
+}

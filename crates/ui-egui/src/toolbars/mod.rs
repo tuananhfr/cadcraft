@@ -186,6 +186,7 @@ fn shipped_bar(id: &str, toolbars: &[ToolbarState]) -> Option<ToolbarState> {
         label: (*label).to_string(),
         dock: Dock::Top,
         row: next_row,
+        visible: false,
         commands: builtin_toolbar_commands(id).iter().map(|command| (*command).to_string()).collect(),
         ..ToolbarState::default()
     })
