@@ -134,6 +134,8 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
                     if let Some(response) = responses.get(next).and_then(Option::as_ref) {
                         response.request_focus();
                     }
+                    // egui would otherwise move focus spatially at the end of the pass and override the tab change.
+                    ui.memory_mut(|memory| memory.move_focus(egui::FocusDirection::None));
                 }
                 if focused.is_some()
                     && ui.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Enter) || input.consume_key(Modifiers::NONE, Key::Space))
