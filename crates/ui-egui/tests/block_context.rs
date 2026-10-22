@@ -58,7 +58,7 @@ fn selecting_a_block_shows_the_block_tab() {
     let block_tab_id = block_button.accesskit_node().locate().0;
     assert_eq!(harness.ctx.data(|data| data.get_temp::<String>(Id::new("cc_ribbon_active"))).as_deref(), Some("ctx_block"));
     harness.get_by_role_and_label(Role::Button, "Replace Block");
-    harness.get_by_role_and_label(Role::Button, "Home").click();
+    harness.get_by_role_and_label(Role::Tab, "Home").click();
     harness.run_steps(3);
     assert_eq!(harness.ctx.data(|data| data.get_temp::<String>(Id::new("cc_ribbon_active"))).as_deref(), Some("home"));
     let line = harness.state_mut().run("line", json!({"points": [[2, 0], [3, 0]]})).unwrap();
