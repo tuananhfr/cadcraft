@@ -1,6 +1,6 @@
 # Hardware parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (zoom and pan regenerate in the background) · **Target:** Autodesk AutoCAD 2027 (Mac and Windows)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-23 · **Change:** minor (GĐ5 PDF batch jobs; printer survey pending) · **Target:** Autodesk AutoCAD 2027 (Mac and Windows)
 
 The hardware AutoCAD uses and how CADCraft compares, per platform. Work items:
 [gaps.md](gaps.md#hardware).
@@ -28,7 +28,7 @@ requirements and graphics-performance documentation. Nothing was benchmarked in 
 | 3D mouse (3Dconnexion SpaceMouse) | yes | **no** | **no** | **no** | no |
 | Pen tablet / digitizer (TABLET command, calibration) | yes (Windows) | **no** | **no** | **no** | no |
 | Screen magnifier following the cursor | yes | — | breaks (#39; PR #187 adds a system-cursor option) | — | — |
-| Plotters and printers (PC3 devices, system printers) | yes | **no**: PDF/PNG/SVG files only; Print asks where to save the PDF (#26) | same | same | PDF bytes shown instead of a download (#134) |
+| Plotters and printers (PC3 devices, system printers) | yes | PDF/PNG/SVG files and user plotter definitions; persisted PDF batch queue, synchronous Folder mode and CLI; no PC3 reader or system-printer host; capability survey pending | same | same | PDF batch downloads, per-frame worker and IndexedDB resume after reopening the same drawing; no Folder scan or system printers; runtime QA pending |
 
 ## Performance on hardware (internal numbers only)
 
@@ -48,5 +48,6 @@ next step.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-23 | minor | GĐ5 PDF batch queue, desktop/CLI Folder mode and web IndexedDB progress documented from source; #134 downloads replace the old bytes-only claim. System-printer survey/submission and runtime/performance evidence remain pending; see [plotters](plotters.md#batch-jobs). |
 | 2026-10-13 | minor | Zoom and pan regenerate in the background: 2–4.5 s stalls down to 26–64 ms on a hatched DWG |
 | 2026-10-10 | major | First hardware parity doc: GPU backends per platform, input devices, displays, plotters |
