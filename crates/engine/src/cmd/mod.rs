@@ -47,6 +47,7 @@ pub mod fonts;
 pub mod helpers;
 pub mod machines;
 pub mod options;
+pub mod outcome;
 pub mod registry;
 
 use cadcraft_doc::Handle;

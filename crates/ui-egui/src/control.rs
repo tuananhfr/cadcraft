@@ -25,11 +25,13 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 
-use cadcraft_engine::Input;
+use cadcraft_engine::cmd::outcome::classify;
+use cadcraft_engine::{Input, Outcome as CommandOutcome};
 use cadcraft_geom::Vec2;
 use serde_json::{Value, json};
 
 use crate::CadApp;
+use crate::dispatch::Dispatched;
 
 pub type ControlResponse = Value;
 
@@ -179,11 +181,15 @@ fn ok(v: Value) -> Outcome {
 fn err(e: impl std::fmt::Display) -> Outcome {
     Outcome::Done(json!({"ok": false, "error": e.to_string()}))
 }
-fn wrap(r: Result<Value, String>) -> Outcome {
-    match r {
-        Ok(v) => ok(v),
-        Err(e) => err(e),
-    }
+fn wrap(dispatched: Dispatched) -> Outcome {
+    Outcome::Done(match dispatched.result {
+        Ok(value) => json!({"ok": true, "result": value, "outcome": dispatched.outcome}),
+        Err(error) => json!({"ok": false, "error": error, "outcome": dispatched.outcome}),
+    })
+}
+
+fn validation_error(error: &str) -> Outcome {
+    wrap(Dispatched { outcome: CommandOutcome::ValidationError, result: Err(error.into()) })
 }
 
 /// What `control.methods` replies: method, params, description. Keep in step with `handle` and the
@@ -289,10 +295,10 @@ pub fn handle(app: &mut CadApp, ctx: &egui::Context, req: &ControlRequest) -> Ou
     let f = |k: &str| p.get(k).and_then(Value::as_f64);
     match req.method.as_str() {
         "engine.execute" | "command" => {
-            let Some(id) = s("command").or(s("id")) else { return err("missing `command`") };
+            let Some(id) = s("command").or(s("id")) else { return validation_error("missing `command`") };
             let params = p.get("params").cloned().unwrap_or(json!({}));
             let params = if params.is_null() { json!({}) } else { params };
-            wrap(app.run(id, params))
+            wrap(app.dispatch(id, params))
         }
         "ui.menu.invoke" => {
             let Some(id) = s("command").or(s("id")) else { return err("missing `command`") };
@@ -347,7 +353,10 @@ pub fn handle(app: &mut CadApp, ctx: &egui::Context, req: &ControlRequest) -> Ou
         }
         "cmdline.state" => ok(cmdline_state(app)),
         "engine.commands" => ok(all_commands(app)),
-        "drawing.inspect" | "document.inspect" => wrap(app.session.execute("drawing.inspect", p).map_err(|e| e.to_string())),
+        "drawing.inspect" | "document.inspect" => {
+            let result = app.session.execute("drawing.inspect", p);
+            wrap(Dispatched { outcome: classify(&result), result: result.map_err(|error| error.to_string()) })
+        }
         "ui.inspect" => ok(inspect(app, ctx)),
         "ui.elements" => ok(elements(ctx, p)),
         "ui.focus" => {
@@ -495,10 +504,10 @@ pub fn handle(app: &mut CadApp, ctx: &egui::Context, req: &ControlRequest) -> Ou
             ok(render_reply(&png, w, h, None))
         }
         "app.open" => {
-            let Some(path) = s("path") else { return err("missing path") };
-            wrap(app.run("open", json!({"path": path})))
+            let Some(path) = s("path") else { return validation_error("missing path") };
+            wrap(app.dispatch("open", json!({"path": path})))
         }
-        "app.save" => wrap(app.run(if s("path").is_some() { "saveas" } else { "qsave" }, p.clone())),
+        "app.save" => wrap(app.dispatch(if s("path").is_some() { "saveas" } else { "qsave" }, p.clone())),
         "app.quit" => {
             // Programmatic calls never open dialogs: quit without the unsaved-changes prompt.
             app.quit_confirmed = true;

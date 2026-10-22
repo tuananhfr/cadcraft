@@ -116,6 +116,7 @@
 	UbotCAD	UbotCAD
 	UbotCAD Help	Довідка UbotCAD
 	Cancel	Скасувати
+	Check the input: {reason}	Перевірте введені дані: {reason}
 	Cartesian (x, y)	Декартові (x, y)
 	Center	Центр
 	Center Line	Осьова лінія
@@ -569,6 +570,7 @@
 	Node	Вузол
 	None	Немає
 	Not available	Недоступно
+	Not available: {reason}	Недоступно: {reason}
 	Not available yet	Поки недоступно
 	Numbered list	Нумерований список
 	OK	Гаразд

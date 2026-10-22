@@ -71,3 +71,46 @@ fn unknown_method_points_to_control_methods() {
     let e = r["error"].as_str().unwrap_or_default();
     assert!(e.starts_with("unknown method `help`") && e.contains("control.methods"), "{e}");
 }
+
+#[test]
+fn engine_execute_reply_carries_outcome() {
+    let mut app = app();
+    app.session.new_drawing(true);
+    for (command, params, expected, succeeds) in [
+        ("line", json!({"points": [[0, 0], [1, 0]]}), "success", true),
+        ("nope", json!({}), "unsupported", false),
+        ("line", json!({"points": "x"}), "validation_error", false),
+    ] {
+        let reply = call(&mut app, "engine.execute", json!({"command": command, "params": params}));
+        assert_eq!(reply["outcome"], expected, "{reply}");
+        assert_eq!(reply["ok"], succeeds, "{reply}");
+        if succeeds {
+            assert!(reply.get("result").is_some(), "{reply}");
+        } else {
+            assert!(reply["error"].is_string(), "{reply}");
+        }
+    }
+}
+
+#[test]
+fn unsupported_command_dispatches_unsupported_without_touching_the_drawing() {
+    let mut app = app();
+    app.session.new_drawing(true);
+    let before = app.session.state().unwrap().doc.clone();
+    assert!(!app.session.state().unwrap().is_dirty());
+    let dispatched = app.dispatch("cad.sheet.sheetset", json!({}));
+    assert_eq!(dispatched.outcome, cadcraft_engine::Outcome::Unsupported);
+    assert!(dispatched.result.is_err());
+    let after = app.session.state().unwrap();
+    assert!(std::sync::Arc::ptr_eq(&before, &after.doc));
+    assert!(!after.is_dirty());
+}
+
+#[test]
+fn cancelled_picker_reports_cancelled() {
+    let services = Services { pick_open: Some(Box::new(|| None)), ..Services::default() };
+    let mut app = CadApp::new(Session::new(), services);
+    let dispatched = app.dispatch("ui.open", Value::Null);
+    assert_eq!(dispatched.outcome, cadcraft_engine::Outcome::Cancelled);
+    assert_eq!(dispatched.result.unwrap(), json!({"cancelled": true}));
+}

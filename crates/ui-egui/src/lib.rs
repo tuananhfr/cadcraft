@@ -22,6 +22,7 @@ pub mod control;
 pub mod credits;
 pub mod customize;
 pub mod dialogs;
+pub mod dispatch;
 pub mod docking;
 pub mod fontmgr;
 #[cfg(not(target_arch = "wasm32"))]
@@ -359,23 +360,7 @@ impl CadApp {
 
     /// Run a command programmatically (or a UI command).
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
-        if let Some(r) = menus::run_ui_command(self, id, &params) {
-            return r;
-        }
-        let aliases = cadcraft_engine::cmd::file::pgp::aliases();
-        let r = self.session.execute(id, &params).map_err(|e| e.to_string());
-        wsprofile::sync_aliases(self, &aliases)?;
-        if let Ok(v) = &r
-            && let Some(m) = v.get("message").and_then(Value::as_str)
-        {
-            for l in m.lines() {
-                self.session.echo(l.to_string());
-            }
-        }
-        if let Err(e) = &r {
-            self.session.echo(e.clone());
-        }
-        r
+        self.dispatch(id, params).result
     }
 
     /// Start a command as if typed (interactive when it has prompts).
