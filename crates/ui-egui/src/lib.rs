@@ -23,6 +23,7 @@ pub mod credits;
 pub mod customize;
 pub mod dialogs;
 pub mod dispatch;
+pub mod dock_clamp;
 pub mod docking;
 pub mod fontmgr;
 #[cfg(not(target_arch = "wasm32"))]

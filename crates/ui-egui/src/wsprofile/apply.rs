@@ -243,6 +243,7 @@ pub(crate) fn remap_screen(app: &mut CadApp, ctx: &egui::Context) {
             *rect = floating_rect(to_ratio(rect_points(*rect), previous), area);
         }
     }
+    crate::docking::reclamp(app, area);
 }
 
 /// Panels whose `panels[]` entry outranks the user's dock tree: locked by policy or placed by
