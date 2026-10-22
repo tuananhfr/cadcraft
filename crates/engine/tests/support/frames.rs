@@ -119,3 +119,16 @@ pub fn anon_dynamic(d: &mut Drawing, effective: &str, anon: &str) {
         },
     );
 }
+
+// Only the queue tests build whole batches; the other binaries sharing this module never call it.
+#[allow(dead_code)]
+pub fn frames_drawing(n: usize) -> Drawing {
+    let mut session = Session::new();
+    session.doc_mut().unwrap().header.set_i64("INSUNITS", 4);
+    frame_block(session.doc_mut().unwrap(), "FRAME-A3", 420.0, 297.0);
+    for index in 0..n {
+        let sheet_id = format!("KT-{:02}", index + 1);
+        place(&mut session, "FRAME-A3", [index as f64 * 500.0, 0.0], 1.0, 0.0, false, &[("SHEET_NO", &sheet_id)]);
+    }
+    session.doc().unwrap().clone()
+}

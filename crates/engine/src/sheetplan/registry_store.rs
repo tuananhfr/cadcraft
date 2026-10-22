@@ -169,7 +169,7 @@ impl DirRegistryStore {
     }
 
     pub fn settings_default() -> Result<Self, String> {
-        crate::cmd::plotters::settings_root().map(Self::new)
+        crate::cmd::plotters::settings_root().map(Self::new).ok_or_else(|| "there is no settings folder for frame templates".to_string())
     }
 
     fn read_file(&self, name: &str) -> Result<Option<String>, String> {
