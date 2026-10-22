@@ -121,7 +121,7 @@ impl Reader<'_> {
                 let bytes: Vec<u8> =
                     hex.as_bytes().chunks(2).map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap()).collect();
                 let text = if bytes.starts_with(&[0xfe, 0xff]) {
-                    let units: Vec<u16> = bytes[2..].chunks_exact(2).map(|pair| u16::from_be_bytes([pair[0], pair[1]])).collect();
+                    let units: Vec<u16> = bytes[2..].as_chunks::<2>().0.iter().map(|pair| u16::from_be_bytes(*pair)).collect();
                     String::from_utf16_lossy(&units)
                 } else {
                     String::from_utf8_lossy(&bytes).into_owned()
@@ -213,7 +213,7 @@ pub fn pages(pdf: &[u8]) -> Vec<ProbePage> {
         for _ in 0..10_000 {
             let Some(node) = pending.pop() else { break };
             if let Some(Node::Array(nums)) = get(node, "Nums") {
-                for pair in nums.chunks_exact(2) {
+                for pair in nums.as_chunks::<2>().0 {
                     if let (Some(index), Some(Node::Text(label))) = (number(&pair[0]), get(&pair[1], "P"))
                         && let Some(page) = output.get_mut(index as usize)
                     {
