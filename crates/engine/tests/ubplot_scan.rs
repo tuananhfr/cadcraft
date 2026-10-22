@@ -3,7 +3,7 @@ mod support;
 use cadcraft_doc::{Common, EntityKind, Handle, Layout, Line, Lineweight, Space};
 use cadcraft_engine::Session;
 use cadcraft_engine::cmd::file::base64_decode;
-use cadcraft_engine::sheetplan::{PlotScale, ScanMode, ScanRequest, Severity, SheetMode, SheetPlan, SheetSource, SheetStatus, codes, ids};
+use cadcraft_engine::sheetplan::{PlotScale, ScanMode, Severity, SheetMode, SheetPlan, SheetSource, SheetStatus, codes, ids};
 use cadcraft_geom::Vec2;
 use serde_json::{Value, json};
 use support::frames::{frame_block, place};
@@ -203,11 +203,11 @@ fn scan_job_id_stable_and_changes_with_settings() {
     let (mut s, handles) = scan_setup(1);
     let params = json!({"mode": "block", "handles": handles});
     let first = scan(&mut s, params.clone());
-    let again = scan(&mut s, params.clone());
+    let again = scan(&mut s, params);
     assert_eq!(again["jobId"], first["jobId"]);
     assert_eq!(first["jobId"], first["job_id"]);
-    let req: ScanRequest = serde_json::from_value(params).unwrap();
-    let request = serde_json::to_value(&req).unwrap();
+    // The job id hashes the request after the print profile seeds its settings, not the raw parameters.
+    let request = serde_json::to_value(&s.ubplot.last.as_ref().unwrap().request).unwrap();
     let source = first["source_hash"].as_str().unwrap();
     assert_eq!(first["jobId"], ids::job_id(source, &request));
     let changed = scan(&mut s, json!({"mode": "block", "handles": handles, "paper": "A4"}));
