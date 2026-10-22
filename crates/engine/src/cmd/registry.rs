@@ -1,7 +1,11 @@
 //! Stable-id metadata for every engine command: the contract workspaces, palettes and saved
 //! layouts rely on. Derived from `CommandSpec`, so the command definitions stay the single source.
 
+use std::collections::{BTreeSet, HashMap};
+use std::sync::OnceLock;
+
 use serde::Serialize;
+use serde_json::{Value, json};
 
 use super::{CommandSpec, command_specs};
 
@@ -15,9 +19,40 @@ pub enum RiskClass {
     Execute,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CommandStatus {
+    Available,
+    Unsupported,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Target {
+    Desktop,
+    Web,
+}
+
+impl Target {
+    pub fn current() -> Self {
+        if cfg!(target_arch = "wasm32") { Self::Web } else { Self::Desktop }
+    }
+}
+
+pub const COMMAND_VERSION: &str = "1.0.0";
+
+/// Pin an existing namespace here before moving its command to another menu category.
+pub const NAMESPACE_PINS: &[(&str, &str)] = &[];
+pub const MODEL_ONLY: &[&str] = &["plotwindow"];
+pub const PAPER_ONLY: &[&str] = &["mspace", "pspace", "mview", "mview.polygonal", "vpclip", "vplayer"];
+
 #[derive(Clone, Debug)]
 pub struct CommandMeta {
     pub stable_id: &'static str,
+    pub namespaced_id: String,
+    pub label_key: &'static str,
+    pub contexts: &'static [&'static str],
+    pub status: CommandStatus,
+    pub version: &'static str,
     pub label: &'static str,
     pub aliases: Vec<String>,
     pub category: &'static str,
@@ -111,6 +146,17 @@ fn meta_of(spec: &CommandSpec) -> CommandMeta {
     let risk_class = risk_of(spec);
     CommandMeta {
         stable_id: spec.id,
+        namespaced_id: namespaced_id(spec),
+        label_key: spec.label,
+        contexts: if MODEL_ONLY.contains(&spec.id) {
+            &["model"]
+        } else if PAPER_ONLY.contains(&spec.id) {
+            &["paper"]
+        } else {
+            &["model", "paper"]
+        },
+        status: status_on(spec.id, Target::current()),
+        version: COMMAND_VERSION,
         label: spec.label,
         aliases: spec.aliases.iter().map(|a| a.to_string()).collect(),
         category: spec.menu.first().copied().unwrap_or("Other"),
@@ -134,4 +180,73 @@ pub fn capability_present(id: &str) -> bool {
 pub fn resolve_stable(id: &str) -> Option<&'static str> {
     let id = RENAMED.iter().find(|(old, _)| *old == id).map_or(id, |(_, new)| *new);
     command_specs().iter().find(|c| c.id == id).map(|c| c.id)
+}
+
+/// UI ids already carry a namespace; engine ids use their first menu category.
+pub fn namespaced_id(spec: &CommandSpec) -> String {
+    if let Some((_, pinned)) = NAMESPACE_PINS.iter().find(|(id, _)| *id == spec.id) {
+        return (*pinned).to_string();
+    }
+    if spec.id.starts_with("ui.") {
+        return spec.id.to_string();
+    }
+    let category = spec.menu.first().copied().unwrap_or("Other").to_ascii_lowercase();
+    format!("cad.{category}.{}", spec.id)
+}
+
+pub fn status_on(id: &str, target: Target) -> CommandStatus {
+    if target == Target::Web && capabilities_of(id).contains(&"xref") { CommandStatus::Unsupported } else { CommandStatus::Available }
+}
+
+/// Resolve ids independently of user aliases, which must not change saved workspace references.
+pub fn resolve_command(id: &str) -> Option<&'static str> {
+    static IDS: OnceLock<HashMap<String, &'static str>> = OnceLock::new();
+    let ids = IDS.get_or_init(|| {
+        let mut ids = HashMap::new();
+        for spec in command_specs() {
+            ids.insert(spec.id.to_ascii_lowercase(), spec.id);
+            ids.insert(namespaced_id(spec).to_ascii_lowercase(), spec.id);
+        }
+        ids
+    });
+    let id = id.to_ascii_lowercase();
+    let id = RENAMED.iter().find(|(old, _)| old.eq_ignore_ascii_case(&id)).map_or(id.as_str(), |(_, new)| *new);
+    ids.get(id).copied()
+}
+
+pub fn registry_json(meta: &CommandMeta) -> Value {
+    let aliases: BTreeSet<String> =
+        std::iter::once(meta.stable_id.to_ascii_uppercase()).chain(meta.aliases.iter().map(|a| a.to_ascii_uppercase())).collect();
+    json!({
+        "id": meta.namespaced_id,
+        "commandId": meta.stable_id,
+        "version": meta.version,
+        "labelKey": meta.label_key,
+        "defaultAliases": aliases,
+        "contexts": meta.contexts,
+        "capabilities": meta.capabilities,
+        "undoable": meta.undoable,
+        "status": meta.status,
+    })
+}
+
+pub fn command_schema() -> Value {
+    json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Command registry entry",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "commandId", "version", "labelKey", "defaultAliases", "contexts", "capabilities", "undoable", "status"],
+        "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "commandId": { "type": "string", "minLength": 1 },
+            "version": { "type": "string", "const": COMMAND_VERSION },
+            "labelKey": { "type": "string", "minLength": 1 },
+            "defaultAliases": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+            "contexts": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "enum": ["model", "paper"] } },
+            "capabilities": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+            "undoable": { "type": "boolean" },
+            "status": { "type": "string", "enum": ["available", "unsupported"] },
+        },
+    })
 }
