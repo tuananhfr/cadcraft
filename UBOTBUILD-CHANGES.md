@@ -56,21 +56,38 @@ This branch (`tuananhfr`) is UbotCAD, the UbotBuild build of [CADCraft](https://
 
 ## V2.2 GĐ2
 
-- UBPLOT accepts a device name and checks its paper limits: near-limit sheets warn, oversized sheets block with an optional overlap split proposal. Unknown devices, and non-PDF devices on the web, fall back to PDF after `DEVICE_UNAVAILABLE` approval.
-- Explicit split approval is atomic with WARN approvals and appends a geometry/device-bound audit record. Approved pieces preserve scale and rotation, publish in sheet/piece order with numbered labels, and carry dashed 0.25 mm overlap seams and 10 mm end ticks. Unapproved splits never print; short sides beyond the device width stay blocked and suggest PDF.
+Paper, physical scale, preflight and audited approval (B1–B9). Gate 2 validation is pending.
 
-- `ubplot.approve` atomically approves WARN issues for users or named agents and appends fingerprinted audit records with host-provided timestamps. BLOCK, INFO and PASS cannot be approved. Rescans preserve unchanged approvals and audit history; changed issue messages require new approval. Publishing rejects forged flags and unapproved warnings with `BLOCK_NOT_APPROVABLE`, `APPROVAL_WITHOUT_AUDIT` or `WARN_NOT_APPROVED`; there is no bypass.
+- UBPLOT ratios use `INSUNITS`, independently of `MEASUREMENT`: `1:100` in a metre drawing prints 1 m as 10 mm. `scale_label` preserves the requested or frame-derived physical ratio. Unitless and unknown codes assume millimetres with INFO `UNITS_ASSUMED`. PLOT and EXPORTPDF retain their legacy paper-units-per-drawing-unit meaning unless `scaleMode: "real"` is supplied.
+- PLOT and EXPORTPDF with an explicit `scale` and no `fit` now preserve that scale on Model instead of silently fitting. PDF page items and PNG use the same default; `fit: true` remains an explicit request to fit. UBPLOT Ratio sheets always publish with `fit: false`; only Fit sheets are fitted. Paper/scale mismatches block instead of shrinking the drawing.
+- Paper strings accept `auto`, standard A0–A5 and elongated names such as `A1x4`, custom `841x2400` mm, and `roll:914` or `roll:914:5`, including per-sheet overrides. Roll length follows the scaled frame plus both margins, rounded up to 1 mm. Too-narrow rolls block with `PAPER_TOO_SMALL`; oversized rolls use `PAPER_TOO_LARGE`; fixed-paper mismatches use `SCALE_PAPER_MISMATCH`. Merged pages retain their own MediaBox and scale.
+- PDF limits are 1000 pages per file, 512 MiB and 15000 mm (15 m) per paper edge. The two-pass writer gathers glyphs separately and releases each page display list after writing it. Edges over 5080 mm (14400 points) use `/UserUnit`, scaled MediaBox/content and catalog PDF 1.6. Oversized paper is rejected; merged jobs over the page cap suggest split output. PNG retains its pixel cap.
+- Preflight reports essential missing xrefs as BLOCK `XREF_MISSING`, unloaded xrefs as WARN `XREF_UNLOADED`, and missing xrefs outside all sheets as plan-level INFO `XREF_MISSING_OUTSIDE`. Nested transforms, visibility and layout viewport model bounds are considered. Empty definitions without usable bounds remain plan-level diagnostics; traversal limits block with `XREF_SCAN_LIMIT`. Web messages explain that external references are not loaded there.
+- Fonts used on planned sheets produce plan-level WARN `FONT_MISSING` / `FONT_FALLBACK` or INFO `FONT_MAPPED`; cached `last` scans refresh font settings. Duplicate ids warn on every copy (`SHEET_ID_DUPLICATE`). The revision register uses natural order: old/missing revisions warn (`REVISION_OLD`), newer revisions report INFO (`REVISION_NEWER`), and superseded templates warn (`TEMPLATE_SUPERSEDED`). `PLOT_STYLE` and renamed split deliveries (`FILE_RENAMED`) are INFO. The full code/severity table is in [UBPLOT](docs/ubplot.md).
+- Clean and INFO-only sheets are `READY`; unapproved WARNs are `NEEDS_PREVIEW`; BLOCKs are `BLOCKED`. Scan summary counts sheet verdicts under `pass`, `info`, `warn`, `block`; plan-level issues do not inflate those counts. The dialog defaults to exceptions, groups by code/severity, offers confirmed bulk WARN approval, and disables Publish for unapproved warnings or BLOCKs in merged output. BLOCK groups offer fixes or exclusion and have no approval control.
+- `ubplot.approve` atomically approves WARNs for `user` or named agents and appends fingerprinted audit records with host timestamps. Only WARNs can be approved; BLOCKs can never be approved, including via JSON or an agent. Unchanged rescans preserve approvals and audit history; changed messages require approval again. Publishing rejects forged flags and unapproved warnings with `BLOCK_NOT_APPROVABLE`, `APPROVAL_WITHOUT_AUDIT` or `WARN_NOT_APPROVED`; there is no bypass.
+- Device limits use the greatest short and long paper sides: at least 95% warns (`DEVICE_LIMIT_NEAR`), exceeding either blocks (`DEVICE_LIMIT_EXCEEDED`). A split proposal requires explicit approval through `ubplot.approve {split}` and a geometry/device-bound audit entry; this resolves the device-size cause rather than approving a BLOCK. Overlap defaults to 20 mm (0–200 mm). Approved pieces preserve scale/rotation, follow sheet/piece order, use numbered page labels, and show 0.25 mm dashed seams with 10 mm end ticks. A short side beyond the device width stays blocked; choose PDF.
+- UBPLOT on the web publishes PDF only. Unknown desktop devices and non-PDF web devices fall back to PDF after WARN `DEVICE_UNAVAILABLE` approval; another printer is never selected silently. Desktop UI offers overlap and split approval. Real printers, driver queries, queues/resume and folder publishing remain GĐ5 work; LPC templates and PrintProfile remain GĐ6 work.
 
-- UBPLOT preflight reports missing/fallback fonts as plan-level WARN and explicit font mappings as INFO, restricted to styles used on the planned sheets. Cached `last` scans refresh process-wide font settings. Font reporting through FONTS keeps its existing JSON output.
-- Duplicate sheet ids warn on every copy. The optional `revisions` register compares template revision attributes in natural order, warning on old/missing revisions and reporting newer revisions as INFO. Superseded templates warn with their replacement id. Plan-level `PLOT_STYLE` reports each selected table or colors as displayed.
-- Successful split PDF delivery reports INFO `FILE_RENAMED` with the actual filename whenever its stem differs from the sheet id. Repeat publishes replace the diagnostic; merged publish and rescanning clear stale rename information.
+### Gate 2 results (lead)
 
-- UBPLOT preflight checks xrefs against sheet outlines and layout viewport model bounds, with nested transforms and dynamic visibility. Essential missing references block with `XREF_MISSING`; unloaded references warn with `XREF_UNLOADED`; missing references outside all sheets report plan-level INFO `XREF_MISSING_OUTSIDE`. Web missing-reference messages explain that external references are not loaded there. Empty definitions have no usable AABB and remain plan-level diagnostics under the specified overlap rule.
-- Clean and INFO-only UBPLOT sheets now scan as `READY`; unapproved WARNs need preview and BLOCKs remain blocked, including paper/scale errors. `derive_status` verifies WARN audit fingerprints and is the path to `READY`. Scan summary now counts sheets by verdict with exactly `pass`, `info`, `warn`, `block` keys. Repeated preflight replaces its own diagnostics; traversal limits block with `XREF_SCAN_LIMIT`.
+Pending: the lead fills results and evidence after running the gate. No tests, benchmarks,
+CLI checks, builds or visual QA were run for this documentation task.
 
-- PDF publications accept 1000 pages and 512 MiB. The writer collects font glyphs separately and releases each page display list after writing it. Sheets over 14400 points use `/UserUnit` with scaled MediaBox/content and catalog PDF 1.6; smaller sheets retain their existing PDF version. Oversized paper is rejected instead of clamped, and merged jobs over the page cap suggest split output.
-
-- PLOT and EXPORTPDF with an explicit `scale` and no `fit` now preserve that scale on Model instead of silently fitting. PDF page items and PNG use the same default; `fit: true` still requests fitting. UBPLOT publishes Ratio sheets at their stored scale and Fit sheets with fitting, with per-page paper margins (zero for PDF/custom paper; device margins when available).
-- UBPLOT scan ratios now follow INSUNITS independently of MEASUREMENT: `1:100` in a metre drawing stores 10 mm on paper per drawing unit. `scale_label` preserves the requested ratio or the frame-derived physical ratio (six significant digits). Unitless and unknown INSUNITS codes assume mm and report plan-level INFO `UNITS_ASSUMED`.
-- PLOT and EXPORTPDF accept `scaleMode: "real"` to interpret an explicit `scale` as a physical ratio using INSUNITS. Without it, scale keeps its existing paper-units-per-drawing-unit meaning.
-- UBPLOT accepts `auto`, standard/elongated paper names (such as `A1x4`), custom `841x2400` mm and `roll:914[:5]` strings, including per-sheet overrides. Roll lengths follow the scaled frame plus both margins, rounded up to 1 mm. `paper_name` retains the resolved choice. Too-narrow rolls and scale/paper mismatches block publishing; merged pages retain their individual sizes. Scan, page setups and PDF output accept up to 15000 mm.
+| Check | Result / evidence |
+| --- | --- |
+| `sp05_mixed_a1_a3_long_in_one_pdf_each_own_mediabox` | Pending — lead |
+| `roll_914_length_follows_frame` | Pending — lead |
+| `sheet_15m_uses_user_unit` | Pending — lead |
+| `pages_with_scale_are_not_fitted` | Pending — lead |
+| `insunits_meters_plot_1_100` | Pending — lead |
+| SP07: `essential_missing_xref_blocks_the_sheet` | Pending — lead |
+| SP07: `font_missing_warns_at_plan_level` | Pending — lead |
+| SP11: `duplicate_sheet_ids_warn_on_every_copy` | Pending — lead |
+| SP11: `old_revision_against_register_warns` | Pending — lead |
+| `block_is_never_approvable_even_by_json` | Pending — lead |
+| Native/wasm clippy, fmt, affected crate tests, layers | Pending — lead |
+| `bench_thousand_dense_pages`: bytes/page, total bytes, time | Pending — lead |
+| Independent PDF CLI checks on mixed-size and 15 m output | Pending — lead |
+| Web release build and visual QA: 1366×768, 1920×1080, 200% zoom | Pending — lead |
+| Desktop smoke: approved three-piece split and PDF inspection | Pending — lead |
