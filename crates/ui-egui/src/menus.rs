@@ -15,6 +15,10 @@ const RECENT_CLEAR: &str = "ui.recent.clear";
 
 /// UI-only commands: (id, label, menu path, shortcut).
 pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
+    ("ui.fullscreen", "Full Screen", &["View", "Full Screen"], None),
+    ("ui.focusmode", "Focus Mode", &["View", "Focus Mode"], None),
+    ("cleanscreenon", "Clean Screen On", &[], None),
+    ("cleanscreenoff", "Clean Screen Off", &[], None),
     ("ui.spacemouse", "3D Mouse...", &["Tools", "3D Mouse..."], None),
     ("ui.spacemouse.calibrate", "Calibrate 3D Mouse", &[], None),
     ("ui.spacemouse.navigate", "3D Mouse Navigation", &[], None),
@@ -130,6 +134,12 @@ pub fn is_ui_command(id: &str) -> bool {
 
 /// Run a UI-only command. `None` if `id` isn't one.
 pub fn run_ui_command(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
+    if id == "ui.fullscreen" {
+        return Some(app.dispatch(id, params.clone()).result);
+    }
+    if let Some(result) = crate::i18n::with_language(app.language(), || crate::focus::route(app, id, params)) {
+        return Some(result);
+    }
     // Changes made outside commands (dragging, palette clicks) are folded in first, so the
     // command's own change becomes one layout undo step.
     crate::wsprofile::observe(app, true);
@@ -726,6 +736,15 @@ pub fn menu_bar(app: &mut CadApp, ui: &mut egui::Ui) {
 
 /// Like choosing a menu item: starts the command interactively.
 pub fn activate(app: &mut CadApp, id: &str) {
+    if id.eq_ignore_ascii_case("ui.fullscreen") {
+        let gesture = app.command_context.input(|input| input.pointer.any_click());
+        let _ = crate::fullscreen::dispatch(app, gesture);
+        return;
+    }
+    if matches!(id, "ui.focusmode" | "cleanscreenon" | "cleanscreenoff") {
+        app.start(id);
+        return;
+    }
     app.cmd.buffer.clear();
     app.start(id);
 }

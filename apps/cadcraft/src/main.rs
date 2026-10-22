@@ -147,6 +147,7 @@ fn pick_font() -> cadcraft_ui_egui::fontmgr::PickFontResult {
 
 fn services() -> Services {
     Services {
+        fullscreen: None,
         pick_open: Some(Box::new(|| {
             rfd::FileDialog::new()
                 .add_filter(i18n::t("Drawings (DWG, DXF)"), &["dwg", "dxf", "dwt"])

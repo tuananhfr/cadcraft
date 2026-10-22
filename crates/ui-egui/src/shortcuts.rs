@@ -90,6 +90,8 @@ pub fn defaults_for(platform: KeyPlatform) -> BTreeMap<String, String> {
         ("ui.panel.properties", "Ctrl+1"),
         ("ui.toggle.toolsets", "Ctrl+3"),
         ("ui.toggle.cmdline", "Ctrl+9"),
+        ("ui.fullscreen", "Ctrl+Shift+F"),
+        ("ui.focusmode", "Ctrl+0"),
         ("ui.dialog.commands", "F1"),
         ("ui.toggle.history", "F2"),
         ("osnap", "F3"),
@@ -102,7 +104,7 @@ pub fn defaults_for(platform: KeyPlatform) -> BTreeMap<String, String> {
         ("dynmode", "F12"),
     ]
     .into_iter()
-    .filter(|(_, keys)| platform == KeyPlatform::Desktop || !is_browser_reserved(keys))
+    .filter(|(id, keys)| platform == KeyPlatform::Desktop || (!matches!(*id, "ui.fullscreen" | "ui.focusmode") && !is_browser_reserved(keys)))
     .map(|(id, key)| (id.to_string(), key.to_string()))
     .collect()
 }

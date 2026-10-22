@@ -14,7 +14,9 @@ pub(crate) const FILE_TABS_HEIGHT: f32 = 26.0;
 pub(crate) const STATUS_BAR_HEIGHT: f32 = 26.0;
 
 pub(crate) fn quick_access(app: &mut CadApp, ui: &mut egui::Ui) {
-    crate::quick_access::show(app, ui);
+    if !crate::focus::hides(app, crate::focus::Chrome::QuickAccess) {
+        crate::quick_access::show(app, ui);
+    }
 }
 
 /// Height of the macOS integrated title row (#161). AppKit draws the traffic lights itself,

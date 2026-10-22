@@ -1851,3 +1851,12 @@
 	A3	A3
 	A4	A4
 	A5	A5
+	Full Screen	Повний екран
+	Focus Mode	Режим зосередження
+	Clean Screen On	Увімкнути чистий екран
+	Clean Screen Off	Вимкнути чистий екран
+	Exit Focus Mode (Esc)	Вийти з режиму зосередження (Esc)
+	Full screen needs a click in the browser	Для повного екрана потрібно клацнути в браузері
+	Full screen is blocked here (iframe needs allow="fullscreen"); using Focus mode	Повний екран заблоковано (iframe потребує allow="fullscreen"); увімкнено режим зосередження
+	on must be a boolean	on має бути логічним значенням
+	command_line must be floating or hidden	command_line має бути floating або hidden
