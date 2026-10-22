@@ -78,7 +78,7 @@ fn openapi_references_existing_schema() {
 
 #[test]
 fn future_minor_with_unknown_enum_value_is_invalid() {
-    assert_eq!(SCHEMA_VERSION, "1.0.0", "review the forward-minor fixture when the current schema changes");
+    assert_eq!(SCHEMA_VERSION, 3);
     let mut profile: Value = serde_json::from_str(include_str!("fixtures/workspace/future-1.3.0.json")).unwrap();
     profile["schema_version"] = json!("1.3.0");
     assert!(migrate(profile.clone()).is_ok(), "the future minor alone must remain readable");

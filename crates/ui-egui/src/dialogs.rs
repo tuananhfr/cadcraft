@@ -388,21 +388,27 @@ fn commands(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
 }
 
 fn blocks(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
-    let mut pick = None;
     egui::Window::new(crate::tl!("Blocks")).id(egui::Id::new("Blocks")).open(open).default_size(vec2(320.0, 360.0)).show(ctx, |ui| {
+        blocks_body(ui, app);
+    });
+}
+
+pub(crate) fn blocks_body(ui: &mut egui::Ui, app: &mut CadApp) {
+    let mut pick = None;
+    egui::ScrollArea::vertical().id_salt("blocks_body").auto_shrink([false, false]).show(ui, |ui| {
         let Ok(d) = app.session.doc() else { return };
-        let names: Vec<&String> = d.blocks.keys().filter(|k| !k.starts_with('*')).collect();
-        if names.is_empty() {
+        let mut names = d.blocks.keys().filter(|name| !name.starts_with('*')).peekable();
+        if names.peek().is_none() {
             ui.label(crate::tl!("No blocks defined in this drawing."));
         }
-        for n in names {
-            if ui.button(n).on_hover_text(crate::tl!("Insert this block")).clicked() {
-                pick = Some(n.clone());
+        for name in names {
+            if ui.button(name).on_hover_text(crate::tl!("Insert this block")).clicked() {
+                pick = Some(name.clone());
             }
         }
     });
-    if let Some(n) = pick {
-        insert_block(app, &n);
+    if let Some(name) = pick {
+        insert_block(app, &name);
     }
 }
 

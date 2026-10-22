@@ -76,6 +76,14 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
     }
     let state_id = Id::new("cc_ribbon_active");
     let mut active: String = ui.ctx().data(|data| data.get_temp(state_id)).unwrap_or_default();
+    let context_id = Id::new("cc_ribbon_context");
+    let previous_context: String = ui.ctx().data(|data| data.get_temp(context_id)).unwrap_or_default();
+    let context = tabs.iter().find(|tab| tab.contextual.is_some()).map(|tab| tab.id.clone()).unwrap_or_default();
+    // A new context exposes its tools without overriding a later manual tab choice.
+    if !context.is_empty() && context != previous_context {
+        active = context.clone();
+    }
+    ui.ctx().data_mut(|data| data.insert_temp(context_id, context));
     if !tabs.iter().any(|tab| tab.id == active) {
         egui::Popup::close_id(ui.ctx(), popup_id);
         active = tabs.first().map(|tab| tab.id.clone()).unwrap_or_default();
@@ -644,8 +652,12 @@ fn button(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGr
                     .on_hover_text(label.as_str())
                 }
             })
-            .inner
-            .on_disabled_hover_text(label.as_str());
+            .inner;
+        let response = if command.known {
+            response.on_disabled_hover_text(label.as_str())
+        } else {
+            response.on_disabled_hover_text(crate::toolbars::placeholder_reason(&command))
+        };
         crate::control::record_widget(ui, &response, &label, "button", None);
         if response.has_focus() {
             response.scroll_to_me(None);

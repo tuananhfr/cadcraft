@@ -114,7 +114,7 @@ pub fn convert_toolbar_to_group(layout: &mut WorkspaceLayout, toolbar: &str, tab
         return Err(crate::tl!("Too many ribbon groups or toolbar commands").to_string());
     }
     let id = fresh_id(tab.groups.iter().map(|group| group.id.as_str()));
-    let commands = bar.commands.iter().filter(|id| crate::toolbars::resolve(id).known).cloned().collect();
+    let commands = bar.commands.iter().filter(|id| crate::toolbars::is_known(id)).cloned().collect();
     tab.groups.push(RibbonGroup { id: id.clone(), label: bar.label.clone(), commands });
     bar.visible = false;
     Ok(id)
@@ -132,7 +132,7 @@ fn toolbar_to_ribbon(app: &mut CadApp, params: &Value) -> Result<Value, String> 
         .find(|bar| bar.id == toolbar.as_ref())
         .into_iter()
         .flat_map(|bar| bar.commands.iter().take(crate::wsprofile::validate::MAX_ARRAY))
-        .filter(|id| !crate::toolbars::resolve(id).known)
+        .filter(|id| !crate::toolbars::is_known(id))
         .cloned()
         .collect();
     let mut created = String::new();
@@ -235,7 +235,7 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
                     "ui.ribbon.tab.rename" => tab.label = text(params, "label")?.into(),
                     "ui.ribbon.group.add" => {
                         let id = fresh_id(tab.groups.iter().map(|group| group.id.as_str()));
-                        tab.groups.push(RibbonGroup { id: id.clone(), label: text(params, "label")?.into(), commands: Vec::new() });
+                        tab.groups.push(RibbonGroup { id: id.clone(), label: text(params, "label")?.into(), ..RibbonGroup::default() });
                         created = Some(id);
                     }
                     _ => {

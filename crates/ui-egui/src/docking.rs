@@ -18,6 +18,8 @@ pub enum Panel {
     ExternalRefs,
     Fonts,
     Lisp,
+    Blocks,
+    History,
 }
 
 impl Panel {
@@ -32,6 +34,8 @@ impl Panel {
             Self::ExternalRefs => "externalReferences",
             Self::Fonts => "fonts",
             Self::Lisp => "lisp",
+            Self::Blocks => "blocks",
+            Self::History => "history",
         }
     }
     pub fn label(self) -> &'static str {
@@ -44,6 +48,8 @@ impl Panel {
             Self::ExternalRefs => "External References",
             Self::Fonts => "Fonts",
             Self::Lisp => "LISP",
+            Self::Blocks => "Blocks",
+            Self::History => "Command History",
         }
     }
     fn default_side(self) -> Zone {
@@ -53,11 +59,11 @@ impl Panel {
             Self::QuickCalc => Zone::Right,
             Self::Layers => Zone::Right,
             Self::Properties => Zone::Right,
-            Self::ExternalRefs | Self::Fonts | Self::Lisp => Zone::Right,
+            Self::ExternalRefs | Self::Fonts | Self::Lisp | Self::Blocks | Self::History => Zone::Right,
         }
     }
     /// Palettes outside the default arrangement, opened on request.
-    pub const ON_DEMAND: &[Self] = &[Self::QuickCalc, Self::Fonts, Self::Lisp];
+    pub const ON_DEMAND: &[Self] = &[Self::QuickCalc, Self::Fonts, Self::Lisp, Self::Blocks, Self::History];
     pub fn parse(id: &str) -> Result<Self, String> {
         Self::ALL.iter().chain(Self::ON_DEMAND).copied().find(|panel| panel.id() == id).ok_or_else(|| format!("Unknown panel: {id}"))
     }
@@ -310,16 +316,44 @@ fn publish_visibility(app: &mut crate::CadApp, workspace: &Workspace) {
 
 pub fn command(app: &mut crate::CadApp, reset: bool, params: &Value) -> Result<Value, String> {
     let mut workspace = app.ui.docking.clone();
+    let clamp = params.get("operation").and_then(Value::as_str) == Some("clamp");
+    let area = if clamp {
+        let [x, y, width, height]: [f32; 4] = serde_json::from_value(params.get("content").cloned().unwrap_or(Value::Null))
+            .map_err(|_| crate::tl!("The docking content area must be finite and positive").to_string())?;
+        let area = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(width, height));
+        if !area.is_finite() || !area.is_positive() || !area.size().is_finite() {
+            return Err(crate::tl!("The docking content area must be finite and positive").to_string());
+        }
+        Some(area)
+    } else {
+        None
+    };
     if reset {
         workspace = Workspace::default();
     } else {
         sync(&mut workspace, app)?;
-        workspace.command(params)?;
+        if !clamp {
+            workspace.command(params)?;
+        }
     }
     crate::wsprofile::apply::keep_locked_stack_sizes(app, &mut workspace);
+    if let Some(area) = area {
+        crate::dock_clamp::clamp_layout(&mut workspace.layout, area);
+    }
+    workspace.validate()?;
     publish_visibility(app, &workspace);
     app.ui.docking = workspace;
     Ok(json!({"docking": app.ui.docking}))
+}
+
+pub(crate) fn reclamp(app: &mut crate::CadApp, content: egui::Rect) {
+    let mut next = app.ui.docking.layout.clone();
+    if crate::dock_clamp::clamp_layout(&mut next, content) {
+        let rect = [content.left(), content.top(), content.width(), content.height()];
+        if let Err(error) = app.run("ui.dock", json!({"operation":"clamp", "content":rect})) {
+            app.set_status(error);
+        }
+    }
 }
 
 pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
@@ -334,9 +368,10 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
         workspace = Workspace::default();
         let _ = sync(&mut workspace, app);
     }
-    // Bodies can dispatch commands (including the drawing's typed command line).
-    // Keep the canonical workspace accessible while rendering an immutable snapshot.
-    app.ui.docking = workspace.clone();
+    app.ui.docking = workspace;
+    reclamp(app, ui.available_rect_before_wrap());
+    // Bodies can dispatch commands, so the rendered snapshot must leave the live layout accessible.
+    let workspace = app.ui.docking.clone();
     let mut style = DockStyle::from_ui(ui);
     style.min_pane = 96.0;
     style.background = t.panel;
@@ -392,6 +427,7 @@ fn panel_limits(panel: &Panel) -> PanelLimits {
         Panel::ToolSets => (egui::vec2(220.0, 150.0), 480.0),
         Panel::Fonts => (egui::vec2(260.0, 180.0), 900.0),
         Panel::Lisp => (egui::vec2(240.0, 140.0), 720.0),
+        Panel::Blocks | Panel::History => (egui::vec2(220.0, 140.0), 720.0),
         Panel::Layers | Panel::Properties | Panel::ExternalRefs => (egui::vec2(220.0, 100.0), 720.0),
     };
     PanelLimits { min, max: egui::vec2(max_width, 1_000_000.0) }
@@ -445,5 +481,7 @@ pub(crate) fn body(app: &mut crate::CadApp, ui: &mut egui::Ui, panel: Panel) {
             egui::ScrollArea::both().id_salt("dock-fonts").auto_shrink([false, false]).show(ui, |ui| crate::fontmgr::body(ui, app));
         }
         Panel::Lisp => crate::lisp_panel::body(ui, app),
+        Panel::Blocks => crate::dialogs::blocks_body(ui, app),
+        Panel::History => crate::cmdline::history_body(ui, app),
     }
 }

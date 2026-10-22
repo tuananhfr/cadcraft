@@ -71,7 +71,7 @@ pub fn defaults() -> BTreeMap<String, String> {
 }
 
 pub fn defaults_for(platform: KeyPlatform) -> BTreeMap<String, String> {
-    [
+    let mut defaults: BTreeMap<String, String> = [
         ("pickstyle", "Ctrl+Shift+A"),
         ("redo", "Ctrl+Shift+Z, Ctrl+Y"),
         ("u", "Ctrl+Z"),
@@ -90,6 +90,8 @@ pub fn defaults_for(platform: KeyPlatform) -> BTreeMap<String, String> {
         ("ui.panel.properties", "Ctrl+1"),
         ("ui.toggle.toolsets", "Ctrl+3"),
         ("ui.toggle.cmdline", "Ctrl+9"),
+        ("ui.fullscreen", "Ctrl+Shift+F"),
+        ("ui.focusmode", "Ctrl+0"),
         ("ui.dialog.commands", "F1"),
         ("ui.toggle.history", "F2"),
         ("osnap", "F3"),
@@ -102,10 +104,17 @@ pub fn defaults_for(platform: KeyPlatform) -> BTreeMap<String, String> {
         ("dynmode", "F12"),
     ]
     .into_iter()
-    .filter(|(_, keys)| platform == KeyPlatform::Desktop || !is_browser_reserved(keys))
+    .filter(|(id, keys)| platform == KeyPlatform::Desktop || (!matches!(*id, "ui.fullscreen" | "ui.focusmode") && !is_browser_reserved(keys)))
     .map(|(id, key)| (id.to_string(), key.to_string()))
-    .collect()
+    .collect();
+    if platform == KeyPlatform::Web {
+        defaults.extend(WEB_ALTERNATES.iter().map(|(id, key)| ((*id).to_string(), (*key).to_string())));
+    }
+    defaults
 }
+
+pub const WEB_ALTERNATES: &[(&str, &str)] =
+    &[("ui.panel.properties", "Ctrl+Shift+1"), ("ui.toggle.cmdline", "Ctrl+Shift+9"), ("ui.dialog.commands", "Shift+F1")];
 
 pub const RESERVED: &[&str] = &["Escape", "Ctrl+Q"];
 
@@ -137,6 +146,13 @@ pub const BROWSER_RESERVED: &[&str] = &[
     "Shift+F10",
     "Ctrl+Shift+C",
     "Ctrl+Shift+P",
+    "Ctrl+Shift+N",
+    "Ctrl+Shift+T",
+    "Ctrl+Shift+W",
+    "Ctrl+Tab",
+    "Ctrl+Shift+Tab",
+    "Ctrl+Shift+I",
+    "Alt+F4",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]

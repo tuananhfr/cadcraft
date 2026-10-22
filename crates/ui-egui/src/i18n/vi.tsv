@@ -1895,3 +1895,109 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	Skipped unknown toolbar commands: {commands}	Đã bỏ qua các lệnh thanh công cụ không xác định: {commands}
 	Drop to add as a ribbon group	Thả để thêm thành nhóm Ribbon
 	Use ui.toolbar.to_ribbon to convert a toolbar	Dùng ui.toolbar.to_ribbon để chuyển thanh công cụ
+# GĐ3 Task 11: web keys.
+	The browser uses this key; choose another shortcut	Trình duyệt dùng phím này; hãy chọn phím tắt khác
+# GĐ3 Task 7: dock clamp.
+	The docking content area must be finite and positive	Vùng nội dung bảng phải hữu hạn và có kích thước dương
+	Full Screen	Toàn màn hình
+	Focus Mode	Chế độ tập trung
+	Clean Screen On	Bật màn hình gọn
+	Clean Screen Off	Tắt màn hình gọn
+	Exit Focus Mode (Esc)	Thoát chế độ tập trung (Esc)
+	Full screen needs a click in the browser	Cần nhấp chuột trong trình duyệt để mở toàn màn hình
+	Full screen is blocked here (iframe needs allow="fullscreen"); using Focus mode	Toàn màn hình bị chặn (iframe cần allow="fullscreen"); đang dùng chế độ tập trung
+	on must be a boolean	on phải là giá trị boolean
+	command_line must be floating or hidden	command_line phải là floating hoặc hidden
+# GĐ2 B9: preflight list.
+	PASS {p} · INFO {i} · WARN {w} · BLOCK {b}	ĐẠT {p} · THÔNG TIN {i} · CẢNH BÁO {w} · CHẶN {b}
+	No sheets to publish	Không có tờ bản vẽ để xuất bản
+	Fix or exclude blocked sheets before publishing a merged PDF	Sửa hoặc loại trừ các tờ bị chặn trước khi xuất bản PDF gộp
+	Approve all warnings before publishing	Chấp nhận tất cả cảnh báo trước khi xuất bản
+	{code} · {n} sheets · {severity}	{code} · {n} tờ · {severity}
+	PASS	ĐẠT
+	INFO	THÔNG TIN
+	WARN	CẢNH BÁO
+	BLOCK	CHẶN
+	Approve all ({n})	Chấp nhận tất cả ({n})
+	Approve {n} warnings ({code})? This is recorded in the audit log.	Chấp nhận {n} cảnh báo ({code})? Thao tác này được ghi vào nhật ký kiểm tra.
+	Approve	Chấp nhận
+	Approved	Đã chấp nhận
+	Cannot be approved: fix the cause or exclude the sheet	Không thể chấp nhận: sửa nguyên nhân hoặc loại trừ tờ bản vẽ
+	Overlap (mm)	Phần chồng lấn (mm)
+	{n} pieces	{n} mảnh
+	Approve split	Chấp nhận chia tờ
+	Printer limits apply in the desktop app; the web app plots PDF.	Giới hạn máy in áp dụng trong ứng dụng máy tính; ứng dụng web in ra PDF.
+	XREF_MISSING	Thiếu tham chiếu ngoài
+	XREF_UNLOADED	Tham chiếu ngoài đã tạm gỡ
+	SCALE_PAPER_MISMATCH	Tỷ lệ không phù hợp với khổ giấy
+	PAPER_TOO_SMALL	Khổ giấy quá nhỏ
+	DEVICE_LIMIT_EXCEEDED	Vượt giới hạn thiết bị
+	DEVICE_LIMIT_NEAR	Gần giới hạn thiết bị
+	DEVICE_UNAVAILABLE	Thiết bị không khả dụng
+	FONT_MISSING	Thiếu phông chữ
+	FONT_FALLBACK	Thay thế phông chữ bị thiếu
+	SHEET_ID_DUPLICATE	Mã tờ bản vẽ trùng lặp
+	REVISION_OLD	Phiên bản sửa đổi cũ
+	TEMPLATE_SUPERSEDED	Mẫu đã được thay thế
+	Approve Plot Warnings	Duyệt cảnh báo in
+	Planned	Dự kiến
+	Double-click to repeat command	Nhấp đúp để lặp lại lệnh
+	Aliases	Lệnh tắt
+	Assign Alias	Gán lệnh tắt
+	Remove Alias	Xóa lệnh tắt
+	Reset Aliases	Đặt lại lệnh tắt
+	Export Aliases...	Xuất lệnh tắt...
+	Import Aliases...	Nhập lệnh tắt...
+	Aliases (JSON)	Lệnh tắt (JSON)
+	Use letters A–Z, digits 0–9, _ or - for aliases	Dùng chữ cái A–Z, chữ số 0–9, _ hoặc - cho lệnh tắt
+	Alias cannot be empty	Lệnh tắt không được để trống
+	Alias must be at most 16 characters	Lệnh tắt có tối đa 16 ký tự
+	{command} is a command name and cannot be an alias	{command} là tên lệnh và không thể dùng làm lệnh tắt
+	Alias already runs {command}; confirm to replace	Lệnh tắt đã chạy lệnh {command}; hãy xác nhận để thay thế
+	Too many aliases	Quá nhiều lệnh tắt
+	{key} is required	Cần có {key}
+	Paste alias JSON to import in the browser	Dán JSON lệnh tắt để nhập trong trình duyệt
+	Alias file is too large	Tệp lệnh tắt quá lớn
+	Paste alias JSON to import	Dán JSON lệnh tắt để nhập
+	Expected an aliases object	Cần một đối tượng aliases
+	Expected a command name	Cần tên lệnh
+	{imported} imported, {skipped} skipped	Đã nhập {imported}, đã bỏ qua {skipped}
+	Filter aliases	Lọc lệnh tắt
+	Alias	Lệnh tắt
+	Command	Lệnh
+	Source	Nguồn
+	User	Người dùng
+	Built-in	Có sẵn
+	Alias command	Lệnh mà lệnh tắt chạy
+	Import Alias File...	Nhập tệp lệnh tắt...
+	Import Aliases	Nhập lệnh tắt
+	Replace Alias?	Thay thế lệnh tắt?
+	Replace Alias	Thay thế lệnh tắt
+	Roll Back Workspace to 1.0.0	Khôi phục workspace 1.0.0
+	Restored the 1.0.0 workspace. Changes are not saved until restart.	Đã khôi phục workspace 1.0.0. Thay đổi sẽ không được lưu cho tới khi khởi động lại.
+	Saving suspended	Đã tạm dừng lưu
+	No 1.0.0 workspace backup is available	Không có bản sao lưu workspace 1.0.0
+	Layout saved on this device (not synced)	Bố cục đã lưu trên máy này (chưa đồng bộ)
+	Layout changed	Bố cục có thay đổi
+	Saving layout…	Đang lưu bố cục…
+	Could not save layout; retrying	Không lưu được bố cục; đang thử lại
+	Layout restored from revision {n}	Bố cục khôi phục từ bản {n}
+	Safe mode: layout changes are not saved	Chế độ an toàn: thay đổi bố cục không được lưu
+	Drawing saved	Bản vẽ đã lưu
+	Drawing downloaded	Đã tải bản vẽ xuống
+	Drawing has unsaved changes	Bản vẽ chưa lưu
+	Drawing autosaved in this browser {time}	Bản vẽ tự lưu trong trình duyệt lúc {time}
+	Layout saved	Đã lưu bố cục
+	Layout not saved	Chưa lưu bố cục
+	Layout restored	Đã khôi phục bố cục
+	Safe mode	Chế độ an toàn
+	Saving drawing…	Đang lưu bản vẽ…
+	Drawing autosaved	Bản vẽ đã tự lưu
+ribbon	Block	Khối
+ribbon	Edit	Sửa
+ribbon	Count	Đếm
+ribbon	Replace	Thay thế
+ribbon	Check	Kiểm tra
+	Replace Block	Thay thế khối
+	Select block references to replace	Chọn các tham chiếu khối cần thay thế
+	Enter replacement block name	Nhập tên khối thay thế

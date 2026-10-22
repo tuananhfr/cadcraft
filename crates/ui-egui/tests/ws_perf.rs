@@ -29,7 +29,12 @@ fn large_profile() -> WorkspaceProfile {
         id: "perf".into(),
         label: "Performance fixture".into(),
         groups: (0..10)
-            .map(|index| RibbonGroup { id: format!("perf-{index}"), label: format!("Group {index}"), commands: commands.by_ref().take(10).collect() })
+            .map(|index| RibbonGroup {
+                id: format!("perf-{index}"),
+                label: format!("Group {index}"),
+                commands: commands.by_ref().take(10).collect(),
+                ..RibbonGroup::default()
+            })
             .collect(),
         ..Default::default()
     }];

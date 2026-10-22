@@ -214,7 +214,7 @@ fn moving_unlocked_panel_keeps_locked_neighbour() {
         app.run("ui.dock", json!({"operation": "move", "panel": moving, "target": "toolSets", "zone": "center"})).unwrap();
         assert_ne!(app.ws.message.as_deref(), Some("Locked by company policy"));
         assert_eq!(app.ws.effective.layout.panels.iter().find(|panel| panel.id == locked), Some(&before));
-        assert!(app.ws.user.layout.dock_tree.is_some(), "an allowed move keeps its tree");
+        assert!(app.ws.device.layout_patch.get("dock_tree").is_some(), "an allowed move keeps its tree");
         let moved = Panel::parse(moving).unwrap();
         assert!(matches!(app.ui.docking.layout.location(&moved).unwrap().placement, Placement::Tab { .. }));
         assert_eq!(app.ui.docking.layout.location(&moved).unwrap().anchor, Some(Panel::ToolSets));
@@ -297,7 +297,7 @@ fn autohide_keeps_other_panels_tree() {
     hidden.set_visible(Panel::Properties, false).unwrap();
     app.run("ui.panel.autohide", json!({"panel": "properties"})).unwrap();
     assert_eq!(app.ui.docking.layout, hidden.layout, "only Properties leaves the live tree");
-    assert!(app.ws.user.layout.dock_tree.is_some());
+    assert!(app.ws.device.layout_patch.get("dock_tree").is_some());
     let mut app = restart(&mut app);
     assert_eq!(app.ui.docking.layout, hidden.layout, "the remaining tree survives restart");
     app.run("ui.panel.pin", json!({"panel": "properties"})).unwrap();

@@ -6,7 +6,8 @@
 //! drops one), `{"alt": "Arial"}` sets FONTALT, `{"fallback": "..."}` FONTFALLBACK. The app saves
 //! [`profile`] between runs and reads it back with [`restore`].
 
-use cadcraft_fonts::{FontState, LegacyVi, font_info, font_map, set_font_map, ttf};
+use cadcraft_doc::{Drawing, TextStyle};
+use cadcraft_fonts::{FontInfo, FontState, LegacyVi, font_info, font_map, set_font_map, ttf};
 use serde_json::{Map, Value, json};
 
 use super::*;
@@ -68,6 +69,29 @@ pub fn restore(saved: &Value) {
     }
 }
 
+fn style_infos(d: &Drawing) -> impl Iterator<Item = (&TextStyle, FontInfo)> {
+    d.text_styles.iter().map(|style| (style, font_info(&style.font, &style.family)))
+}
+
+pub(crate) fn style_status(d: &Drawing) -> Vec<crate::sheetplan::preflight::FontStatus> {
+    style_infos(d)
+        .map(|(style, info)| crate::sheetplan::preflight::FontStatus {
+            style: style.name.clone(),
+            font: style.font.clone(),
+            state: info.state,
+            with: info.with,
+            mapped: info.mapped,
+        })
+        .collect()
+}
+
+// Integration tests and unit tests share the process-wide font settings.
+#[doc(hidden)]
+pub fn test_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// The text styles' fonts and what is drawn for each. `missing` counts the styles in use (by text,
 /// dimension styles, ...) whose font this computer lacks: a style nothing uses costs nothing.
 pub fn report(s: &Session) -> Value {
@@ -76,9 +100,8 @@ pub fn report(s: &Session) -> Value {
     if let Ok(doc) = s.doc() {
         let in_use = super::props::text_styles_in_use(doc);
         let current = doc.header.str("TEXTSTYLE", "Standard");
-        for st in &doc.text_styles {
+        for (st, info) in style_infos(doc) {
             let used = st.name.eq_ignore_ascii_case(&current) || in_use.iter().any(|n| n.eq_ignore_ascii_case(&st.name));
-            let info = font_info(&st.font, &st.family);
             if used && info.state == FontState::Missing {
                 missing += 1;
             }
@@ -151,14 +174,13 @@ fn run_fonts(s: &mut Session, p: &Value) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Mutex, MutexGuard, PoisonError};
+    use std::sync::MutexGuard;
 
     use super::*;
 
     /// The replacement table is process-wide: tests that change it run one at a time.
     fn serial() -> MutexGuard<'static, ()> {
-        static L: Mutex<()> = Mutex::new(());
-        L.lock().unwrap_or_else(PoisonError::into_inner)
+        test_lock()
     }
 
     #[test]

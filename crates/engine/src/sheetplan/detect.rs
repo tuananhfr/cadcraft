@@ -48,6 +48,33 @@ impl FrameCandidate {
     }
 }
 
+pub(super) fn insert_hidden(d: &Drawing, entity: &Entity) -> Vec<Handle> {
+    let EntityKind::Insert(insert) = &entity.kind else { return Vec::new() };
+    if d.entity(entity.handle).is_some() {
+        return dynblock::hidden_objects(d, entity.handle);
+    }
+    if d.foreign.objects.is_empty() {
+        return Vec::new();
+    }
+    // Definition entities need an addressable reference for the dynamic visibility lookup.
+    let mut context = Drawing { foreign: d.foreign.clone(), blocks: d.blocks.clone(), ..Drawing::default() };
+    context.model.push(Entity::new(
+        entity.handle,
+        EntityKind::Insert(Insert {
+            block: insert.block.clone(),
+            insert: insert.insert,
+            scale: insert.scale,
+            rotation: insert.rotation,
+            attribs: Vec::new(),
+            cols: insert.cols,
+            rows: insert.rows,
+            col_spacing: insert.col_spacing,
+            row_spacing: insert.row_spacing,
+        }),
+    ));
+    dynblock::hidden_objects(&context, entity.handle)
+}
+
 #[derive(Clone)]
 struct Rectangle {
     corners: [Vec2; 4],
@@ -138,27 +165,7 @@ impl Walk {
                     self.incomplete = true;
                     break;
                 }
-                // Definition entities are not addressable through Drawing::entity.
-                let nested_hidden = if !d.foreign.objects.is_empty() {
-                    let mut context = Drawing { foreign: d.foreign.clone(), blocks: d.blocks.clone(), ..Drawing::default() };
-                    context.model.push(Entity::new(
-                        e.handle,
-                        EntityKind::Insert(Insert {
-                            block: inner.block.clone(),
-                            insert: inner.insert,
-                            scale: inner.scale,
-                            rotation: inner.rotation,
-                            attribs: Vec::new(),
-                            cols: inner.cols,
-                            rows: inner.rows,
-                            col_spacing: inner.col_spacing,
-                            row_spacing: inner.row_spacing,
-                        }),
-                    ));
-                    dynblock::hidden_objects(&context, e.handle)
-                } else {
-                    Vec::new()
-                };
+                let nested_hidden = insert_hidden(d, e);
                 if nested_hidden.len() > MAX_FRAME_LEAVES {
                     self.incomplete = true;
                     break;

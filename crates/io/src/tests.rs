@@ -530,9 +530,12 @@ fn pdf_hostile_options_and_empty() {
     let (w, h) = media_box(&bytes);
     assert!((w - 841.89).abs() < 0.01 && (h - 595.276).abs() < 0.01, "metric default is A4 landscape");
     let s = sample();
+    // Paper beyond MAX_PAPER_MM is refused instead of silently clamped.
+    let huge = serde_json::json!({"width": 1e308, "height": 1e308, "scale": 1e308, "fit": false});
+    assert!(plot(&s, &Space::Model, &huge).is_err());
+    // A paper with an unusable side is ignored, so the default page applies.
     for o in [
         serde_json::json!({"width": 1e308, "height": -5}),
-        serde_json::json!({"width": 1e308, "height": 1e308, "scale": 1e308, "fit": false}),
         serde_json::json!({"scale": -1, "fit": false, "title": "a(b)\\c\u{e9}"}),
         serde_json::json!(null),
         serde_json::json!([1, 2]),

@@ -208,7 +208,7 @@ fn ubplot_json_call_opens_no_prompt() {
     assert!(spec.interactive.is_some());
     s.ubplot.review = true;
     let result = s.execute("ubplot", &json!({"mode": "block", "handles": [f1.hex()]})).unwrap();
-    assert_eq!(result["summary"]["sheets"], 1);
+    assert_eq!(result["summary"], json!({"pass": 1, "info": 0, "warn": 0, "block": 0}));
     assert!(s.ubplot.last.is_some());
     assert!(s.running.is_none());
     assert!(s.current_prompt().is_none());

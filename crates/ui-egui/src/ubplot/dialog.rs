@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
 use cadcraft_doc::Handle;
-use cadcraft_engine::sheetplan::{ScanRequest, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, ids::sheet_key};
+use cadcraft_engine::sheetplan::{ScanRequest, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, ids::sheet_key, verdict};
 use egui::{TextureHandle, vec2};
 use serde_json::{Value, json};
 
@@ -11,18 +11,19 @@ use crate::CadApp;
 struct State {
     doc_uid: u64,
     job_id: String,
-    show_all: bool,
+    exceptions: super::exceptions::State,
     split: bool,
     textures: BTreeMap<(String, u32), Result<TextureHandle, String>>,
     failed: Vec<String>,
     error: Option<String>,
 }
 
-enum Action {
+pub(super) enum Action {
     Rescan,
     Edit(Box<ScanRequest>),
     Pick(String),
     Publish,
+    Approve(Value),
 }
 
 pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
@@ -37,58 +38,73 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     if state.job_id != plan.job_id {
         state.job_id = plan.job_id.clone();
         state.textures.clear();
+        state.exceptions = super::exceptions::State::default();
         state.failed.clear();
         state.error = None;
     }
     let mut action = None;
+    let available = ctx.content_rect().size() - vec2(32.0, 48.0);
     egui::Window::new(crate::tl!("Quick Plot"))
         .id(egui::Id::new(super::DIALOG))
         .open(open)
         .collapsible(false)
-        .default_width(820.0)
-        .default_height(640.0)
-        .max_height((ctx.content_rect().height() - 48.0).max(240.0))
-        .vscroll(true)
+        .default_width(820.0_f32.min(available.x))
+        .default_height(640.0_f32.min(available.y))
+        .max_width(available.x.max(260.0))
+        .max_height(available.y.max(180.0))
         .show(ctx, |ui| {
-            ui.heading(crate::tl!("Scan"));
-            let blocked = plan.sheets.iter().filter(|sheet| sheet.status == SheetStatus::Blocked).count();
-            let warnings =
-                plan.issues.iter().chain(plan.sheets.iter().flat_map(|sheet| &sheet.issues)).filter(|issue| issue.severity == Severity::Warn).count();
-            ui.horizontal_wrapped(|ui| {
-                ui.label(crate::tf!("{n} sheets", n = plan.sheets.len()));
-                ui.label(crate::tf!("· {b} blocked · {w} warnings", b = blocked, w = warnings));
-                if ui.button(crate::tl!("Rescan")).clicked() {
-                    action = Some(Action::Rescan);
+            // Reserve the footer before scrolling so publishing stays reachable at high zoom.
+            let body_height = (ui.available_height() - 76.0).max(40.0);
+            egui::ScrollArea::vertical().id_salt("ubplot_body").max_height(body_height).auto_shrink([false, false]).show(ui, |ui| {
+                ui.heading(crate::tl!("Scan"));
+                let (mut pass, mut info, mut warn, mut block) = (0, 0, 0, 0);
+                for sheet in &plan.sheets {
+                    match verdict(sheet) {
+                        Severity::Pass => pass += 1,
+                        Severity::Info => info += 1,
+                        Severity::Warn => warn += 1,
+                        Severity::Block => block += 1,
+                    }
+                }
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(crate::tf!("{n} sheets", n = plan.sheets.len()));
+                    ui.label(crate::tf!("PASS {p} · INFO {i} · WARN {w} · BLOCK {b}", p = pass, i = info, w = warn, b = block));
+                    if ui.button(crate::tl!("Rescan")).clicked() {
+                        action = Some(Action::Rescan);
+                    }
+                });
+                ui.separator();
+                ui.heading(crate::tl!("Preview"));
+                thumbnails(app, ui, &plan, &mut state);
+                ui.separator();
+                ui.heading(crate::tl!("Exceptions"));
+                super::exceptions::show(ui, &plan, &request, &mut state.exceptions, &mut action);
+                if let Some(error) = &state.error {
+                    ui.colored_label(crate::theme::Tokens::get().warn, error);
+                }
+                if !state.failed.is_empty() {
+                    ui.label(crate::tl!("Failed sheets"));
+                    for key in &state.failed {
+                        ui.label(key);
+                    }
                 }
             });
-            ui.separator();
-            ui.heading(crate::tl!("Preview"));
-            thumbnails(app, ui, &plan, &mut state);
-            ui.separator();
-            ui.heading(crate::tl!("Exceptions"));
-            ui.checkbox(&mut state.show_all, crate::tl!("Show all sheets"));
-            exceptions(ui, &plan, &request, state.show_all, &mut action);
             ui.separator();
             ui.heading(crate::tl!("Publish"));
             ui.horizontal_wrapped(|ui| {
                 ui.radio_value(&mut state.split, false, crate::tl!("Merged PDF"));
                 ui.radio_value(&mut state.split, true, crate::tl!("One PDF per sheet"));
-                if ui.add_enabled(!plan.sheets.is_empty(), egui::Button::new(crate::tl!("Publish"))).clicked() {
+                let reason = publish_reason(&plan, state.split);
+                let button = ui.add_enabled(reason.is_none(), egui::Button::new(crate::tl!("Publish")));
+                if button.clicked() {
                     action = Some(Action::Publish);
                 }
+                if let Some(reason) = reason {
+                    button.on_disabled_hover_text(reason);
+                }
             });
-            if let Some(error) = &state.error {
-                ui.colored_label(crate::theme::Tokens::get().warn, error);
-            }
-            if !state.failed.is_empty() {
-                ui.label(crate::tl!("Failed sheets"));
-                egui::ScrollArea::vertical().id_salt("ubplot_failed").max_height(80.0).show(ui, |ui| {
-                    for key in &state.failed {
-                        ui.label(key);
-                    }
-                });
-            }
         });
+    super::exceptions::confirmation(ctx, &plan, &mut state.exceptions, &mut action);
     match action {
         Some(Action::Rescan) => match super::rescan(app) {
             Ok(_) => {
@@ -103,6 +119,10 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
             Err(error) => state.error = Some(error),
         },
         Some(Action::Pick(key)) => super::pick_window(app, ctx, key),
+        Some(Action::Approve(params)) => match app.run("ubplot.approve", params) {
+            Ok(_) => state.error = None,
+            Err(error) => state.error = Some(error),
+        },
         Some(Action::Publish) => publish(app, &mut state, open),
         None => {}
     }
@@ -115,45 +135,50 @@ fn thumbnails(app: &mut CadApp, ui: &mut egui::Ui, plan: &SheetPlan, state: &mut
     let columns = ((ui.available_width() / 176.0).floor() as usize).clamp(1, 16);
     let rows = plan.sheets.len().div_ceil(columns);
     let mut budget = 2_usize;
-    egui::ScrollArea::vertical().id_salt("ubplot_thumbnails").max_height(190.0).show_rows(ui, 188.0, rows, |ui, range| {
-        let visible_orders: BTreeSet<_> =
-            plan.sheets.iter().skip(range.start * columns).take(range.len() * columns).map(|sheet| sheet.order).collect();
-        // Retaining viewport rows bounds GPU memory even when every sheet has been visited.
-        state.textures.retain(|(_, order), _| visible_orders.contains(order));
-        for row in range {
-            ui.horizontal(|ui| {
-                for sheet in plan.sheets.iter().skip(row * columns).take(columns) {
-                    ui.vertical(|ui| {
-                        ui.set_min_height(188.0);
-                        let (rect, _) = ui.allocate_exact_size(vec2(160.0, 160.0), egui::Sense::hover());
-                        if ui.is_rect_visible(rect) {
-                            let key = (plan.job_id.clone(), sheet.order);
-                            if budget > 0
-                                && let Entry::Vacant(entry) = state.textures.entry(key.clone())
-                            {
-                                budget -= 1;
-                                entry.insert(thumbnail(app, ui.ctx(), sheet));
+    egui::ScrollArea::vertical().id_salt("ubplot_thumbnails").max_height((ui.ctx().content_rect().height() * 0.2).clamp(48.0, 140.0)).show_rows(
+        ui,
+        188.0,
+        rows,
+        |ui, range| {
+            let visible_orders: BTreeSet<_> =
+                plan.sheets.iter().skip(range.start * columns).take(range.len() * columns).map(|sheet| sheet.order).collect();
+            // Retaining viewport rows bounds GPU memory even when every sheet has been visited.
+            state.textures.retain(|(_, order), _| visible_orders.contains(order));
+            for row in range {
+                ui.horizontal(|ui| {
+                    for sheet in plan.sheets.iter().skip(row * columns).take(columns) {
+                        ui.vertical(|ui| {
+                            ui.set_min_height(188.0);
+                            let (rect, _) = ui.allocate_exact_size(vec2(160.0, 160.0), egui::Sense::hover());
+                            if ui.is_rect_visible(rect) {
+                                let key = (plan.job_id.clone(), sheet.order);
+                                if budget > 0
+                                    && let Entry::Vacant(entry) = state.textures.entry(key.clone())
+                                {
+                                    budget -= 1;
+                                    entry.insert(thumbnail(app, ui.ctx(), sheet));
+                                }
+                                match state.textures.get(&key) {
+                                    Some(Ok(texture)) => {
+                                        let image_rect = egui::Rect::from_center_size(rect.center(), texture.size_vec2());
+                                        egui::Image::new((texture.id(), texture.size_vec2())).paint_at(ui, image_rect);
+                                    }
+                                    Some(Err(_)) => {
+                                        ui.put(rect, egui::Label::new(crate::tl!("Preview unavailable")));
+                                    }
+                                    None => {
+                                        ui.put(rect, egui::Label::new(crate::tl!("Loading preview…")));
+                                        ui.ctx().request_repaint();
+                                    }
+                                }
                             }
-                            match state.textures.get(&key) {
-                                Some(Ok(texture)) => {
-                                    let image_rect = egui::Rect::from_center_size(rect.center(), texture.size_vec2());
-                                    egui::Image::new((texture.id(), texture.size_vec2())).paint_at(ui, image_rect);
-                                }
-                                Some(Err(_)) => {
-                                    ui.put(rect, egui::Label::new(crate::tl!("Preview unavailable")));
-                                }
-                                None => {
-                                    ui.put(rect, egui::Label::new(crate::tl!("Loading preview…")));
-                                    ui.ctx().request_repaint();
-                                }
-                            }
-                        }
-                        ui.label(crate::tf!("Preview {order}", order = sheet.order));
-                    });
-                }
-            });
-        }
-    });
+                            ui.label(crate::tf!("Preview {order}", order = sheet.order));
+                        });
+                    }
+                });
+            }
+        },
+    );
 }
 
 fn thumbnail(app: &mut CadApp, ctx: &egui::Context, sheet: &Sheet) -> Result<TextureHandle, String> {
@@ -182,70 +207,19 @@ fn thumbnail(app: &mut CadApp, ctx: &egui::Context, sheet: &Sheet) -> Result<Tex
     Ok(ctx.load_texture("ubplot_thumbnail", egui::ColorImage::from_rgba_unmultiplied(size, image.as_raw()), egui::TextureOptions::LINEAR))
 }
 
-fn exceptions(ui: &mut egui::Ui, plan: &SheetPlan, request: &ScanRequest, show_all: bool, action: &mut Option<Action>) {
-    let mut groups: BTreeMap<&str, Vec<&Sheet>> = BTreeMap::new();
-    for sheet in &plan.sheets {
-        let codes: BTreeSet<_> =
-            sheet.issues.iter().chain(&plan.issues).filter(|issue| issue.severity >= Severity::Warn).map(|issue| issue.code.as_str()).collect();
-        if show_all && codes.is_empty() {
-            groups.entry("").or_default().push(sheet);
-        }
-        for code in codes {
-            groups.entry(code).or_default().push(sheet);
-        }
+fn publish_reason(plan: &SheetPlan, split: bool) -> Option<&'static str> {
+    if plan.sheets.is_empty() {
+        Some(crate::tl!("No sheets to publish"))
+    } else if !split
+        && (plan.issues.iter().any(|issue| issue.severity == Severity::Block)
+            || plan.sheets.iter().any(|sheet| verdict(sheet) == Severity::Block || sheet.status == SheetStatus::Blocked))
+    {
+        Some(crate::tl!("Fix or exclude blocked sheets before publishing a merged PDF"))
+    } else if super::exceptions::has_unapproved_warnings(plan) {
+        Some(crate::tl!("Approve all warnings before publishing"))
+    } else {
+        None
     }
-    egui::ScrollArea::vertical().id_salt("ubplot_exceptions").max_height(200.0).show(ui, |ui| {
-        for (code, sheets) in groups {
-            ui.push_id(code, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    if code.is_empty() {
-                        ui.strong(crate::tl!("All sheets"));
-                    } else {
-                        ui.strong(crate::tf!("{code} · {n} sheets", code = code, n = sheets.len())).on_hover_text(issue_label(code));
-                    }
-                    if ui.button(crate::tl!("Exclude all")).clicked() {
-                        let mut next = request.clone();
-                        for sheet in &sheets {
-                            let key = sheet_key(sheet);
-                            if !next.exclude.contains(&key) {
-                                next.exclude.push(key);
-                            }
-                        }
-                        *action = Some(Action::Edit(Box::new(next)));
-                    }
-                    ui.menu_button(crate::tl!("Set paper for all"), |ui| {
-                        for (paper, label) in [
-                            ("A0", crate::tl!("A0")),
-                            ("A1", crate::tl!("A1")),
-                            ("A2", crate::tl!("A2")),
-                            ("A3", crate::tl!("A3")),
-                            ("A4", crate::tl!("A4")),
-                            ("A5", crate::tl!("A5")),
-                        ] {
-                            if ui.selectable_label(false, label).clicked() {
-                                let mut next = request.clone();
-                                for sheet in &sheets {
-                                    next.overrides.entry(sheet_key(sheet)).or_default().paper = Some(paper.into());
-                                }
-                                *action = Some(Action::Edit(Box::new(next)));
-                                ui.close();
-                            }
-                        }
-                    });
-                });
-                for sheet in sheets {
-                    ui.push_id(sheet.order, |ui| {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(crate::tf!("{sheet} · {order}", sheet = sheet.sheet_id, order = sheet.order));
-                            if ui.button(crate::tl!("Pick window <")).clicked() {
-                                *action = Some(Action::Pick(sheet_key(sheet)));
-                            }
-                        });
-                    });
-                }
-            });
-        }
-    });
 }
 
 fn publish(app: &mut CadApp, state: &mut State, open: &mut bool) {
@@ -283,21 +257,5 @@ fn publish(app: &mut CadApp, state: &mut State, open: &mut bool) {
                     .collect();
             }
         }
-    }
-}
-
-fn issue_label(code: &str) -> &str {
-    match code {
-        "FRAME_AMBIGUOUS" => crate::tl!("FRAME_AMBIGUOUS"),
-        "FRAME_NOT_FOUND" => crate::tl!("FRAME_NOT_FOUND"),
-        "FRAME_MINSERT" => crate::tl!("FRAME_MINSERT"),
-        "PAPER_TOO_LARGE" => crate::tl!("PAPER_TOO_LARGE"),
-        "RENDER_FAILED" => crate::tl!("RENDER_FAILED"),
-        "FRAME_DUPLICATE" => crate::tl!("FRAME_DUPLICATE"),
-        "FRAME_OVERLAP" => crate::tl!("FRAME_OVERLAP"),
-        "FRAME_NESTED" => crate::tl!("FRAME_NESTED"),
-        "FRAME_MIRRORED" => crate::tl!("FRAME_MIRRORED"),
-        "FRAME_NONUNIFORM" => crate::tl!("FRAME_NONUNIFORM"),
-        other => other,
     }
 }

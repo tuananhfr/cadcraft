@@ -1,93 +1,26 @@
-# Workspace profile migration runbook
+# Workspace schema migration and rollback
 
-Code: `crates/ui-egui/src/wsprofile/migrate.rs`. Tests: `crates/ui-egui/tests/ws_migrate.rs`.
-Fixtures: `crates/ui-egui/tests/fixtures/workspace/`.
+| Input | Read behavior | Next stored form | Kept original |
+| --- | --- | --- | --- |
+| Legacy `version: 1` workspace | Convert to a user profile, then migrate device geometry | Schema 3 | Exact original bytes |
+| `schema_version: "1.0.0"` or another 1.x version, including the historical `future-1.3.0` fixture | Run `device_layer`; move UI scale and geometry to the device | `schemaVersion: 3` | Exact original bytes, kept once |
+| Schema 3, numeric or string version | Read current fields and preserve unknown fields | CamelCase schema keys, snake_case enum values | Existing backup retained |
+| Major version above 3 | Refuse the newer schema and use SIMPLE | Original kept as damaged evidence | No v1 migration backup created |
 
-## What `migrate` does
+Rust fields and internal JSON Pointers remain snake_case. The stored set uses `scope` for profile ownership and `deviceGeometry` for local UI scale, screen information and geometry. User shortcut, alias, status item and dock-tree keys remain verbatim. The checksum covers the wire JSON that is stored, excluding only its top-level `checksum` field.
 
-`migrate(value)` takes a stored profile as raw JSON and returns `Migrated { value, steps, backup }`.
+Startup reads and validates the migrated set before writing it. It keeps the original before the first v3 snapshot or current-set write. A backup failure leaves the current set and snapshots unchanged and reports a failed save; retries must keep the backup first. Backups are outside snapshot pruning.
 
-- Works on JSON, not on the typed model, so fields this build does not know are kept.
-- `steps` lists the steps that changed the document. It is empty when the document is already current,
-  so running `migrate` twice gives the same value and no steps the second time.
-- `backup` is the input exactly as received, set only when `steps` is not empty. Store it before
-  replacing the profile; it is the rollback copy.
-- A document is accepted only if the result still parses as a `WorkspaceProfile`.
+On desktop, the backup is `<settings dir>/workspace/backup-v1.json`, published atomically and never replaced. To roll back in the running application, execute `ui.workspace.rollback {}` through the UI command/control interface. It returns `{"restored":"1.0.0"}`, restores the original current set and applies its layout. The status reports `suspended`, with the message: “Restored the 1.0.0 workspace. Changes are not saved until restart.” Autosave and sync writes remain suspended for the rest of that session. A missing backup is an error and changes nothing.
 
-Outcomes by schema version `X.Y.Z` of the input:
+For a deployment rollback, exit the v3 application, restore `backup-v1.json` as `current.json` in that workspace directory, then launch the older build. Restarting a v3 build deliberately migrates the v1 original again while retaining the same backup.
 
-| Input | Result |
-| --- | --- |
-| Legacy `workspace.json` (`{"version":1,"workspace":{..}}`) | Converted by `from_legacy_v1` to a `user` profile over `SIMPLE`, step `legacy_v1` |
-| Same major as `SCHEMA_VERSION`, older | Upgraded through `STEPS` |
-| Same major, newer minor or patch | Returned unchanged only if the typed profile still parses; unknown fields kept, but unknown enum values return `MigrateError::Invalid` |
-| Newer major | `MigrateError::NewerMajor`; startup falls back to the `SIMPLE` preset and keeps the snapshot |
-| Older major with no path, missing or unreadable `schema_version`, wrong types, not an object | `MigrateError::Invalid` / `NotAnObject` |
+In a browser, the localStorage backup key is `cadcraft.ws.backup:1.0.0`. The same command restores its exact contents to `cadcraft.ws.current` and suspends saving until restart. For a deployment rollback, close other tabs for the same origin, restore that backup value to `cadcraft.ws.current`, then open the older deployment. Keep the backup key. The subsequent IndexedDB implementation stores the backup in `meta` under `backup:1.0.0`; it must retain the old localStorage current key for one release.
 
-Command ids listed in `cadcraft_engine::cmd::registry::RENAMED` are rewritten in toolbars, ribbon groups,
-quick access, favorites, hidden tools, shortcut keys and alias targets (step `rename_command_ids`). Ids
-the build does not know are left alone; the UI shows them as inactive placeholders.
+The three pending GĐ3 fields (`ribbonMode`, `quickAccessPosition`, `density`) are documented even when this build does not expose their controls. They survive load and save. Bare legacy `ui_scale` is a read-only migration input; wire round-trip checks therefore use migrated fixture values, where the scale lives in `deviceGeometry`.
 
-Adding a value to an enum is a major schema bump: an older client rejects an unknown enum value as Invalid (fail-closed) and starts on SIMPLE keeping the damaged copy.
-The regression `ws_docs::future_minor_with_unknown_enum_value_is_invalid` stamps schema 1.3.0 and
-`owner_type: "team"` and asserts `MigrateError::Invalid` (current schema: 1.0.0).
+Adding future migrations requires a named `Step`, a matching `CHANGELOG` row, a synthetic previous-version fixture, a stored-patch startup test and an idempotence check. `migrate_with(value, steps)` injects a table for tests; an empty table can read the original v1 profile without upgrading it. Unknown enum values still fail typed validation. Command ID renames continue to follow the engine registry through `rename_command_ids`.
 
-## Stored layout patches
+Stored `layoutPatch` is expanded over the current base and policy before profile migration. Changes to the patch structure itself require a raw-patch migration before that expansion; a full-profile fixture alone cannot prove that path. The tests include old `layout_patch` input with geometry and scale and verify actual startup, device ownership, backup and restart.
 
-Stored user layouts are PATCHES deserialised over today's base before `migrate()`:
-`startup.rs::resolve_layout_patch` reads `layout_patch`, applies it with `try_apply_patch`, then
-`load_profile` validates and migrates the expanded profile. This means an old enum or field can
-fail typed patch application before a full-profile migrator can see it.
-
-Every future schema bump must migrate patches too (patch-aware), with a fixture of an old patch.
-Keep the original patch and base/version metadata for rollback; migrate raw patches before typed
-application when the change requires it. This patch-aware upgrade path is not yet implemented:
-`STEPS` is empty at schema 1.0.0. A full-profile fixture alone cannot prove stored upgrades work.
-For each bump, add an old `layout_patch` fixture and exercise actual startup over the new base,
-checking intended overrides, new base defaults, policy locks, unknown fields, idempotence and backup.
-
-## Adding a migrator
-
-1. Change `SCHEMA_VERSION` in `wsprofile/schema.rs` (patch for a fix, minor for an added field, major only
-   for a change older code cannot read).
-2. Add a `Step { name, from, to, apply }` to `STEPS` in `migrate.rs`. `from` is the previous
-   `SCHEMA_VERSION`, `to` the new one. `apply` edits the JSON in place, must not drop fields, and must be a
-   no-op on a document that already has the change. Return `MigrateError::Invalid` rather than panic.
-3. Add a fixture under `tests/fixtures/workspace/` written by hand in the previous schema (no real user data,
-   keep it under 3 KB) and add it to `VALID_FIXTURES` in `ws_migrate.rs`; the idempotence and no-loss tests
-   then cover it.
-4. Add a `(to_version, one-line change)` row to `CHANGELOG`. The last row must equal `SCHEMA_VERSION`; a
-   test checks this and that every step has a row.
-5. Update the schema document and presets if the new field needs a default there.
-
-`migrate_with(value, steps)` runs the same logic with a step table you pass in. Tests use it to exercise
-multi-version upgrades without changing `SCHEMA_VERSION`.
-
-## Fixtures
-
-| File | Models |
-| --- | --- |
-| `legacy-v1.json` | Current `apps/cadcraft` `workspace.json` |
-| `aged-1y.json` | 1.0.0 profile using a command id that was later renamed |
-| `aged-3y.json` | 1.0.0 profile that predates most optional fields |
-| `aged-5y.json` | 1.0.0 profile with a panel that no longer exists |
-| `aged-10y.json` | Older legacy file with a key the app no longer writes |
-| `future-1.3.0.json` | Written by a newer minor: unknown fields at several levels |
-| `corrupt-truncated.json`, `corrupt-wrongtypes.json` | Must produce an error, never a panic |
-
-The aged files are hand-written guesses at how the schema could look over time, not real user data.
-
-## Rollback
-
-Before a migrated profile replaces the stored one, the store keeps `Migrated::backup`. To undo an upgrade,
-run the `ui.workspace.restore` command (added with the store in W5): it writes the backup back unchanged.
-The backup serializes to the same bytes as the original input.
-
-A profile that fails to migrate is not deleted: the app loads `SIMPLE` and keeps the broken snapshot so it
-can be repaired or restored.
-
-## Pre-release ws-v21 command-line docking
-
-Profiles saved by pre-release ws-v21 builds with SIMPLE `"dock":"bottom"` render a docked
-command line. Current SIMPLE defaults to floating. No migration rewrites these stored choices
-because ws-v21 was never released.
+Synthetic fixture coverage includes profiles aged 1, 3 and 5 years, the legacy-format 10-year fixture, unknown future fields and invalid/truncated JSON. These are hand-written examples, without real user data. Pre-release ws-v21 profiles that explicitly docked the command line remain docked; no migration rewrites that choice merely because the SIMPLE default now floats.

@@ -16,6 +16,7 @@
 	{n} frame(s) added, {m} ignored (not frames), {t} total	Додано рамок: {n}, проігноровано (не рамки): {m}, усього: {t}
 	UBPLOT: {n} sheet(s), {b} blocked, {w} warning(s)	UBPLOT: аркушів: {n}, заблоковано: {b}, попереджень: {w}
 	Publish Plot Frames	Опублікувати аркуші рамок
+	Approve Plot Warnings	Схвалити попередження друку
 	Scan Plot Frames	Сканувати рамки для друку
 	Plot Frame Templates	Шаблони рамок для друку
 	Apply	Застосувати
@@ -1893,3 +1894,107 @@
 	Skipped unknown toolbar commands: {commands}	Пропущено невідомі команди панелі інструментів: {commands}
 	Drop to add as a ribbon group	Відпустіть, щоб додати як групу стрічки
 	Use ui.toolbar.to_ribbon to convert a toolbar	Використайте ui.toolbar.to_ribbon для перетворення панелі інструментів
+# GĐ3 Task 11: web keys.
+	The browser uses this key; choose another shortcut	Браузер використовує це сполучення клавіш; виберіть інше
+# GĐ3 Task 7: dock clamp.
+	The docking content area must be finite and positive	Робоча область панелей має бути скінченною та додатною
+	Full Screen	Повний екран
+	Focus Mode	Режим зосередження
+	Clean Screen On	Увімкнути чистий екран
+	Clean Screen Off	Вимкнути чистий екран
+	Exit Focus Mode (Esc)	Вийти з режиму зосередження (Esc)
+	Full screen needs a click in the browser	Для повного екрана потрібно клацнути в браузері
+	Full screen is blocked here (iframe needs allow="fullscreen"); using Focus mode	Повний екран заблоковано (iframe потребує allow="fullscreen"); увімкнено режим зосередження
+	on must be a boolean	on має бути логічним значенням
+	command_line must be floating or hidden	command_line має бути floating або hidden
+# GĐ2 B9: preflight list.
+	PASS {p} · INFO {i} · WARN {w} · BLOCK {b}	УСПІХ {p} · ІНФО {i} · УВАГА {w} · БЛОК {b}
+	No sheets to publish	Немає аркушів для публікації
+	Fix or exclude blocked sheets before publishing a merged PDF	Виправте або виключіть заблоковані аркуші перед публікацією об’єднаного PDF
+	Approve all warnings before publishing	Підтвердьте всі попередження перед публікацією
+	{code} · {n} sheets · {severity}	{code} · {n} аркушів · {severity}
+	PASS	УСПІХ
+	INFO	ІНФО
+	WARN	УВАГА
+	BLOCK	БЛОК
+	Approve all ({n})	Підтвердити всі ({n})
+	Approve {n} warnings ({code})? This is recorded in the audit log.	Підтвердити {n} попереджень ({code})? Це буде записано в журналі аудиту.
+	Approve	Підтвердити
+	Approved	Підтверджено
+	Cannot be approved: fix the cause or exclude the sheet	Неможливо підтвердити: усуньте причину або виключіть аркуш
+	Overlap (mm)	Перекриття (мм)
+	{n} pieces	{n} частин
+	Approve split	Підтвердити поділ
+	Printer limits apply in the desktop app; the web app plots PDF.	Обмеження принтера діють у настільному застосунку; вебзастосунок друкує в PDF.
+	XREF_MISSING	Відсутнє зовнішнє посилання
+	XREF_UNLOADED	Зовнішнє посилання вивантажено
+	SCALE_PAPER_MISMATCH	Масштаб не відповідає паперу
+	PAPER_TOO_SMALL	Папір замалий
+	DEVICE_LIMIT_EXCEEDED	Перевищено обмеження пристрою
+	DEVICE_LIMIT_NEAR	Наближення до обмеження пристрою
+	DEVICE_UNAVAILABLE	Пристрій недоступний
+	FONT_MISSING	Шрифт відсутній
+	FONT_FALLBACK	Заміна відсутнього шрифту
+	SHEET_ID_DUPLICATE	Дубльований код аркуша
+	REVISION_OLD	Застаріла редакція
+	TEMPLATE_SUPERSEDED	Шаблон замінено новішим
+	Planned	Заплановано
+	Double-click to repeat command	Двічі клацніть, щоб повторити команду
+	Aliases	Псевдоніми
+	Assign Alias	Призначити псевдонім
+	Remove Alias	Видалити псевдонім
+	Reset Aliases	Скинути псевдоніми
+	Export Aliases...	Експортувати псевдоніми...
+	Import Aliases...	Імпортувати псевдоніми...
+	Aliases (JSON)	Псевдоніми (JSON)
+	Use letters A–Z, digits 0–9, _ or - for aliases	Використовуйте літери A–Z, цифри 0–9, _ або - для псевдонімів
+	Alias cannot be empty	Псевдонім не може бути порожнім
+	Alias must be at most 16 characters	Псевдонім має містити щонайбільше 16 символів
+	{command} is a command name and cannot be an alias	{command} — назва команди, яка не може бути псевдонімом
+	Alias already runs {command}; confirm to replace	Псевдонім уже виконує {command}; підтвердьте заміну
+	Too many aliases	Забагато псевдонімів
+	{key} is required	Потрібно вказати {key}
+	Paste alias JSON to import in the browser	Вставте JSON псевдонімів для імпорту в браузері
+	Alias file is too large	Файл псевдонімів завеликий
+	Paste alias JSON to import	Вставте JSON псевдонімів для імпорту
+	Expected an aliases object	Очікується об’єкт aliases
+	Expected a command name	Очікується назва команди
+	{imported} imported, {skipped} skipped	Імпортовано: {imported}, пропущено: {skipped}
+	Filter aliases	Фільтрувати псевдоніми
+	Alias	Псевдонім
+	Command	Команда
+	Source	Джерело
+	Built-in	Вбудований
+	Alias command	Команда псевдоніма
+	Import Alias File...	Імпортувати файл псевдонімів...
+	Import Aliases	Імпортувати псевдоніми
+	Replace Alias?	Замінити псевдонім?
+	Replace Alias	Замінити псевдонім
+	Roll Back Workspace to 1.0.0	Відкотити робочий простір до 1.0.0
+	Restored the 1.0.0 workspace. Changes are not saved until restart.	Відновлено робочий простір 1.0.0. Зміни не зберігатимуться до перезапуску.
+	Saving suspended	Збереження призупинено
+	No 1.0.0 workspace backup is available	Резервна копія робочого простору 1.0.0 відсутня
+	Layout saved on this device (not synced)	Компонування збережено на цьому пристрої (не синхронізовано)
+	Layout changed	Компонування змінено
+	Saving layout…	Збереження компонування…
+	Could not save layout; retrying	Не вдалося зберегти компонування; повторна спроба
+	Layout restored from revision {n}	Компонування відновлено з ревізії {n}
+	Safe mode: layout changes are not saved	Безпечний режим: зміни компонування не зберігаються
+	Drawing saved	Креслення збережено
+	Drawing downloaded	Креслення завантажено
+	Drawing has unsaved changes	Креслення має незбережені зміни
+	Drawing autosaved in this browser {time}	Креслення автоматично збережено в цьому браузері {time}
+	Layout saved	Компонування збережено
+	Layout not saved	Компонування не збережено
+	Layout restored	Компонування відновлено
+	Safe mode	Безпечний режим
+	Saving drawing…	Збереження креслення…
+	Drawing autosaved	Креслення автозбережено
+ribbon	Block	Блок
+ribbon	Edit	Редагування
+ribbon	Count	Підрахунок
+ribbon	Replace	Замінити
+ribbon	Check	Перевірка
+	Replace Block	Замінити блок
+	Select block references to replace	Виберіть посилання на блоки для заміни
+	Enter replacement block name	Введіть назву блока для заміни

@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 use crate::CadApp;
 
+pub mod alias_tab;
 mod keyboard_tab;
 mod quick_access_tab;
 mod ribbon_tab;
@@ -15,6 +16,7 @@ pub const DIALOG: &str = "customize_workspace";
 #[derive(Default)]
 pub struct State {
     page: usize,
+    aliases: alias_tab::State,
     tab: String,
     group: String,
     ribbon_index: Option<usize>,
@@ -100,7 +102,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         .anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0))
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                let pages = [crate::tl!("Ribbon"), crate::tl!("Toolbars"), crate::tl!("Keyboard"), crate::tl!("Quick Access")];
+                let pages = [crate::tl!("Ribbon"), crate::tl!("Toolbars"), crate::tl!("Keyboard"), crate::tl!("Quick Access"), crate::tl!("Aliases")];
                 for (page, label) in pages.iter().enumerate() {
                     let response = ui.add(egui::Button::selectable(state.page == page, *label));
                     if !state.focused && page == 0 {
@@ -117,7 +119,8 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                 0 => ribbon_tab::show(app, ui, &mut state),
                 1 => toolbars_tab::show(app, ui, &mut state),
                 2 => keyboard_tab::show(app, ui, &mut state),
-                _ => quick_access_tab::show(app, ui, &mut state),
+                3 => quick_access_tab::show(app, ui, &mut state),
+                _ => alias_tab::show(app, ui, &mut state),
             });
             if let Some(error) = &state.error {
                 ui.colored_label(crate::theme::Tokens::get().warn, error);

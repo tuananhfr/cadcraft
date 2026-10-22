@@ -53,3 +53,41 @@ This branch (`tuananhfr`) is UbotCAD, the UbotBuild build of [CADCraft](https://
 - Command Palette shares accent-insensitive Vietnamese/English/alias search with Command Reference, Quick Access and Customize. Vietnamese/Latin-1 normalization and IME guards protect typing; desktop Ctrl+Shift+P opens the palette, while web uses the UI without that reserved shortcut.
 - Added temporary qps pseudo-localization and a seven-screen Vietnamese catalog-text regression at 1366×768, including Quick Plot. Plot translates the built-in Model label while preserving user layout names. Engine history, diagnostics and CLI/MCP output remain English.
 - T13 source work is complete; native/wasm tests, build gates, browser visual QA (including 200% zoom), desktop smoke and native terminology/IME review remain with the lead. No execution pass is claimed here.
+
+## V2.2 GĐ2
+
+Paper, physical scale, preflight and audited approval (B1–B9). Gate 2 validation is pending.
+
+- UBPLOT ratios use `INSUNITS`, independently of `MEASUREMENT`: `1:100` in a metre drawing prints 1 m as 10 mm. `scale_label` preserves the requested or frame-derived physical ratio. Unitless and unknown codes assume millimetres with INFO `UNITS_ASSUMED`. PLOT and EXPORTPDF retain their legacy paper-units-per-drawing-unit meaning unless `scaleMode: "real"` is supplied.
+- PLOT and EXPORTPDF with an explicit `scale` and no `fit` now preserve that scale on Model instead of silently fitting. PDF page items and PNG use the same default; `fit: true` remains an explicit request to fit. UBPLOT Ratio sheets always publish with `fit: false`; only Fit sheets are fitted. Paper/scale mismatches block instead of shrinking the drawing.
+- Paper strings accept `auto`, standard A0–A5 and elongated names such as `A1x4`, custom `841x2400` mm, and `roll:914` or `roll:914:5`, including per-sheet overrides. Roll length follows the scaled frame plus both margins, rounded up to 1 mm. Too-narrow rolls block with `PAPER_TOO_SMALL`; oversized rolls use `PAPER_TOO_LARGE`; fixed-paper mismatches use `SCALE_PAPER_MISMATCH`. Merged pages retain their own MediaBox and scale.
+- PDF limits are 1000 pages per file, 512 MiB and 15000 mm (15 m) per paper edge. The two-pass writer gathers glyphs separately and releases each page display list after writing it. Edges over 5080 mm (14400 points) use `/UserUnit`, scaled MediaBox/content and catalog PDF 1.6. Oversized paper is rejected; merged jobs over the page cap suggest split output. PNG retains its pixel cap.
+- Preflight reports essential missing xrefs as BLOCK `XREF_MISSING`, unloaded xrefs as WARN `XREF_UNLOADED`, and missing xrefs outside all sheets as plan-level INFO `XREF_MISSING_OUTSIDE`. Nested transforms, visibility and layout viewport model bounds are considered. Empty definitions without usable bounds remain plan-level diagnostics; traversal limits block with `XREF_SCAN_LIMIT`. Web messages explain that external references are not loaded there.
+- Fonts used on planned sheets produce plan-level WARN `FONT_MISSING` / `FONT_FALLBACK` or INFO `FONT_MAPPED`; cached `last` scans refresh font settings. Duplicate ids warn on every copy (`SHEET_ID_DUPLICATE`). The revision register uses natural order: old/missing revisions warn (`REVISION_OLD`), newer revisions report INFO (`REVISION_NEWER`), and superseded templates warn (`TEMPLATE_SUPERSEDED`). `PLOT_STYLE` and renamed split deliveries (`FILE_RENAMED`) are INFO. The full code/severity table is in [UBPLOT](docs/ubplot.md).
+- Clean and INFO-only sheets are `READY`; unapproved WARNs are `NEEDS_PREVIEW`; BLOCKs are `BLOCKED`. Scan summary counts sheet verdicts under `pass`, `info`, `warn`, `block`; plan-level issues do not inflate those counts. The dialog defaults to exceptions, groups by code/severity, offers confirmed bulk WARN approval, and disables Publish for unapproved warnings or BLOCKs in merged output. BLOCK groups offer fixes or exclusion and have no approval control.
+- `ubplot.approve` atomically approves WARNs for `user` or named agents and appends fingerprinted audit records with host timestamps. Only WARNs can be approved; BLOCKs can never be approved, including via JSON or an agent. Unchanged rescans preserve approvals and audit history; changed messages require approval again. Publishing rejects forged flags and unapproved warnings with `BLOCK_NOT_APPROVABLE`, `APPROVAL_WITHOUT_AUDIT` or `WARN_NOT_APPROVED`; there is no bypass.
+- Device limits use the greatest short and long paper sides: at least 95% warns (`DEVICE_LIMIT_NEAR`), exceeding either blocks (`DEVICE_LIMIT_EXCEEDED`). A split proposal requires explicit approval through `ubplot.approve {split}` and a geometry/device-bound audit entry; this resolves the device-size cause rather than approving a BLOCK. Overlap defaults to 20 mm (0–200 mm). Approved pieces preserve scale/rotation, follow sheet/piece order, use numbered page labels, and show 0.25 mm dashed seams with 10 mm end ticks. A short side beyond the device width stays blocked; choose PDF.
+- UBPLOT on the web publishes PDF only. Unknown desktop devices and non-PDF web devices fall back to PDF after WARN `DEVICE_UNAVAILABLE` approval; another printer is never selected silently. Desktop UI offers overlap and split approval. Real printers, driver queries, queues/resume and folder publishing remain GĐ5 work; LPC templates and PrintProfile remain GĐ6 work.
+
+### Gate 2 results (lead)
+
+Pending: the lead fills results and evidence after running the gate. No tests, benchmarks,
+CLI checks, builds or visual QA were run for this documentation task.
+
+| Check | Result / evidence |
+| --- | --- |
+| `sp05_mixed_a1_a3_long_in_one_pdf_each_own_mediabox` | Pending — lead |
+| `roll_914_length_follows_frame` | Pending — lead |
+| `sheet_15m_uses_user_unit` | Pending — lead |
+| `pages_with_scale_are_not_fitted` | Pending — lead |
+| `insunits_meters_plot_1_100` | Pending — lead |
+| SP07: `essential_missing_xref_blocks_the_sheet` | Pending — lead |
+| SP07: `font_missing_warns_at_plan_level` | Pending — lead |
+| SP11: `duplicate_sheet_ids_warn_on_every_copy` | Pending — lead |
+| SP11: `old_revision_against_register_warns` | Pending — lead |
+| `block_is_never_approvable_even_by_json` | Pending — lead |
+| Native/wasm clippy, fmt, affected crate tests, layers | Pending — lead |
+| `bench_thousand_dense_pages`: bytes/page, total bytes, time | Pending — lead |
+| Independent PDF CLI checks on mixed-size and 15 m output | Pending — lead |
+| Web release build and visual QA: 1366×768, 1920×1080, 200% zoom | Pending — lead |
+| Desktop smoke: approved three-piece split and PDF inspection | Pending — lead |

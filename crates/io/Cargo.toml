@@ -23,4 +23,5 @@ miniz_oxide = "0.8"
 quick-xml = { workspace = true }
 
 [dev-dependencies]
+sha2 = { workspace = true }
 tiny-skia = { workspace = true }

@@ -1,4 +1,4 @@
-//! The workspace profile document: serde types for schema 1.0.0.
+//! The workspace profile document: serde types for schema 3.
 
 use std::collections::BTreeMap;
 
@@ -6,7 +6,26 @@ use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 
-pub const SCHEMA_VERSION: &str = "1.0.0";
+pub const SCHEMA_VERSION: u32 = 3;
+
+pub(crate) fn version_major(value: &Value) -> Option<u32> {
+    if let Some(number) = value.as_u64() {
+        return u32::try_from(number).ok();
+    }
+    let text = value.as_str()?;
+    let parts: Vec<_> = text.split('.').take(4).collect();
+    if !matches!(parts.len(), 1 | 3) || parts.iter().any(|part| part.is_empty() || !part.bytes().all(|byte| byte.is_ascii_digit())) {
+        return None;
+    }
+    for part in &parts {
+        part.parse::<u32>().ok()?;
+    }
+    parts.first()?.parse().ok()
+}
+
+pub(crate) fn schema_version<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
+    version_major(&Value::deserialize(deserializer)?).ok_or_else(|| D::Error::custom("unreadable schema_version"))
+}
 
 /// Profile layers from the most general to the most specific.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,7 +80,7 @@ fn unit_ratio<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f32, D::Erro
     Ok(clamp_finite(f32::deserialize(deserializer)?, 0.0, 1.0))
 }
 
-fn ui_scale<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f32, D::Error> {
+pub(crate) fn ui_scale<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f32, D::Error> {
     Ok(clamp_finite(f32::deserialize(deserializer)?, 0.75, 2.0))
 }
 
@@ -79,6 +98,8 @@ pub struct RibbonGroup {
     pub id: String,
     pub label: String,
     pub commands: Vec<String>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -91,11 +112,13 @@ pub struct RibbonTab {
     /// Selection kind that makes the tab appear ("dimension", "hatch"); `None` for a standing tab.
     pub contextual: Option<String>,
     pub groups: Vec<RibbonGroup>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 impl Default for RibbonTab {
     fn default() -> Self {
-        Self { id: String::new(), label: String::new(), order: 0, visible: true, contextual: None, groups: Vec::new() }
+        Self { id: String::new(), label: String::new(), order: 0, visible: true, contextual: None, groups: Vec::new(), extra: Map::new() }
     }
 }
 
@@ -117,6 +140,8 @@ pub struct Ribbon {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<RibbonMode>,
     pub tabs: Vec<RibbonTab>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 impl Ribbon {
@@ -151,6 +176,8 @@ pub struct ToolbarState {
     #[serde(deserialize_with = "unit_ratio")]
     pub y_ratio: f32,
     pub commands: Vec<String>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 impl Default for ToolbarState {
@@ -166,6 +193,7 @@ impl Default for ToolbarState {
             x_ratio: 0.0,
             y_ratio: 0.0,
             commands: Vec::new(),
+            extra: Map::new(),
         }
     }
 }
@@ -186,6 +214,8 @@ pub struct PanelState {
     pub width_ratio: f32,
     #[serde(deserialize_with = "unit_ratio")]
     pub height_ratio: f32,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 impl Default for PanelState {
@@ -200,6 +230,7 @@ impl Default for PanelState {
             y_ratio: 0.0,
             width_ratio: 0.2,
             height_ratio: 1.0,
+            extra: Map::new(),
         }
     }
 }
@@ -218,11 +249,13 @@ pub struct CommandLineState {
     pub x_ratio: f32,
     #[serde(deserialize_with = "unit_ratio")]
     pub y_ratio: f32,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 impl Default for CommandLineState {
     fn default() -> Self {
-        Self { dock: Dock::Floating, height_ratio: 0.1, lines: 3, visible: true, x_ratio: 0.0, y_ratio: 0.0 }
+        Self { dock: Dock::Floating, height_ratio: 0.1, lines: 3, visible: true, x_ratio: 0.0, y_ratio: 0.0, extra: Map::new() }
     }
 }
 
@@ -251,11 +284,13 @@ pub const STATUS_BAR_ITEMS: &[&str] = &[
 pub struct StatusBarState {
     pub visible: bool,
     pub items: BTreeMap<String, bool>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 impl Default for StatusBarState {
     fn default() -> Self {
-        Self { visible: true, items: STATUS_BAR_ITEMS.iter().map(|item| ((*item).to_string(), true)).collect() }
+        Self { visible: true, items: STATUS_BAR_ITEMS.iter().map(|item| ((*item).to_string(), true)).collect(), extra: Map::new() }
     }
 }
 
@@ -266,11 +301,13 @@ pub struct ToolSetsState {
     pub tab: String,
     pub collapsed_groups: Vec<String>,
     pub hidden_tools: Vec<String>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 impl Default for ToolSetsState {
     fn default() -> Self {
-        Self { visible: true, tab: "Drafting".into(), collapsed_groups: Vec::new(), hidden_tools: Vec::new() }
+        Self { visible: true, tab: "Drafting".into(), collapsed_groups: Vec::new(), hidden_tools: Vec::new(), extra: Map::new() }
     }
 }
 
@@ -287,11 +324,21 @@ pub struct ViewState {
     pub properties_all: bool,
     /// An in-window menu bar; off by default where the system draws the menu bar (macOS).
     pub in_window_menu: bool,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 impl Default for ViewState {
     fn default() -> Self {
-        Self { file_tabs: true, viewcube: true, ucs_icon: true, layer_list: false, properties_all: true, in_window_menu: !cfg!(target_os = "macos") }
+        Self {
+            file_tabs: true,
+            viewcube: true,
+            ucs_icon: true,
+            layer_list: false,
+            properties_all: true,
+            in_window_menu: !cfg!(target_os = "macos"),
+            extra: Map::new(),
+        }
     }
 }
 
@@ -411,7 +458,8 @@ impl Default for WorkspaceLayout {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, remote = "Self")]
 pub struct WorkspaceProfile {
-    pub schema_version: String,
+    #[serde(deserialize_with = "schema_version")]
+    pub schema_version: u32,
     pub profile_id: String,
     pub tenant_id: Option<String>,
     pub owner_type: OwnerType,
@@ -423,8 +471,6 @@ pub struct WorkspaceProfile {
     pub status: ProfileStatus,
     pub locale: Option<String>,
     pub theme: Option<String>,
-    #[serde(deserialize_with = "ui_scale")]
-    pub ui_scale: f32,
     /// RFC 3339.
     pub created_at: String,
     /// RFC 3339.
@@ -440,7 +486,7 @@ pub const PRESET_TIMESTAMP: &str = "2026-10-21T00:00:00Z";
 impl Default for WorkspaceProfile {
     fn default() -> Self {
         Self {
-            schema_version: SCHEMA_VERSION.into(),
+            schema_version: SCHEMA_VERSION,
             profile_id: "preset.SIMPLE".into(),
             tenant_id: None,
             owner_type: OwnerType::Platform,
@@ -452,7 +498,6 @@ impl Default for WorkspaceProfile {
             status: ProfileStatus::Published,
             locale: None,
             theme: None,
-            ui_scale: 1.0,
             created_at: PRESET_TIMESTAMP.into(),
             updated_at: PRESET_TIMESTAMP.into(),
             layout: WorkspaceLayout::default(),
@@ -496,6 +541,12 @@ impl<'de> Deserialize<'de> for WorkspaceProfile {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let mut value = Value::deserialize(deserializer)?;
         hoist_root_layout_keys(&mut value);
+        if let Some(fields) = value.as_object_mut() {
+            if let Some(scale) = fields.remove("ui_scale") {
+                serde_json::from_value::<super::device::DeviceState>(serde_json::json!({"ui_scale": scale})).map_err(D::Error::custom)?;
+            }
+            fields.remove("uiScale");
+        }
         WorkspaceProfile::deserialize(value).map_err(D::Error::custom)
     }
 }

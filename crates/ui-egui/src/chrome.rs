@@ -23,7 +23,8 @@ pub(crate) fn file_tabs_height(density: Density) -> f32 {
 }
 
 pub(crate) fn quick_access(app: &mut CadApp, ui: &mut egui::Ui, row: QuickAccessRow) {
-    if quick_access_row(app) != row || app.ws.effective.layout.quick_access.is_empty() {
+    if crate::focus::hides(app, crate::focus::Chrome::QuickAccess) || quick_access_row(app) != row || app.ws.effective.layout.quick_access.is_empty()
+    {
         return;
     }
     egui::Panel::top("cc_quick_access_row")
@@ -63,7 +64,9 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
     let ribbon_hidden = app.ws.effective.layout.ribbon.effective_mode() == crate::wsprofile::schema::RibbonMode::Hidden
         && !crate::ribbon::visible_tabs(app).is_empty();
     let title_height = if app.ws.effective.layout.density == Density::Comfortable { 40.0 } else { MAC_TITLE_BAR };
-    let qat_in_title = quick_access_row(app) == QuickAccessRow::TitleBar && !app.ws.effective.layout.quick_access.is_empty();
+    let qat_in_title = !crate::focus::hides(app, crate::focus::Chrome::QuickAccess)
+        && quick_access_row(app) == QuickAccessRow::TitleBar
+        && !app.ws.effective.layout.quick_access.is_empty();
     if app.integrated_titlebar || ribbon_hidden || qat_in_title {
         egui::Panel::top("cc_title_toolbar").exact_size(title_height).show_separator_line(false).frame(egui::Frame::NONE.fill(t.chrome)).show(
             ui,

@@ -66,11 +66,14 @@ files are not read; we haven't found a public specification of that format.
 
 Reading fixes hostile values:
 
-- Sizes are kept within 1–5080 mm, and width and height are swapped to portrait.
+- Sizes are kept within 1–15000 mm, and width and height are swapped to portrait.
 - Margins are kept within 0–1000 mm. Margins that leave no printable area are dropped.
 - Paper names are unique, and a device keeps at most 512 papers.
 - A missing or unknown `defaultPaper` becomes the first paper.
 - Files over 1 MB are refused.
+
+PDF publications accept at most 1000 pages and 512 MiB. Sheets with a side over 14400 points
+use `/UserUnit` and catalog version PDF 1.6; each side must be at most 15000 mm.
 
 In the file name, characters other than letters, digits, spaces and `-_()+,` become `_`.
 
@@ -108,11 +111,56 @@ In the file name, characters other than letters, digits, spaces and `-_()+,` bec
     printable area's lower-left origin; offsets are millimetres, default to `[0, 0]`, and are
     bounded to ±100,000 mm. PDF and PNG support these controls. SVG plots keep their extents view;
     an active offset is rejected rather than ignored. Layout plots do not use model offsets.
+  - `scale` is a positive number or ratio such as `"1:100"`. By default it means paper
+    units per drawing unit: paper units are millimetres with `MEASUREMENT=1`, inches
+    otherwise. This legacy meaning is unchanged.
+  - `scaleMode: "real"` interprets `scale` as a physical ratio using `INSUNITS`,
+    independently of `MEASUREMENT`. For example, a metre drawing (`INSUNITS=6`) at
+    `"1:100"` prints 1 m as 10 mm. Unitless or unknown INSUNITS codes assume mm.
+  - With `scale` and no `fit`, PDF and PNG preserve the requested scale. Model plots
+    without a scale fit by default; layouts default to 1:1. `fit: true` explicitly fits even
+    when a scale is supplied; `fit: false` without a scale uses 1:1.
+  - PDF `pages` items accept their own `scale`, `fit` and `margins`; an item without `fit`
+    fits only when it has no scale. UBPLOT Ratio sheets publish with `fit: false`, Fit
+    sheets with `fit: true`. UBPLOT defaults to zero margins except for rolls or a
+    matching non-PDF device paper from the sheet's owning layout. The scan `device`
+    controls size checks; it does not supply model-space block/window margins.
   - `exportpdf` takes the same options and always writes PDF.
 
-Model-space PDF plots don't apply the paper's margins yet. They fit the drawing inside the
-default margins. PNG plots apply them. SVG plots show a layout's whole sheet, or the
-model-space extents.
+PDF and PNG plots apply the paper's margins to their printable area. SVG plots show a
+layout's whole sheet, or the model-space extents.
+
+## UBPLOT device limits and splits
+
+`ubplot.scan {device: "A1 Plotter", …}` checks the greatest short and long sides among
+that device's papers. `CADCraft PDF` allows 15000 mm on either side. At least 95% of
+either limit produces WARN `DEVICE_LIMIT_NEAR`; exceeding either produces BLOCK
+`DEVICE_LIMIT_EXCEEDED`. Device definitions describe capabilities; real printer
+submission, driver queries and print queues remain GĐ5 work.
+
+An oversized long sheet can have an unapproved overlap split proposal. The short side
+must fit the device width; otherwise choose PDF. Scan and Publish never split it
+automatically. On desktop, the review dialog shows the piece count, `Overlap (mm)`
+(0–200, default 20) and `Approve split`. Programmatic approval uses:
+
+```json
+{"command":"ubplot.approve","params":{"split":[{"sheetKey":"S-001@1","overlapMm":20}],"by":"user"}}
+```
+
+Approval records an audit entry tied to geometry, paper, scale, device limits and overlap.
+It resolves the size problem; BLOCK issues themselves cannot be approved. Approved pieces
+preserve scale and rotation, publish in sheet/piece order, and use page labels such as
+`S-001 (1/3)`. Dashed 0.25 mm seams and 10 mm end ticks mark overlap edges. Pieces count
+toward the 1000-page PDF cap. `output: "split"` means one PDF per original sheet, containing
+all its approved pieces; it does not authorize a device split.
+
+UBPLOT on the web publishes PDF only. Every device other than `CADCraft PDF` produces
+WARN `DEVICE_UNAVAILABLE`, with PDF fallback after approval and no device split proposal.
+An unknown or removed desktop device has the same warning and fallback. Publishing
+rechecks capabilities and never silently selects another printer. This restriction applies
+to UBPLOT; the built-in PNG/SVG outputs remain available through PLOT.
+
+See [UBPLOT](ubplot.md) for paper strings, physical scale, preflight and approval details.
 
 ## Plot transparency
 

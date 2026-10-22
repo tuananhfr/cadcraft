@@ -1,6 +1,6 @@
 # Where CADCraft falls short of AutoCAD
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-22 · **Change:** minor (GĐ0 release-blocker source inventory; acceptance pending) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-22 · **Change:** minor (GĐ2 UBPLOT coverage and remaining work; lead gates pending) · **Target:** Autodesk AutoCAD 2027
 
 Every known shortfall, one row each, ranked within each section by user impact. This is the work
 list: agents pick from here (top of a section first), and remove or update a row in the same PR
@@ -46,6 +46,21 @@ do them first.
 | F22 | Inquiry leftovers (COUNT across spaces and nested blocks, the QuickCalc palette and COMPARE landed, #563; MASSPROP on regions, #510): COMPARE compares the tab shown, not every layout at once, and has no COMPAREEXPORT report; QuickCalc keeps its history and variables for the session only | `file/compare.rs`, `palettes/quickcalc.rs` | Low | 3–5 |
 | F23 | No Sheet Set Manager, eTransmit, Share, Traces, Markup Import, Activity Insights | menu items uncovered | Low-medium (team workflows) | 40–70 |
 | F24 | No 3D: UCS, 3D views, orbit, solids, surfaces, meshes, sections, visual styles, materials, lights, rendering (150 menu items) | [parity-checklist](parity-checklist.md) | Medium (3D users) | 300–450 |
+
+## UBPLOT V2.2
+
+GĐ1A/GĐ2 source now covers ordered block/window/layout PDF plans, standard/elongated/
+custom/roll paper, mixed page sizes, INSUNITS physical ratios without implicit Fit,
+1000-page / 512 MiB / 15 m PDF caps, xref/font/id/revision preflight, audited WARN approval,
+exception review and approved device overlap splits. BLOCKs cannot be approved.
+See [UBPLOT](ubplot.md) and [Gate 2 results (lead)](../UBOTBUILD-CHANGES.md#gate-2-results-lead);
+acceptance results remain pending.
+
+| Gap | Evidence / covered behavior | Remaining work |
+|---|---|---|
+| Real LPC frames and acceptance | Generic frame detection and explicit BLOCK diagnostics are implemented. | GĐ1A A12 real-file validation remains open: compare frame/page counts, ambiguous/dynamic/rotated frames and physical paper sizes. Required LPC frame files/xrefs are still missing; checks depending on them are blocked, not passed. No LPC fixtures are committed. |
+| Print queue and real devices | Device size checks, PDF fallback warnings and explicit audited overlap splits are implemented; web UBPLOT is PDF only. | GĐ5: system printer submission/driver queries (H3), queue, resume, manifest, folder publishing and large web batch delivery. Capability checks do not submit a print job. |
+| LPC registry and PrintProfile | Generic templates and the per-scan revision register support current preflight. | GĐ6: LPC templates/golden baseline, hierarchical PrintProfile and LISP adapter. Tenant/role approval policy and remote print-job APIs remain deferred. |
 
 ## UI/UX
 
@@ -145,6 +160,7 @@ Detail: [localization-parity.md](localization-parity.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-22 | minor | GĐ2 UBPLOT source coverage recorded: paper/physical scale, PDF caps, preflight, audited WARN approval, exception review and approved overlap splits. Gate 2 evidence remains for the lead; real LPC A12 checks, GĐ5 queue/printers and GĐ6 registry/profile work stay open. |
 | 2026-10-22 | minor | GĐ0: browser plot file delivery (#134) marked done in source; S4/P1 narrowed, obsolete no-DWG platform claim removed; browser key gap, beforeunload limits, non-atomic workspace writes and DXF IMPORT deferral recorded in workspace docs. Lead release gates and QA remain pending. |
 | 2026-10-21 | minor | V2.1 workspace/ribbon/toolbar client inventory (U12) and SHX shapes/unifont/codepage support (FF8); acceptance evidence and remaining scope in `workspace/acceptance.md` |
 | 2026-10-12 | minor | Object transparency (entity, ByLayer, ByBlock) is drawn: on screen (TRANSPARENCYDISPLAY, on by default), in PNG/SVG exports, and in plots when the page setup's "Plot transparency" is on (PDF alpha, PNG blending, SVG opacity; PLOTTRANSPARENCYOVERRIDE): F14 narrowed |

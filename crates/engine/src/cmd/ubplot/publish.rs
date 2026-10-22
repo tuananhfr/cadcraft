@@ -6,13 +6,15 @@ use serde_json::{Value, json};
 
 use super::{LastPlan, bad, io, source_hash};
 use crate::cmd::file::base64_encode;
+use crate::sheetplan::approval::{carry_over, issues, merge_audit, refresh_status, validate_approvals, validate_issue_approvals};
 use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::ids::{sha256_hex, sheet_key};
-use crate::sheetplan::{ScanMode, ScanRequest, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, parse_plan};
+use crate::sheetplan::paper::sheet_margins;
+use crate::sheetplan::{PlotScale, ScanMode, ScanRequest, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, parse_plan};
 use crate::{Result, Session};
 
 const COMMAND: &str = "ubplot.publish";
-const MAX_PAGES: usize = 256;
+const MAX_PAGES: usize = cadcraft_doc::MAX_PLOT_PAGES;
 
 pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     crate::sheetplan::plan::validate_request_value(params).map_err(|error| bad(COMMAND, error))?;
@@ -33,6 +35,24 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
             s.ubplot.last.as_ref().filter(|last| last.doc_uid == uid).ok_or_else(|| bad(COMMAND, "no previous UBPLOT plan"))?.plan.clone()
         }
     };
+    let uid = s.state()?.uid;
+    if let Some(last) = s.ubplot.last.as_ref().filter(|last| last.doc_uid == uid) {
+        plan.audit = merge_audit(&last.plan.audit, &plan.audit).map_err(|error| bad(COMMAND, error))?;
+    }
+    validate_issue_approvals(&plan).map_err(|error| bad(COMMAND, error))?;
+    let previous = plan.clone();
+    let device = plan.device.as_deref().and_then(crate::cmd::plotters::find_device);
+    let missing = plan.device.is_some() && device.is_none();
+    crate::sheetplan::preflight::check_devices(&mut plan, device.as_ref(), missing, cfg!(target_arch = "wasm32"));
+    carry_over(&previous, &mut plan);
+    validate_approvals(&plan).map_err(|error| bad(COMMAND, error))?;
+    let warnings: BTreeSet<_> = issues(&plan)
+        .filter(|(_, issue)| issue.severity == Severity::Warn && !issue.approved_by_user)
+        .map(|(key, issue)| format!("{key}:{}", issue.code))
+        .collect();
+    if !warnings.is_empty() {
+        return Err(bad(COMMAND, format!("WARN_NOT_APPROVED: {}", warnings.into_iter().collect::<Vec<_>>().join(", "))));
+    }
     if source_hash(s)? != plan.source_hash {
         return Err(bad(COMMAND, "PLAN_STALE: drawing changed since scan; scan again"));
     }
@@ -43,18 +63,24 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
         return Err(bad(COMMAND, "PLAN_INVALID: job_id is not safe for a temporary file name"));
     }
     plan.sheets.sort_by_key(|sheet| sheet.order);
-    if output == "merged" && plan.sheets.len() > MAX_PAGES {
-        return Err(bad(COMMAND, format!("at most {MAX_PAGES} pages fit in merged output")));
+    let page_count = plan
+        .sheets
+        .iter()
+        .try_fold(0_usize, |total, sheet| {
+            total.checked_add(sheet.split.as_ref().filter(|split| split.approved).map_or(1, |split| split.pieces.len()))
+        })
+        .ok_or_else(|| bad(COMMAND, "page count overflow"))?;
+    if output == "merged" && page_count > MAX_PAGES {
+        return Err(bad(COMMAND, format!("at most {MAX_PAGES} pages fit in merged output; publish it in parts (split)")));
     }
     #[cfg(target_arch = "wasm32")]
     if output == "split" && plan.sheets.len() > 20 {
         return Err(bad(COMMAND, "web split output is limited to 20 files; use merged output"));
     }
     for sheet in &mut plan.sheets {
-        if sheet.issues.iter().chain(&plan.issues).any(|entry| entry.severity == Severity::Block) {
-            sheet.status = SheetStatus::Blocked;
-        }
+        sheet.issues.retain(|entry| entry.code != codes::FILE_RENAMED);
     }
+    refresh_status(&mut plan);
     let names = split_names(&plan.sheets);
     let base = Path::new(path.unwrap_or("Drawing.pdf"));
     let destinations: Vec<PathBuf> = if output == "merged" {
@@ -81,12 +107,9 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     let plot = io().and_then(|hooks| hooks.plot).ok_or_else(|| bad(COMMAND, "PDF plotting is not available in this build"))?;
     let mut files = Vec::new();
     if output == "merged" {
-        let rendered = plan
-            .sheets
-            .iter()
-            .map(|sheet| page(s, sheet))
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .and_then(|pages| plot(s.doc().map_err(|error| error.to_string())?, &Space::Model, &options(pages, title)));
+        let rendered = plan.sheets.iter().map(|sheet| sheet_pages(s, sheet)).collect::<std::result::Result<Vec<_>, _>>().and_then(|pages| {
+            plot(s.doc().map_err(|error| error.to_string())?, &Space::Model, &options(pages.into_iter().flatten().collect(), title))
+        });
         let result = rendered.and_then(|bytes| finish(&destinations, 0, path.is_some(), &plan.job_id, &plan.sheets, &bytes));
         match result {
             Ok(file) => {
@@ -108,11 +131,21 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
             if sheet.status == SheetStatus::Blocked {
                 continue;
             }
-            let result = page(s, sheet)
-                .and_then(|page| plot(s.doc().map_err(|error| error.to_string())?, &Space::Model, &options(vec![page], title)))
+            let result = sheet_pages(s, sheet)
+                .and_then(|pages| plot(s.doc().map_err(|error| error.to_string())?, &Space::Model, &options(pages, title)))
                 .and_then(|bytes| finish(&destinations, index, path.is_some(), &plan.job_id, std::slice::from_ref(sheet), &bytes));
             match result {
                 Ok(file) => {
+                    if let Some(name) = file.get("name").and_then(Value::as_str)
+                        && Path::new(name).file_stem().and_then(|stem| stem.to_str()) != Some(sheet.sheet_id.as_str())
+                    {
+                        sheet.issues.push(issue(
+                            Severity::Info,
+                            codes::FILE_RENAMED,
+                            format!("Sheet `{}` is published as `{name}`.", sheet.sheet_id),
+                            Some(&sheet.sheet_id),
+                        ));
+                    }
                     sheet.status = SheetStatus::Done;
                     files.push(file);
                 }
@@ -141,7 +174,7 @@ fn serialize(plan: &SheetPlan) -> Result<String> {
     serde_json::to_string(plan).map_err(|error| bad(COMMAND, error.to_string()))
 }
 
-fn remember(s: &mut Session, plan: &SheetPlan, supplied: Option<&Value>) -> Result<()> {
+pub(super) fn remember(s: &mut Session, plan: &SheetPlan, supplied: Option<&Value>) -> Result<()> {
     let state = s.state()?;
     let (uid, revision) = (state.uid, state.revision);
     if let Some(last) = &mut s.ubplot.last
@@ -155,7 +188,42 @@ fn remember(s: &mut Session, plan: &SheetPlan, supplied: Option<&Value>) -> Resu
     Ok(())
 }
 
+fn sheet_pages(s: &Session, sheet: &Sheet) -> std::result::Result<Vec<Value>, String> {
+    let Some(split) = sheet.split.as_ref().filter(|split| split.approved) else {
+        return page(s, sheet).map(|page| vec![page]);
+    };
+    let (_, [width, height], scale) = crate::sheetplan::split::frame(sheet).ok_or_else(|| "split needs a rectangular outline".to_string())?;
+    let mut pages = Vec::with_capacity(split.pieces.len());
+    for (index, outline) in split.pieces.iter().enumerate() {
+        let mut piece = sheet.clone();
+        match &mut piece.source {
+            SheetSource::Block { outline: source, .. } | SheetSource::Window { outline: source, .. } => *source = *outline,
+            SheetSource::Layout { .. } => return Err("layout splits are not available; choose PDF".into()),
+        }
+        let [a, b, c, _] = outline.map(|[x, y]| cadcraft_geom::Vec2::new(x, y));
+        let (piece_width, piece_height) = ((b - a).len() * scale, (c - b).len() * scale);
+        piece.paper_mm = [piece_width, piece_height];
+        piece.landscape = piece_width > piece_height;
+        piece.plot_scale = PlotScale::Ratio { paper_mm: scale, drawing_units: 1.0 };
+        piece.sheet_id = format!("{} ({}/{})", sheet.sheet_id, index.saturating_add(1), split.pieces.len());
+        let mut value = page(s, &piece)?;
+        let seams = if width >= height {
+            [index > 0, false, index.saturating_add(1) < split.pieces.len(), false]
+        } else {
+            [false, index > 0, false, index.saturating_add(1) < split.pieces.len()]
+        };
+        let object = value.as_object_mut().ok_or_else(|| "page must be an object".to_string())?;
+        // Each piece is an exact crop; inherited roll margins would clip its seam-area geometry.
+        object.insert("margins".into(), json!([0.0, 0.0, 0.0, 0.0]));
+        object.insert("seams".into(), json!(seams));
+        object.insert("seamOverlapMm".into(), json!(split.overlap_mm));
+        pages.push(value);
+    }
+    Ok(pages)
+}
+
 fn page(s: &Session, sheet: &Sheet) -> std::result::Result<Value, String> {
+    let d = s.doc().map_err(|error| error.to_string())?;
     let [a, b] = sheet.paper_mm;
     let (width, height) = if sheet.landscape { (a.max(b), a.min(b)) } else { (a.min(b), a.max(b)) };
     let mut page = json!({"width": width, "height": height, "landscape": sheet.landscape, "label": sheet.sheet_id});
@@ -175,11 +243,26 @@ fn page(s: &Session, sheet: &Sheet) -> std::result::Result<Value, String> {
             object.insert("layout".into(), json!(name));
         }
     }
+    match sheet.plot_scale {
+        PlotScale::Fit => {
+            object.insert("fit".into(), json!(true));
+        }
+        PlotScale::Ratio { paper_mm, drawing_units } => {
+            let scale = paper_mm / drawing_units / cadcraft_render::paper::paper_unit_mm(d);
+            if !scale.is_finite() || scale <= 0.0 {
+                return Err("plot scale must be finite and positive after unit conversion".into());
+            }
+            object.insert("scale".into(), json!(scale));
+            object.insert("fit".into(), json!(false));
+        }
+    }
+    let margins = sheet_margins(d, sheet);
+    object.insert("margins".into(), json!(margins));
     Ok(page)
 }
 
 fn options(pages: Vec<Value>, title: &str) -> Value {
-    json!({"pages": pages, "title": title, "margins": [0, 0, 0, 0], "output": "pdf"})
+    json!({"pages": pages, "title": title, "output": "pdf"})
 }
 
 fn failed(sheet: &mut Sheet, error: &str) {

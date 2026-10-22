@@ -115,6 +115,11 @@ fn known_tools() -> &'static [Tool] {
     })
 }
 
+/// Whether a toolbar or ribbon button with this id runs a real command in this build.
+pub fn is_known(id: &str) -> bool {
+    resolve(id).known
+}
+
 pub fn resolve(id: &str) -> Command {
     if let Some((icon, _, label, shortcut)) = known_tools().iter().find(|tool| tool.1 == id) {
         return Command { label: (*label).to_string(), icon: Some(*icon), shortcut: *shortcut, known: true };
@@ -168,6 +173,10 @@ fn title_of(id: &str) -> String {
 /// The text of a placeholder button and its tool tip.
 pub(crate) fn placeholder_label(command: &Command) -> String {
     crate::tf!("{title} — not available in this version", title = command.label)
+}
+
+pub(crate) fn placeholder_reason(command: &Command) -> String {
+    if PLANNED.iter().any(|(_, title)| *title == command.label) { crate::tl!("Planned").to_string() } else { placeholder_label(command) }
 }
 
 /// The window's tool bars in drawing order for `dock`: by row, then by position in the row.

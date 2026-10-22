@@ -6,11 +6,12 @@ use cadcraft_ui_egui::docking::Panel;
 use cadcraft_ui_egui::i18n::Preference;
 use cadcraft_ui_egui::theme::ThemePref;
 use cadcraft_ui_egui::wsprofile::SaveStatus;
+use cadcraft_ui_egui::wsprofile::canonical::with_checksum;
 use cadcraft_ui_egui::wsprofile::merge::Level;
 use cadcraft_ui_egui::wsprofile::presets::{PRESET_IDS, preset};
 use cadcraft_ui_egui::wsprofile::schema::{Dock, OwnerType, ProfileStatus, WorkspaceProfile};
 use cadcraft_ui_egui::wsprofile::startup::{FALLBACK_MESSAGE, Fallback, RESTORED_MESSAGE, parse_set};
-use cadcraft_ui_egui::wsprofile::store::{CORRUPT_SNAPSHOT, MAX_USER_PROFILES, MemoryStore, ProfileSet, ProfileStore};
+use cadcraft_ui_egui::wsprofile::store::{CORRUPT_SNAPSHOT, Commit, Durability, MAX_USER_PROFILES, MemoryStore, ProfileSet, ProfileStore};
 use cadcraft_ui_egui::wsprofile::validate::{Mode, validate};
 use cadcraft_ui_egui::{CadApp, Services};
 use craft_ui::docking::Node;
@@ -155,7 +156,7 @@ fn crash_recovery_ux04() {
     assert!(app.ui.docking.layout.contains(&Panel::ExternalRefs));
     assert_eq!(app.ui.docking.layout.root, root, "docked panels keep their places");
     let user = &app.ws.user;
-    assert_eq!(user.ui_scale, 1.25);
+    assert_eq!(app.ws.device.ui_scale, 1.25);
     assert_eq!(user.layout.shortcuts.get("line").map(String::as_str), Some("L"));
     assert_eq!(user.layout.aliases.get("ln").map(String::as_str), Some("line"));
     assert_eq!(user.layout.quick_access, vec!["qsave".to_string(), "u".to_string()]);
@@ -193,10 +194,10 @@ fn corrupt_store_falls_back_ux15() {
     assert!(!standard_toolbar_visible(&current_set(&app).user.unwrap()));
 
     let mut newer = preset("SIMPLE").unwrap();
-    newer.schema_version = "2.0.0".into();
+    newer.schema_version = 4;
     let newer = serde_json::to_string(&json!({"active": "SIMPLE", "user": newer})).unwrap();
     let app = attached(MemoryStore { current: Some(newer), ..MemoryStore::default() });
-    assert!(matches!(app.ws.fallback, Some(Fallback::NewerMajor(ref version)) if version == "2.0.0"), "{:?}", app.ws.fallback);
+    assert!(matches!(app.ws.fallback, Some(Fallback::NewerMajor(ref version)) if version == "4"), "{:?}", app.ws.fallback);
 
     let invalid = json!({"active": "SIMPLE", "user": {"schema_version": "1.0.0", "name": "x".repeat(2000)}}).to_string();
     let shared = Shared::new(MemoryStore { current: Some(invalid.clone()), ..MemoryStore::default() });
@@ -274,11 +275,12 @@ fn newer_major_still_falls_back_to_simple() {
     let _aliases = alias_lock();
     let shared = three_committed_revisions();
     let mut newer: Value = serde_json::from_str(&shared.read_current().unwrap()).unwrap();
-    newer["schema_version"] = json!("2.0.0");
-    let damaged = newer.to_string();
+    newer["schemaVersion"] = json!(4);
+    // A genuine newer writer signs its set; an unsigned edit would read as corruption instead.
+    let damaged = with_checksum(newer).to_string();
     shared.0.borrow_mut().current = Some(damaged.clone());
     let app = reattach(&shared);
-    assert_eq!(app.ws.fallback, Some(Fallback::NewerMajor("2.0.0".into())));
+    assert_eq!(app.ws.fallback, Some(Fallback::NewerMajor("4".into())));
     assert_eq!(app.ws.user.base_id.as_deref(), Some("SIMPLE"));
     assert_eq!(app.ws.effective.layout, preset("SIMPLE").unwrap().layout);
     assert_eq!(shared.damaged(), vec![damaged.into_bytes()]);
@@ -703,7 +705,7 @@ fn session_hidden_panel_not_persisted_via_dock_tree() {
 fn session_layer_hides_a_panel_the_users_dock_tree_shows() {
     let mut app = attached(MemoryStore::default());
     run(&mut app, "ui.dock", json!({"operation": "move", "panel": "properties", "target": "toolSets", "zone": "bottom"}));
-    assert!(app.ws.user.layout.dock_tree.is_some());
+    assert!(app.ws.device.layout_patch.get("dock_tree").is_some());
     app.set_session_layer(json!({"panels": [{"id": "layers", "visible": false, "mode": "hidden"}]}));
     assert!(!app.ui.docking.layout.contains(&Panel::Layers));
 }
@@ -768,6 +770,13 @@ struct SnapshotsRefused {
 }
 
 impl ProfileStore for SnapshotsRefused {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        self.inner.keep_backup(version, raw)
+    }
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.inner.read_backup(version)
+    }
+
     fn read_current(&self) -> Option<String> {
         self.inner.read_current()
     }
@@ -874,6 +883,13 @@ impl Shared {
 }
 
 impl ProfileStore for Shared {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        self.0.borrow_mut().keep_backup(version, raw)
+    }
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.0.borrow().read_backup(version)
+    }
+
     fn take_external_change(&mut self) -> bool {
         self.1.replace(false)
     }
@@ -899,6 +915,30 @@ impl ProfileStore for Shared {
     fn keep_damaged(&mut self, raw: &[u8]) -> Result<String, String> {
         self.0.borrow_mut().keep_damaged(raw)
     }
+}
+
+#[test]
+fn write_commit_default_refuses_older_expected() {
+    let set = |revision: u64| format!(r#"{{"active":"SIMPLE","user":{{"revision":{revision}}}}}"#);
+    let shared = Shared::new(MemoryStore::default());
+    let mut store = shared.clone();
+    let first = set(1);
+    store.write_commit(Commit { expected: 0, revision: 1, json: &first, prune: Vec::new() }).unwrap();
+    assert_eq!(store.durability(), Durability::Committed);
+    assert_eq!(shared.0.borrow().current.as_deref(), Some(first.as_str()));
+    assert_eq!(store.snapshots(), vec![1]);
+
+    // A writer that last saw revision 0 must not replace revision 1.
+    let stale = set(2);
+    let error = store.write_commit(Commit { expected: 0, revision: 2, json: &stale, prune: Vec::new() }).unwrap_err();
+    assert!(error.contains("changed in another tab"), "{error}");
+    assert_eq!(shared.0.borrow().current.as_deref(), Some(first.as_str()), "current is untouched");
+    assert_eq!(store.snapshots(), vec![1], "no snapshot is written either");
+
+    store.write_commit(Commit { expected: 1, revision: 2, json: &stale, prune: Vec::new() }).unwrap();
+    assert_eq!(shared.0.borrow().current.as_deref(), Some(stale.as_str()));
+    assert_eq!(store.snapshots(), vec![1, 2]);
+    assert_eq!(store.read_snapshot(2).as_deref(), Some(stale.as_str()));
 }
 
 #[test]
@@ -943,6 +983,13 @@ impl Flaky {
 }
 
 impl ProfileStore for Flaky {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        self.inner.keep_backup(version, raw)
+    }
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.inner.read_backup(version)
+    }
+
     fn read_current(&self) -> Option<String> {
         self.inner.read_current()
     }
@@ -1078,12 +1125,12 @@ fn import_base_change_undo_restores_identity_and_preferences() {
     assert_eq!(again.ws.user.profile_id, before.profile_id);
     assert_eq!(again.ws.user.base_id, before.base_id);
     assert_eq!(again.ws.user.layout, before.layout);
-    assert_eq!(again.ws.user.ui_scale, before.ui_scale);
+    assert_eq!(again.ws.device.ui_scale, 1.25);
     run(&mut app, "ui.layout.redo", json!({}));
     assert_eq!(app.ws.active, "AUTOCAD_FAMILIAR");
     assert_eq!(app.ws.user.base_id, imported.base_id);
     assert_eq!(app.ws.user.layout, imported.layout);
-    assert_eq!(app.ws.user.ui_scale, imported.ui_scale);
+    assert_eq!(app.ws.device.ui_scale, 1.25);
 }
 
 #[test]
@@ -1117,6 +1164,13 @@ struct RefuseOutgoingOnce {
 }
 
 impl ProfileStore for RefuseOutgoingOnce {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        self.inner.keep_backup(version, raw)
+    }
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.inner.read_backup(version)
+    }
+
     fn read_current(&self) -> Option<String> {
         self.inner.read_current()
     }
@@ -1193,7 +1247,7 @@ fn failed_outgoing_save_blocks_workspace_switch() {
             assert_eq!(again.ws.active, active);
             assert_eq!(again.ws.user.profile_id, before.profile_id);
             assert_eq!(again.ws.user.layout, before.layout);
-            assert_eq!(again.ws.user.ui_scale, 1.25);
+            assert_eq!(again.ws.device.ui_scale, 1.25);
         }
     }
 }

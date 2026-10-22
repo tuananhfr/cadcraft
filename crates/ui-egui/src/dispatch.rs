@@ -34,6 +34,9 @@ fn dispatch_command(app: &mut CadApp, id: &str, params: Value) -> Dispatched {
         app.session.echo(reason.clone());
         return Dispatched { outcome: Outcome::Unsupported, result: Err(reason) };
     }
+    if id.eq_ignore_ascii_case("ui.fullscreen") {
+        return crate::fullscreen::dispatch(app, false);
+    }
     if let Some(result) = menus::run_ui_command(app, id, &params) {
         let outcome = match &result {
             Ok(value) if value.get("cancelled").and_then(Value::as_bool) == Some(true) => Outcome::Cancelled,
@@ -46,6 +49,11 @@ fn dispatch_command(app: &mut CadApp, id: &str, params: Value) -> Dispatched {
     let result = if id.starts_with("ui.") { Err(EngineError::UnknownCommand(id.to_string())) } else { app.session.execute(id, &params) };
     let outcome = classify(&result);
     let result = result.map_err(|error| error.to_string());
+    if matches!(command, "qsave" | "saveas")
+        && let Ok(saved) = &result
+    {
+        app.record_drawing_save(saved);
+    }
     if let Err(error) = wsprofile::sync_aliases(app, &aliases) {
         return Dispatched { outcome: Outcome::ValidationError, result: Err(error) };
     }

@@ -5,6 +5,7 @@ use egui::{Align2, Color32, Rect, Sense, vec2};
 use serde_json::json;
 
 use super::presets::SAFE_PRESET;
+use super::save_state::{DrawingSave, LayoutSave};
 use super::startup::Fallback;
 use super::{Choice, SaveStatus, WsState, commands::MAX_NAME};
 use crate::CadApp;
@@ -270,37 +271,45 @@ pub fn run_menu_action(app: &mut CadApp, action: MenuAction) {
     }
 }
 
-/// The save state in the status bar's words, and a longer explanation when there is one. `None`
-/// while there is nothing to say: no storage, or a first run that has changed nothing yet.
-pub fn save_text(ws: &WsState) -> Option<(&'static str, Option<String>)> {
+/// The layout save state the status bar shows. `None` while there is nothing to say: no storage, or
+/// a first run that has changed nothing yet.
+pub fn save_text(ws: &WsState) -> Option<LayoutSave> {
     ws.store.as_ref()?;
-    Some(match &ws.status {
-        SaveStatus::SavedLocally => (crate::tl!("Saved locally"), None),
-        SaveStatus::Unsaved if ws.autosave.pending() => (crate::tl!("Saving…"), None),
-        SaveStatus::Unsaved if matches!(ws.fallback, Some(Fallback::NoProfile)) => return None,
-        SaveStatus::Unsaved => (crate::tl!("Not saved"), None),
-        SaveStatus::Failed(error) => (crate::tl!("Not saved"), Some(format!("{}: {error}", crate::tl!("Could not save workspace")))),
-        SaveStatus::Syncing => (crate::tl!("Syncing"), None),
-        SaveStatus::Synced => (crate::tl!("Synced"), None),
-        SaveStatus::Offline => (crate::tl!("Offline"), None),
-        SaveStatus::Conflict => (crate::tl!("Sync conflict"), None),
-        SaveStatus::TabConflict => (crate::tl!("Changed in another tab"), None),
-    })
+    let state = LayoutSave::from_ws(ws);
+    let untouched_first_run = state == LayoutSave::Clean && ws.status == SaveStatus::Unsaved && matches!(ws.fallback, Some(Fallback::NoProfile));
+    (!untouched_first_run).then_some(state)
 }
 
-/// Paints the save state with its right edge 8 px left of `right`; returns where the controls to
-/// its left must end (`right` itself when there is nothing to show).
-pub fn status(app: &CadApp, ui: &mut egui::Ui, right: f32, cy: f32) -> f32 {
-    let Some((text, detail)) = save_text(&app.ws) else { return right };
+/// Paints `short` with its right edge 8 px left of `right`, `detail` as its tooltip; returns its left edge.
+fn paint_state(ui: &mut egui::Ui, salt: &str, right: f32, cy: f32, short: &str, detail: &str, warn: bool) -> f32 {
     let t = Tokens::get();
-    let color = if matches!(app.ws.status, SaveStatus::Failed(_) | SaveStatus::Conflict | SaveStatus::TabConflict) { t.warn } else { t.text_dim };
-    let galley = ui.painter().layout_no_wrap(text.to_string(), crate::theme::small(), color);
+    let color = if warn { t.warn } else { t.text_dim };
+    let galley = ui.painter().layout_no_wrap(short.to_string(), crate::theme::small(), color);
     let rect = Rect::from_min_size(egui::pos2(right - 8.0 - galley.size().x, cy - galley.size().y / 2.0), galley.size());
     ui.painter().galley(rect.min, galley, color);
-    let response = ui.interact(rect.expand2(vec2(2.0, 4.0)), ui.id().with("ws_save_state"), Sense::hover());
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, text));
-    if let Some(detail) = detail {
+    let response = ui.interact(rect.expand2(vec2(2.0, 4.0)), ui.id().with(salt), Sense::hover());
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, short));
+    if detail != short {
         response.on_hover_text(detail);
     }
-    rect.left() - 8.0
+    rect.left()
+}
+
+/// Paints the layout save state and, left of it, the drawing's, ending 8 px left of `right`;
+/// returns where the controls to their left must end (`right` itself when there is nothing to show).
+pub fn status(app: &CadApp, ui: &mut egui::Ui, right: f32, cy: f32) -> f32 {
+    let mut edge = right;
+    if let Some(layout) = save_text(&app.ws) {
+        let detail = match &layout {
+            LayoutSave::Retry(error) => format!("{}\n{error}", layout.label()),
+            _ => layout.label(),
+        };
+        let warn = matches!(layout, LayoutSave::Retry(_) | LayoutSave::Conflict);
+        edge = paint_state(ui, "ws_save_state", edge, cy, &layout.short(), &detail, warn);
+    }
+    let drawing = DrawingSave::from_app(app);
+    if drawing != DrawingSave::Clean {
+        edge = paint_state(ui, "drawing_save_state", edge, cy, &drawing.short(), &drawing.label(), false);
+    }
+    if edge < right { edge - 8.0 } else { right }
 }

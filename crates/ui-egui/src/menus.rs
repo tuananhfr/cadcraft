@@ -16,6 +16,10 @@ const RECENT_CLEAR: &str = "ui.recent.clear";
 
 /// UI-only commands: (id, label, menu path, shortcut).
 pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
+    ("ui.fullscreen", "Full Screen", &["View", "Full Screen"], None),
+    ("ui.focusmode", "Focus Mode", &["View", "Focus Mode"], None),
+    ("cleanscreenon", "Clean Screen On", &[], None),
+    ("cleanscreenoff", "Clean Screen Off", &[], None),
     ("ui.spacemouse", "3D Mouse...", &["Tools", "3D Mouse..."], None),
     ("ui.spacemouse.calibrate", "Calibrate 3D Mouse", &[], None),
     ("ui.spacemouse.navigate", "3D Mouse Navigation", &[], None),
@@ -26,6 +30,8 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.panel.peek", "Show Auto-hide Panel", &[], None),
     ("ui.panel.fonts", "Fonts", &[], None),
     ("ui.panel.lisp", "LISP", &[], None),
+    ("ui.panel.blocks", "Blocks", &["Window", "Blocks"], None),
+    ("ui.panel.history", "Command History", &[], None),
     ("ui.panel.toolsets", "Tool Sets", &[], None),
     ("ui.panel.externalreferences", "External References", &[], None),
     ("ui.dock.reset", "Reset Panel Layout", &["Window", "Reset Panel Layout"], None),
@@ -47,6 +53,11 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.ribbon.button.move", "Move Ribbon Command", &[], None),
     ("ui.ribbon.collapse", "Minimize Ribbon", &["Window", "Minimize Ribbon"], None),
     ("ui.ribbon.mode", "Ribbon Display Mode", &["View", "Ribbon", "Display Mode"], None),
+    ("ui.alias.set", "Assign Alias", &[], None),
+    ("ui.alias.remove", "Remove Alias", &[], None),
+    ("ui.alias.reset", "Reset Aliases", &[], None),
+    ("ui.alias.export", "Export Aliases...", &[], None),
+    ("ui.alias.import", "Import Aliases...", &[], None),
     ("ui.shortcut.bind", "Assign Shortcut", &[], None),
     ("ui.shortcut.unbind", "Remove Shortcut", &[], None),
     ("ui.quickaccess.pin", "Add to Quick Access", &[], None),
@@ -69,6 +80,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.workspace.export", "Export Workspace...", &[], None),
     ("ui.workspace.import", "Import Workspace...", &[], None),
     ("ui.workspace.restore", "Restore Workspace Revision", &[], None),
+    ("ui.workspace.rollback", "Roll Back Workspace to 1.0.0", &[], None),
     ("ui.workspace.status", "Workspace Save Status", &[], None),
     ("ui.workspace.set", "Set Workspace Value", &[], None),
     ("ui.workspace.resolve", "Resolve Workspace Conflict", &[], None),
@@ -111,7 +123,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.resetpalettes", "Reset Palettes", &["Window", "Reset Palettes"], None),
     ("ui.start", "Start", &["Window", "Start"], None),
     ("ui.dialog.layers", "Layer Properties Manager", &["Window", "Layers"], None),
-    ("ui.dialog.blocks", "Blocks", &["Window", "Blocks"], None),
+    ("ui.dialog.blocks", "Blocks", &[], None),
     ("ui.dialog.qselect", "Quick Select...", &[], None),
     ("ui.dialog.parameters", "Parameters Manager", &["Window", "Parameters Manager"], None),
     ("ui.dialog.dsettings", "Drafting Settings...", &[], None),
@@ -138,12 +150,19 @@ pub fn is_ui_command(id: &str) -> bool {
 
 /// Run a UI-only command. `None` if `id` isn't one.
 pub fn run_ui_command(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
-    // Changes made outside commands (dragging, palette clicks) are folded in first, so the
-    // command's own change becomes one layout undo step.
-    crate::wsprofile::observe(app, true);
+    if id == "ui.fullscreen" {
+        return Some(app.dispatch(id, params.clone()).result);
+    }
+    if let Some(result) = crate::i18n::with_language(app.language(), || crate::focus::route(app, id, params)) {
+        return Some(result);
+    }
+    // Pending interface edits belong to the command's undo step; automatic geometry repairs
+    // belong to the existing drag instead of adding undo steps.
+    let record = id != "ui.dock" || params.get("operation").and_then(Value::as_str) != Some("clamp");
+    crate::wsprofile::observe(app, record);
     let result = crate::i18n::with_language(app.language(), || run_ui_command_inner(app, id, params));
     if result.is_some() {
-        crate::wsprofile::observe(app, true);
+        crate::wsprofile::observe(app, record);
     }
     result
 }
@@ -179,6 +198,9 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
     if let Some(result) = crate::palette::route(app, id, params) {
         return Some(result);
     }
+    if let Some(result) = crate::customize::alias_tab::route(app, id, params) {
+        return Some(result);
+    }
     if let Some(result) = crate::customize::route(app, id, params) {
         return Some(result);
     }
@@ -209,9 +231,19 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
     if matches!(id, "ui.dock" | "ui.dock.reset") {
         return Some(crate::docking::command(app, id == "ui.dock.reset", params));
     }
+    if id == "ui.dialog.blocks" {
+        return run_ui_command_inner(app, "ui.panel.blocks", params);
+    }
     if matches!(
         id,
-        "ui.panel.properties" | "ui.panel.layers" | "ui.panel.fonts" | "ui.panel.lisp" | "ui.panel.toolsets" | "ui.panel.externalreferences"
+        "ui.panel.properties"
+            | "ui.panel.layers"
+            | "ui.panel.fonts"
+            | "ui.panel.lisp"
+            | "ui.panel.toolsets"
+            | "ui.panel.externalreferences"
+            | "ui.panel.blocks"
+            | "ui.panel.history"
     ) {
         let panel = match id {
             "ui.panel.toolsets" => "toolSets",
@@ -301,7 +333,11 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
             let title = app.session.state().map(|s| s.title.clone()).ok();
             let name = app.ui.save_format.suggested_name(title.as_deref());
             if let Some(p) = app.services.pick_save.as_ref().and_then(|f| f(&name)) {
-                return Some(app.session.execute("saveas", &saveas_params(&app.ui, &app.session, &p)).map_err(|e| e.to_string()));
+                let result = app.session.execute("saveas", &saveas_params(&app.ui, &app.session, &p)).map_err(|e| e.to_string());
+                if let Ok(saved) = &result {
+                    app.record_drawing_save(saved);
+                }
+                return Some(result);
             }
             Ok(json!({"cancelled": true}))
         }
@@ -441,7 +477,17 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
         "ui.resetpalettes" => {
             let (menu, theme, interface_language, save_format) = (app.ui.in_window_menu, app.ui.theme, app.ui.interface_language, app.ui.save_format);
             let (animations, save_version) = (app.ui.animations, std::mem::take(&mut app.ui.save_version));
-            app.ui = crate::UiState { in_window_menu: menu, theme, animations, interface_language, save_format, save_version, ..Default::default() };
+            let downloaded = std::mem::take(&mut app.ui.downloaded);
+            app.ui = crate::UiState {
+                in_window_menu: menu,
+                theme,
+                animations,
+                interface_language,
+                save_format,
+                save_version,
+                downloaded,
+                ..Default::default()
+            };
             Ok(Value::Null)
         }
         "ui.start" => {
@@ -467,7 +513,6 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
         }
         "ui.dialog.language"
         | "ui.dialog.layers"
-        | "ui.dialog.blocks"
         | "ui.dialog.dsettings"
         | "ui.dialog.about"
         | "ui.dialog.commands"
@@ -751,6 +796,15 @@ pub fn menu_bar(app: &mut CadApp, ui: &mut egui::Ui) {
 
 /// Like choosing a menu item: starts the command interactively.
 pub fn activate(app: &mut CadApp, id: &str) {
+    if id.eq_ignore_ascii_case("ui.fullscreen") {
+        let gesture = app.command_context.input(|input| input.pointer.any_click());
+        let _ = crate::fullscreen::dispatch(app, gesture);
+        return;
+    }
+    if matches!(id, "ui.focusmode" | "cleanscreenon" | "cleanscreenoff") {
+        app.start(id);
+        return;
+    }
     app.cmd.buffer.clear();
     app.start(id);
 }

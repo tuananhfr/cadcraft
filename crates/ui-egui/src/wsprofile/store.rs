@@ -15,18 +15,41 @@ pub const KEEP_SNAPSHOTS: usize = 20;
 /// Snapshot revision that holds a profile set startup could not read. Revisions the app commits
 /// start at 1, and pruning never removes this one, so later commits cannot erase the evidence.
 pub const CORRUPT_SNAPSHOT: u64 = 0;
+pub const TAB_CONFLICT_MESSAGE: &str = "Workspace changed in another tab";
+
+/// How far the last commit a store accepted has got.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Durability {
+    Committed,
+    Pending,
+    Failed(String),
+    Conflict { stored: u64 },
+}
+
+/// One commit: the snapshot under `revision` and the current set, both `json`.
+#[derive(Clone, Debug)]
+pub struct Commit<'a> {
+    /// The stored revision the writer last read or wrote.
+    pub expected: u64,
+    pub revision: u64,
+    pub json: &'a str,
+    /// Snapshots the commit makes obsolete.
+    pub prune: Vec<u64>,
+}
 
 /// Everything committed at once, so Save As profiles and the active choice never disagree.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProfileSet {
-    pub schema_version: String,
+    #[serde(deserialize_with = "super::schema::schema_version")]
+    pub schema_version: u32,
     /// A preset id or the `profile_id` of one of `profiles`.
     pub active: String,
     /// Saved user profiles, at most [`MAX_USER_PROFILES`].
     pub profiles: Vec<WorkspaceProfile>,
     /// The working profile: the user's layer over its `base_id` preset, as last committed.
     pub user: Option<WorkspaceProfile>,
+    pub device: Option<super::device::DeviceState>,
     /// Fields a newer writer added, kept through a save.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
@@ -34,17 +57,38 @@ pub struct ProfileSet {
 
 impl Default for ProfileSet {
     fn default() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into(), active: SAFE_PRESET.into(), profiles: Vec::new(), user: None, extra: Map::new() }
+        Self { schema_version: SCHEMA_VERSION, active: SAFE_PRESET.into(), profiles: Vec::new(), user: None, device: None, extra: Map::new() }
     }
 }
 
 pub trait ProfileStore {
+    fn keep_backup(&mut self, _version: &str, _raw: &str) -> Result<(), String> {
+        Err("this storage keeps no backup".into())
+    }
+    fn read_backup(&self, _version: &str) -> Option<String> {
+        None
+    }
     /// The [`ProfileSet`] JSON last written.
     fn read_current(&self) -> Option<String>;
     /// Replaces the current set; atomic in every implementation (old or new, never half).
     fn write_current(&mut self, json: &str) -> Result<(), String>;
     /// Keeps a copy under `revision`; keeps the newest [`KEEP_SNAPSHOTS`] plus [`CORRUPT_SNAPSHOT`].
     fn push_snapshot(&mut self, revision: u64, json: &str) -> Result<(), String>;
+    /// Writes snapshot and current together, unless the stored revision is newer than `expected`.
+    /// The snapshot goes first, so a torn write leaves the old current; `push_snapshot` already
+    /// prunes, so only transactional stores need `prune`.
+    fn write_commit(&mut self, c: Commit<'_>) -> Result<(), String> {
+        let stored = self.read_current().as_deref().and_then(super::startup::stored_revision).unwrap_or(0);
+        if stored > c.expected {
+            return Err(TAB_CONFLICT_MESSAGE.into());
+        }
+        self.push_snapshot(c.revision, c.json)?;
+        self.write_current(c.json)
+    }
+    /// Whether the last accepted commit is durable yet; a store that writes before returning always is.
+    fn durability(&mut self) -> Durability {
+        Durability::Committed
+    }
     /// Stored revisions, ascending.
     fn snapshots(&self) -> Vec<u64>;
     fn read_snapshot(&self, revision: u64) -> Option<String>;
@@ -87,11 +131,27 @@ pub struct MemoryStore {
     pub fail_writes: bool,
     /// Copies kept by [`ProfileStore::keep_damaged`], by name.
     pub damaged: BTreeMap<String, Vec<u8>>,
+    pub backups: BTreeMap<String, String>,
 }
 
 const WRITE_REFUSED: &str = "storage is full or blocked";
 
 impl ProfileStore for MemoryStore {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        if self.backups.contains_key(version) {
+            return Ok(());
+        }
+        if self.fail_writes {
+            return Err(WRITE_REFUSED.into());
+        }
+        self.backups.insert(version.into(), raw.into());
+        Ok(())
+    }
+
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.backups.get(version).cloned()
+    }
+
     fn read_current(&self) -> Option<String> {
         self.current.clone()
     }

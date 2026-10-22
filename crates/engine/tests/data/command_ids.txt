@@ -50,6 +50,7 @@ bclose
 bedit
 blend
 block
+blockreplace
 blocks.dynamic
 blocks.list
 blocks.reference
@@ -392,6 +393,7 @@ transparencydisplay
 trim
 u
 ubplot
+ubplot.approve
 ubplot.publish
 ubplot.scan
 ubplot.templates

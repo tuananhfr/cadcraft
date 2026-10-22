@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use cadcraft_ui_egui::wsprofile::store::{MAX_SET_BYTES, ProfileStore, expired_snapshots};
 
 const CURRENT: &str = "current.json";
+const BACKUP: &str = "backup-v1.json";
 const POLICY: &str = "policy.json";
 const SNAPSHOTS: &str = "snapshots";
 const DAMAGED: &str = "damaged";
@@ -99,6 +100,35 @@ fn within(json: &str, limit: usize) -> Result<(), String> {
 }
 
 impl ProfileStore for FileProfileStore {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        if version != "1.0.0" {
+            return Err("unsupported backup version".into());
+        }
+        within(raw, MAX_SET_BYTES)?;
+        let backup = self.dir.join(BACKUP);
+        if read_capped(&backup, MAX_SET_BYTES + 1).map_err(|error| error.to_string())?.is_some() {
+            return Ok(());
+        }
+        let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let staged = self.dir.join(format!(".backup-{}-{sequence}.tmp", std::process::id()));
+        write_atomic(&staged, raw)?;
+        // Publishing a complete inode avoids both partial backups and replacing another writer's original.
+        let result = fs::hard_link(&staged, &backup);
+        let _ = fs::remove_file(&staged);
+        match result {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+            Err(error) => Err(format!("{}: {error}", backup.display())),
+        }
+    }
+
+    fn read_backup(&self, version: &str) -> Option<String> {
+        if version != "1.0.0" {
+            return None;
+        }
+        read_capped(&self.dir.join(BACKUP), MAX_SET_BYTES + 1).ok().flatten().filter(|text| text.len() <= MAX_SET_BYTES)
+    }
+
     fn read_current(&self) -> Option<String> {
         // Too large or not UTF-8 text goes to startup as bytes, which keeps it as it is.
         let bytes = self.read_current_bytes().filter(|bytes| bytes.len() <= MAX_SET_BYTES)?;
@@ -234,6 +264,20 @@ mod tests {
         let path = std::env::temp_dir().join(format!("cadcraft-profile-store-test-{}-{sequence}", std::process::id()));
         fs::create_dir_all(&path).unwrap();
         path
+    }
+
+    #[test]
+    fn file_store_keeps_backup_once() {
+        let dir = temp_dir();
+        let mut store = FileProfileStore::new(dir.join("workspace"));
+        let original = "{\r\n  \"schema_version\": \"1.0.0\"\r\n}";
+        store.keep_backup("1.0.0", original).unwrap();
+        store.keep_backup("1.0.0", "replacement").unwrap();
+        assert_eq!(store.read_backup("1.0.0").as_deref(), Some(original));
+        assert_eq!(fs::read(dir.join("workspace/backup-v1.json")).unwrap(), original.as_bytes());
+        assert_eq!(fs::read_dir(dir.join("workspace")).unwrap().count(), 1);
+        assert_eq!(store.read_backup("4"), None);
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

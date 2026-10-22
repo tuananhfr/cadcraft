@@ -168,6 +168,35 @@ fn qat_position_is_independent_of_menu_bar() {
 }
 
 #[test]
+fn focus_mode_hides_and_restores_every_qat_position() {
+    let _guard = test_lock();
+    for in_window_menu in [false, true] {
+        for position in ["title_bar", "above_ribbon", "below_ribbon"] {
+            let mut app = attached(MemoryStore::default());
+            app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+            app.run("ui.workspace.set", json!({"pointer": "/quick_access", "value": ["ubplot"]})).unwrap();
+            app.run("ui.ribbon.mode", json!({"mode": "tabs_only"})).unwrap();
+            app.run("ui.quickaccess.position", json!({"position": position})).unwrap();
+            app.run("ui.toggle.menubar", json!({"on": in_window_menu})).unwrap();
+            app.run("ui.density", json!({"density": "comfortable"})).unwrap();
+            let mut h = harness(app, true);
+            let before = qat_rect(&h);
+            let layout = serde_json::to_value(&h.state().ws.effective.layout).unwrap();
+            h.state_mut().run("ui.focusmode", json!({"on": true})).unwrap();
+            h.run_steps(4);
+            assert!(h.query_all_by_label("Quick Plot...").next().is_none(), "{position}, menu={in_window_menu}");
+            let canvas = h.state().canvas.rect.unwrap();
+            assert!(canvas.height() >= h.ctx.content_rect().height() * 0.85);
+            assert_eq!(serde_json::to_value(&h.state().ws.effective.layout).unwrap(), layout);
+            h.state_mut().run("ui.focusmode", json!({"on": false})).unwrap();
+            h.run_steps(4);
+            assert_eq!(qat_rect(&h), before, "{position}, menu={in_window_menu}");
+            assert_eq!(serde_json::to_value(&h.state().ws.effective.layout).unwrap(), layout);
+        }
+    }
+}
+
+#[test]
 fn qat_survives_theme_and_density_changes_tc18() {
     let _guard = test_lock();
     let mut h = harness(pinned(), true);

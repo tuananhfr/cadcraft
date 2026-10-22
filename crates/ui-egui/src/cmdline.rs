@@ -332,10 +332,7 @@ pub fn keyboard(app: &mut CadApp, ctx: &egui::Context) {
             }
             egui::Event::Key { key, pressed: true, repeat, modifiers, .. } => match key {
                 Key::Enter => submit(app),
-                Key::Escape => {
-                    app.cmd.buffer.clear();
-                    app.session.cancel();
-                }
+                Key::Escape => crate::focus::escape(app, ctx),
                 Key::Backspace => {
                     let press = KeyPress { repeat, plain: !(modifiers.alt || modifiers.ctrl || modifiers.command) };
                     let erase = backspace_erases(
@@ -477,6 +474,15 @@ fn dock_menu(app: &mut CadApp, response: &egui::Response) {
 }
 
 pub fn show(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
+    if app.focus.active() {
+        if app.focus.command_line == crate::focus::CommandLineInFocus::Hidden {
+            return;
+        }
+        let width = (canvas.width() - 16.0).clamp(0.0, 760.0);
+        let bar = Rect::from_min_size(pos2(canvas.center().x - width / 2.0, canvas.bottom() - INPUT_HEIGHT - 8.0), vec2(width, INPUT_HEIGHT));
+        show_at(app, ui, canvas, bar);
+        return;
+    }
     if app.ws.effective.layout.command_line.dock != crate::wsprofile::schema::Dock::Floating {
         return;
     }
@@ -500,12 +506,14 @@ fn show_at(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect, bar: Rect) {
     let t = Tokens::get();
     let (w, h) = (bar.width(), bar.height());
     let p = ui.painter_at(canvas);
-    history(app, ui, canvas, bar);
+    if !app.focus.active() {
+        history(app, ui, canvas, bar);
+    }
     let input = ui.interact(bar, ui.id().with("cmdline_input"), Sense::hover());
     input.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, crate::tl!("Command line input")));
     crate::control::record_widget(ui, &input, "Command line input", "label", None);
     // History lines above the bar (the expanded window replaces them).
-    let n = if app.cmd.expanded { 0 } else { visible_lines(app, canvas, bar) };
+    let n = if app.cmd.expanded || app.focus.active() { 0 } else { visible_lines(app, canvas, bar) };
     let lines: Vec<String> = app.session.log.iter().rev().take(n).rev().cloned().collect();
     if !lines.is_empty() {
         let lh = 16.0;
@@ -517,41 +525,43 @@ fn show_at(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect, bar: Rect) {
     }
     p.rect_filled(bar, 3.0, t.cmd_bg);
     p.rect_stroke(bar, 3.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
-    let grip_rect = Rect::from_min_size(pos2(bar.left(), bar.top() + 4.0), vec2(7.0, 16.0));
-    let grip = ui.interact(grip_rect, ui.id().with("cmdline_move"), Sense::click_and_drag());
-    crate::icons::describe_control(ui, &grip, "Command line grip", None, false);
-    for y in [5.0, 10.0, 15.0] {
-        p.circle_filled(pos2(bar.left() + 3.0, bar.top() + y), 0.8, t.text_dim);
-    }
-    dock_menu(app, &grip);
-    if app.ws.effective.layout.command_line.dock == crate::wsprofile::schema::Dock::Floating {
-        if grip.drag_started() {
-            app.cmd.move_preview = Some(bar.min);
+    if !app.focus.active() {
+        let grip_rect = Rect::from_min_size(pos2(bar.left(), bar.top() + 4.0), vec2(7.0, 16.0));
+        let grip = ui.interact(grip_rect, ui.id().with("cmdline_move"), Sense::click_and_drag());
+        crate::icons::describe_control(ui, &grip, "Command line grip", None, false);
+        for y in [5.0, 10.0, 15.0] {
+            p.circle_filled(pos2(bar.left() + 3.0, bar.top() + y), 0.8, t.text_dim);
         }
-        if grip.dragged() {
-            let position = app.cmd.move_preview.unwrap_or(bar.min) + grip.drag_delta();
-            let top = canvas.top() + (history_lines(app).min(MAX_LINES) as f32 * LINE_H + 8.0).min((canvas.height() - h).max(0.0));
-            app.cmd.move_preview = Some(pos2(
-                position.x.clamp(canvas.left(), (canvas.right() - w).max(canvas.left())),
-                position.y.clamp(top, (canvas.bottom() - h).max(top)),
-            ));
-        }
-        if grip.drag_stopped()
-            && let Some(position) = app.cmd.move_preview.take()
-        {
-            let top = canvas.top() + (history_lines(app).min(MAX_LINES) as f32 * LINE_H + 8.0).min((canvas.height() - h).max(0.0));
-            let x_room = (canvas.width() - w).max(0.0);
-            let y_room = (canvas.bottom() - h - top).max(0.0);
-            let x = if x_room > 0.0 { ((position.x - canvas.left()) / x_room).clamp(0.0, 1.0) } else { 0.5 };
-            let y = if y_room > 0.0 { ((position.y - top) / y_room).clamp(0.0, 1.0) } else { 1.0 };
-            let mut state = app.ws.effective.layout.command_line.clone();
-            // Zero coordinates retain the legacy default placement.
-            state.x_ratio = if x == 0.0 && y == 0.0 { f32::EPSILON } else { x };
-            state.y_ratio = y;
-            if let Err(error) = app.run("ui.workspace.set", serde_json::json!({"pointer": "/command_line", "value": state})) {
-                app.set_status(error);
+        dock_menu(app, &grip);
+        if app.ws.effective.layout.command_line.dock == crate::wsprofile::schema::Dock::Floating {
+            if grip.drag_started() {
+                app.cmd.move_preview = Some(bar.min);
             }
-            app.ws.autosave.interaction_ended();
+            if grip.dragged() {
+                let position = app.cmd.move_preview.unwrap_or(bar.min) + grip.drag_delta();
+                let top = canvas.top() + (history_lines(app).min(MAX_LINES) as f32 * LINE_H + 8.0).min((canvas.height() - h).max(0.0));
+                app.cmd.move_preview = Some(pos2(
+                    position.x.clamp(canvas.left(), (canvas.right() - w).max(canvas.left())),
+                    position.y.clamp(top, (canvas.bottom() - h).max(top)),
+                ));
+            }
+            if grip.drag_stopped()
+                && let Some(position) = app.cmd.move_preview.take()
+            {
+                let top = canvas.top() + (history_lines(app).min(MAX_LINES) as f32 * LINE_H + 8.0).min((canvas.height() - h).max(0.0));
+                let x_room = (canvas.width() - w).max(0.0);
+                let y_room = (canvas.bottom() - h - top).max(0.0);
+                let x = if x_room > 0.0 { ((position.x - canvas.left()) / x_room).clamp(0.0, 1.0) } else { 0.5 };
+                let y = if y_room > 0.0 { ((position.y - top) / y_room).clamp(0.0, 1.0) } else { 1.0 };
+                let mut state = app.ws.effective.layout.command_line.clone();
+                // Zero coordinates retain the legacy default placement.
+                state.x_ratio = if x == 0.0 && y == 0.0 { f32::EPSILON } else { x };
+                state.y_ratio = y;
+                if let Err(error) = app.run("ui.workspace.set", serde_json::json!({"pointer": "/command_line", "value": state})) {
+                    app.set_status(error);
+                }
+                app.ws.autosave.interaction_ended();
+            }
         }
     }
     // Prompt glyph.
@@ -639,19 +649,21 @@ fn show_at(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect, bar: Rect) {
     if blink {
         p.line_segment([pos2(x + gw + 1.0, bar.top() + 5.0), pos2(x + gw + 1.0, bar.bottom() - 5.0)], Stroke::new(1.0, t.text));
     }
-    // History chevron.
-    crate::icons::paint(
-        &p,
-        Rect::from_center_size(pos2(bar.right() - 14.0, bar.center().y), vec2(14.0, 14.0)),
-        if app.cmd.expanded { crate::icons::Icon::ChevronDown } else { crate::icons::Icon::ChevronUp },
-        false,
-    );
+    if !app.focus.active() {
+        // History chevron.
+        crate::icons::paint(
+            &p,
+            Rect::from_center_size(pos2(bar.right() - 14.0, bar.center().y), vec2(14.0, 14.0)),
+            if app.cmd.expanded { crate::icons::Icon::ChevronDown } else { crate::icons::Icon::ChevronUp },
+            false,
+        );
+    }
     autocomplete(app, ui, canvas, bar);
 }
 
 fn overlay_rect(app: &CadApp, screen: Rect, bar: Rect, size: egui::Vec2, above: f32) -> Rect {
     let size = size.min(screen.size()).max(vec2(1.0, 1.0));
-    let top = if app.ws.effective.layout.command_line.dock == crate::wsprofile::schema::Dock::Top {
+    let top = if !app.focus.active() && app.ws.effective.layout.command_line.dock == crate::wsprofile::schema::Dock::Top {
         bar.bottom() + 4.0
     } else {
         bar.top() - above - size.y - 4.0
@@ -669,7 +681,7 @@ fn autocomplete(app: &mut CadApp, ui: &egui::Ui, canvas: Rect, bar: Rect) {
     if suggestions.is_empty() {
         return;
     }
-    let n = if app.cmd.expanded { 0 } else { visible_lines(app, canvas, bar).min(app.session.log.len()) };
+    let n = if app.cmd.expanded || app.focus.active() { 0 } else { visible_lines(app, canvas, bar).min(app.session.log.len()) };
     let above = if n == 0 { 0.0 } else { LINE_H * n as f32 + 6.0 };
     let anchor = bar.translate(vec2(24.0, 0.0));
     let rect = overlay_rect(app, ui.ctx().content_rect(), anchor, vec2((bar.width() - 24.0).max(1.0), 20.0 * suggestions.len() as f32), above);
@@ -800,20 +812,44 @@ fn history_window(app: &CadApp, ui: &mut egui::Ui, r: Rect) {
     ui.painter().rect_stroke(r, 3.0, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
     let inner = r.shrink2(vec2(8.0, 3.0));
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
-    child.spacing_mut().item_spacing.y = 0.0;
+    let _ = history_rows(&mut child, app, false);
+}
+
+pub(crate) fn history_body(ui: &mut egui::Ui, app: &mut CadApp) {
+    if let Some(command) = history_rows(ui, app, true) {
+        app.start(&command);
+    }
+}
+
+fn history_rows(ui: &mut egui::Ui, app: &CadApp, replay: bool) -> Option<String> {
+    let t = Tokens::get();
     let log = &app.session.log;
-    egui::ScrollArea::vertical().id_salt("cmd_history").stick_to_bottom(true).auto_shrink([false, false]).show_rows(
-        &mut child,
-        LINE_H,
-        log.len(),
-        |ui, rows| {
-            for l in log.get(rows).into_iter().flatten() {
-                let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), LINE_H), Sense::hover());
-                let p = ui.painter().with_clip_rect(row.intersect(ui.clip_rect()));
-                p.text(pos2(row.left(), row.center().y), egui::Align2::LEFT_CENTER, l, crate::theme::small(), t.text_dim);
-            }
-        },
-    );
+    let mut repeat = None;
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        egui::ScrollArea::vertical().id_salt("cmd_history").stick_to_bottom(true).auto_shrink([false, false]).show_rows(
+            ui,
+            LINE_H,
+            log.len(),
+            |ui, rows| {
+                for line in log.get(rows).into_iter().flatten() {
+                    let command = line.strip_prefix("Command: ").filter(|name| replay && !name.trim().is_empty());
+                    let sense = if command.is_some() { Sense::click() } else { Sense::hover() };
+                    let (row, response) = ui.allocate_exact_size(vec2(ui.available_width(), LINE_H), sense);
+                    let p = ui.painter().with_clip_rect(row.intersect(ui.clip_rect()));
+                    p.text(pos2(row.left(), row.center().y), egui::Align2::LEFT_CENTER, line, crate::theme::small(), t.text_dim);
+                    if let Some(command) = command {
+                        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), line));
+                        if response.double_clicked() {
+                            repeat = Some(command.to_string());
+                        }
+                        response.on_hover_text(crate::tl!("Double-click to repeat command"));
+                    }
+                }
+            },
+        );
+    });
+    repeat
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@
 //! screen opens on a smaller one with every floating window still reachable.
 
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -11,11 +12,13 @@ pub struct ScreenProfile {
     pub work_area: [f32; 4],
     pub pixel_ratio: f32,
     pub window_mode: String,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 impl Default for ScreenProfile {
     fn default() -> Self {
-        Self { monitor_count: 1, work_area: [0.0, 0.0, 1280.0, 800.0], pixel_ratio: 1.0, window_mode: "windowed".into() }
+        Self { monitor_count: 1, work_area: [0.0, 0.0, 1280.0, 800.0], pixel_ratio: 1.0, window_mode: "windowed".into(), extra: Map::new() }
     }
 }
 
