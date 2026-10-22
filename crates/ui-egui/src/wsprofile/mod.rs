@@ -16,6 +16,7 @@ pub mod screen;
 pub mod startup;
 pub mod store;
 pub mod sync;
+pub mod tab_conflict;
 pub mod validate;
 
 use serde_json::{Map, Value, json};
@@ -46,6 +47,7 @@ pub enum SaveStatus {
     Synced,
     Offline,
     Conflict,
+    TabConflict,
 }
 
 impl SaveStatus {
@@ -58,6 +60,7 @@ impl SaveStatus {
             Self::Synced => "synced",
             Self::Offline => "offline",
             Self::Conflict => "conflict",
+            Self::TabConflict => "tab_conflict",
         }
     }
 
@@ -71,6 +74,7 @@ impl SaveStatus {
             Self::Synced => "Synced",
             Self::Offline => "Offline",
             Self::Conflict => "Sync conflict",
+            Self::TabConflict => "Changed in another tab",
         }
     }
 }
@@ -91,6 +95,8 @@ pub struct WsState {
     pub history: LayoutHistory,
     pub autosave: Autosave,
     pub status: SaveStatus,
+    /// Revision of the stored set this app last read or wrote.
+    pub known_revision: u64,
     pub sync: sync::SyncState,
     /// `None`: nothing is persisted, as before workspace profiles.
     pub store: Option<Box<dyn ProfileStore>>,
@@ -140,6 +146,7 @@ impl Default for WsState {
             history: LayoutHistory::default(),
             autosave: Autosave::default(),
             status: SaveStatus::Unsaved,
+            known_revision: 0,
             sync: sync::SyncState::default(),
             store: None,
             fallback: None,
@@ -193,10 +200,13 @@ impl WsState {
 
     /// Whether a change is not stored yet; a host checks this before it exits.
     pub fn needs_flush(&self) -> bool {
-        self.autosave.pending() || matches!(self.status, SaveStatus::Failed(_))
+        self.autosave.pending() || matches!(self.status, SaveStatus::Failed(_) | SaveStatus::TabConflict)
     }
 
     fn mark_changed(&mut self) {
+        if self.status == SaveStatus::TabConflict {
+            return;
+        }
         self.autosave.changed(self.now);
         self.status = SaveStatus::Unsaved;
     }
@@ -409,6 +419,13 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
         }
     }
     app.ws.released = released;
+    let external = app.ws.store.as_mut().is_some_and(|store| store.take_external_change());
+    if external
+        && !app.ws.needs_flush()
+        && let Err(error) = app.adopt_stored_workspace()
+    {
+        app.set_status(error);
+    }
     // Another dialog replacing the picker abandons it; storing resumes.
     if app.ui.dialog.as_deref() != Some(picker::PICKER_DIALOG) {
         app.ws.first_run_picker_open = false;
@@ -445,7 +462,9 @@ pub fn rfc3339(unix_ms: f64) -> String {
 impl CadApp {
     /// Takes over profile storage: restores the stored workspace (or SIMPLE) and shows it.
     pub fn attach_profile_store(&mut self, mut store: Box<dyn ProfileStore>) {
+        let revision = store.read_current().as_deref().and_then(startup::stored_revision).unwrap_or(0);
         let (restored, unkept) = startup::open(store.as_mut());
+        self.ws.known_revision = revision.max(restored.user.revision);
         let damaged = matches!(restored.fallback, Some(Fallback::Corrupt(_) | Fallback::NewerMajor(_) | Fallback::Invalid(_)));
         let kept = unkept.is_none();
         self.ws.unkept_damage = unkept;
@@ -523,14 +542,50 @@ impl CadApp {
         self.apply_workspace();
     }
 
+    pub(super) fn adopt_stored_workspace(&mut self) -> Result<(), String> {
+        let store = self.ws.store.take().ok_or("No workspace storage is attached")?;
+        self.attach_profile_store(store);
+        self.ws.drag_before = None;
+        self.ws.first_run = false;
+        self.ws.first_run_picker_open = false;
+        if self.ui.dialog.as_deref() == Some(tab_conflict::DIALOG) {
+            self.ui.dialog = None;
+        }
+        if self.ws.fallback.is_none() || matches!(self.ws.fallback, Some(Fallback::NoProfile)) {
+            self.ws.message = Some("Updated from another tab".into());
+            self.set_status(crate::tl!("Updated from another tab"));
+        }
+        Ok(())
+    }
+
+    pub(super) fn check_workspace_revision(&mut self, interactive: bool) -> Result<(), String> {
+        let raw = self.ws.store.as_ref().and_then(|store| store.read_current());
+        let stored = raw.as_deref().and_then(startup::stored_revision).unwrap_or(0);
+        if stored > self.ws.known_revision || self.ws.status == SaveStatus::TabConflict {
+            self.ws.status = SaveStatus::TabConflict;
+            self.ws.autosave.clear();
+            if interactive {
+                self.ui.dialog = Some(tab_conflict::DIALOG.into());
+            }
+            return Err("Workspace changed in another tab".into());
+        }
+        Ok(())
+    }
+
     /// Stores the workspace now: next revision, a snapshot of it, then the current set.
     pub fn commit_workspace_now(&mut self) -> Result<(), String> {
+        self.commit_workspace(true)
+    }
+
+    pub(super) fn commit_workspace(&mut self, interactive: bool) -> Result<(), String> {
         observe(self, true);
+        // localStorage cannot check and write atomically; IndexedDB transactions will close this race.
+        self.check_workspace_revision(interactive)?;
         let policy = self.ws.policy();
         let Some(store) = self.ws.store.as_mut() else { return Err("No workspace storage is attached".into()) };
         let newest = store.snapshots().into_iter().max().unwrap_or(0);
         let mut user = self.ws.user.clone();
-        user.revision = newest.max(user.revision).saturating_add(1);
+        user.revision = newest.max(user.revision).max(self.ws.known_revision).saturating_add(1);
         user.updated_at = rfc3339(crate::now_ms());
         if user.created_at.is_empty() {
             user.created_at = user.updated_at.clone();
@@ -560,6 +615,7 @@ impl CadApp {
         });
         match written {
             Ok(()) => {
+                self.ws.known_revision = user.revision;
                 self.ws.user = user;
                 self.ws.profiles = set.profiles;
                 self.ws.status = SaveStatus::SavedLocally;

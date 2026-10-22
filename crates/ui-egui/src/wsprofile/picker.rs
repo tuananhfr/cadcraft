@@ -129,6 +129,9 @@ fn familiar_tag(ui: &mut egui::Ui, row: Rect, name_width: f32) {
 
 fn choose(app: &mut CadApp, id: &str) {
     if let Err(error) = app.run("ui.workspace.select", json!({"id": id})) {
+        if app.ws.status == SaveStatus::TabConflict {
+            app.ui.dialog = Some(super::tab_conflict::DIALOG.into());
+        }
         app.set_status(error);
     }
 }
@@ -196,7 +199,12 @@ pub fn save_as_dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     if submit && !cancel {
         match app.run("ui.workspace.saveas", json!({"name": name})) {
             Ok(_) => finished = true,
-            Err(message) => failure = Some(message),
+            Err(message) => {
+                if app.ws.status == SaveStatus::TabConflict {
+                    app.ui.dialog = Some(super::tab_conflict::DIALOG.into());
+                }
+                failure = Some(message);
+            }
         }
     }
     ctx.data_mut(|data| {
@@ -276,6 +284,7 @@ pub fn save_text(ws: &WsState) -> Option<(&'static str, Option<String>)> {
         SaveStatus::Synced => (crate::tl!("Synced"), None),
         SaveStatus::Offline => (crate::tl!("Offline"), None),
         SaveStatus::Conflict => (crate::tl!("Sync conflict"), None),
+        SaveStatus::TabConflict => (crate::tl!("Changed in another tab"), None),
     })
 }
 
@@ -284,7 +293,7 @@ pub fn save_text(ws: &WsState) -> Option<(&'static str, Option<String>)> {
 pub fn status(app: &CadApp, ui: &mut egui::Ui, right: f32, cy: f32) -> f32 {
     let Some((text, detail)) = save_text(&app.ws) else { return right };
     let t = Tokens::get();
-    let color = if matches!(app.ws.status, SaveStatus::Failed(_) | SaveStatus::Conflict) { t.warn } else { t.text_dim };
+    let color = if matches!(app.ws.status, SaveStatus::Failed(_) | SaveStatus::Conflict | SaveStatus::TabConflict) { t.warn } else { t.text_dim };
     let galley = ui.painter().layout_no_wrap(text.to_string(), crate::theme::small(), color);
     let rect = Rect::from_min_size(egui::pos2(right - 8.0 - galley.size().x, cy - galley.size().y / 2.0), galley.size());
     ui.painter().galley(rect.min, galley, color);

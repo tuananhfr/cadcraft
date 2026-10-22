@@ -861,11 +861,11 @@ fn a_drag_is_one_undo_step_and_is_saved_on_release() {
 
 /// A `MemoryStore` the test can still look into after the app took it.
 #[derive(Clone)]
-struct Shared(std::rc::Rc<std::cell::RefCell<MemoryStore>>);
+struct Shared(std::rc::Rc<std::cell::RefCell<MemoryStore>>, std::rc::Rc<std::cell::Cell<bool>>);
 
 impl Shared {
     fn new(store: MemoryStore) -> Self {
-        Self(std::rc::Rc::new(std::cell::RefCell::new(store)))
+        Self(std::rc::Rc::new(std::cell::RefCell::new(store)), std::rc::Rc::new(std::cell::Cell::new(false)))
     }
 
     fn damaged(&self) -> Vec<Vec<u8>> {
@@ -874,6 +874,10 @@ impl Shared {
 }
 
 impl ProfileStore for Shared {
+    fn take_external_change(&mut self) -> bool {
+        self.1.replace(false)
+    }
+
     fn read_current(&self) -> Option<String> {
         self.0.borrow().read_current()
     }
@@ -1387,4 +1391,175 @@ fn dock_tree_locked_geometry_tolerates_rounding() {
     cadcraft_ui_egui::wsprofile::merge::strip_nulls(&mut value);
     run(&mut app, "ui.workspace.set", json!({"pointer": "/dock_tree", "value": value}));
     assert_eq!(app.ui.docking.layout, expected, "normalized rounding within tolerance must keep the tree");
+}
+
+fn two_workspace_writers() -> (Shared, CadApp, CadApp) {
+    let shared = Shared::new(MemoryStore::default());
+    let mut a = reattach(&shared);
+    a.commit_workspace_now().unwrap();
+    let b = reattach(&shared);
+    assert_eq!(b.ws.known_revision, a.ws.known_revision);
+    (shared, a, b)
+}
+
+fn conflicting_workspace_writers() -> (Shared, CadApp, CadApp) {
+    let (shared, mut a, mut b) = two_workspace_writers();
+    run(&mut a, "ui.workspace.set", json!({"pointer": "/command_line/lines", "value": 5}));
+    a.commit_workspace_now().unwrap();
+    run(&mut b, "ui.cmdline.lines", json!({"lines": 7}));
+    assert!(b.commit_workspace_now().unwrap_err().contains("changed in another tab"));
+    (shared, a, b)
+}
+
+#[test]
+fn second_writer_detects_conflict_and_does_not_overwrite() {
+    let _aliases = alias_lock();
+    let (shared, a, mut b) = conflicting_workspace_writers();
+    assert_eq!(b.ws.status, SaveStatus::TabConflict);
+    assert_eq!(b.ws.status.as_str(), "tab_conflict");
+    assert_eq!(b.ws.status.label(), "Changed in another tab");
+    assert_eq!(b.ui.dialog.as_deref(), Some("workspace_tab_conflict"));
+    assert!(!b.ws.autosave.pending());
+    assert!(b.ws.needs_flush(), "the unresolved layout is still local");
+    assert_eq!(current_set(&b).user.unwrap().layout.command_line.lines, 5);
+    assert_eq!(b.ws.user.layout.command_line.lines, 7);
+    assert!(b.ws.known_revision < a.ws.known_revision);
+    let before = shared.0.borrow().clone();
+    let ctx = egui::Context::default();
+    shared.1.set(true);
+    for time in [1.0, 10.0, 100.0] {
+        frame(&mut b, &ctx, time);
+    }
+    assert_eq!(b.ws.status, SaveStatus::TabConflict);
+    assert!(!b.ws.autosave.pending());
+    assert_eq!(shared.0.borrow().current, before.current);
+    assert_eq!(shared.0.borrow().snapshot_map, before.snapshot_map);
+}
+
+#[test]
+fn resolve_keep_mine_overwrites_after_confirm() {
+    let _aliases = alias_lock();
+    let (_, a, mut b) = conflicting_workspace_writers();
+    run(&mut b, "ui.workspace.resolve", json!({"keep": "mine"}));
+    let user = current_set(&b).user.unwrap();
+    assert_eq!(user.layout.command_line.lines, 7);
+    assert!(user.revision > a.ws.known_revision);
+    assert_eq!(b.ws.known_revision, user.revision);
+    assert_eq!(b.ws.status, SaveStatus::SavedLocally);
+    assert!(!b.ws.autosave.pending());
+    assert!(b.ui.dialog.is_none());
+}
+
+#[test]
+fn resolve_keep_theirs_adopts_the_stored_set() {
+    let _aliases = alias_lock();
+    let (shared, a, mut b) = conflicting_workspace_writers();
+    let before = shared.0.borrow().clone();
+    run(&mut b, "ui.workspace.resolve", json!({"keep": "theirs"}));
+    assert_eq!(b.ws.user.layout.command_line.lines, 5);
+    assert_eq!(b.ws.known_revision, a.ws.known_revision);
+    assert_eq!(b.ws.status, SaveStatus::SavedLocally);
+    assert!(!b.ws.autosave.pending());
+    assert!(b.ui.dialog.is_none());
+    assert_eq!(shared.0.borrow().current, before.current);
+    assert_eq!(shared.0.borrow().snapshot_map, before.snapshot_map);
+}
+
+#[test]
+fn changed_elsewhere_without_local_edits_adopts_silently() {
+    let _aliases = alias_lock();
+    let (shared, mut a, mut b) = two_workspace_writers();
+    b.set_session_layer(json!({"status_bar": {"visible": false}}));
+    run(&mut a, "ui.workspace.set", json!({"pointer": "/command_line/lines", "value": 5}));
+    a.commit_workspace_now().unwrap();
+    let before = shared.0.borrow().clone();
+    shared.1.set(true);
+    frame(&mut b, &egui::Context::default(), 1.0);
+    assert_eq!(b.ws.user.layout.command_line.lines, 5);
+    assert_eq!(b.ws.known_revision, a.ws.known_revision);
+    assert_eq!(b.ws.message.as_deref(), Some("Updated from another tab"));
+    assert!(b.ui.dialog.is_none(), "adoption does not open a dialog");
+    assert!(!b.ui.show_status_bar, "session overrides survive adoption");
+    assert!(!b.ws.autosave.pending());
+    assert!(!shared.1.get());
+    assert_eq!(shared.0.borrow().current, before.current);
+    assert_eq!(shared.0.borrow().snapshot_map, before.snapshot_map);
+    b.ui.dialog = Some("units".into());
+    run(&mut a, "ui.workspace.set", json!({"pointer": "/command_line/lines", "value": 6}));
+    a.commit_workspace_now().unwrap();
+    shared.1.set(true);
+    frame(&mut b, &egui::Context::default(), 2.0);
+    assert_eq!(b.ws.user.layout.command_line.lines, 6);
+    assert_eq!(b.ui.dialog.as_deref(), Some("units"), "the current dialog stays open");
+}
+
+#[test]
+fn programmatic_commit_conflict_returns_error_without_dialog() {
+    let _aliases = alias_lock();
+    let (shared, mut a, mut b) = two_workspace_writers();
+    run(&mut a, "ui.workspace.set", json!({"pointer": "/command_line/lines", "value": 5}));
+    a.commit_workspace_now().unwrap();
+    let before = shared.0.borrow().clone();
+    let error = b.run("ui.workspace.set", json!({"pointer": "/command_line/lines", "value": 7})).unwrap_err();
+    assert!(error.contains("changed in another tab"), "{error}");
+    assert_eq!(b.ws.status, SaveStatus::TabConflict);
+    assert!(b.ui.dialog.is_none());
+    assert!(!b.ws.autosave.pending());
+    for command in ["ui.workspace.select", "ui.workspace.saveas", "ui.workspace.import", "ui.workspace.restore"] {
+        let params = match command {
+            "ui.workspace.select" => json!({"id": "AUTOCAD_FAMILIAR"}),
+            "ui.workspace.saveas" => json!({"name": "Mine"}),
+            "ui.workspace.import" => json!({"text": SPEC_SAMPLE}),
+            _ => json!({"revision": a.ws.known_revision}),
+        };
+        let error = b.run(command, params).unwrap_err();
+        assert!(error.contains("changed in another tab"), "{command}: {error}");
+        assert!(b.ui.dialog.is_none());
+    }
+    assert_eq!(shared.0.borrow().current, before.current);
+    assert_eq!(shared.0.borrow().snapshot_map, before.snapshot_map);
+}
+
+#[test]
+fn external_change_with_pending_edits_waits_for_commit() {
+    let _aliases = alias_lock();
+    let (shared, mut a, mut b) = two_workspace_writers();
+    run(&mut b, "ui.workspace.set", json!({"pointer": "/command_line/lines", "value": 7}));
+    run(&mut a, "ui.workspace.set", json!({"pointer": "/command_line/lines", "value": 5}));
+    a.commit_workspace_now().unwrap();
+    shared.1.set(true);
+    let ctx = egui::Context::default();
+    frame(&mut b, &ctx, 0.1);
+    assert_eq!(b.ws.user.layout.command_line.lines, 7);
+    assert!(b.ui.dialog.is_none());
+    frame(&mut b, &ctx, 1.0);
+    assert_eq!(b.ws.status, SaveStatus::TabConflict);
+    assert_eq!(b.ui.dialog.as_deref(), Some("workspace_tab_conflict"));
+    assert!(!b.ws.autosave.pending());
+    assert_eq!(current_set(&b).user.unwrap().layout.command_line.lines, 5);
+}
+
+#[test]
+fn stored_revision_reads_only_bounded_unsigned_revision() {
+    use cadcraft_ui_egui::wsprofile::startup::stored_revision;
+
+    assert_eq!(stored_revision(r#"{"user":{"revision":42,"layout":"invalid"}}"#), Some(42));
+    assert_eq!(stored_revision(r#"{"user":{"revision":18446744073709551615}}"#), Some(u64::MAX));
+    for raw in ["{", "[]", "{}", r#"{"user":null}"#, r#"{"user":{"revision":-1}}"#, r#"{"user":{"revision":"1"}}"#] {
+        assert_eq!(stored_revision(raw), None, "{raw}");
+    }
+    assert_eq!(stored_revision(&" ".repeat(cadcraft_ui_egui::wsprofile::store::MAX_SET_BYTES + 1)), None);
+}
+
+#[test]
+fn workspace_resolution_requires_a_valid_choice_and_conflict() {
+    let _aliases = alias_lock();
+    let (_, _, mut b) = two_workspace_writers();
+    for params in [Value::Null, json!({}), json!({"keep": "both"}), json!({"keep": "mine"}), json!({"keep": "theirs"})] {
+        assert!(b.run("ui.workspace.resolve", params).is_err());
+        assert!(b.ui.dialog.is_none());
+    }
+    assert!(cadcraft_ui_egui::menus::UI_COMMANDS.iter().any(|(id, label, menu, shortcut)| {
+        *id == "ui.workspace.resolve" && *label == "Resolve Workspace Conflict" && menu.is_empty() && shortcut.is_none()
+    }));
 }

@@ -1536,3 +1536,8 @@
 	Show {panel}	Показати {panel}
 	Workspace import: {name} is larger than {limit} bytes	Імпорт робочого простору: {name} перевищує {limit} байтів
 	Workspace import: the file is not UTF-8 text	Імпорт робочого простору: файл не є текстом у кодуванні UTF-8
+	Changed in another tab	Змінено в іншій вкладці
+	Updated from another tab	Оновлено з іншої вкладки
+	Resolve Workspace Conflict	Розв’язати конфлікт робочого простору
+	Keep my layout	Зберегти моє компонування
+	Use the other tab's layout	Використати компонування іншої вкладки

@@ -118,6 +118,15 @@ fn fallback_to_safe(policy: Vec<Layer>, fallback: Fallback) -> Restored {
     Restored { user, layers, fallback: Some(fallback), set: ProfileSet::default() }
 }
 
+/// Reads the current set's revision without validating its workspace layout.
+pub fn stored_revision(raw: &str) -> Option<u64> {
+    if raw.len() > MAX_SET_BYTES {
+        return None;
+    }
+    let value: Value = serde_json::from_str(raw).ok()?;
+    value.pointer("/user/revision").and_then(Value::as_u64)
+}
+
 /// Reads stored set text (or a bare profile, as hosts hand over migrated legacy files), with no
 /// policy under the stored layers.
 pub fn parse_set(raw: &str) -> Result<ProfileSet, Fallback> {

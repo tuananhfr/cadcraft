@@ -2,7 +2,11 @@
 //! `localStorage` is a few MB for the whole site (fonts share it), so a full or blocked storage is
 //! an `Err` the app shows, never a panic.
 
+use std::cell::Cell;
+#[cfg(target_arch = "wasm32")]
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use cadcraft_ui_egui::wsprofile::rfc3339;
 use cadcraft_ui_egui::wsprofile::store::{CORRUPT_SNAPSHOT, KEEP_SNAPSHOTS, MAX_SET_BYTES, ProfileStore, expired_snapshots};
@@ -20,6 +24,10 @@ const MAX_DAMAGED_COPIES: usize = 3;
 
 /// The start of every time the core stamps while it has no clock (the web build has none).
 const EPOCH_PREFIX: &str = "1970-01-01T00:00:00";
+
+pub fn is_profile_key(key: Option<&str>) -> bool {
+    key.is_none_or(|key| key == CURRENT_KEY)
+}
 
 pub fn snapshot_key(revision: u64) -> String {
     format!("{SNAPSHOT_PREFIX}{revision}")
@@ -130,6 +138,9 @@ pub struct LocalStorageStore<K: KeyValue> {
     kv: K,
     now_ms: fn() -> f64,
     created: BTreeMap<String, String>,
+    external: Rc<Cell<bool>>,
+    #[cfg(target_arch = "wasm32")]
+    repaint: Rc<RefCell<Option<egui::Context>>>,
 }
 
 impl<K: KeyValue> LocalStorageStore<K> {
@@ -138,7 +149,21 @@ impl<K: KeyValue> LocalStorageStore<K> {
         if let Some(stored) = kv.get(CURRENT_KEY) {
             remember_created(&stored, &mut created);
         }
-        Self { kv, now_ms, created }
+        Self {
+            kv,
+            now_ms,
+            created,
+            external: Rc::new(Cell::new(false)),
+            #[cfg(target_arch = "wasm32")]
+            repaint: Rc::new(RefCell::new(None)),
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn repaint_on_external_change(&mut self, ctx: &egui::Context) {
+        if let Ok(mut repaint) = self.repaint.try_borrow_mut() {
+            *repaint = Some(ctx.clone());
+        }
     }
 
     #[cfg(test)]
@@ -202,6 +227,10 @@ impl<K: KeyValue> LocalStorageStore<K> {
 }
 
 impl<K: KeyValue> ProfileStore for LocalStorageStore<K> {
+    fn take_external_change(&mut self) -> bool {
+        self.external.replace(false)
+    }
+
     fn read_current(&self) -> Option<String> {
         self.kv.get(CURRENT_KEY).filter(|text| text.len() <= MAX_SET_BYTES)
     }
@@ -306,8 +335,30 @@ impl KeyValue for BrowserStorage {
 /// The page's `localStorage`; `None` when the browser blocks it.
 #[cfg(target_arch = "wasm32")]
 pub fn open() -> Option<LocalStorageStore<BrowserStorage>> {
-    let storage = web_sys::window()?.local_storage().ok().flatten()?;
-    Some(LocalStorageStore::new(BrowserStorage(storage), web_sys::js_sys::Date::now))
+    use wasm_bindgen::{JsCast, closure::Closure};
+
+    let window = web_sys::window()?;
+    let storage = window.local_storage().ok().flatten()?;
+    let store = LocalStorageStore::new(BrowserStorage(storage), web_sys::js_sys::Date::now);
+    let external = Rc::clone(&store.external);
+    let repaint = Rc::clone(&store.repaint);
+    let listener = Closure::<dyn FnMut(web_sys::StorageEvent)>::new(move |event: web_sys::StorageEvent| {
+        if is_profile_key(event.key().as_deref()) {
+            external.set(true);
+            if let Ok(repaint) = repaint.try_borrow()
+                && let Some(ctx) = repaint.as_ref()
+            {
+                ctx.request_repaint();
+            }
+        }
+    });
+    if let Err(error) = window.add_event_listener_with_callback("storage", listener.as_ref().unchecked_ref()) {
+        log::warn!("workspace: could not listen for storage changes: {error:?}");
+        return Some(store);
+    }
+    // The window owns this listener for the page's lifetime, after open returns.
+    listener.forget();
+    Some(store)
 }
 
 #[cfg(test)]
@@ -316,6 +367,18 @@ mod tests {
     use cadcraft_ui_egui::wsprofile::startup::{Fallback, restore};
     use cadcraft_ui_egui::wsprofile::store::{CORRUPT_SNAPSHOT, KEEP_SNAPSHOTS, MAX_SET_BYTES, ProfileStore};
     use std::collections::BTreeMap;
+
+    #[test]
+    fn storage_event_for_our_key_marks_external_change() {
+        let mut store = store(FakeStorage::default());
+        for (key, expected) in [(Some(CURRENT_KEY), true), (None, true), (Some(INDEX_KEY), false), (Some("unrelated"), false)] {
+            if is_profile_key(key) {
+                store.external.set(true);
+            }
+            assert_eq!(store.take_external_change(), expected, "{key:?}");
+            assert!(!store.take_external_change(), "the notification is consumed once");
+        }
+    }
 
     /// A browser's storage: an optional byte quota, as `localStorage` has.
     #[derive(Default)]
