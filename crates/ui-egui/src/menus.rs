@@ -563,8 +563,10 @@ pub fn tree(app: &CadApp) -> Vec<(String, Vec<Entry>)> {
                     label: if seg.is_empty() { label.to_string() } else { seg.to_string() },
                     id: id.to_string(),
                     shortcut: match app.ws.effective.layout.shortcuts.get(id) {
-                        Some(keys) => keys.split(',').next().map(str::trim).filter(|key| !key.is_empty()).map(|key| key.replace("Ctrl+", "Cmd+")),
-                        None => shortcut.map(str::to_string),
+                        Some(keys) => crate::shortcuts::menu_shortcut_label(crate::shortcuts::CURRENT, keys).and_then(|keys| {
+                            keys.split(',').next().map(str::trim).filter(|key| !key.is_empty()).map(|key| key.replace("Ctrl+", "Cmd+"))
+                        }),
+                        None => shortcut.and_then(|label| crate::shortcuts::menu_shortcut_label(crate::shortcuts::CURRENT, label)),
                     },
                     enabled,
                 });

@@ -66,3 +66,21 @@ fn recovery_list_opens_copies_and_discards_files() {
     cadcraft_ui_egui::autosave::load_prefs(&saved);
     assert_eq!((autosave::savetime(), autosave::savefilepath().as_str()), (25, "/tmp/cc-autosave-prefs"));
 }
+
+#[test]
+fn unsaved_drawings_reported_until_saved() {
+    set_io(IoHooks { read: |_, _| Ok(Drawing::new_metric()), write: |_, _| Ok(b"0\nEOF\n".to_vec()), plot: None });
+    let dir = std::env::temp_dir().join(format!("cadcraft-unsaved-drawings-ui-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("Drawing.dxf");
+    let mut app = CadApp::new(Session::new(), Services::default());
+    assert!(!app.has_unsaved_drawings());
+
+    app.run("line", serde_json::json!({ "points": [[0, 0], [10, 10]] })).unwrap();
+    assert!(app.has_unsaved_drawings());
+
+    app.run("saveas", serde_json::json!({ "path": path })).unwrap();
+    assert!(!app.has_unsaved_drawings());
+    assert!(path.exists());
+    std::fs::remove_dir_all(&dir).unwrap();
+}

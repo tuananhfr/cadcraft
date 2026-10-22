@@ -993,3 +993,51 @@ fn drawing_codepage_reaches_text_font() {
     assert_eq!(text_font(&d, &ts).codepage(), encoding_rs::WINDOWS_1252);
     assert!(cadcraft_fonts::ttf::remove_user_font(name));
 }
+
+#[test]
+fn rotate_about_rotates_points_dirs_and_glyphs() {
+    let prim = |kind, start, len| DPrim { handle: Handle(1), color: Rgb(0, 0, 0), aci7: true, lw: 0.0, transparency: 0, kind, start, len };
+    let mut list = DisplayList {
+        prims: vec![prim(Kind::Polyline, 0, 2), prim(Kind::Infinite { ray: false }, 2, 2), prim(Kind::Tris, 0, 3)],
+        verts: vec![Vec2::new(10.0, 0.0), Vec2::new(10.0, 2.0), Vec2::new(100.0, 200.0), Vec2::X],
+        tris: vec![Vec2::ZERO, Vec2::new(2.0, 0.0), Vec2::new(0.0, 3.0)],
+        texts: vec![PlotText {
+            prim: 2,
+            verts: 3,
+            bounds: Bounds2::new(Vec2::ZERO, Vec2::new(2.0, 3.0)),
+            glyph: cadcraft_fonts::TextGlyph {
+                face: cadcraft_fonts::ttf::Face { bytes: std::sync::Arc::new(Vec::new()), index: 0 },
+                gid: 1,
+                ch: 'A',
+                outline: 0,
+                origin: Vec2::new(2.0, 3.0),
+                x: Vec2::new(2.0, 0.0),
+                y: Vec2::new(0.5, 3.0),
+            },
+        }],
+        ..Default::default()
+    };
+    let original = list.clone();
+    for center in [Vec2::ZERO, Vec2::new(12.0, 34.0)] {
+        list = original.clone();
+        list.rotate_about(center, std::f64::consts::FRAC_PI_2);
+        let point = |p: Vec2| center + Vec2::new(-(p.y - center.y), p.x - center.x);
+        let vector = |p: Vec2| Vec2::new(-p.y, p.x);
+        for (i, (got, before)) in list.verts.iter().zip(&original.verts).enumerate() {
+            assert!(got.near(if i == 3 { vector(*before) } else { point(*before) }, 1e-12));
+        }
+        for (got, before) in list.tris.iter().zip(&original.tris) {
+            assert!(got.near(point(*before), 1e-12));
+        }
+        let glyph = &list.texts[0].glyph;
+        assert!(glyph.origin.near(point(original.texts[0].glyph.origin), 1e-12));
+        assert!(glyph.x.near(vector(original.texts[0].glyph.x), 1e-12));
+        assert!(glyph.y.near(vector(original.texts[0].glyph.y), 1e-12));
+        let bounds = Bounds2::from_points(original.verts[..2].iter().chain(&original.tris).copied().map(point));
+        assert!(list.bounds.min.near(bounds.min, 1e-12));
+        assert!(list.bounds.max.near(bounds.max, 1e-12));
+        let text_bounds = Bounds2::from_points(original.texts[0].bounds.corners().map(point));
+        assert!(list.texts[0].bounds.min.near(text_bounds.min, 1e-12));
+        assert!(list.texts[0].bounds.max.near(text_bounds.max, 1e-12));
+    }
+}

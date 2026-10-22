@@ -13,6 +13,8 @@
 pub mod download;
 #[cfg(target_arch = "wasm32")]
 mod host;
+#[cfg(target_arch = "wasm32")]
+mod leave_guard;
 
 #[cfg(target_arch = "wasm32")]
 mod web {
@@ -36,6 +38,7 @@ mod web {
         Option<(crate::host::Bridge, crate::host::DirtyReport)>,
         Option<web_sys::MediaQueryList>,
         crate::fonts::Fonts,
+        Option<crate::leave_guard::LeaveGuard>,
     );
 
     impl eframe::App for Shell {
@@ -46,6 +49,9 @@ mod web {
             self.4.frame(&mut app);
             app.system_animations = self.3.as_ref().map(|reduced| !reduced.matches());
             app.logic(ctx);
+            if let Some(guard) = &self.5 {
+                guard.set(app.has_unsaved_drawings());
+            }
             if let Some((bridge, reported)) = &self.2 {
                 bridge.report_dirty(&app, reported);
             }
@@ -220,9 +226,14 @@ mod web {
                             (bridge, crate::host::DirtyReport::default())
                         });
                         let reduced_motion = web_sys::window().and_then(|w| w.match_media("(prefers-reduced-motion: reduce)").ok().flatten());
+                        let leave_guard =
+                            if query_param("host").as_deref() == Some("parent") { None } else { crate::leave_guard::LeaveGuard::install() };
+                        if let Some(guard) = &leave_guard {
+                            guard.set(app.has_unsaved_drawings());
+                        }
                         let app = Rc::new(RefCell::new(app));
                         flush_when_leaving(&app);
-                        Ok(Box::new(Shell(app, inbox, host, reduced_motion, fonts)))
+                        Ok(Box::new(Shell(app, inbox, host, reduced_motion, fonts, leave_guard)))
                     }),
                 )
                 .await;

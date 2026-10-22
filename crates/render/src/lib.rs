@@ -173,7 +173,86 @@ fn ink(c: Color, layer: Color, block: Color) -> Ink {
     Ink { rgb: c.resolve(layer, block), aci7, aci }
 }
 
+/// The centre, local size and CCW angle of a four-vertex rectangle, within relative tolerance 1e-6.
+pub fn rectangle_frame(outline: &[Vec2]) -> Option<(Vec2, Vec2, f64)> {
+    let [a, b, c, d] = outline else { return None };
+    if !outline.iter().all(|p| p.is_finite()) {
+        return None;
+    }
+    let edges = [*b - *a, *c - *b, *d - *c, *a - *d];
+    let lengths = edges.map(Vec2::len);
+    if !lengths.iter().all(|v| v.is_finite() && *v > 0.0) {
+        return None;
+    }
+    let [ab, bc, cd, da] = edges;
+    let [w, h, opposite_w, opposite_h] = lengths;
+    let longest = w.max(h).max(opposite_w).max(opposite_h);
+    if (ab / longest + cd / longest).len() > 1e-6 || (bc / longest + da / longest).len() > 1e-6 {
+        return None;
+    }
+    for ((e, len), (next, next_len)) in edges.iter().zip(lengths).zip(edges.iter().zip(lengths).cycle().skip(1)) {
+        if (*e / len).dot(*next / next_len).abs() > 1e-6 {
+            return None;
+        }
+    }
+    // Average before adding to avoid overflow when finite coordinates are near f64's limit.
+    let center = *a * 0.25 + *b * 0.25 + *c * 0.25 + *d * 0.25;
+    let size = Vec2::new(w, opposite_h);
+    let bounds = Bounds2::new(center - size * 0.5, center + size * 0.5);
+    if !center.is_finite()
+        || !bounds.min.is_finite()
+        || !bounds.max.is_finite()
+        || !bounds.width().is_finite()
+        || !bounds.height().is_finite()
+        || bounds.width() <= 0.0
+        || bounds.height() <= 0.0
+    {
+        return None;
+    }
+    Some((center, size, ab.y.atan2(ab.x)))
+}
+
 impl DisplayList {
+    /// Rotate geometry and glyph placement in world space, preserving infinite-line directions.
+    pub fn rotate_about(&mut self, center: Vec2, radians: f64) {
+        if !center.is_finite() || !radians.is_finite() {
+            return;
+        }
+        let directions: std::collections::HashSet<usize> = self
+            .prims
+            .iter()
+            .filter(|p| matches!(p.kind, Kind::Infinite { .. }) && p.len >= 2)
+            .filter_map(|p| p.start.checked_add(1).map(|i| i as usize))
+            .collect();
+        for (i, p) in self.verts.iter_mut().enumerate() {
+            // Subtract the centre first to retain precision for survey coordinates.
+            *p = if directions.contains(&i) { p.rotate(radians) } else { p.rotate_about(center, radians) };
+        }
+        for p in &mut self.tris {
+            *p = p.rotate_about(center, radians);
+        }
+        for text in &mut self.texts {
+            text.glyph.origin = text.glyph.origin.rotate_about(center, radians);
+            text.glyph.x = text.glyph.x.rotate(radians);
+            text.glyph.y = text.glyph.y.rotate(radians);
+            if !text.bounds.is_empty() {
+                text.bounds = Bounds2::from_points(text.bounds.corners().map(|p| p.rotate_about(center, radians)));
+            }
+        }
+        let mut bounds = Bounds2::EMPTY;
+        for p in &self.prims {
+            if matches!(p.kind, Kind::Infinite { .. }) {
+                continue;
+            }
+            let Some(end) = p.start.checked_add(p.len) else { continue };
+            let verts = if matches!(p.kind, Kind::Tris | Kind::Mask) { &self.tris } else { &self.verts };
+            for q in verts.get(p.start as usize..end as usize).unwrap_or(&[]) {
+                bounds.add(*q);
+            }
+        }
+        self.bounds = bounds;
+    }
+
     pub fn segment_count(&self) -> usize {
         self.prims.iter().filter(|p| p.kind == Kind::Polyline).map(|p| p.len.saturating_sub(1) as usize).sum()
     }
