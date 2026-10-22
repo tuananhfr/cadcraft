@@ -1,5 +1,6 @@
 pub mod approval;
 pub mod codes;
+pub mod compare;
 pub mod detect;
 pub mod ids;
 pub mod outline;

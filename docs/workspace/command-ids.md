@@ -409,6 +409,7 @@ UI-only recovery status: `ui.recovery.status` (registered in `ui-egui::menus::UI
 | `u` | `cad.edit.u` | Edit | model, paper | available | edit |  |
 | `ubplot` | `cad.file.ubplot` | File | model, paper | available | file | ubp |
 | `ubplot.approve` | `cad.other.ubplot.approve` | Other | model, paper | available | edit |  |
+| `ubplot.compare` | `cad.other.ubplot.compare` | Other | model, paper | available | read |  |
 | `ubplot.folder` | `cad.other.ubplot.folder` | Other | model, paper | available | file |  |
 | `ubplot.jobs` | `cad.other.ubplot.jobs` | Other | model, paper | available | file |  |
 | `ubplot.publish` | `cad.other.ubplot.publish` | Other | model, paper | available | file |  |

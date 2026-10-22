@@ -396,6 +396,7 @@ trim	cad.modify.trim
 u	cad.edit.u
 ubplot	cad.file.ubplot
 ubplot.approve	cad.other.ubplot.approve
+ubplot.compare	cad.other.ubplot.compare
 ubplot.folder	cad.other.ubplot.folder
 ubplot.jobs	cad.other.ubplot.jobs
 ubplot.publish	cad.other.ubplot.publish

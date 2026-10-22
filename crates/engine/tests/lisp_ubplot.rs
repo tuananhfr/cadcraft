@@ -258,3 +258,238 @@ fn ubplot_templates_lists_only_approved_versioned_templates() {
     session.ubplot.registry.templates.clear();
     assert!(eval(&mut session, "(ubplot-templates)").is_nil());
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+mod reference {
+    use std::path::PathBuf;
+    use std::sync::{Mutex, MutexGuard};
+
+    use cadcraft_engine::lisp::{sandbox, trust};
+    use cadcraft_engine::sheetplan::SheetSource;
+    use cadcraft_engine::sheetplan::compare::{PlanDiff, compare};
+
+    use super::*;
+
+    const SOURCE: &str = include_str!("../../../docs/lisp/UBB_PLOT.lsp");
+    static REFERENCE_TEST: Mutex<()> = Mutex::new(());
+
+    struct Reference {
+        _lock: MutexGuard<'static, ()>,
+        previous_approvals: Vec<String>,
+        previous_roots: Vec<PathBuf>,
+        root: PathBuf,
+    }
+
+    impl Reference {
+        fn new(name: &str) -> Self {
+            let lock = REFERENCE_TEST.lock().unwrap_or_else(|error| error.into_inner());
+            let root = std::env::temp_dir().join(format!("cadcraft-ubb-reference-{}-{name}", std::process::id()));
+            std::fs::create_dir(&root).unwrap();
+            let reference = Self {
+                _lock: lock,
+                previous_approvals: trust::approved(),
+                previous_roots: sandbox::write_roots(),
+                root: root.canonicalize().unwrap(),
+            };
+            trust::set_approved(Vec::new());
+            assert!(trust::approve(&trust::source_sha(SOURCE)));
+            sandbox::set_write_roots(vec![reference.root.clone()]);
+            reference
+        }
+
+        fn load(&self, session: &mut Session) {
+            let result = session.execute("appload", &json!({"name": "UBB_PLOT.lsp", "text": SOURCE})).unwrap();
+            assert!(result.get("error").is_none(), "{result}");
+            eval(session, &format!("(setq *ubb-output-dir* {})", lisp_string(&self.root.to_string_lossy())));
+        }
+    }
+
+    impl Drop for Reference {
+        fn drop(&mut self) {
+            trust::set_approved(self.previous_approvals.clone());
+            sandbox::set_write_roots(self.previous_roots.clone());
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn native_plan(session: &mut Session) -> SheetPlan {
+        let handles: Vec<_> = inserts(session).iter().map(|handle| handle.hex()).collect();
+        serde_json::from_value(session.execute("ubplot.scan", &json!({"mode": "block", "handles": handles})).unwrap()).unwrap()
+    }
+
+    fn run_reference(session: &mut Session) -> Value {
+        let result = session.execute("lisp", &json!({"code": "(C:UBB_PLOT)", "inputs": ["All"]})).unwrap();
+        assert!(result.get("error").is_none(), "{result}");
+        result
+    }
+
+    #[test]
+    fn sp10_portable_lisp_matches_native_scan() {
+        let reference = Reference::new("portable");
+        let mut session = setup();
+        place(&mut session, "KHUNG_A1", [7000.25, -600.75], 1.5, 37.0, false, &[("SO_BV", "KT-\"04\\\n雪")]);
+        place(&mut session, "KHUNG_A3", [11000.0, 500.0], 2.0, -28.0, true, &[("SO_BV", "KT-05")]);
+        reference.load(&mut session);
+        eval(&mut session, "(setq *ubb-portable* T)");
+        let portable: SheetPlan = serde_json::from_value(eval_json(&mut session, &format!("(ubb:plan-json {INSERTS})"))).unwrap();
+        let native = native_plan(&mut session);
+        let diffs = compare(&portable, &native, 1e-6);
+        assert!(diffs.is_empty(), "{diffs:?}");
+        assert_eq!(portable.job_id, "lisp");
+        assert_eq!(portable.source_hash, "");
+        assert_eq!(portable.sheets.len(), 5);
+        assert_eq!(portable.sheets[3].sheet_id, "KT-\"04\\\n雪");
+        run_reference(&mut session);
+        let saved = std::fs::read_to_string(reference.root.join("UBB_PLOT.json")).unwrap();
+        let saved: SheetPlan = serde_json::from_str(&saved).unwrap();
+        assert!(compare(&saved, &native, 1e-6).is_empty());
+        let compared = session.execute("ubplot.compare", &json!({"a": portable, "b": native})).unwrap();
+        assert_eq!(compared, json!({"same": true, "diffs": []}));
+    }
+
+    #[test]
+    fn portable_unsupported_geometry_keeps_blocked_sheets() {
+        let reference = Reference::new("unsupported");
+        let mut session = setup();
+        for template in &mut session.ubplot.registry.templates {
+            template.geometry = vec![cadcraft_engine::sheetplan::GeometryRule::LargestClosedRect];
+        }
+        reference.load(&mut session);
+        eval(&mut session, "(setq *ubb-portable* T)");
+        let plan: SheetPlan = serde_json::from_value(eval_json(&mut session, &format!("(ubb:plan-json {INSERTS})"))).unwrap();
+        assert_eq!(plan.sheets.len(), 3);
+        assert!(plan.sheets.iter().all(|sheet| sheet.status == SheetStatus::Blocked));
+        assert!(plan.sheets.iter().all(|sheet| sheet.issues.iter().any(|issue| issue.code == "FRAME_AMBIGUOUS")));
+    }
+
+    #[test]
+    fn ubb_plot_native_path_publishes() {
+        let reference = Reference::new("native");
+        let mut session = setup();
+        reference.load(&mut session);
+        native_plan(&mut session);
+        approve_warnings(&mut session);
+        eval(&mut session, "(setq *ubb-portable* nil)");
+        run_reference(&mut session);
+        let LispValue::Str(manifest) = session.lisp_var("*ubb-manifest*") else { panic!("expected publish manifest") };
+        let manifest: Value = serde_json::from_str(&manifest).unwrap();
+        assert!(manifest["failed"].as_array().unwrap().is_empty(), "{manifest}");
+        let plan: SheetPlan = serde_json::from_value(manifest["plan"].clone()).unwrap();
+        assert_eq!(plan.sheets.len(), 3);
+        assert!(plan.sheets.iter().all(|sheet| sheet.status == SheetStatus::Done));
+        let pdf = base64_decode(manifest["files"][0]["data"].as_str().unwrap()).unwrap();
+        assert!(pdf.starts_with(b"%PDF-"));
+        assert_eq!(support::pdf_probe::pages(&pdf).len(), 3);
+        let saved: SheetPlan = serde_json::from_str(&std::fs::read_to_string(reference.root.join("UBB_PLOT.json")).unwrap()).unwrap();
+        assert_eq!(saved.sheets.len(), 3);
+        assert!(session.running.is_none());
+    }
+
+    #[test]
+    fn ubb_plot_check_reports_environment() {
+        let reference = Reference::new("check");
+        let mut session = setup();
+        reference.load(&mut session);
+        let result = session.execute("lisp", &json!({"code": "(C:UBB_PLOT_CHECK)"})).unwrap();
+        assert!(result.get("error").is_none(), "{result}");
+        let output = result["output"].as_array().unwrap().iter().filter_map(Value::as_str).collect::<Vec<_>>().join("\n");
+        assert!(output.contains("UbotCAD"), "{output}");
+        assert!(output.contains("Version:"), "{output}");
+        assert!(output.contains("ACADVER:"), "{output}");
+        assert!(output.contains("Dependencies: OK"), "{output}");
+        assert!(!output.contains("Missing functions:"), "{output}");
+    }
+
+    #[test]
+    fn compare_reports_order_and_outline_diffs() {
+        let mut session = setup();
+        let mut a = native_plan(&mut session);
+        a.sheets.truncate(2);
+        a.sheets[1] = a.sheets[0].clone();
+        a.sheets[1].order = 2;
+        let SheetSource::Block { outline, .. } = &mut a.sheets[1].source else { panic!("expected block") };
+        for point in outline {
+            point[0] += 50.0;
+        }
+        let mut b = a.clone();
+        b.sheets.swap(0, 1);
+        let SheetSource::Block { outline, .. } = &mut b.sheets[1].source else { panic!("expected block") };
+        outline[0][0] += 0.1;
+        let diffs = compare(&a, &b, 1e-6);
+        assert_eq!(diffs.len(), 2, "{diffs:?}");
+        assert_eq!(diffs.iter().map(|diff| (diff.index, diff.field.as_str())).collect::<Vec<_>>(), [(0, "outline"), (1, "outline")]);
+        let response = session.execute("cad.other.ubplot.compare", &json!({"a": a, "b": b})).unwrap();
+        assert_eq!(response["same"], false);
+        assert_eq!(serde_json::from_value::<Vec<PlanDiff>>(response["diffs"].clone()).unwrap(), diffs);
+    }
+
+    #[test]
+    fn compare_uses_absolute_coordinate_tolerance_and_exact_field_list() {
+        let mut session = setup();
+        let a = native_plan(&mut session);
+        let mut b = a.clone();
+        b.schema_version = "ignored by typed comparison".into();
+        b.job_id = "lisp".into();
+        b.source_hash.clear();
+        b.issues.clear();
+        for sheet in &mut b.sheets {
+            sheet.status = SheetStatus::Done;
+            sheet.issues.clear();
+            sheet.attributes.clear();
+            sheet.plot_scale = cadcraft_engine::sheetplan::PlotScale::Fit;
+        }
+        assert!(compare(&a, &b, 1e-6).is_empty());
+        let SheetSource::Block { outline, .. } = &mut b.sheets[0].source else { panic!("expected block") };
+        outline[0] = [0.00000075, 0.00000075];
+        assert!(compare(&a, &b, 1e-6).is_empty());
+        let SheetSource::Block { outline, .. } = &mut b.sheets[0].source else { panic!("expected block") };
+        outline[0][0] = 0.000002;
+        assert_eq!(compare(&a, &b, 1e-6)[0].field, "outline");
+        b.sheets[0].paper_mm[0] += 0.0000001;
+        assert_eq!(compare(&a, &b, 1e-6).len(), 2);
+        b.sheets.pop();
+        assert_eq!(compare(&a, &b, 1e-6)[0].field, "count");
+    }
+
+    #[test]
+    fn ubplot_compare_rejects_invalid_input_and_retains_array_order() {
+        let mut session = setup();
+        let plan = native_plan(&mut session);
+        let before = session.ubplot.last.as_ref().unwrap().plan.clone();
+        for tol in [json!(0), json!(-1), json!(1.01), json!("NaN"), Value::Null] {
+            assert!(session.execute("ubplot.compare", &json!({"a": plan, "b": plan, "tol": tol})).is_err());
+        }
+        for params in [json!({}), json!({"a": plan}), json!({"a": plan, "b": {}})] {
+            assert!(session.execute("ubplot.compare", &params).is_err());
+        }
+        let mut reversed = plan.clone();
+        reversed.sheets.reverse();
+        let response = session.execute("ubplot.compare", &json!({"a": plan, "b": reversed})).unwrap();
+        assert_eq!(response["same"], false);
+        assert!(response["diffs"].as_array().unwrap().iter().any(|diff| diff["index"] == 0 && diff["field"] == "sheet_id"));
+        assert_eq!(session.ubplot.last.as_ref().unwrap().plan, before);
+        let meta = cadcraft_engine::cmd::registry::command_registry().into_iter().find(|meta| meta.stable_id == "ubplot.compare").unwrap();
+        assert_eq!(meta.risk_class, cadcraft_engine::cmd::registry::RiskClass::Read);
+        assert!(Session::empty().execute("ubplot.compare", &json!({"a": plan, "b": plan, "tol": 1})).is_ok());
+    }
+
+    #[test]
+    fn ubplot_export_lisp_defines_nonempty_active_templates() {
+        let reference = Reference::new("export");
+        let mut session = setup();
+        reference.load(&mut session);
+        let export = session.execute("ubplot.templates", &json!({"action": "exportLisp"})).unwrap();
+        let text = export["text"].as_str().unwrap();
+        let result = session.execute("lisp", &json!({"code": text})).unwrap();
+        assert!(result.get("error").is_none(), "{result}");
+        let templates = session.lisp_var("*ubb-templates*").to_vec();
+        assert_eq!(templates.len(), 2);
+        assert!(to_text(&templates[0], true).contains("a1@1"));
+        assert!(to_text(&templates[0], true).contains("(frame (0 0) (841 0) (841 594) (0 594))"));
+        assert!(to_text(&templates[0], true).contains("(paper 841 594 T)"));
+        eval(&mut session, "(defun ubb:refresh-templates () nil)");
+        eval(&mut session, "(setq *ubb-portable* T)");
+        let portable: SheetPlan = serde_json::from_value(eval_json(&mut session, &format!("(ubb:plan-json {INSERTS})"))).unwrap();
+        assert!(compare(&portable, &native_plan(&mut session), 1e-6).is_empty());
+    }
+}
