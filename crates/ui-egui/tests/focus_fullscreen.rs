@@ -64,7 +64,8 @@ fn running(app: &CadApp) -> Option<&str> {
     app.session.running.as_ref().map(|command| command.id.as_str())
 }
 
-fn viewport_commands(output: &egui::FullOutput) -> Vec<bool> {
+fn viewport_commands(mut output: egui::FullOutput) -> Vec<bool> {
+    output.textures_delta.clear(); // no renderer here
     output
         .viewport_output
         .values()
@@ -96,11 +97,11 @@ fn fullscreen_keeps_camera_selection_and_dirty_flag_tc03_h04() {
     let on = ctx.run_ui(egui::RawInput::default(), |_| {
         assert_eq!(fullscreen::toggle(&mut app, &ctx, false), Outcome::Success);
     });
-    assert_eq!(viewport_commands(&on), [true]);
+    assert_eq!(viewport_commands(on), [true]);
     let off = ctx.run_ui(egui::RawInput::default(), |_| {
         assert_eq!(fullscreen::toggle(&mut app, &ctx, false), Outcome::Success);
     });
-    assert_eq!(viewport_commands(&off), [false]);
+    assert_eq!(viewport_commands(off), [false]);
     assert_eq!(app.fullscreen.phase, Phase::Off);
     assert_eq!(app.session.state().unwrap().view(), view);
     assert_eq!(app.session.selection(), selection);
