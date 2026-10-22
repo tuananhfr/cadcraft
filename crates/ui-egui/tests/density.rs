@@ -113,10 +113,10 @@ fn normal_density_matches_todays_metrics() {
     let ctx = egui::Context::default();
     theme::apply(&ctx, Theme::Dark, false);
     theme::apply_density(&ctx, Density::Comfortable);
-    assert_eq!(ctx.style().spacing.interact_size.y, comfortable.interact_height);
+    assert_eq!(ctx.global_style().spacing.interact_size.y, comfortable.interact_height);
     theme::apply_density(&ctx, Density::Normal);
     theme::apply(&ctx, Theme::Light, false);
-    let style = ctx.style();
+    let style = ctx.global_style();
     assert_eq!(style.spacing.interact_size.y, metrics.interact_height);
     assert_eq!(style.spacing.button_padding, metrics.button_padding);
     assert_eq!(style.spacing.item_spacing, metrics.item_spacing);
@@ -227,7 +227,7 @@ fn theme_text_and_focus_contrast_meet_wcag() {
         let tokens = Tokens::of(shown);
         let ctx = egui::Context::default();
         theme::apply(&ctx, shown, false);
-        let visuals = ctx.style().visuals.clone();
+        let visuals = ctx.global_style().visuals.clone();
         // Panels, the ribbon and tool bars (chrome) and the file tabs (chrome_dark).
         for bg in [tokens.panel, tokens.chrome, tokens.chrome_dark] {
             for text in [tokens.text, tokens.text_dim, tokens.text_faint, visuals.weak_text_color()] {
@@ -258,8 +258,8 @@ fn density_persists_across_restart() {
         assert_eq!(restored.ws.effective.layout.density, expected);
         assert_eq!(serde_json::to_value(&restored.ws.user.layout).unwrap()["density"], name);
         let h = harness(restored, 1.0);
-        assert_eq!(h.ctx.style().spacing.interact_size.y, expected.metrics().interact_height);
-        assert_eq!(h.ctx.style().spacing.button_padding, expected.metrics().button_padding);
+        assert_eq!(h.ctx.global_style().spacing.interact_size.y, expected.metrics().interact_height);
+        assert_eq!(h.ctx.global_style().spacing.button_padding, expected.metrics().button_padding);
     }
 }
 
@@ -315,7 +315,7 @@ fn options_display_changes_density_through_the_command() {
     h.run_steps(4);
     assert_eq!(h.state().ws.effective.layout.density, Density::Comfortable);
     assert_eq!(h.state().ws.history.undo_len(), steps + 1);
-    assert_eq!(h.ctx.style().spacing.interact_size.y, Density::Comfortable.metrics().interact_height);
+    assert_eq!(h.ctx.global_style().spacing.interact_size.y, Density::Comfortable.metrics().interact_height);
     assert_eq!(h.state().ui.dialog.as_deref(), Some("options:display"));
     assert!(!h.state().session.state().unwrap().is_dirty());
 }
