@@ -228,7 +228,8 @@ pub(crate) fn sync_scale(app: &mut CadApp, ctx: &egui::Context) {
     }
 }
 
-/// Remaps live floating panels when the window or zoom changes, including after startup.
+/// Remaps live floating panels and docked sizes when the window, zoom or display scale changes,
+/// including after startup, then clamps them around the canvas.
 pub(crate) fn remap_screen(app: &mut CadApp, ctx: &egui::Context) {
     let area = ctx.content_rect();
     let previous = app.ws.area;
@@ -243,6 +244,10 @@ pub(crate) fn remap_screen(app: &mut CadApp, ctx: &egui::Context) {
             *rect = floating_rect(to_ratio(rect_points(*rect), previous), area);
         }
     }
+    // Point sizes from a wide monitor would squeeze nested canvas splits past the clamp; keeping the
+    // stored tree's proportions also lets the old sizes return with the old screen.
+    scale_sizes(&mut app.ui.docking, previous, true);
+    scale_sizes(&mut app.ui.docking, area, false);
     crate::docking::reclamp(app, area);
 }
 
