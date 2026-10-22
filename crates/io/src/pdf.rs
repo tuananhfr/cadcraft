@@ -1315,7 +1315,8 @@ fn assemble(d: &Drawing, pages: impl ExactSizeIterator<Item = Result<SheetPage>>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cadcraft_render::{DPrim, DisplayList, Pen, PlotText};
+    use cadcraft_render::pen::Pen;
+    use cadcraft_render::{DPrim, DisplayList, PlotText};
 
     fn prim(handle: u64, kind: Kind, start: u32, len: u32) -> DPrim {
         DPrim { handle: Handle(handle), color: Rgb(0, 0, 0), aci7: false, lw: 0.0, transparency: 0, kind, start, len }
