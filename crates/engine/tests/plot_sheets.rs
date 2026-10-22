@@ -41,7 +41,7 @@ fn layouts_name_the_sheets_of_one_pdf() {
 #[test]
 fn bad_sheet_lists_are_errors() {
     let mut s = session();
-    let many = vec!["Model"; 257];
+    let many = vec!["Model"; cadcraft_doc::MAX_PLOT_PAGES + 1];
     for p in [json!({"layouts": []}), json!({"layouts": ["Nope"]}), json!({"layouts": "Model"}), json!({"layouts": [7]}), json!({ "layouts": many })]
     {
         assert!(s.execute("exportpdf", &p).is_err(), "{p}");
