@@ -18,6 +18,8 @@ pub enum Panel {
     ExternalRefs,
     Fonts,
     Lisp,
+    Blocks,
+    History,
 }
 
 impl Panel {
@@ -32,6 +34,8 @@ impl Panel {
             Self::ExternalRefs => "externalReferences",
             Self::Fonts => "fonts",
             Self::Lisp => "lisp",
+            Self::Blocks => "blocks",
+            Self::History => "history",
         }
     }
     pub fn label(self) -> &'static str {
@@ -44,6 +48,8 @@ impl Panel {
             Self::ExternalRefs => "External References",
             Self::Fonts => "Fonts",
             Self::Lisp => "LISP",
+            Self::Blocks => "Blocks",
+            Self::History => "Command History",
         }
     }
     fn default_side(self) -> Zone {
@@ -53,11 +59,11 @@ impl Panel {
             Self::QuickCalc => Zone::Right,
             Self::Layers => Zone::Right,
             Self::Properties => Zone::Right,
-            Self::ExternalRefs | Self::Fonts | Self::Lisp => Zone::Right,
+            Self::ExternalRefs | Self::Fonts | Self::Lisp | Self::Blocks | Self::History => Zone::Right,
         }
     }
     /// Palettes outside the default arrangement, opened on request.
-    pub const ON_DEMAND: &[Self] = &[Self::QuickCalc, Self::Fonts, Self::Lisp];
+    pub const ON_DEMAND: &[Self] = &[Self::QuickCalc, Self::Fonts, Self::Lisp, Self::Blocks, Self::History];
     pub fn parse(id: &str) -> Result<Self, String> {
         Self::ALL.iter().chain(Self::ON_DEMAND).copied().find(|panel| panel.id() == id).ok_or_else(|| format!("Unknown panel: {id}"))
     }
@@ -421,6 +427,7 @@ fn panel_limits(panel: &Panel) -> PanelLimits {
         Panel::ToolSets => (egui::vec2(220.0, 150.0), 480.0),
         Panel::Fonts => (egui::vec2(260.0, 180.0), 900.0),
         Panel::Lisp => (egui::vec2(240.0, 140.0), 720.0),
+        Panel::Blocks | Panel::History => (egui::vec2(220.0, 140.0), 720.0),
         Panel::Layers | Panel::Properties | Panel::ExternalRefs => (egui::vec2(220.0, 100.0), 720.0),
     };
     PanelLimits { min, max: egui::vec2(max_width, 1_000_000.0) }
@@ -474,5 +481,7 @@ pub(crate) fn body(app: &mut crate::CadApp, ui: &mut egui::Ui, panel: Panel) {
             egui::ScrollArea::both().id_salt("dock-fonts").auto_shrink([false, false]).show(ui, |ui| crate::fontmgr::body(ui, app));
         }
         Panel::Lisp => crate::lisp_panel::body(ui, app),
+        Panel::Blocks => crate::dialogs::blocks_body(ui, app),
+        Panel::History => crate::cmdline::history_body(ui, app),
     }
 }

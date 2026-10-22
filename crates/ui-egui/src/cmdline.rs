@@ -800,20 +800,44 @@ fn history_window(app: &CadApp, ui: &mut egui::Ui, r: Rect) {
     ui.painter().rect_stroke(r, 3.0, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
     let inner = r.shrink2(vec2(8.0, 3.0));
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
-    child.spacing_mut().item_spacing.y = 0.0;
+    let _ = history_rows(&mut child, app, false);
+}
+
+pub(crate) fn history_body(ui: &mut egui::Ui, app: &mut CadApp) {
+    if let Some(command) = history_rows(ui, app, true) {
+        app.start(&command);
+    }
+}
+
+fn history_rows(ui: &mut egui::Ui, app: &CadApp, replay: bool) -> Option<String> {
+    let t = Tokens::get();
     let log = &app.session.log;
-    egui::ScrollArea::vertical().id_salt("cmd_history").stick_to_bottom(true).auto_shrink([false, false]).show_rows(
-        &mut child,
-        LINE_H,
-        log.len(),
-        |ui, rows| {
-            for l in log.get(rows).into_iter().flatten() {
-                let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), LINE_H), Sense::hover());
-                let p = ui.painter().with_clip_rect(row.intersect(ui.clip_rect()));
-                p.text(pos2(row.left(), row.center().y), egui::Align2::LEFT_CENTER, l, crate::theme::small(), t.text_dim);
-            }
-        },
-    );
+    let mut repeat = None;
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        egui::ScrollArea::vertical().id_salt("cmd_history").stick_to_bottom(true).auto_shrink([false, false]).show_rows(
+            ui,
+            LINE_H,
+            log.len(),
+            |ui, rows| {
+                for line in log.get(rows).into_iter().flatten() {
+                    let command = line.strip_prefix("Command: ").filter(|name| replay && !name.trim().is_empty());
+                    let sense = if command.is_some() { Sense::click() } else { Sense::hover() };
+                    let (row, response) = ui.allocate_exact_size(vec2(ui.available_width(), LINE_H), sense);
+                    let p = ui.painter().with_clip_rect(row.intersect(ui.clip_rect()));
+                    p.text(pos2(row.left(), row.center().y), egui::Align2::LEFT_CENTER, line, crate::theme::small(), t.text_dim);
+                    if let Some(command) = command {
+                        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), line));
+                        if response.double_clicked() {
+                            repeat = Some(command.to_string());
+                        }
+                        response.on_hover_text(crate::tl!("Double-click to repeat command"));
+                    }
+                }
+            },
+        );
+    });
+    repeat
 }
 
 #[cfg(test)]
