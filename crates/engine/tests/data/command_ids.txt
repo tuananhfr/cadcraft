@@ -251,6 +251,7 @@ limits
 line
 linetype
 lisp
+lispaudit
 lispsandbox
 lisptrust
 list

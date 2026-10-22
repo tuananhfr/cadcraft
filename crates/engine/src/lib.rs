@@ -881,6 +881,7 @@ impl Session {
         }
         let before = self.state().ok().map(|s| (s.doc.clone(), s.selection.clone(), s.uid));
         let editing = self.state().is_ok_and(|s| s.block_edit.is_some());
+        self.lisp_audit_command(spec.id);
         let run = spec.run;
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             #[cfg(not(target_arch = "wasm32"))]
@@ -1005,6 +1006,7 @@ impl Session {
         }
         match spec.interactive {
             Some(factory) => {
+                self.lisp_audit_command(spec.id);
                 let machine = guard::Guarded::create(spec.id, factory, self)?;
                 let st = self.state()?;
                 let before = st.doc.clone();

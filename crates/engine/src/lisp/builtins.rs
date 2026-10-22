@@ -1046,7 +1046,7 @@ fn callable(ctx: &Ctx<'_>, f: &Value) -> Result<Value, LispError> {
                     params.push(s);
                 }
             }
-            Ok(Value::Func(Arc::new(super::value::Func { name: None, params, locals, body: def.cdr() })))
+            Ok(Value::Func(Arc::new(super::value::Func { source: ctx.env.audit_source.clone(), name: None, params, locals, body: def.cdr() })))
         }
         other => Err(LispError::new(format!("bad function: {}", to_text(other, true)))),
     }
@@ -1224,7 +1224,7 @@ fn load(ctx: &mut Ctx<'_>, a: Vec<Value>) -> Result<Flow, LispError> {
     match text {
         Some(t) => {
             super::trust::check_source(&name, &t).map_err(|error| LispError::new(error.to_string()))?;
-            Ok(Flow::Forms(read::read_all(&t)?))
+            Ok(Flow::Forms(read::read_all(&t)?, super::audit::Source::loaded(&name, &t)))
         }
         None => match a.get(1) {
             Some(v) => Ok(Flow::Value(v.clone())),

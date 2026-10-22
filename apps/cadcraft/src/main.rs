@@ -114,8 +114,55 @@ impl eframe::App for App {
     }
 }
 
+fn append_lisp_audit(dir: &std::path::Path, record: &cadcraft_engine::lisp::audit::LispAudit) -> std::io::Result<()> {
+    use std::io::Write;
+
+    const MAX_BYTES: u64 = 5 * 1024 * 1024;
+    let mut line = serde_json::to_vec(record).map_err(std::io::Error::other)?;
+    line.push(b'\n');
+    std::fs::create_dir_all(dir)?;
+    let path = dir.join("lisp-audit.jsonl");
+    let size = match std::fs::metadata(&path) {
+        Ok(metadata) => metadata.len(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
+        Err(error) => return Err(error),
+    };
+    let line_size = u64::try_from(line.len()).map_err(std::io::Error::other)?;
+    if size > 0 && size.saturating_add(line_size) > MAX_BYTES {
+        match std::fs::remove_file(dir.join("lisp-audit.jsonl.3")) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+        for index in (1..=2).rev() {
+            match std::fs::rename(dir.join(format!("lisp-audit.jsonl.{index}")), dir.join(format!("lisp-audit.jsonl.{}", index + 1))) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
+            }
+        }
+        std::fs::rename(&path, dir.join("lisp-audit.jsonl.1"))?;
+    }
+    std::fs::OpenOptions::new().create(true).append(true).open(path)?.write_all(&line)
+}
+
+fn lisp_audit_sink(record: &cadcraft_engine::lisp::audit::LispAudit) {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    static REPORTED: std::sync::Once = std::sync::Once::new();
+
+    let _lock = LOCK.lock().unwrap_or_else(|error| error.into_inner());
+    let result = match config_dir() {
+        Some(dir) => append_lisp_audit(&dir.join("logs"), record),
+        None => Err(std::io::Error::other("settings directory is unavailable")),
+    };
+    if let Err(error) = result {
+        REPORTED.call_once(|| eprintln!("CADCraft LISP audit: {error}"));
+    }
+}
+
 /// File format hooks for the engine (it stays I/O-agnostic).
 pub fn install_io() {
+    cadcraft_engine::lisp::audit::set_audit_sink(lisp_audit_sink);
     #[cfg(not(target_arch = "wasm32"))]
     cadcraft_engine::sheetplan::registry_store::set_registry_store_factory(|| {
         Ok(Box::new(cadcraft_engine::sheetplan::registry_store::DirRegistryStore::settings_default()?))
@@ -479,13 +526,50 @@ fn main() -> eframe::Result {
 
 #[cfg(test)]
 mod tests {
-    use super::{config_dir_from, control_flag, control_port_from, filters_for_kind, filters_for_save, follow_desktop, parse_launch_args};
+    use super::{
+        append_lisp_audit, config_dir_from, control_flag, control_port_from, filters_for_kind, filters_for_save, follow_desktop, parse_launch_args,
+    };
     use cadcraft_ui_egui::wsprofile::WORKSPACE_FILE;
     use std::ffi::OsString;
     use std::path::PathBuf;
 
     fn env<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<OsString> + 'a {
         move |k| vars.iter().find(|(n, _)| *n == k).map(|(_, v)| OsString::from(v))
+    }
+
+    #[test]
+    fn lisp_audit_jsonl_rotates_three_backups_and_appends() {
+        let dir = std::env::temp_dir().join(format!("cadcraft-lisp-audit-{}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let path = dir.join("lisp-audit.jsonl");
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(5 * 1024 * 1024).unwrap();
+        drop(file);
+        for index in 1..=3 {
+            std::fs::write(dir.join(format!("lisp-audit.jsonl.{index}")), index.to_string()).unwrap();
+        }
+        let record = cadcraft_engine::lisp::audit::LispAudit {
+            at_ms: 42,
+            source: "test.lsp".into(),
+            sha256: None,
+            created: 1,
+            modified: 0,
+            deleted: 0,
+            commands: vec!["line".into()],
+            undo_label: "LISP".into(),
+        };
+        append_lisp_audit(&dir, &record).unwrap();
+        assert_eq!(std::fs::metadata(dir.join("lisp-audit.jsonl.1")).unwrap().len(), 5 * 1024 * 1024);
+        assert_eq!(std::fs::read_to_string(dir.join("lisp-audit.jsonl.2")).unwrap(), "1");
+        assert_eq!(std::fs::read_to_string(dir.join("lisp-audit.jsonl.3")).unwrap(), "2");
+        assert!(!dir.join("lisp-audit.jsonl.4").exists());
+        append_lisp_audit(&dir, &record).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.ends_with('\n'));
+        let records: Vec<cadcraft_engine::lisp::audit::LispAudit> = text.lines().map(|line| serde_json::from_str(line).unwrap()).collect();
+        assert_eq!(records, vec![record.clone(), record]);
+        assert!(append_lisp_audit(&path, &records[0]).is_err(), "an invalid log directory reports an IO error");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
