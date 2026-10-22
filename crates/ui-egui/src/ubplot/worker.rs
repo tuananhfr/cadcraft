@@ -38,8 +38,8 @@ mod desktop {
 
     use cadcraft_engine::sheetplan::parse_plan;
     use cadcraft_engine::sheetplan::queue::{
-        DirJobStore, JobRunner, JobStatus, JobStore, MAX_JOB_SHEETS, MAX_MANIFEST_BYTES, PdfSheetRenderer, PrintJob, SheetBudget, SheetRenderer,
-        SnapshotLoader, SourceLoader, StepOutcome,
+        DirJobStore, FolderLoader, JobRunner, JobStatus, JobStore, MAX_JOB_SHEETS, MAX_MANIFEST_BYTES, PdfSheetRenderer, PrintJob, SheetBudget,
+        SheetRenderer, SnapshotLoader, SourceLoader, StepOutcome, is_folder_job,
     };
 
     use super::{Progress, PublishManifest, WorkerEvent};
@@ -131,7 +131,7 @@ mod desktop {
 
     struct Pending {
         job: PrintJob,
-        loader: SnapshotLoader,
+        loader: Box<dyn SourceLoader + Send>,
     }
 
     pub struct JobPump {
@@ -252,7 +252,7 @@ mod desktop {
             if job.job_id != id {
                 return Err(crate::tl!("Stored print job does not match its id").into());
             }
-            let loader = snapshot(session)?;
+            let loader = source_loader(session, &store, id)?;
             let mut manifest = manifest;
             manifest.status = JobStatus::Queued;
             manifest.updated_ms = now();
@@ -300,7 +300,11 @@ mod desktop {
                     continue;
                 }
                 self.refresh(&id);
-                match snapshot(session) {
+                let loader = self
+                    .store()
+                    .ok_or_else(|| crate::tl!("Background printing is not available in this build").to_string())
+                    .and_then(|store| source_loader(session, &store, &id));
+                match loader {
                     Ok(loader) if self.pending.len() < MAX_JOB_SHEETS => self.pending.push_back(Pending { job, loader }),
                     Ok(_) => {
                         self.errors.insert(id, crate::tl!("Print job queue is full").into());
@@ -371,7 +375,7 @@ mod desktop {
                         store.commit(&id, &[], &manifest.to_json())?;
                         self.manifests.insert(id.clone(), manifest);
                         let budget = SheetBudget { cancel: Arc::new(AtomicBool::new(false)), ..self.budget.clone() };
-                        Ok(JobWorker::spawn_with_renderer(pending.job, Box::new(pending.loader), Box::new(store), budget, self.renderer.clone()))
+                        Ok(JobWorker::spawn_with_renderer(pending.job, pending.loader, Box::new(store), budget, self.renderer.clone()))
                     });
                 match start {
                     Ok(worker) => self.active = Some((id, worker)),
@@ -386,6 +390,10 @@ mod desktop {
             }
             notice
         }
+    }
+
+    fn source_loader(session: &mut cadcraft_engine::Session, store: &dyn JobStore, id: &str) -> Result<Box<dyn SourceLoader + Send>, String> {
+        if is_folder_job(store, id)? { Ok(Box::new(FolderLoader::default())) } else { Ok(Box::new(snapshot(session)?)) }
     }
 
     fn snapshot(session: &mut cadcraft_engine::Session) -> Result<SnapshotLoader, String> {

@@ -15,7 +15,6 @@ use crate::{EngineError, Result, Session};
 const PUBLISH: &str = "ubplot.publish";
 const JOBS: &str = "ubplot.jobs";
 const FOLDER: &str = "ubplot.folder";
-const FOLDER_DEFINITION: &str = "folder.json";
 // A manifest omits render geometry and output settings; retain them in the same store transaction.
 const JOB_DEFINITION: &str = "job.json";
 
@@ -200,7 +199,7 @@ pub(super) fn run_folder(s: &mut Session, params: &Value) -> Result<Value> {
         let saved = store.read_artifact(&job.job_id, JOB_DEFINITION).map_err(|error| bad(FOLDER, error))?;
         if manifest.job_id != job.job_id
             || saved.as_deref() != Some(definition.as_slice())
-            || store.read_artifact(&job.job_id, FOLDER_DEFINITION).map_err(|error| bad(FOLDER, error))?.is_none()
+            || !is_folder_job(store, &job.job_id).map_err(|error| bad(FOLDER, error))?
         {
             return Err(bad(FOLDER, "jobId already exists with a different plan or settings; remove it before publishing again"));
         }
@@ -347,7 +346,7 @@ pub(super) fn run_jobs(s: &mut Session, params: &Value) -> Result<Value> {
                 return Err(bad(JOBS, "PDF queue rendering is not available in this build"));
             }
             let job = read_job(s.ensure_job_store(), id)?;
-            let folder = s.ensure_job_store().read_artifact(id, FOLDER_DEFINITION).map_err(|error| bad(JOBS, error))?.is_some();
+            let folder = is_folder_job(s.ensure_job_store(), id).map_err(|error| bad(JOBS, error))?;
             let mut loader: Box<dyn SourceLoader> = if folder {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
