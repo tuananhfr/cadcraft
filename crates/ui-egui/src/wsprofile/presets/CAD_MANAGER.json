@@ -1,0 +1,264 @@
+{
+  "schema_version": 3,
+  "profile_id": "preset.CAD_MANAGER",
+  "tenant_id": null,
+  "owner_type": "platform",
+  "owner_id": null,
+  "name": "CAD Manager",
+  "base_id": null,
+  "revision": 1,
+  "etag": null,
+  "status": "draft",
+  "locale": null,
+  "theme": null,
+  "ui_scale": 1.0,
+  "created_at": "2026-10-23T00:00:00Z",
+  "updated_at": "2026-10-23T00:00:00Z",
+  "layout": {
+    "ribbon": {
+      "mode": "expanded",
+      "visible": true,
+      "collapsed": false,
+      "tabs": [
+        {
+          "id": "home",
+          "label": "Home",
+          "order": 0,
+          "visible": true,
+          "contextual": null,
+          "groups": [
+            {
+              "id": "draw",
+              "label": "Draw",
+              "commands": ["line", "pline", "circle", "arc", "rectang", "polygon", "ellipse", "spline", "hatch", "point"]
+            },
+            {
+              "id": "modify",
+              "label": "Modify",
+              "commands": ["move", "copy", "rotate", "scale", "mirror", "stretch", "trim", "extend", "offset", "fillet", "chamfer", "array", "erase", "explode", "join", "break"]
+            },
+            {
+              "id": "annotation",
+              "label": "Annotation",
+              "commands": ["text", "mtext", "dimlinear", "mleader", "table"]
+            },
+            {
+              "id": "layers",
+              "label": "Layers",
+              "commands": ["layer", "layer.new", "layer.current", "layiso", "layuniso"]
+            },
+            {
+              "id": "block",
+              "label": "Block",
+              "commands": ["insert", "block", "bedit", "group"]
+            },
+            {
+              "id": "properties",
+              "label": "Properties",
+              "commands": ["properties", "matchprop", "color", "linetype", "lweight"]
+            },
+            {
+              "id": "utilities",
+              "label": "Utilities",
+              "commands": ["dist", "area", "id", "list", "qselect"]
+            },
+            {
+              "id": "clipboard",
+              "label": "Clipboard",
+              "commands": ["cutclip", "copyclip", "pasteclip"]
+            }
+          ]
+        },
+        {
+          "id": "standards",
+          "label": "Standards",
+          "order": 1,
+          "visible": true,
+          "contextual": null,
+          "groups": [
+            {
+              "id": "standards",
+              "label": "Standards",
+              "commands": ["style", "dimstyle", "layer", "purge", "audit"]
+            }
+          ]
+        },
+        {
+          "id": "fonts",
+          "label": "Fonts",
+          "order": 2,
+          "visible": true,
+          "contextual": null,
+          "groups": [
+            {
+              "id": "fonts",
+              "label": "Fonts",
+              "commands": ["fonts", "style"]
+            }
+          ]
+        },
+        {
+          "id": "xref",
+          "label": "Xref",
+          "order": 3,
+          "visible": true,
+          "contextual": null,
+          "groups": [
+            {
+              "id": "xref",
+              "label": "Xref",
+              "commands": ["xref", "xattach"]
+            }
+          ]
+        },
+        {
+          "id": "plot",
+          "label": "Plot",
+          "order": 4,
+          "visible": true,
+          "contextual": null,
+          "groups": [
+            {
+              "id": "plot",
+              "label": "Plot",
+              "commands": ["plot", "publish", "pagesetup"]
+            }
+          ]
+        },
+        {
+          "id": "ctx_dimension",
+          "label": "Dimension",
+          "order": 100,
+          "visible": true,
+          "contextual": "dimension",
+          "groups": [
+            {
+              "id": "edit",
+              "label": "Edit Dimension",
+              "commands": ["dimedit", "dimtedit", "dimspace", "dimbreak", "dimoverride", "dimreassociate", "dimdisassociate"]
+            }
+          ]
+        },
+        {
+          "id": "ctx_hatch",
+          "label": "Hatch",
+          "order": 101,
+          "visible": true,
+          "contextual": "hatch",
+          "groups": [
+            {
+              "id": "edit",
+              "label": "Hatch Edit",
+              "commands": ["hatchedit", "hatchpick", "hatchtoback"]
+            }
+          ]
+        },
+        {
+          "id": "ctx_block",
+          "label": "Block",
+          "order": 103,
+          "visible": true,
+          "contextual": "block",
+          "groups": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "commands": ["bedit", "refedit", "explode", "attsync", "battman"]
+            },
+            {
+              "id": "count",
+              "label": "Count",
+              "commands": ["count", "countlist"]
+            },
+            {
+              "id": "replace",
+              "label": "Replace",
+              "commands": ["blockreplace"]
+            },
+            {
+              "id": "check",
+              "label": "Check",
+              "commands": ["list", "selectsimilar", "audit"]
+            }
+          ]
+        }
+      ]
+    },
+    "toolbars": [],
+    "panels": [
+      {
+        "id": "layers",
+        "mode": "dock",
+        "side": "right",
+        "tab_group": null,
+        "visible": true,
+        "x_ratio": 0.0,
+        "y_ratio": 0.0,
+        "width_ratio": 0.21,
+        "height_ratio": 0.4
+      },
+      {
+        "id": "externalReferences",
+        "mode": "dock",
+        "side": "right",
+        "tab_group": null,
+        "visible": true,
+        "x_ratio": 0.0,
+        "y_ratio": 0.0,
+        "width_ratio": 0.21,
+        "height_ratio": 0.3
+      },
+      {
+        "id": "fonts",
+        "mode": "dock",
+        "side": "right",
+        "tab_group": null,
+        "visible": true,
+        "x_ratio": 0.0,
+        "y_ratio": 0.0,
+        "width_ratio": 0.21,
+        "height_ratio": 0.3
+      }
+    ],
+    "dock_tree": null,
+    "command_line": {
+      "dock": "bottom",
+      "height_ratio": 0.1,
+      "lines": 3,
+      "visible": true,
+      "x_ratio": 0.0,
+      "y_ratio": 0.0
+    },
+    "quick_access": ["new", "open", "qsave", "saveas", "plot", "u", "redo"],
+    "status_bar": {
+      "visible": true,
+      "items": {
+        "annotation": true,
+        "coordinates": true,
+        "dynmode": true,
+        "grid": true,
+        "isodraft": true,
+        "layouts": true,
+        "lineweight": true,
+        "ortho": true,
+        "osnap": true,
+        "otrack": true,
+        "polar": true,
+        "quickprops": true,
+        "settings": true,
+        "snap": true,
+        "transparency": true,
+        "workspace": true
+      }
+    },
+    "shortcuts": {},
+    "aliases": {},
+    "favorites": [],
+    "toolsets": {
+      "visible": false,
+      "tab": "Drafting",
+      "collapsed_groups": [],
+      "hidden_tools": []
+    }
+  }
+}

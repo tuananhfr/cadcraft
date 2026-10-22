@@ -1998,3 +1998,11 @@ ribbon	Check	Перевірка
 	Replace Block	Замінити блок
 	Select block references to replace	Виберіть посилання на блоки для заміни
 	Enter replacement block name	Введіть назву блока для заміни
+	CAD Manager	CAD-менеджер
+	Minimal	Мінімальний
+	Standards, fonts, external references and plotting.	Стандарти, шрифти, зовнішні посилання та друк.
+	Ribbon tabs, canvas and a floating command line.	Вкладки стрічки, полотно та плаваючий командний рядок.
+ribbon	Standards	Стандарти
+ribbon	Fonts	Шрифти
+ribbon	Xref	Зовнішні посилання
+ribbon	Plot	Друк креслення

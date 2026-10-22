@@ -38,6 +38,8 @@ fn preset_name(id: &str) -> Option<&'static str> {
         "INFRA" => crate::tl!("Infrastructure"),
         "QS_QA" => crate::tl!("Quantity Survey and QA"),
         "SHEET_PUBLISH" => crate::tl!("Sheets and Publishing"),
+        "CAD_MANAGER" => crate::tl!("CAD Manager"),
+        "MINIMAL" => crate::tl!("Minimal"),
         _ => return None,
     })
 }
@@ -53,6 +55,8 @@ fn preset_description(id: &str) -> &'static str {
         "INFRA" => crate::tl!("Alignments and station annotation for infrastructure."),
         "QS_QA" => crate::tl!("Quantity take-off, drawing comparison and checks."),
         "SHEET_PUBLISH" => crate::tl!("Layouts, plotting and publishing."),
+        "CAD_MANAGER" => crate::tl!("Standards, fonts, external references and plotting."),
+        "MINIMAL" => crate::tl!("Ribbon tabs, canvas and a floating command line."),
         _ => crate::tl!("A workspace you saved."),
     }
 }

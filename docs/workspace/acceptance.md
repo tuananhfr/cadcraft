@@ -63,6 +63,19 @@ Unit references below use `src/i18n/tests.rs` unless another path is given.
 and `pseudo_ribbon_and_dialogs_fit_1366x768` remain in place. qps layout assertions and the
 Vietnamese painted-text check do not replace browser overflow/contrast or native language review.
 
+## V3.1 GĐ3 Task 15: CAD Manager and Minimal presets
+
+2026-10-23 · Source inventory only; build, test execution and visual acceptance remain with the controller.
+The picker now offers eleven presets. CAD Manager and Minimal are local layouts; CAD Manager adds no company authorization or policy-locking service.
+
+| Preset / scope | Status | Evidence in source | Still owed |
+|---|---|---|---|
+| CAD_MANAGER | partial | Expanded ribbon: Home, Standards (`style`, `dimstyle`, `layer`, `purge`, `audit`), Fonts (`fonts`, `style`), Xref (`xref`, `xattach`), Plot (`plot`, `publish`, `pagesetup`); right-docked Layers, External References and Fonts. `ws_profile::cad_manager_preset_uses_only_real_commands` checks both validation modes, exact tab commands, real IDs and panel placement. No Sheet Set tab. | Lead native/wasm gate and visual QA; confirm Xref buttons report Unsupported on web through the existing registry. |
+| MINIMAL | partial | TabsOnly ribbon retains the eight standard tabs and Dimension/Hatch/Block contexts; no panels, toolbars or Quick Access, with a floating command line and visible status bar. `ws_profile::minimal_preset_is_tabs_only_with_canvas` applies it at 1366×768 and requires at least 80% canvas height. | Lead test run and browser/native captures. |
+| SIMPLE fallback | partial | SAFE_PRESET stays SIMPLE; its JSON is untouched. `ws_profile::simple_preset_is_unchanged_and_still_safe` pins SHA-256 for the original LF and CRLF Git checkout representations and checks default layout/validation. | Lead regression run on native and wasm. |
+| Picker / Vietnamese | partial | `picker_lists_every_preset_and_a_row_selects_it` includes both new English labels; `presets_offer_the_vietnamese_names` finds “Quản lý CAD” and “Tối giản” and selects Minimal. Ukrainian/Vietnamese labels and new ribbon glossary entries are supplied. | Lead glossary scan, UI test run and language review. |
+| All presets | partial | Existing PRESET_IDS loops cover validation, real commands, unique IDs/ratios, contextual Block commands, round trips, applying, persistence and drawing integrity. The tab test retains exact eight-tab expectations for existing presets and Minimal, with the exact five-tab list for CAD Manager. | Lead execution of these suites and a new eleven-preset performance run; the nine-preset measurements below remain historical. |
+
 ## Measured
 
 | Metric | Samples / SLO | Result |

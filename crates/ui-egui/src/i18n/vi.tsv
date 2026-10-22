@@ -2001,3 +2001,9 @@ ribbon	Check	Kiểm tra
 	Replace Block	Thay thế khối
 	Select block references to replace	Chọn các tham chiếu khối cần thay thế
 	Enter replacement block name	Nhập tên khối thay thế
+	CAD Manager	Quản lý CAD
+	Minimal	Tối giản
+	Standards, fonts, external references and plotting.	Tiêu chuẩn, phông chữ, tham chiếu ngoài và in bản vẽ.
+	Ribbon tabs, canvas and a floating command line.	Thẻ dải băng, vùng vẽ và dòng lệnh nổi.
+ribbon	Standards	Tiêu chuẩn
+ribbon	Fonts	Phông chữ

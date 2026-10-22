@@ -1,9 +1,20 @@
-//! The nine workspace presets shipped inside the binary.
+//! The eleven workspace presets shipped inside the binary.
 
 use super::schema::WorkspaceProfile;
 
-pub const PRESET_IDS: &[&str] =
-    &["SIMPLE", "AUTOCAD_FAMILIAR", "PLANNING_GIS", "ARCHITECTURE", "STRUCTURE", "MEP_FIRE", "INFRA", "QS_QA", "SHEET_PUBLISH"];
+pub const PRESET_IDS: &[&str] = &[
+    "SIMPLE",
+    "AUTOCAD_FAMILIAR",
+    "PLANNING_GIS",
+    "ARCHITECTURE",
+    "STRUCTURE",
+    "MEP_FIRE",
+    "INFRA",
+    "QS_QA",
+    "SHEET_PUBLISH",
+    "CAD_MANAGER",
+    "MINIMAL",
+];
 
 /// What startup falls back to when a profile cannot be used.
 pub const SAFE_PRESET: &str = "SIMPLE";
@@ -20,6 +31,8 @@ pub fn preset_json(id: &str) -> Option<&'static str> {
         "INFRA" => include_str!("presets/INFRA.json"),
         "QS_QA" => include_str!("presets/QS_QA.json"),
         "SHEET_PUBLISH" => include_str!("presets/SHEET_PUBLISH.json"),
+        "CAD_MANAGER" => include_str!("presets/CAD_MANAGER.json"),
+        "MINIMAL" => include_str!("presets/MINIMAL.json"),
         _ => return None,
     })
 }
