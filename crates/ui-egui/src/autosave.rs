@@ -139,28 +139,31 @@ pub fn show(app: &mut CadApp, ctx: &egui::Context) {
     let mut later = false;
     egui::Modal::new(egui::Id::new("cc_drawing_recovery")).show(ctx, |ui| {
         ui.set_width(460.0);
-        ui.label(RichText::new("Drawing Recovery").strong());
+        ui.label(RichText::new(crate::tl!("Drawing Recovery")).strong());
         ui.add_space(4.0);
-        ui.label("UbotCAD did not close normally. These drawings were autosaved:");
+        ui.label(crate::tl!("UbotCAD did not close normally. These drawings were autosaved:"));
         ui.add_space(6.0);
         egui::Grid::new("cc_recovery_list").num_columns(4).spacing(vec2(12.0, 6.0)).show(ui, |ui| {
             for (i, item) in app.recovery.items.iter().enumerate() {
                 ui.label(&item.drawing);
-                ui.label(RichText::new(format!("{} UTC · {} KB", utc(item.modified), item.bytes.div_ceil(1024))).color(t.text_dim));
-                if ui.button("Open").clicked() {
+                ui.label(
+                    RichText::new(crate::tf!("{date} UTC · {size} KB", date = utc(item.modified), size = item.bytes.div_ceil(1024)))
+                        .color(t.text_dim),
+                );
+                if ui.button(crate::tl!("Open")).clicked() {
                     open = Some(i);
                 }
-                if ui.button("Discard").clicked() {
+                if ui.button(crate::tl!("Discard")).clicked() {
                     discard = Some(i);
                 }
                 ui.end_row();
             }
         });
         ui.add_space(6.0);
-        ui.label(RichText::new("Opened drawings have no file name: save them to keep them.").color(t.text_dim));
+        ui.label(RichText::new(crate::tl!("Opened drawings have no file name: save them to keep them.")).color(t.text_dim));
         ui.add_space(8.0);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("Later").on_hover_text("Keep the files and ask again next time").clicked() {
+            if ui.button(crate::tl!("Later")).on_hover_text(crate::tl!("Keep the files and ask again next time")).clicked() {
                 later = true;
             }
         });
@@ -190,7 +193,7 @@ pub fn gpu_notice(app: &mut CadApp, ctx: &egui::Context) {
     let Some(n) = &app.gpu_notice else { return };
     let t = Tokens::get();
     let mut dismiss = false;
-    egui::Window::new("Graphics error")
+    egui::Window::new(crate::tl!("Graphics error"))
         .id(egui::Id::new("cc_gpu_notice"))
         .collapsible(false)
         .resizable(false)
@@ -198,25 +201,32 @@ pub fn gpu_notice(app: &mut CadApp, ctx: &egui::Context) {
         .show(ctx, |ui| {
             ui.set_width(440.0);
             if n.fault.lost {
-                ui.label("The graphics device stopped working (a driver reset or a GPU that stopped responding). UbotCAD can't draw again until it restarts.");
+                ui.label(crate::tl!(
+                    "The graphics device stopped working (a driver reset or a GPU that stopped responding). UbotCAD can't draw again until it restarts."
+                ));
             } else {
-                let times = if n.fault.errors == 1 { String::new() } else { format!(" ({} times)", n.fault.errors) };
-                ui.label(format!("The graphics driver reported an error{times}. UbotCAD kept running, but the drawing may not display correctly."));
+                let times = if n.fault.errors == 1 { String::new() } else { crate::tf!(" ({count} times)", count = n.fault.errors) };
+                ui.label(crate::tf!(
+                    "The graphics driver reported an error{times}. UbotCAD kept running, but the drawing may not display correctly.",
+                    times = times
+                ));
             }
             ui.add_space(4.0);
             match n.autosaved {
-                0 => ui.label("Nothing needed autosaving."),
-                1 => ui.label("A recovery copy of the open drawing with unsaved changes was autosaved."),
-                k => ui.label(format!("Recovery copies of {k} drawings with unsaved changes were autosaved.")),
+                0 => ui.label(crate::tl!("Nothing needed autosaving.")),
+                1 => ui.label(crate::tl!("A recovery copy of the open drawing with unsaved changes was autosaved.")),
+                k => ui.label(crate::tf!("Recovery copies of {count} drawings with unsaved changes were autosaved.", count = k)),
             };
-            ui.label(RichText::new("Save your work and restart UbotCAD. Recovery copies are offered at the next start if needed.").strong());
+            ui.label(
+                RichText::new(crate::tl!("Save your work and restart UbotCAD. Recovery copies are offered at the next start if needed.")).strong(),
+            );
             ui.add_space(4.0);
-            ui.collapsing("Details", |ui| {
+            ui.collapsing(crate::tl!("Details"), |ui| {
                 ui.label(RichText::new(&n.fault.message).color(t.text_dim).monospace());
             });
             // A row just as tall as the button (a plain right-to-left layout takes the rest).
             ui.allocate_ui_with_layout(vec2(ui.available_width(), 0.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Dismiss").clicked() {
+                if ui.button(crate::tl!("Dismiss")).clicked() {
                     dismiss = true;
                 }
             });

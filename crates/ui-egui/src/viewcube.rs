@@ -70,9 +70,9 @@ pub enum Part {
 impl Part {
     fn tip(self) -> &'static str {
         match self {
-            Part::Face => "Top: plan view of the drawing (zoom extents)",
-            Part::Home => "Home: zoom to the drawing extents",
-            Part::Ring => "Compass: view rotation isn't available in the 2D plan view yet",
+            Part::Face => crate::tl!("Top: plan view of the drawing (zoom extents)"),
+            Part::Home => crate::tl!("Home: zoom to the drawing extents"),
+            Part::Ring => crate::tl!("Compass: view rotation isn't available in the 2D plan view yet"),
         }
     }
 }
@@ -119,11 +119,11 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, l: &Layout) {
     }
     let mut action = None;
     resp.context_menu(|ui| {
-        if ui.button("Home").clicked() {
+        if ui.button(crate::tl!("Home")).clicked() {
             action = Some(("zoom.extents", json!({})));
             ui.close();
         }
-        if ui.button("Hide ViewCube").clicked() {
+        if ui.button(crate::tl!("Hide ViewCube")).clicked() {
             action = Some(("ui.toggle.viewcube", json!({"on": false})));
             ui.close();
         }
@@ -133,7 +133,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, l: &Layout) {
     }
     // The WCS pill (painted by the canvas) opens the coordinate-system menu.
     let pill = ui.interact(l.pill, ui.id().with("viewcube_wcs"), Sense::click_and_drag()).on_hover_cursor(CursorIcon::PointingHand);
-    let pill = pill.on_hover_text("Coordinate system");
+    let pill = pill.on_hover_text(crate::tl!("Coordinate system"));
     ucs_menu(app, egui::Popup::menu(&pill));
 }
 
@@ -166,7 +166,7 @@ pub fn ucs_icon(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
     let [x, y] = ucs_arms(canvas);
     let rx = ui.interact(x, ui.id().with("ucs_x"), Sense::click_and_drag());
     let ry = ui.interact(y, ui.id().with("ucs_y"), Sense::click_and_drag());
-    let resp = (rx | ry).on_hover_cursor(CursorIcon::PointingHand).on_hover_text("UCS icon: World Coordinate System");
+    let resp = (rx | ry).on_hover_cursor(CursorIcon::PointingHand).on_hover_text(crate::tl!("UCS icon: World Coordinate System"));
     if resp.hovered() {
         let o = pos2(x.left() + 8.0, x.center().y);
         let st = Stroke::new(2.0, t.hover);
@@ -183,9 +183,10 @@ pub fn ucs_icon(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
 fn ucs_menu(app: &mut CadApp, popup: egui::Popup<'_>) {
     let mut hide = false;
     popup.show(|ui| {
-        ui.radio(true, "World (WCS)").on_hover_text("UbotCAD draws in the World Coordinate System; user coordinate systems aren't available yet.");
+        ui.radio(true, crate::tl!("World (WCS)"))
+            .on_hover_text(crate::tl!("UbotCAD draws in the World Coordinate System; user coordinate systems aren't available yet."));
         ui.separator();
-        if ui.button("Hide UCS Icon").clicked() {
+        if ui.button(crate::tl!("Hide UCS Icon")).clicked() {
             hide = true;
             ui.close();
         }
