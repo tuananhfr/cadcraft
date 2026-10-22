@@ -1853,3 +1853,6 @@ ribbon	Take-off	Bóc khối lượng
 ribbon	Utilities	Tiện ích
 ribbon	Visibility	Hiện/ẩn
 ribbon	Walls and Openings	Tường và lỗ mở
+
+# GĐ3 Task 7: dock clamp.
+	The docking content area must be finite and positive	Vùng nội dung bảng phải hữu hạn và có kích thước dương

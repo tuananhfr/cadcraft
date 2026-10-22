@@ -310,16 +310,44 @@ fn publish_visibility(app: &mut crate::CadApp, workspace: &Workspace) {
 
 pub fn command(app: &mut crate::CadApp, reset: bool, params: &Value) -> Result<Value, String> {
     let mut workspace = app.ui.docking.clone();
+    let clamp = params.get("operation").and_then(Value::as_str) == Some("clamp");
+    let area = if clamp {
+        let [x, y, width, height]: [f32; 4] = serde_json::from_value(params.get("content").cloned().unwrap_or(Value::Null))
+            .map_err(|_| crate::tl!("The docking content area must be finite and positive").to_string())?;
+        let area = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(width, height));
+        if !area.is_finite() || !area.is_positive() || !area.size().is_finite() {
+            return Err(crate::tl!("The docking content area must be finite and positive").to_string());
+        }
+        Some(area)
+    } else {
+        None
+    };
     if reset {
         workspace = Workspace::default();
     } else {
         sync(&mut workspace, app)?;
-        workspace.command(params)?;
+        if !clamp {
+            workspace.command(params)?;
+        }
     }
     crate::wsprofile::apply::keep_locked_stack_sizes(app, &mut workspace);
+    if let Some(area) = area {
+        crate::dock_clamp::clamp_layout(&mut workspace.layout, area);
+    }
+    workspace.validate()?;
     publish_visibility(app, &workspace);
     app.ui.docking = workspace;
     Ok(json!({"docking": app.ui.docking}))
+}
+
+pub(crate) fn reclamp(app: &mut crate::CadApp, content: egui::Rect) {
+    let mut next = app.ui.docking.layout.clone();
+    if crate::dock_clamp::clamp_layout(&mut next, content) {
+        let rect = [content.left(), content.top(), content.width(), content.height()];
+        if let Err(error) = app.run("ui.dock", json!({"operation":"clamp", "content":rect})) {
+            app.set_status(error);
+        }
+    }
 }
 
 pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
@@ -334,9 +362,10 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
         workspace = Workspace::default();
         let _ = sync(&mut workspace, app);
     }
-    // Bodies can dispatch commands (including the drawing's typed command line).
-    // Keep the canonical workspace accessible while rendering an immutable snapshot.
-    app.ui.docking = workspace.clone();
+    app.ui.docking = workspace;
+    reclamp(app, ui.available_rect_before_wrap());
+    // Bodies can dispatch commands, so the rendered snapshot must leave the live layout accessible.
+    let workspace = app.ui.docking.clone();
     let mut style = DockStyle::from_ui(ui);
     style.min_pane = 96.0;
     style.background = t.panel;

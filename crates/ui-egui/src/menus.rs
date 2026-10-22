@@ -130,12 +130,13 @@ pub fn is_ui_command(id: &str) -> bool {
 
 /// Run a UI-only command. `None` if `id` isn't one.
 pub fn run_ui_command(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
-    // Changes made outside commands (dragging, palette clicks) are folded in first, so the
-    // command's own change becomes one layout undo step.
-    crate::wsprofile::observe(app, true);
+    // Pending interface edits belong to the command's undo step; automatic geometry repairs
+    // belong to the existing drag instead of adding undo steps.
+    let record = id != "ui.dock" || params.get("operation").and_then(Value::as_str) != Some("clamp");
+    crate::wsprofile::observe(app, record);
     let result = crate::i18n::with_language(app.language(), || run_ui_command_inner(app, id, params));
     if result.is_some() {
-        crate::wsprofile::observe(app, true);
+        crate::wsprofile::observe(app, record);
     }
     result
 }

@@ -107,6 +107,7 @@ const MARKED_UI_SOURCES: &[(&str, &str)] = &[
     ("credits.rs", include_str!("../credits.rs")),
     ("palettes/quickcalc.rs", include_str!("../palettes/quickcalc.rs")),
     ("palettes/patterns.rs", include_str!("../palettes/patterns.rs")),
+    ("docking.rs", include_str!("../docking.rs")),
     ("dialogs.rs", include_str!("../dialogs.rs")),
     ("ubplot/dialog.rs", include_str!("../ubplot/dialog.rs")),
     ("palette/mod.rs", include_str!("../palette/mod.rs")),
