@@ -1,8 +1,8 @@
 //! Vector PDF plotting (PLOT / EXPORTPDF): a minimal PDF writer of our own (pure Rust, no file
 //! access, so it runs on the web too).
 //!
-//! One page per sheet: model-space extents fitted to a sheet, or a layout at 1:1 (or the given
-//! `scale`) on its paper (paper units are millimetres in metric drawings, inches otherwise).
+//! One page per sheet: model-space extents fitted unless a scale is given, or a layout at 1:1
+//! (or the given `scale`). Paper units are millimetres in metric drawings, inches otherwise.
 //! Lines are stroked paths (`m`/`l`/`S`), fills are `f` paths, colours are RGB with colour 7 printing black on white
 //! paper, and line widths come from lineweights when enabled. The page setup's plot style
 //! table (or the `plotStyleTable` option) sets the printed colours, linetypes and lineweights.
@@ -87,7 +87,7 @@ pub struct PdfOptions {
     /// Custom paper size in millimetres (portrait width, height).
     pub paper_mm: Option<(f64, f64)>,
     pub landscape: Option<bool>,
-    /// Fit the drawing to the printable area. Default: on for model space, off for layouts (1:1).
+    /// Fit the drawing to the printable area. Default: on for model space/windows without a scale.
     pub fit: Option<bool>,
     /// Plot scale in paper units per drawing unit (when not fitting).
     pub scale: Option<f64>,
@@ -100,10 +100,9 @@ pub struct PdfOptions {
     /// Flate-compress the content stream.
     pub compress: bool,
     pub title: String,
-    /// Model space only: plot this rectangle (drawing units), fitted to the printable area,
-    /// instead of the extents. Ignored for layouts.
+    /// Model space only: plot this rectangle (drawing units) instead of the extents. Ignored for layouts.
     pub window: Option<Bounds2>,
-    /// Rotate the display list into this frame before fitting its local rectangle.
+    /// Rotate the display list into this frame before placing its local rectangle.
     pub frame: Option<PlotFrame>,
     /// Page label, replacing the space name.
     pub label: Option<String>,
@@ -122,6 +121,8 @@ pub struct PdfOptions {
     /// Margins (left, bottom, right, top; mm) of the plot device's paper, bounding the printable
     /// area of a model-space plot. `None` keeps the page setup's (none for model space).
     pub margins: Option<[f64; 4]>,
+    /// `margins` also replace a layout's page setup margins (a publish page that names its own).
+    pub page_margins: bool,
     /// Entity hyperlinks read from a drawing file (`PE_URL` extended data) become link
     /// annotations too, after [`PdfOptions::links`]. Default on.
     pub hyperlinks: bool,
@@ -152,6 +153,7 @@ impl Default for PdfOptions {
             links: Vec::new(),
             text_as_geometry: false,
             margins: None,
+            page_margins: false,
             hyperlinks: true,
             plot_transparency: None,
         }
@@ -190,6 +192,7 @@ impl PdfOptions {
             frame: v.get("outline").and_then(|v| PlotFrame::from_outline(v).ok()),
             label: v.get("label").and_then(Value::as_str).map(str::to_string),
             margins: margins(v.get("margins")),
+            page_margins: false,
             hyperlinks: v.get("hyperlinks").and_then(Value::as_bool).unwrap_or(true),
             plot_transparency: v.get("plotTransparency").and_then(Value::as_bool),
         }
@@ -285,17 +288,16 @@ pub fn plot(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>> {
                     space.clone()
                 };
                 let mut po = PdfOptions::from_json(&serde_json::json!({
-                    "paper": pg.get("paper"), "landscape": pg.get("landscape"), "scale": pg.get("scale"),
+                    "paper": pg.get("paper"), "landscape": pg.get("landscape"), "scale": pg.get("scale"), "fit": pg.get("fit"),
                     "width": pg.get("width"), "height": pg.get("height"), "label": pg.get("label"),
                     "plotStyleTable": opts.get("plotStyleTable"), "lineweights": opts.get("lineweights"),
-                    "margins": opts.get("margins"), "text": opts.get("text"),
+                    "margins": pg.get("margins").or_else(|| opts.get("margins")), "text": opts.get("text"),
                 }));
+                po.page_margins = pg.get("margins").is_some();
                 if let Some(raw) = pg.get("outline") {
                     po.frame = Some(PlotFrame::from_outline(raw)?);
-                    po.fit = Some(true);
                 } else if let Some(raw) = pg.get("window") {
                     po.window = Some(window(Some(raw)).ok_or_else(|| IoError::Format("each page needs a `window` with two corners".into()))?);
-                    po.fit = Some(true);
                 }
                 if po.landscape.is_none()
                     && let Some((w, h)) = po.paper_mm
@@ -382,8 +384,10 @@ pub fn page_for(d: &Drawing, space: &Space, o: &PdfOptions) -> Result<PageSetup>
     if let Some(t) = &o.plot_style_table {
         page.plot_style_table = t.clone();
     }
-    // The plot device's margins bound a model-space plot (a layout's come with its page setup).
-    if let (Space::Model, Some(m)) = (space, o.margins) {
+    // A layout keeps its page setup margins unless a publish page names its own.
+    if let Some(m) = o.margins
+        && (matches!(space, Space::Model) || o.page_margins)
+    {
         page.margins_mm = m;
     }
     page.width_mm = page.width_mm.clamp(1.0, MAX_SHEET_MM);
@@ -495,7 +499,7 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
     let k = unit_mm * PT_PER_MM;
     let frame_bounds = o.frame.map(PlotFrame::bounds).transpose()?;
     let window = frame_bounds.or_else(|| o.window.filter(|w| matches!(space, Space::Model) && !w.is_empty()));
-    let fit = o.fit.unwrap_or(window.is_some() || matches!(space, Space::Model));
+    let fit = o.fit.unwrap_or(o.scale.is_none() && (window.is_some() || matches!(space, Space::Model)));
     // Chord tolerance: about 0.05 mm on paper.
     let est = plot_scale(&window.unwrap_or_else(|| d.extents(space)), &sheet, fit, o.scale);
     let tol = 0.05 / unit_mm / est.max(1e-300);
@@ -508,8 +512,8 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
     }
     let b = window.unwrap_or(list.bounds);
     let s = plot_scale(&b, &sheet, fit, o.scale);
-    let map = if fit || matches!(space, Space::Model) {
-        let (from, to) = placement(space, &b, fit, &sheet, o);
+    let map = if fit || window.is_some() || matches!(space, Space::Model) {
+        let (from, to) = placement(space, &b, fit || window.is_some(), &sheet, o);
         Map { from, s, to, k }
     } else {
         Map { from: Vec2::ZERO, s, to: Vec2::ZERO, k }
@@ -517,7 +521,7 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
     // Plot style ends, joins and fill patterns at the plot scale (a layout's are already drawn).
     cadcraft_render::pen::apply(&mut list, map.s * unit_mm);
     let media = sheet.size * k;
-    let clip_pt = if fit || matches!(space, Space::Model) {
+    let clip_pt = if fit || window.is_some() || o.page_margins || matches!(space, Space::Model) {
         Bounds2::new(sheet.printable.min * k, sheet.printable.max * k)
     } else {
         Bounds2::new(Vec2::ZERO, media)

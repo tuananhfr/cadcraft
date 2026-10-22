@@ -228,3 +228,27 @@ pub fn pages(pdf: &[u8]) -> Vec<ProbePage> {
     }
     output
 }
+
+pub fn path_bbox(pdf: &[u8], layer: usize) -> [f64; 4] {
+    let text = String::from_utf8_lossy(pdf);
+    assert!(!text.contains("/FlateDecode"));
+    let marker = format!("/OC /L{layer} BDC\n");
+    let mut min = [f64::INFINITY; 2];
+    let mut max = [f64::NEG_INFINITY; 2];
+    let mut vertices = 0;
+    for path in text.split(&marker).skip(1) {
+        let path = path.split_once("EMC").unwrap().0;
+        for line in path.lines() {
+            let fields: Vec<_> = line.split_whitespace().collect();
+            if let [x, y, "m" | "l"] = fields.as_slice() {
+                for (axis, value) in [x.parse::<f64>().unwrap(), y.parse::<f64>().unwrap()].into_iter().enumerate() {
+                    min[axis] = min[axis].min(value);
+                    max[axis] = max[axis].max(value);
+                }
+                vertices += 1;
+            }
+        }
+    }
+    assert!(vertices >= 4, "rectangle path required on layer {layer}");
+    [min[0], min[1], max[0], max[1]]
+}

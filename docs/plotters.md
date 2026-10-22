@@ -114,12 +114,17 @@ In the file name, characters other than letters, digits, spaces and `-_()+,` bec
   - `scaleMode: "real"` interprets `scale` as a physical ratio using `INSUNITS`,
     independently of `MEASUREMENT`. For example, a metre drawing (`INSUNITS=6`) at
     `"1:100"` prints 1 m as 10 mm. Unitless or unknown INSUNITS codes assume mm.
-    Use `fit: false` to apply the explicit scale with the current Model plotter.
+  - With `scale` and no `fit`, PDF and PNG preserve the requested scale. Model plots
+    without a scale fit by default; layouts default to 1:1. `fit: true` explicitly fits even
+    when a scale is supplied; `fit: false` without a scale uses 1:1.
+  - PDF `pages` items accept their own `scale`, `fit` and `margins`; an item without `fit`
+    fits only when it has no scale. UBPLOT Ratio sheets publish with `fit: false`, Fit
+    sheets with `fit: true`. PDF/custom sheets have zero margins; available device papers
+    supply their own margins.
   - `exportpdf` takes the same options and always writes PDF.
 
-Model-space PDF plots don't apply the paper's margins yet. They fit the drawing inside the
-default margins. PNG plots apply them. SVG plots show a layout's whole sheet, or the
-model-space extents.
+PDF and PNG plots apply the paper's margins to their printable area. SVG plots show a
+layout's whole sheet, or the model-space extents.
 
 ## Plot transparency
 
