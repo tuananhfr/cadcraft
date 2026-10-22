@@ -11,6 +11,7 @@ pub mod eval;
 pub mod input;
 pub mod read;
 mod startup;
+mod ubplot;
 pub mod value;
 
 use std::collections::HashMap;

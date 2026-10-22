@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use super::eval::{Ctx, Flow, Special};
 use super::value::{Builtin, BuiltinKind, Sym, Value, charge_bytes, check_string_len, eq, equal, real_text, to_text};
-use super::{Env, LispError, drawing, input, read};
+use super::{Env, LispError, drawing, input, read, ubplot};
 
 type R = Result<Value, LispError>;
 
@@ -1426,6 +1426,11 @@ static BUILTINS: &[Builtin] = &[
     ctx!("COMMAND", drawing::command),
     ctx!("COMMAND-S", drawing::command),
     ctx!("VL-CMDF", drawing::command),
+    ctx!("GETPROPERTYVALUE", ubplot::getpropertyvalue),
+    ctx!("UBPLOT-ATTRIBS", ubplot::attribs),
+    ctx!("UBPLOT-SCAN", ubplot::scan),
+    ctx!("UBPLOT-PUBLISH", ubplot::publish),
+    ctx!("UBPLOT-TEMPLATES", ubplot::templates),
     ctx!("GETVAR", drawing::getvar),
     ctx!("SETVAR", drawing::setvar),
     ctx!("ENTGET", drawing::entget),
