@@ -451,31 +451,54 @@ fn paper_for(w: f64, h: f64) -> Option<(&'static str, bool)> {
 }
 
 /// Sheet frames grouped into books: rows of equal lower edge, bottom to top, each left to right.
-fn frame_books(d: &Drawing, frame_height: f64, unit: f64) -> (Vec<Vec<Frame>>, usize) {
+fn frame_books(d: &Drawing, frame_height: f64, unit: f64) -> (Vec<Vec<Frame>>, Vec<Value>) {
     let mut found: Vec<(i64, f64, Frame)> = Vec::new();
-    let mut skipped = 0;
-    for e in d.model.iter().take(MAX_FRAMES) {
+    let mut issues = Vec::new();
+    let mut entities = d.model.iter();
+    for (index, e) in entities.by_ref().take(MAX_FRAMES).enumerate() {
         let EntityKind::LwPolyline(pl) = &e.kind else { continue };
         if !pl.closed {
             continue;
         }
-        let b = cadcraft_doc::entity_bounds(d, e, 0);
-        if b.is_empty() || !b.width().is_finite() || !b.height().is_finite() {
+        // Bounds omit non-finite points, so check the source before accepting a partial frame.
+        let invalid = pl.vertices.iter().any(|v| !v.p.is_finite());
+        let b = if invalid { Bounds2::from_points(pl.vertices.iter().map(|v| v.p)) } else { cadcraft_doc::entity_bounds(d, e, 0) };
+        let (w, h) = (b.width() * unit, b.height() * unit);
+        let row = (b.min.y * 1000.0).round();
+        let number = index.saturating_add(1);
+        let issue = |code: &str, message: String| {
+            json!({ "severity": "BLOCK", "code": code, "message": message,
+                "window": [b.min.x, b.min.y, b.max.x, b.max.y], "size_mm": [w, h] })
+        };
+        if invalid
+            || b.is_empty()
+            || !b.min.is_finite()
+            || !b.max.is_finite()
+            || !w.is_finite()
+            || !h.is_finite()
+            || !row.is_finite()
+            || row.abs() >= 9e15
+        {
+            issues.push(issue(
+                "FRAME_OUT_OF_RANGE",
+                format!("Frame {number} has non-finite or out-of-range coordinates or dimensions; it was not plotted"),
+            ));
             continue;
         }
-        let (w, h) = (b.width() * unit, b.height() * unit);
+        // Closed outlines of another height are drawing content (rooms, columns), not sheet frames.
         if (h - frame_height).abs() > 0.0005 {
             continue;
         }
         match paper_for(w, h) {
-            Some((paper, landscape)) => {
-                let row = (b.min.y * 1000.0).round();
-                if row.is_finite() && row.abs() < 9e15 {
-                    found.push((row as i64, b.min.x, Frame { window: b, paper, landscape }));
-                }
+            Some((paper, landscape)) => found.push((row as i64, b.min.x, Frame { window: b, paper, landscape })),
+            None => {
+                issues.push(issue("FRAME_PAPER_MISMATCH", format!("Frame {number} ({w:.1} x {h:.1} mm) matches no paper size; it was not plotted")))
             }
-            None => skipped += 1,
         }
+    }
+    if entities.next().is_some() {
+        issues.push(json!({ "severity": "BLOCK", "code": "FRAME_LIMIT", "scanned": MAX_FRAMES,
+            "message": format!("Frame scan stopped after {MAX_FRAMES} model-space entities; additional frames may not have been plotted") }));
     }
     found.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
     let mut books: Vec<Vec<Frame>> = Vec::new();
@@ -489,7 +512,7 @@ fn frame_books(d: &Drawing, frame_height: f64, unit: f64) -> (Vec<Vec<Frame>>, u
             b.push(f);
         }
     }
-    (books, skipped)
+    (books, issues)
 }
 
 fn run_pdfbook(s: &mut Session, p: &Value) -> Result<Value> {
@@ -498,9 +521,29 @@ fn run_pdfbook(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let num = |k: &str, default: f64| p.get(k).and_then(Value::as_f64).filter(|v| v.is_finite() && *v > 0.0).unwrap_or(default);
     let (frame_height, unit) = (num("frameHeight", 297.0), num("unit", 1.0));
-    let (books, skipped) = frame_books(s.doc()?, frame_height, unit);
+    let (books, issues) = frame_books(s.doc()?, frame_height, unit);
+    let skipped = issues.iter().filter(|issue| issue.get("code").and_then(Value::as_str) != Some("FRAME_LIMIT")).count();
     if books.is_empty() {
-        return Err(bad("pdfbook", format!("no closed polylines {frame_height} mm high (sheet frames) in model space")));
+        let mut message = format!("no closed polylines {frame_height} mm high (sheet frames) in model space");
+        if !issues.is_empty() {
+            let details = issues
+                .iter()
+                .take(10)
+                .map(|issue| {
+                    let message = issue.get("message").and_then(Value::as_str).unwrap_or_default();
+                    match issue.get("window") {
+                        Some(window) => format!("{message}; window {window}"),
+                        None => message.to_string(),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("; ");
+            message.push_str(&format!(": {details}"));
+            if issues.len() > 10 {
+                message.push_str(&format!("; and {} more", issues.len().saturating_sub(10)));
+            }
+        }
+        return Err(bad("pdfbook", message));
     }
     let target = str_param(p, "path").map(str::to_string).or_else(|| s.state().ok().and_then(|st| st.path.clone()));
     let pb = target.as_deref().map(std::path::Path::new);
@@ -534,14 +577,20 @@ fn run_pdfbook(s: &mut Session, p: &Value) -> Result<Value> {
         }
         out.push(r);
     }
-    let message = format!("Plotted {} book(s), {} sheet(s)", out.len(), books.iter().map(Vec::len).sum::<usize>());
-    Ok(json!({ "books": out, "skipped": skipped, "message": message }))
+    let mut message = format!("Plotted {} book(s), {} sheet(s)", out.len(), books.iter().map(Vec::len).sum::<usize>());
+    if skipped > 0 {
+        message.push_str(&format!("; {skipped} frames were not plotted"));
+    }
+    if issues.iter().any(|issue| issue.get("code").and_then(Value::as_str) == Some("FRAME_LIMIT")) {
+        message.push_str(&format!("; frame scan stopped after {MAX_FRAMES} model-space entities; additional frames may not have been plotted"));
+    }
+    Ok(json!({ "books": out, "skipped": skipped, "issues": issues, "message": message }))
 }
 
 #[cfg(test)]
 mod tests {
     use cadcraft_doc::{Block, Circle, Common, Handle, Insert, Layer, Line};
-    use cadcraft_geom::Vec3;
+    use cadcraft_geom::{PolyVertex, Vec3};
 
     use super::super::file::{IoHooks, set_io};
     use super::*;
@@ -735,6 +784,102 @@ mod tests {
         let _ = std::fs::remove_file(temp("b.pdf"));
         // No frames: an error, not a panic.
         assert!(Session::new().execute("pdfbook", &json!({})).is_err());
+    }
+
+    fn pdfbook_frame([x0, y0, x1, y1]: [f64; 4]) -> EntityKind {
+        EntityKind::LwPolyline(cadcraft_doc::LwPolyline {
+            vertices: [Vec2::new(x0, y0), Vec2::new(x1, y0), Vec2::new(x1, y1), Vec2::new(x0, y1)].into_iter().map(PolyVertex::new).collect(),
+            closed: true,
+            const_width: 0.0,
+            elevation: 0.0,
+            plinegen: false,
+        })
+    }
+
+    #[test]
+    fn pdfbook_reports_each_frame_it_cannot_plot() {
+        our_hooks();
+        let mut s = Session::new();
+        let d = s.doc_mut().unwrap();
+        for x in [0.0, 500.0, 1000.0] {
+            d.add(&Space::Model, Common::default(), pdfbook_frame([x, 0.0, x + 420.0, 297.0])).unwrap();
+        }
+        let window = [1500.0, 0.0, 2000.0, 297.0];
+        d.add(&Space::Model, Common::default(), pdfbook_frame(window)).unwrap();
+        let mut invalid = pdfbook_frame([2000.0, 0.0, 2420.0, 297.0]);
+        if let EntityKind::LwPolyline(pl) = &mut invalid {
+            pl.vertices[0].p.x = f64::NAN;
+        }
+        d.add(&Space::Model, Common::default(), invalid).unwrap();
+
+        let r = s.execute("pdfbook", &json!({})).unwrap();
+        let books = r["books"].as_array().unwrap();
+        assert_eq!(books.len(), 1);
+        assert_eq!(books[0]["pages"], 3);
+        let pdf = String::from_utf8(base64_decode(books[0]["data"].as_str().unwrap()).unwrap()).unwrap();
+        assert!(pdf.starts_with("%PDF"));
+        let options: Value = serde_json::from_str(pdf.split_once(" fake Model ").unwrap().1).unwrap();
+        assert_eq!(options["pages"].as_array().unwrap().len(), 3);
+        let issues = r["issues"].as_array().unwrap();
+        assert_eq!(issues.len(), 2);
+        assert!(issues.iter().all(|issue| issue["severity"] == "BLOCK"));
+        let mismatch = issues.iter().find(|issue| issue["code"] == "FRAME_PAPER_MISMATCH").unwrap();
+        assert_eq!(mismatch["window"], json!(window));
+        for (value, expected) in mismatch["size_mm"].as_array().unwrap().iter().zip([500.0, 297.0]) {
+            assert!((value.as_f64().unwrap() - expected).abs() < 1e-9);
+        }
+        assert!(mismatch["message"].as_str().unwrap().contains("500.0 x 297.0 mm"));
+        assert!(issues.iter().any(|issue| issue["code"] == "FRAME_OUT_OF_RANGE"));
+        assert_eq!(r["skipped"], 2);
+        assert!(r["message"].as_str().unwrap().contains("2 frames were not plotted"));
+    }
+
+    #[test]
+    fn pdfbook_with_only_unmatched_frames_errors_with_the_list() {
+        our_hooks();
+        let mut s = Session::new();
+        let windows: Vec<_> = (0..12)
+            .map(|i| {
+                let x = f64::from(i) * 500.0;
+                [x, 0.0, x + 500.0, 297.0]
+            })
+            .collect();
+        for window in &windows {
+            s.doc_mut().unwrap().add(&Space::Model, Common::default(), pdfbook_frame(*window)).unwrap();
+        }
+        let error = s.execute("pdfbook", &json!({})).unwrap_err().to_string();
+        for (i, window) in windows.iter().enumerate() {
+            assert_eq!(error.contains(&format!("window {}", json!(window))), i < 10, "{error}");
+        }
+        assert_eq!(error.matches("window ").count(), 10);
+        assert!(error.contains("and 2 more"), "{error}");
+    }
+
+    #[test]
+    fn pdfbook_reports_scan_limit_without_counting_it_as_a_skipped_frame() {
+        our_hooks();
+        let mut s = Session::new();
+        let d = s.doc_mut().unwrap();
+        d.add(&Space::Model, Common::default(), pdfbook_frame([0.0, 0.0, 420.0, 297.0])).unwrap();
+        for _ in 1..MAX_FRAMES {
+            d.add(&Space::Model, Common::default(), line((0.0, 0.0), (1.0, 0.0))).unwrap();
+        }
+        let (books, issues) = frame_books(d, 297.0, 1.0);
+        assert_eq!(books.len(), 1);
+        assert!(issues.is_empty(), "reaching the exact limit leaves no unexamined entities");
+        d.add(&Space::Model, Common::default(), pdfbook_frame([500.0, 0.0, 1000.0, 297.0])).unwrap();
+
+        let r = s.execute("pdfbook", &json!({})).unwrap();
+        assert_eq!(r["books"][0]["pages"], 1);
+        assert_eq!(r["skipped"], 0);
+        let issues = r["issues"].as_array().unwrap();
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0]["code"], "FRAME_LIMIT");
+        assert_eq!(issues[0]["severity"], "BLOCK");
+        assert_eq!(issues[0]["scanned"], MAX_FRAMES);
+        assert!(issues[0].get("window").is_none(), "the limit issue belongs to the plan");
+        assert!(issues[0]["message"].as_str().unwrap().contains(&MAX_FRAMES.to_string()));
+        assert!(r["message"].as_str().unwrap().contains("frame scan stopped"));
     }
 
     #[test]
