@@ -298,6 +298,44 @@ fn plain_insert(block: &str) -> EntityKind {
     })
 }
 
+#[test]
+fn effective_name_follows_btag_of_anonymous_block() {
+    use crate::foreign::ForeignExtra;
+    use std::sync::Arc;
+
+    let mut d = Drawing::new_imperial();
+    for name in ["FRAME-A1", "*U7"] {
+        d.blocks.insert(name.into(), Arc::new(Block::new(name)));
+    }
+    Arc::make_mut(&mut d.foreign).records.insert(
+        ("BLOCK_RECORD".into(), "*U7".into()),
+        ForeignExtra {
+            xdata: vec![
+                RawTag { code: 1001, value: "AcDbBlockRepBTag".into() },
+                RawTag { code: 1070, value: "1".into() },
+                RawTag { code: 1005, value: "1F0".into() },
+            ],
+            ..Default::default()
+        },
+    );
+    Arc::make_mut(&mut d.foreign).targets.insert(Handle(0x1F0), ("BLOCK_RECORD".into(), "FRAME-A1".into()));
+    let anonymous = d.add(&Space::Model, Common::default(), plain_insert("*U7")).unwrap();
+    let named = d.add(&Space::Model, Common::default(), plain_insert("FRAME-A1")).unwrap();
+    let line = d.add(&Space::Model, Common::default(), line((0.0, 0.0), (1.0, 1.0))).unwrap();
+    assert_eq!(dynblock::effective_name(&d, anonymous).as_deref(), Some("FRAME-A1"));
+    assert_eq!(dynblock::effective_name(&d, named).as_deref(), Some("FRAME-A1"));
+    assert_eq!(dynblock::effective_name(&d, line), None);
+    assert_eq!(dynblock::effective_name(&d, Handle(u64::MAX)), None);
+    assert!(dynblock::hidden_objects(&d, named).is_empty());
+
+    Arc::make_mut(&mut d.foreign).targets.remove(&Handle(0x1F0));
+    assert_eq!(dynblock::effective_name(&d, anonymous).as_deref(), Some("*U7"));
+    Arc::make_mut(&mut d.foreign).targets.insert(Handle(0x1F0), ("LAYER".into(), "FRAME-A1".into()));
+    assert_eq!(dynblock::effective_name(&d, anonymous).as_deref(), Some("*U7"));
+    Arc::make_mut(&mut d.foreign).targets.insert(Handle(0x1F0), ("BLOCK_RECORD".into(), "MISSING".into()));
+    assert_eq!(dynblock::effective_name(&d, anonymous).as_deref(), Some("*U7"));
+}
+
 fn on_layer(layer: &str, kind: EntityKind, h: u64) -> Entity {
     Entity { handle: Handle(h), common: Common { layer: layer.into(), ..Default::default() }, kind }
 }

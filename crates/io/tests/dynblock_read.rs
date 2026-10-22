@@ -267,6 +267,26 @@ fn block_of(d: &cadcraft_doc::Drawing, h: &str) -> String {
 }
 
 #[test]
+fn hidden_objects_follow_the_current_visibility_state() {
+    use cadcraft_doc::dynblock::{effective_name, hidden_objects, set_property};
+
+    let src = with_references().replace("331\n31\n331\n32\n", "331\n32\n331\n31\n");
+    assert_ne!(src, with_references());
+    let mut d = read_dxf(src.as_bytes()).unwrap();
+    assert!(hidden_objects(&d, h("80")).is_empty());
+    assert_eq!(hidden_objects(&d, h("81")), [h("31"), h("32")]);
+    assert!(hidden_objects(&d, h("30")).is_empty());
+    assert!(hidden_objects(&d, h("FFFF")).is_empty());
+    assert_eq!(effective_name(&d, h("81")).as_deref(), Some("Door"));
+
+    set_property(&mut d, h("80"), "Visibility1", "Closed").unwrap();
+    assert_eq!(hidden_objects(&d, h("80")), [h("31"), h("32")]);
+    assert_eq!(effective_name(&d, h("80")).as_deref(), Some("Door"));
+    set_property(&mut d, h("80"), "Visibility1", "Open").unwrap();
+    assert!(hidden_objects(&d, h("80")).is_empty());
+}
+
+#[test]
 fn changing_the_visibility_state_makes_a_new_anonymous_block() {
     let mut d = read_dxf(with_references().as_bytes()).unwrap();
     // Door's own reference to Closed: the swing (lines 31, 32) hidden, the leaf (30) shown.
