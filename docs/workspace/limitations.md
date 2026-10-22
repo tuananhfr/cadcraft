@@ -34,28 +34,33 @@ A workspace whose pending changes cannot be saved (storage full or refused, or a
 kept) cannot be left for another workspace, so its changes are not lost silently; the error stays on screen and
 the save is retried. Reset to the preset is the way out.
 
-## V2.2/V3.1 GĐ0 web limits
+## V2.2/V3.1 web keys (GĐ0 / GĐ3 Task 11)
 
 2026-10-22 · Implementation inventory; browser QA and release acceptance remain pending.
 
-Browser-reserved keys are removed from web defaults and saved-profile dispatch, refused by the shortcut editor and hidden from menu hints. The following desktop defaults have no replacement web default until GĐ3 (accepted for GĐ0):
+Browser-reserved keys are removed from web defaults and saved-profile dispatch, refused by the shortcut editor and hidden from menu hints. Customize → Keyboard warns about a browser key before assignment and disables Assign Shortcut until a different key is entered. The web defaults add these alternatives to the filtered desktop table:
 
-| Command / control | Removed web default |
-|---|---|
-| New drawing (`new`) | Ctrl+N |
-| Copy with base point (`copybase`) | Ctrl+Shift+C |
-| Properties (`ui.panel.properties`) | Ctrl+1 |
-| Tool Sets (`ui.toggle.toolsets`) | Ctrl+3 |
-| Command line (`ui.toggle.cmdline`) | Ctrl+9 |
-| Command reference (`ui.dialog.commands`) | F1 |
-| Object snap (`osnap`) | F3 |
-| Isoplane (`isoplane`) | F5, Ctrl+E |
-| Grid (`grid`) | F7 |
-| Polar tracking (`polar`) | F10 |
-| Object snap tracking (`otrack`) | F11 |
-| Dynamic input (`dynmode`) | F12 |
+| Command / control | Desktop default | Web default / entry point |
+|---|---|---|
+| Properties (`ui.panel.properties`) | Ctrl+1 | Ctrl+Shift+1; Window → Properties Inspector |
+| Command line (`ui.toggle.cmdline`) | Ctrl+9 | Ctrl+Shift+9; Window → Command Line |
+| Command reference (`ui.dialog.commands`) | F1 | Shift+F1; Help → UbotCAD Help |
+| Command Palette (`ui.palette`) | Ctrl+Shift+P | No key; Help → Command Palette or the button in Command Reference |
+| New drawing (`new`) | Ctrl+N | No key; File → New Drawing |
+| Copy with base point (`copybase`) | Ctrl+Shift+C | No key; Edit → Copy with Base Point |
+| Tool Sets (`ui.toggle.toolsets`) | Ctrl+3 | No key; Window → Panels → Tool Sets |
+| Object snap (`osnap`) | F3 | No key; status bar or Command Reference |
+| Isoplane (`isoplane`) | F5, Ctrl+E | No key; Command Reference or command line |
+| Grid (`grid`) | F7 | No key; status bar or Command Reference |
+| Polar tracking (`polar`) | F10 | No key; status bar or Command Reference |
+| Object snap tracking (`otrack`) | F11 | No key; status bar |
+| Dynamic input (`dynmode`) | F12 | No key; status bar |
 
-These commands remain reachable through menus, command line or the relevant status-bar controls. Ctrl+L/T/W/R and the other entries in `shortcuts::BROWSER_RESERVED`, including Shift+F10, cannot be bound on the web. F8 (Ortho) and F9 (Snap) are retained. Desktop keeps its existing defaults.
+Ctrl+O/S/P/Z/Y/A/C/V/X retain their existing web actions. Ctrl+Shift+Z (Redo), Ctrl+Shift+S (Save As), Ctrl+Shift+A (Group Selection), Ctrl+Shift+V (Paste as Block), F2 (Command History), F8 (Ortho) and F9 (Snap) also keep their desktop defaults. In Customize, Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z operate on layout history on both platforms; a focused text editor keeps its own undo keys.
+
+The browser keeps Ctrl+L/T/W/R, Ctrl+N, Ctrl+1…9, Ctrl+E, F1/F3/F5/F6/F7/F10/F11/F12, Shift+F10, Ctrl+Shift+C/P/N/T/W/I, Ctrl+Tab, Ctrl+Shift+Tab and Alt+F4. These cannot be assigned on the web, including through imported profiles or replacement bindings. F9 is deliberately available to Snap. Desktop defaults stay unchanged, including Ctrl+Shift+P for Command Palette.
+
+Regression sources: `web_shortcuts::web_alternates_avoid_browser_keys_h09`, `properties_and_command_line_have_web_keys`, `web_commands_keep_a_way_in`, `ctrl_z_in_customize_undoes_layout_on_both_platforms_tc19`, plus `web_keys` and `ws_ribbon::shortcut_defaults_unchanged`. These are assertions in source; native/wasm CI and real-browser shortcut checks remain for the lead.
 
 Standalone web pages request beforeunload confirmation only while an open drawing has unsaved changes. Browsers require a prior user gesture and control the prompt text; this is not crash recovery or drawing autosave. Embedded `?host=parent` mode delegates leave protection to the parent through dirty reporting. Web drawing autosave is deferred to GĐ4.
 

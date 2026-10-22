@@ -38,7 +38,9 @@ fn web_defaults_keep_every_safe_desktop_binding() {
             assert_eq!(web.get(command), Some(keys), "{command}");
         }
     }
-    assert_eq!(web.len(), desktop.len() - removed);
+    let added =
+        shortcuts::WEB_ALTERNATES.iter().filter(|(command, _)| desktop.get(*command).is_none_or(|keys| shortcuts::is_browser_reserved(keys))).count();
+    assert_eq!(web.len(), desktop.len() - removed + added);
     assert_eq!(desktop.get("isoplane").map(String::as_str), Some("F5, Ctrl+E"));
     assert_eq!(desktop.get("copybase").map(String::as_str), Some("Ctrl+Shift+C"));
 }
