@@ -822,17 +822,15 @@ fn run_plot(s: &mut Session, p: &Value, cmd: &str) -> Result<Value> {
     };
     let pages = sheets.as_ref().map_or(1, Vec::len);
     match str_param(p, "path") {
-        Some(_path) => {
-            #[cfg(not(target_arch = "wasm32"))]
+        Some(path) => {
+            super::file::store_file(cmd, path, &bytes)?;
+            let mut r = json!({ "path": path, "bytes": bytes.len(), "layout": layout, "pages": pages });
+            if cfg!(target_arch = "wasm32")
+                && let Some(output) = r.as_object_mut()
             {
-                let path = _path;
-                let tmp = format!("{path}.cadcraft-tmp");
-                std::fs::write(&tmp, &bytes).map_err(|e| bad(cmd, format!("{path}: {e}")))?;
-                std::fs::rename(&tmp, path).map_err(|e| bad(cmd, format!("{path}: {e}")))?;
-                Ok(json!({ "path": path, "bytes": bytes.len(), "layout": layout, "pages": pages }))
+                output.insert("download".into(), json!(true));
             }
-            #[cfg(target_arch = "wasm32")]
-            Err(bad(cmd, "paths are not available on the web; omit `path` to get the PDF as base64 `data`"))
+            Ok(r)
         }
         None => Ok(json!({ "data": base64_encode(&bytes), "bytes": bytes.len(), "layout": layout, "pages": pages })),
     }

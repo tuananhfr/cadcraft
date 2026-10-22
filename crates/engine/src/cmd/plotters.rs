@@ -604,14 +604,9 @@ fn run_plottermanager(_s: &mut Session, p: &Value) -> Result<Value> {
             let text = find_device(&name).ok_or_else(|| unknown_device(cmd, &name))?.to_file_text();
             match str_param(p, "path") {
                 None => Ok(json!({ "name": name, "text": text })),
-                Some(_path) => {
-                    #[cfg(not(target_arch = "wasm32"))]
-                    {
-                        std::fs::write(_path, &text).map_err(|e| bad(cmd, format!("{_path}: {e}")))?;
-                        Ok(json!({ "name": name, "path": _path }))
-                    }
-                    #[cfg(target_arch = "wasm32")]
-                    Err(bad(cmd, "paths are not available on the web; omit `path` to get the file as `text`"))
+                Some(path) => {
+                    super::file::store_file(cmd, path, text.as_bytes())?;
+                    Ok(json!({ "name": name, "path": path }))
                 }
             }
         }

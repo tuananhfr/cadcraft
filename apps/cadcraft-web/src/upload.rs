@@ -1,7 +1,7 @@
 //! Browser uploads: File > Open… on the web, through web-sys only. There is no file system to pick
 //! a path from, so the picker is a hidden `<input type="file">`; the chosen file (or one dropped on
-//! the page) is read in the background and handed to the app on its next frame, which opens it
-//! with OPEN `{data, name}` ([`CadApp::open_bytes`]).
+//! the page) is read in the background. Workspace files carry their purpose through that read
+//! so they cannot be mistaken for drawings.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -10,13 +10,12 @@ use cadcraft_ui_egui::CadApp;
 use wasm_bindgen::JsCast as _;
 use web_sys::js_sys;
 
+use crate::upload_route::{self, Purpose};
+
 /// The hidden file input (one at a time; a cancelled pick leaves it until the next one).
 const INPUT_ID: &str = "cadcraft_open_input";
-/// What the picker offers: the formats OPEN reads.
-const ACCEPT: &str = ".dxf,.dwg";
-
-/// A file read in the browser (name, contents), or why it couldn't be read.
-type Upload = Result<(String, Vec<u8>), String>;
+/// The purpose must survive asynchronous reads even when another picker opens in the meantime.
+type Upload = Result<(Purpose, String, Vec<u8>), String>;
 
 /// Files read in the background, waiting for the app's next frame.
 #[derive(Clone)]
@@ -33,12 +32,16 @@ impl Inbox {
     /// Show the browser's file picker and return at once. A chosen file arrives through
     /// [`Self::drain`]; cancelling the picker does nothing.
     pub fn pick(&self) {
-        if let Err(e) = self.show_picker() {
+        self.pick_for(Purpose::Drawing);
+    }
+
+    pub fn pick_for(&self, purpose: Purpose) {
+        if let Err(e) = self.show_picker(purpose) {
             self.push(Err(format!("Open: the browser's file picker is not available ({e})")));
         }
     }
 
-    fn show_picker(&self) -> Result<(), String> {
+    fn show_picker(&self, purpose: Purpose) -> Result<(), String> {
         let document = web_sys::window().and_then(|w| w.document()).ok_or("no browser document")?;
         let body = document.body().ok_or("the page has no body")?;
         if let Some(old) = document.get_element_by_id(INPUT_ID) {
@@ -50,14 +53,14 @@ impl Inbox {
             .dyn_into::<web_sys::HtmlInputElement>()
             .map_err(|_| "could not create a file input".to_string())?;
         input.set_type("file");
-        input.set_accept(ACCEPT);
+        input.set_accept(upload_route::accept(purpose));
         input.set_id(INPUT_ID);
         input.set_attribute("style", "display:none").map_err(js_error)?;
         let (inbox, chosen) = (self.clone(), input.clone());
         // Called once, when a file was chosen (browsers don't fire `change` on cancel).
         let on_change = wasm_bindgen::closure::Closure::once_into_js(move || {
             if let Some(file) = chosen.files().and_then(|f| f.get(0)) {
-                inbox.read(file);
+                inbox.read(purpose, file);
             }
             chosen.remove();
         });
@@ -71,25 +74,25 @@ impl Inbox {
     pub fn take_dropped(&self, ctx: &egui::Context) {
         for f in ctx.input(|i| i.raw.dropped_files.clone()) {
             if let Some(file) = f.web_file() {
-                self.read(file.clone());
+                self.read(Purpose::Drawing, file.clone());
             }
         }
     }
 
     /// Read `file` in the background; it arrives through [`Self::drain`]. A file too large to
     /// open is refused before it is read.
-    fn read(&self, file: web_sys::File) {
+    fn read(&self, purpose: Purpose, file: web_sys::File) {
         let name = file.name();
         // `File.size` is a whole number of bytes; anything else counts as too large.
         let size = file.size();
         let len = if size.is_finite() && size >= 0.0 { size as u64 } else { u64::MAX };
-        if let Some(e) = CadApp::open_size_error(&name, len) {
+        if let Some(e) = upload_route::size_error(purpose, &name, len) {
             return self.push(Err(e));
         }
         let inbox = self.clone();
         wasm_bindgen_futures::spawn_local(async move {
             let r = match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
-                Ok(buf) => Ok((name, js_sys::Uint8Array::new(&buf).to_vec())),
+                Ok(buf) => Ok((purpose, name, js_sys::Uint8Array::new(&buf).to_vec())),
                 Err(e) => Err(format!("Open: could not read {name}: {}", js_error(e))),
             };
             inbox.push(r);
@@ -101,7 +104,7 @@ impl Inbox {
     pub fn receive(&self, name: String, bytes: Vec<u8>) {
         match CadApp::open_size_error(&name, bytes.len() as u64) {
             Some(e) => self.push(Err(e)),
-            None => self.push(Ok((name, bytes))),
+            None => self.push(Ok((Purpose::Drawing, name, bytes))),
         }
     }
 
@@ -121,7 +124,12 @@ impl Inbox {
     pub fn drain(&self, app: &mut CadApp) {
         for upload in self.files.take() {
             match upload {
-                Ok((name, bytes)) => app.open_bytes(&name, &bytes),
+                Ok((Purpose::Drawing, name, bytes)) => app.open_bytes(&name, &bytes),
+                Ok((Purpose::Workspace, name, bytes)) => {
+                    if let Err(e) = upload_route::route(Purpose::Workspace, &name, &bytes).and_then(|(id, params)| app.run(&id, params)) {
+                        app.open_failed(e);
+                    }
+                }
                 Err(e) => app.open_failed(e),
             }
         }

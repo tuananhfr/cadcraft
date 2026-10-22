@@ -214,6 +214,16 @@ mod web {
                             picker.pick();
                             None
                         }));
+                        let picker = inbox.clone();
+                        app.services.pick_open_kind = Some(Box::new(move |kind| {
+                            let purpose = if kind.extensions == cadcraft_ui_egui::wsprofile::WORKSPACE_FILE.extensions {
+                                crate::upload_route::Purpose::Workspace
+                            } else {
+                                crate::upload_route::Purpose::Drawing
+                            };
+                            picker.pick_for(purpose);
+                            None
+                        }));
                         let host = app_bridge.map(|bridge| {
                             bridge.listen(inbox.clone());
                             bridge.post_ready();
@@ -253,6 +263,8 @@ mod fonts;
 mod profile_store;
 #[cfg(target_arch = "wasm32")]
 mod upload;
+#[cfg(any(target_arch = "wasm32", test))]
+mod upload_route;
 
 #[cfg(target_arch = "wasm32")]
 fn main() {

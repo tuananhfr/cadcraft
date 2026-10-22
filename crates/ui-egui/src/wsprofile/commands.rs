@@ -195,14 +195,8 @@ fn export(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     Ok(json!({"text": text, "path": path}))
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn write_file(path: &str, text: &str) -> Result<(), String> {
-    std::fs::write(path, text).map_err(|error| format!("Could not write {path}: {error}"))
-}
-
-#[cfg(target_arch = "wasm32")]
-fn write_file(_path: &str, _text: &str) -> Result<(), String> {
-    Err("Writing a workspace file is not available in the browser; use the exported text".into())
+    cadcraft_engine::cmd::file::store_file("ui.workspace.export", path, text.as_bytes()).map_err(|error| error.to_string())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
