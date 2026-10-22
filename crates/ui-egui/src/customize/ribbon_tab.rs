@@ -2,7 +2,7 @@
 
 use serde_json::json;
 
-use super::{State, commands, edit, row, run};
+use super::{State, commands, edit, list, row, run};
 use crate::CadApp;
 use crate::wsprofile::schema::{RibbonGroup, RibbonMode};
 
@@ -32,25 +32,21 @@ pub(super) fn show(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State) {
     if !groups.iter().any(|group| group.id == state.group) {
         state.group = groups.first().map(|group| group.id.clone()).unwrap_or_default();
     }
+    let height = (!state.scroll_ribbon_page).then_some(state.list_height);
     let columns = if ui.available_width() >= 960.0 { 4.0 } else { 2.0 };
     let width = (ui.available_width() - ui.spacing().item_spacing.x * (columns - 1.0)) / columns;
     ui.with_layout(egui::Layout::left_to_right(egui::Align::Min).with_main_wrap(true), |ui| {
         ui.allocate_ui_with_layout(egui::vec2(width, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
             ui.label(crate::tl!("Ribbon tabs"));
-            egui::ScrollArea::vertical()
-                .id_salt("tabs")
-                .min_scrolled_height(state.list_height)
-                .max_height(state.list_height)
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    for tab in &tabs {
-                        if row(ui, tab.id == state.tab, crate::ribbon::render::tab_label(tab)) {
-                            state.tab = tab.id.clone();
-                            state.group.clear();
-                            state.ribbon_index = None;
-                        }
+            list(ui, "tabs", height, |ui| {
+                for tab in &tabs {
+                    if row(ui, tab.id == state.tab, crate::ribbon::render::tab_label(tab)) {
+                        state.tab = tab.id.clone();
+                        state.group.clear();
+                        state.ribbon_index = None;
                     }
-                });
+                }
+            });
             let response = edit(ui, &mut state.label, crate::tl!("Tab or group name"));
             if std::mem::take(&mut state.focus_label) {
                 response.request_focus();
@@ -87,29 +83,24 @@ pub(super) fn show(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State) {
         });
         ui.allocate_ui_with_layout(egui::vec2(width, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
             ui.label(crate::tl!("Ribbon groups"));
-            egui::ScrollArea::vertical()
-                .id_salt("groups")
-                .min_scrolled_height(state.list_height)
-                .max_height(state.list_height)
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    for group in &groups {
-                        let label = selected_tab.map_or(group.label.as_str(), |tab| crate::ribbon::render::group_label(tab, group));
-                        let (zone, dropped) = ui.dnd_drop_zone::<RibbonDrag, _>(egui::Frame::NONE, |ui| row(ui, group.id == state.group, label));
-                        if zone.inner {
-                            state.group = group.id.clone();
-                            state.ribbon_index = None;
-                        }
-                        if let Some(payload) = zone.response.dnd_hover_payload::<RibbonDrag>()
-                            && payload.tab == state.tab
-                        {
-                            marker(ui, zone.response.rect, true);
-                        }
-                        if let Some(payload) = dropped {
-                            drop_command(app, state, &payload, &group.id, group.commands.len());
-                        }
+            list(ui, "groups", height, |ui| {
+                for group in &groups {
+                    let label = selected_tab.map_or(group.label.as_str(), |tab| crate::ribbon::render::group_label(tab, group));
+                    let (zone, dropped) = ui.dnd_drop_zone::<RibbonDrag, _>(egui::Frame::NONE, |ui| row(ui, group.id == state.group, label));
+                    if zone.inner {
+                        state.group = group.id.clone();
+                        state.ribbon_index = None;
                     }
-                });
+                    if let Some(payload) = zone.response.dnd_hover_payload::<RibbonDrag>()
+                        && payload.tab == state.tab
+                    {
+                        marker(ui, zone.response.rect, true);
+                    }
+                    if let Some(payload) = dropped {
+                        drop_command(app, state, &payload, &group.id, group.commands.len());
+                    }
+                }
+            });
             ui.horizontal_wrapped(|ui| {
                 if ui.button(crate::tl!("Add Group")).clicked() {
                     let label = if state.label.trim().is_empty() { crate::tl!("New Group").to_string() } else { state.label.clone() };
@@ -197,12 +188,9 @@ fn command_rows(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State, group: &
     ui.label(crate::tl!("Ribbon commands"));
     let focus = state.ribbon_focus.take();
     let mut movement = None;
-    let scroll = egui::ScrollArea::vertical()
-        .id_salt(("ribbon_commands", &state.tab, &state.group))
-        .min_scrolled_height(state.list_height)
-        .max_height(state.list_height)
-        .auto_shrink([false, false]);
-    scroll.show(ui, |ui| {
+    let height = (!state.scroll_ribbon_page).then_some(state.list_height);
+    let id_salt = ("ribbon_commands", state.tab.clone(), state.group.clone());
+    list(ui, id_salt, height, |ui| {
         for (index, command) in group.commands.iter().enumerate() {
             let payload = RibbonDrag { tab: state.tab.clone(), group: state.group.clone(), index };
             let id = ui.make_persistent_id(("ribbon_command", index));

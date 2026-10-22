@@ -480,11 +480,28 @@ fn customize_short_screen_keeps_close_and_scrolled_commands_reachable() {
     let mut h = harness(app);
     h.set_size(vec2(683.0, 384.0));
     h.run_steps(5);
-    for id in commands(h.state(), "draw") {
-        on_command(&h, &id, |node| node.scroll_to_me());
+    let before = h.state().ws.user.layout.clone();
+    let ids = commands(h.state(), "draw");
+    for id in ids.iter().chain(ids.iter().rev()) {
+        on_command(&h, id, |node| node.scroll_to_me());
         h.run_steps(5);
-        on_command(&h, &id, |node| assert!(h.ctx.content_rect().contains_rect(node.rect()), "{id}"));
+        on_command(&h, id, |node| {
+            assert!(h.ctx.content_rect().contains_rect(node.rect()), "{id}: {:?}", node.rect());
+            assert_row_visible(&h, node);
+        });
     }
+    let library: Vec<_> = h
+        .query_all_by_role(egui::accesskit::Role::Button)
+        .filter_map(|node| node.accesskit_node().label().filter(|label| label.ends_with(')')))
+        .collect();
+    assert!(library.len() >= 5);
+    for label in [library.first().unwrap(), library.last().unwrap(), library.first().unwrap()] {
+        h.get_by_role_and_label(egui::accesskit::Role::Button, label).scroll_to_me();
+        h.run_steps(5);
+        assert_row_visible(&h, &h.get_by_role_and_label(egui::accesskit::Role::Button, label));
+    }
+    assert_eq!(h.state().ws.user.layout, before);
+    assert!(!h.state().session.state().unwrap().is_dirty());
     assert!(h.ctx.content_rect().contains_rect(h.get_by_label("Close").rect()));
     h.get_by_label("Close").click();
     h.run_steps(3);

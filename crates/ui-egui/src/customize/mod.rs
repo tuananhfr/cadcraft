@@ -17,6 +17,7 @@ pub const DIALOG: &str = "customize_workspace";
 pub struct State {
     page: usize,
     list_height: f32,
+    scroll_ribbon_page: bool,
     aliases: alias_tab::State,
     tab: String,
     group: String,
@@ -86,6 +87,20 @@ fn row(ui: &mut egui::Ui, selected: bool, label: &str) -> bool {
     response.clicked()
 }
 
+fn list<R>(ui: &mut egui::Ui, id_salt: impl std::hash::Hash, height: Option<f32>, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    if let Some(height) = height {
+        egui::ScrollArea::vertical()
+            .id_salt(id_salt)
+            .min_scrolled_height(height)
+            .max_height(height)
+            .auto_shrink([false, false])
+            .show(ui, add_contents)
+            .inner
+    } else {
+        ui.push_id(id_salt, add_contents).inner
+    }
+}
+
 pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     let mut state = std::mem::take(&mut app.customize);
     let mut close = false;
@@ -124,8 +139,9 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
             ui.separator();
             let row = ui.spacing().interact_size.y + ui.spacing().item_spacing.y;
             let body = (ui.available_height() - row - 16.0 - if state.error.is_some() { row * 2.0 } else { 0.0 }).max(1.0);
-            // Short screens scroll the page; each inner list keeps at least five complete rows.
             state.list_height = (body - row * 6.0).max(row * 5.0);
+            // An inner list consumes scroll-to requests before the page can reveal it on short screens.
+            state.scroll_ribbon_page = body < row * 11.0;
             egui::ScrollArea::vertical()
                 .id_salt("customize_page")
                 .auto_shrink([false, false])
@@ -189,18 +205,14 @@ fn commands(app: &CadApp, ui: &mut egui::Ui, state: &mut State) {
     {
         state.command = (*id).into();
     }
-    egui::ScrollArea::vertical()
-        .id_salt("command_list")
-        .min_scrolled_height(state.list_height)
-        .max_height(state.list_height)
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            for &(id, label) in &state.commands {
-                ui.push_id(id, |ui| {
-                    if row(ui, state.command == id, &format!("{} ({id})", crate::i18n::t(label))) {
-                        state.command = id.into();
-                    }
-                });
-            }
-        });
+    let height = (!(state.page == 0 && state.scroll_ribbon_page)).then_some(state.list_height);
+    list(ui, "command_list", height, |ui| {
+        for &(id, label) in &state.commands {
+            ui.push_id(id, |ui| {
+                if row(ui, state.command == id, &format!("{} ({id})", crate::i18n::t(label))) {
+                    state.command = id.into();
+                }
+            });
+        }
+    });
 }

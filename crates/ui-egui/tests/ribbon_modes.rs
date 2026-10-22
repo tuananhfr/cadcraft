@@ -98,9 +98,20 @@ fn ribbon_mode_command_persists_across_restart() {
     let _guard = test_lock();
     let mut app = attached(MemoryStore::default());
     app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
-    assert!(cadcraft_ui_egui::menus::UI_COMMANDS.iter().any(|(id, label, path, shortcut)| {
-        *id == "ui.ribbon.mode" && *label == "Ribbon Display Mode" && *path == ["View", "Ribbon", "Display Mode"].as_slice() && shortcut.is_none()
-    }));
+    for (command, expected_label, expected_path) in [
+        ("ui.ribbon.mode", "Ribbon Display Mode", &[][..]),
+        ("ui.ribbon.mode.expanded", "Expanded", &["View", "Ribbon", "Display Mode", "Expanded"][..]),
+        ("ui.ribbon.mode.compact", "Compact", &["View", "Ribbon", "Display Mode", "Compact"][..]),
+        ("ui.ribbon.mode.tabs_only", "Tabs Only", &["View", "Ribbon", "Display Mode", "Tabs Only"][..]),
+        ("ui.ribbon.mode.hidden", "Hidden", &["View", "Ribbon", "Display Mode", "Hidden"][..]),
+    ] {
+        let rows: Vec<_> = cadcraft_ui_egui::menus::UI_COMMANDS.iter().filter(|(id, _, _, _)| *id == command).collect();
+        assert_eq!(rows.len(), 1, "{command}");
+        let (_, label, path, shortcut) = rows[0];
+        assert_eq!(*label, expected_label, "{command}");
+        assert_eq!(*path, expected_path, "{command}");
+        assert!(shortcut.is_none(), "{command}");
+    }
     let before = app.ws.user.layout.clone();
     let steps = app.ws.history.undo_len();
     assert_eq!(app.run("ui.ribbon.mode", json!({"mode": "compact"})).unwrap()["changed"], true);

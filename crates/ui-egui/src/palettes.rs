@@ -1133,11 +1133,13 @@ mod header_tests {
                     let mut h = Harness::builder().with_size(vec2(width, 400.0)).build_ui_state(
                         |ui, app: &mut CadApp| {
                             app.logic(ui.ctx());
-                            properties_header(app, ui);
+                            // Exercise translated geometry even without optional Vietnamese fonts.
+                            crate::i18n::with_language(app.ui.interface_language.code(), || properties_header(app, ui));
                         },
                         app,
                     );
                     h.run_steps(5);
+                    assert_eq!(h.state().ui.interface_language.code(), language);
                     let all = h.get_by_role_and_label(Role::Button, crate::i18n::tr(language, "All")).rect();
                     let my = h.get_by_role_and_label(Role::Button, crate::i18n::tr(language, "My")).rect();
                     let selection = h.get_by_role(Role::ComboBox).rect();
