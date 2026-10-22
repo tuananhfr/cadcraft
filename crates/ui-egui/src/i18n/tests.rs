@@ -125,6 +125,9 @@ const VI_DONE: &[Section] = &[
     Section::Menus("Window"),
     Section::Menus("Help"),
     Section::Menus(""),
+    Section::UiCommands,
+    Section::ToolSets,
+    Section::Snap,
 ];
 
 const MARKED_UI_SOURCES: &[(&str, &str)] = &[

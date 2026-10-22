@@ -596,3 +596,35 @@ menu	Help	Trợ giúp
 	Write Block	Ghi khối ra tệp
 	Xref and Block In-place Editing	Sửa tham chiếu ngoài và khối tại chỗ
 
+# Batch 9c: UI commands, tool sets and object snaps.
+	Apparent Intersection	Giao điểm biểu kiến
+	Auto Constrain	Tự động ràng buộc
+	Boolean	Phép toán Boolean
+	Boundary	Đường biên
+	Box	Hình hộp
+	Cone	Hình nón
+	Cylinder	Hình trụ
+	Define Attributes	Định nghĩa thuộc tính khối
+	Endpoint	Điểm cuối
+	Extension	Đường kéo dài
+	Extrude	Đùn
+	Find and Replace	Tìm và thay thế
+	Geometric Center	Tâm hình học
+	Gradient	Tô chuyển màu
+	Hatch	Tô mặt cắt
+	Insert Block	Chèn khối
+	Insertion	Điểm chèn
+	Intersection	Giao điểm
+	Loft	Tạo khối qua tiết diện
+	Midpoint	Trung điểm
+	Nearest	Gần nhất
+	Node	Điểm nút
+	Primitives	Hình cơ bản
+	Pyramid	Hình chóp
+	Quadrant	Điểm góc phần tư
+	Revolve	Tạo khối tròn xoay
+	Solid	Khối đặc
+	Sphere	Hình cầu
+	Sweep	Quét theo đường dẫn
+	Table	Bảng
+	Torus	Hình xuyến
