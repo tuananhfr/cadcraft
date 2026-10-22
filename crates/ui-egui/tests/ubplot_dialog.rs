@@ -12,7 +12,7 @@ use cadcraft_geom::{PolyVertex, Vec2, Vec3};
 use cadcraft_ui_egui::{CadApp, Services};
 use egui::{Event, Modifiers, PointerButton, vec2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::json;
 
 fn test_lock() -> MutexGuard<'static, ()> {
