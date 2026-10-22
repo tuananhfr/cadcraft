@@ -94,7 +94,7 @@ fn visible(d: &Drawing, e: &Entity) -> bool {
         && (e.common.layer == "0" || d.layer(&e.common.layer).is_none_or(cadcraft_doc::Layer::visible))
 }
 
-fn rectangle(e: &Entity) -> Option<[Vec2; 4]> {
+pub(super) fn rectangle(e: &Entity) -> Option<[Vec2; 4]> {
     match &e.kind {
         EntityKind::LwPolyline(p) if p.closed && matches!(p.vertices.len(), 4 | 5) => {
             if p.vertices.iter().any(|v| v.bulge != 0.0) {
