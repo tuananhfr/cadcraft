@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::wsprofile::schema::Density;
 
+/// Control sizes and spacing of one interface density, in points.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Metrics {
     pub interact_height: f32,
@@ -55,12 +56,16 @@ impl Density {
     }
 }
 
+const DENSITY_ID: &str = "cc_density";
+
+/// The density [`apply_density`] last installed in `ctx`.
 pub fn density(ctx: &egui::Context) -> Density {
-    ctx.data(|data| data.get_temp(egui::Id::new("cc_density"))).unwrap_or_default()
+    ctx.data(|data| data.get_temp(egui::Id::new(DENSITY_ID))).unwrap_or_default()
 }
 
+/// Installs `density`'s spacing in the styles of both themes.
 pub fn apply_density(ctx: &egui::Context, density: Density) {
-    let id = egui::Id::new("cc_density");
+    let id = egui::Id::new(DENSITY_ID);
     if ctx.data(|data| data.get_temp::<Density>(id)) == Some(density) {
         return;
     }
@@ -73,7 +78,7 @@ pub fn apply_density(ctx: &egui::Context, density: Density) {
     });
 }
 
-/// WCAG 2.x relative luminance for opaque sRGB colours.
+/// WCAG 2.x contrast ratio (1 to 21) of two opaque sRGB colours.
 pub fn contrast_ratio(a: Color32, b: Color32) -> f32 {
     let luminance = |color: Color32| {
         let linear = |channel: u8| {
@@ -769,7 +774,7 @@ fn visuals(theme: Theme) -> Visuals {
     v.widgets.active.bg_fill = t.accent;
     v.widgets.active.weak_bg_fill = t.accent;
     v.selection.bg_fill = t.select_bg;
-    v.selection.stroke.color = t.accent;
+    // egui's default fades the text with alpha, which falls below WCAG AA on the chrome.
     v.weak_text_color = Some(t.text_dim);
     v.window_stroke = egui::Stroke::new(1.0, t.border);
     let shadow = Color32::from_black_alpha(if theme == Theme::Dark { 90 } else { 40 });

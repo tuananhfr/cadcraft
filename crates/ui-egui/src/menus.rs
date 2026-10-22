@@ -724,7 +724,9 @@ pub fn menu_bar(app: &mut CadApp, ui: &mut egui::Ui) {
     let tree = tree(app);
     let collapsed = app.ws.effective.layout.ribbon.effective_mode() == RibbonMode::TabsOnly;
     let mut clicked = None;
-    egui::Panel::top("cc_menubar").exact_size(22.0).frame(egui::Frame::NONE.fill(t.chrome_dark).inner_margin(egui::Margin::symmetric(6, 0))).show(
+    // Menu names are buttons of the density's interact height; Normal keeps the original 22 pt bar.
+    let height = app.ws.effective.layout.density.metrics().interact_height + 2.0;
+    egui::Panel::top("cc_menubar").exact_size(height).frame(egui::Frame::NONE.fill(t.chrome_dark).inner_margin(egui::Margin::symmetric(6, 0))).show(
         ui,
         |ui| {
             // Zoom can leave less room than the menu names need.

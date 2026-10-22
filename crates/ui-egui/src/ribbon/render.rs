@@ -227,9 +227,10 @@ fn tab_strip(ui: &mut egui::Ui, app: &mut CadApp, tabs: &[usize]) -> Option<usiz
     let font = egui::TextStyle::Button.resolve(ui.style());
     let gap = ui.spacing().item_spacing.x;
     let padding = ui.spacing().button_padding.x * 2.0;
+    let comfortable = app.ws.effective.layout.density == Density::Comfortable;
     let width = |label: &str| {
         let width = ui.painter().layout_no_wrap(label.to_string(), font.clone(), Tokens::get().text).size().x + padding;
-        if app.ws.effective.layout.density == Density::Comfortable { width.max(32.0) } else { width }
+        if comfortable { width.max(32.0) } else { width }
     };
     let widths: Vec<_> = tabs.iter().filter_map(|index| visible.get(*index).map(|tab| (*index, width(tab_label(tab))))).collect();
     let available = ui.available_width().max(0.0);
@@ -271,13 +272,11 @@ fn tab_strip(ui: &mut egui::Ui, app: &mut CadApp, tabs: &[usize]) -> Option<usiz
         ribbon_context_menu(ui, app, &response, Some(&tab.id));
     }
     if overflow {
-        egui::containers::menu::MenuButton::from_button(
-            egui::Button::new(crate::tl!("»")).min_size(if app.ws.effective.layout.density == Density::Comfortable {
-                vec2(32.0, metrics.tab_height)
-            } else {
-                egui::Vec2::ZERO
-            }),
-        )
+        egui::containers::menu::MenuButton::from_button(egui::Button::new(crate::tl!("»")).min_size(if comfortable {
+            vec2(32.0, metrics.tab_height)
+        } else {
+            egui::Vec2::ZERO
+        }))
         .ui(ui, |ui| {
             egui::ScrollArea::vertical().max_height(ui.ctx().content_rect().height() * 0.75).show(ui, |ui| {
                 for index in tabs.iter().filter(|index| !shown.contains(index)) {

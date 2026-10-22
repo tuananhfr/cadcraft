@@ -304,6 +304,7 @@ pub enum QuickAccessPosition {
     BelowRibbon,
 }
 
+/// Interface density: control sizes and spacing ([`Density::metrics`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Density {

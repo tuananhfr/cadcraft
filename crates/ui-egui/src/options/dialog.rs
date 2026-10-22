@@ -110,6 +110,14 @@ fn animations_label(a: AnimationPref) -> &'static str {
     }
 }
 
+fn density_label(d: Density) -> &'static str {
+    match d {
+        Density::Compact => crate::tl!("Compact"),
+        Density::Normal => crate::tl!("Normal"),
+        Density::Comfortable => crate::tl!("Comfortable"),
+    }
+}
+
 /// A colour button, its hex value and a Default button; a change goes into `changes` under `key`.
 fn color_row(ui: &mut egui::Ui, current: Option<Color32>, default: Color32, key: &str, changes: &mut Map<String, Value>) {
     ui.horizontal(|ui| {
@@ -152,11 +160,6 @@ fn display(app: &mut CadApp, ui: &mut egui::Ui, changes: &mut Map<String, Value>
 
         ui.label(crate::tl!("Interface density"));
         let mut density = app.ws.effective.layout.density;
-        let density_label = |density| match density {
-            Density::Compact => crate::tl!("Compact"),
-            Density::Normal => crate::tl!("Normal"),
-            Density::Comfortable => crate::tl!("Comfortable"),
-        };
         egui::ComboBox::from_id_salt("options_density").selected_text(density_label(density)).show_ui(ui, |ui| {
             for value in [Density::Compact, Density::Normal, Density::Comfortable] {
                 ui.selectable_value(&mut density, value, density_label(value));
