@@ -166,7 +166,7 @@ fn fifty_dock_cycles_keep_canvas_usable_h02_tc02() {
         let from = h.get_by_role_and_label(egui::accesskit::Role::Tab, "Properties").rect().center();
         let canvas = h.state().canvas.rect.unwrap();
         let x = if cycle % 2 == 0 { canvas.left() + 5.0 } else { canvas.right() - 5.0 };
-        drag(&mut h, from, pos2(x, canvas.center().y()));
+        drag(&mut h, from, pos2(x, canvas.center().y));
         assert!(!h.state().ui.docking.layout.floating.iter().any(|group| group.panels.contains(&Panel::Properties)));
         let path = canvas_parent(h.state().ui.docking.layout.root.as_ref().unwrap(), Vec::new());
         for x in [5.0, 1360.0] {
