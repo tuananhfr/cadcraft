@@ -133,7 +133,10 @@ fn advance(
 }
 
 fn verify(job: &PrintJob, manifest: &PublishManifest, renderer: &TimedRenderer, sheets: usize, files: usize) -> u64 {
-    assert_eq!(manifest.status, JobStatus::Done);
+    if manifest.status != JobStatus::Done {
+        let failed: Vec<_> = manifest.sheets.iter().filter(|sheet| sheet.status != SheetStatus::Done).take(3).collect();
+        panic!("job {:?}: issues {:?}; first unfinished sheets {failed:?}", manifest.status, manifest.issues);
+    }
     assert_eq!(manifest.sheets.len(), sheets);
     assert_eq!(manifest.files.len(), files);
     assert!(manifest.sheets.iter().all(|sheet| sheet.status == SheetStatus::Done && sheet.attempts == 1));
