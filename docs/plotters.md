@@ -66,11 +66,14 @@ files are not read; we haven't found a public specification of that format.
 
 Reading fixes hostile values:
 
-- Sizes are kept within 1–5080 mm, and width and height are swapped to portrait.
+- Sizes are kept within 1–15000 mm, and width and height are swapped to portrait.
 - Margins are kept within 0–1000 mm. Margins that leave no printable area are dropped.
 - Paper names are unique, and a device keeps at most 512 papers.
 - A missing or unknown `defaultPaper` becomes the first paper.
 - Files over 1 MB are refused.
+
+PDF publications accept at most 1000 pages and 512 MiB. Sheets with a side over 14400 points
+use `/UserUnit` and catalog version PDF 1.6; each side must be at most 15000 mm.
 
 In the file name, characters other than letters, digits, spaces and `-_()+,` become `_`.
 

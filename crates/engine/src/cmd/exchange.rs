@@ -27,7 +27,7 @@ pub const EXPORT_FORMATS: &[&str] = &["dxf", "dwg", "svg", "png", "pdf"];
 const PREVIEW_PX: u64 = 1200;
 const MAX_PREVIEW_PX: u64 = 4096;
 /// Most sheets one PUBLISH plots.
-const MAX_SHEETS: usize = 256;
+const MAX_SHEETS: usize = cadcraft_doc::MAX_PLOT_PAGES;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![

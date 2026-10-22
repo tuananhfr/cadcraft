@@ -669,7 +669,7 @@ fn run_pagesetup(s: &mut Session, p: &Value) -> Result<Value> {
         page.width_mm = ps.width_mm;
         page.height_mm = ps.height_mm;
     }
-    let mm = |k: &str| p.get(k).and_then(Value::as_f64).filter(|v| v.is_finite() && *v > 0.0 && *v <= 5080.0);
+    let mm = |k: &str| p.get(k).and_then(Value::as_f64).filter(|v| v.is_finite() && *v > 0.0 && *v <= cadcraft_doc::MAX_PAPER_MM);
     match (mm("width"), mm("height")) {
         (Some(w), Some(h)) => {
             page.paper = format!("User ({w:.2} x {h:.2} MM)");
@@ -677,7 +677,9 @@ fn run_pagesetup(s: &mut Session, p: &Value) -> Result<Value> {
             page.height_mm = w.max(h);
         }
         (None, None) if p.get("width").is_none() && p.get("height").is_none() => {}
-        _ => return Err(bad(cmd, "`width` and `height` (mm, 0-5080) are both required for a custom size")),
+        _ => {
+            return Err(bad(cmd, format!("`width` and `height` (mm, 0-{}) are both required for a custom size", cadcraft_doc::MAX_PAPER_MM)));
+        }
     }
     if let Some(l) = p.get("landscape").and_then(Value::as_bool) {
         page.landscape = l;
@@ -733,7 +735,7 @@ fn run_pagesetup(s: &mut Session, p: &Value) -> Result<Value> {
 // ---------- plotting ----------
 
 /// Most sheets in one plot (the PDF writer's own limit, `cadcraft_io::pdf::MAX_PAGES`).
-const MAX_PLOT_SHEETS: usize = 256;
+const MAX_PLOT_SHEETS: usize = cadcraft_doc::MAX_PLOT_PAGES;
 
 /// The sheets of a multi-sheet plot, as canonical names: the `layouts` list (`"Model"` or layout
 /// names, any case) or `"all"` (Model if it has objects, then every layout in tab order).
@@ -1046,6 +1048,20 @@ mod tests {
         ] {
             assert!(s.execute("viewport.set", &bad_p).is_err(), "{bad_p}");
         }
+    }
+
+    #[test]
+    fn pagesetup_accepts_up_to_15000_mm() {
+        let mut s = Session::new();
+        for (width, height) in [(914.0, 15000.0), (15000.0, 914.0)] {
+            let result = s.execute("pagesetup", &json!({"layout": "Layout1", "width": width, "height": height})).unwrap();
+            assert_eq!(result["page"]["widthMm"], 914.0);
+            assert_eq!(result["page"]["heightMm"], 15000.0);
+        }
+        for (width, height) in [(914.0, 15001.0), (15001.0, 914.0)] {
+            assert!(s.execute("pagesetup", &json!({"layout": "Layout1", "width": width, "height": height})).is_err());
+        }
+        assert_eq!(s.doc().unwrap().layout("Layout1").unwrap().page.height_mm, 15000.0);
     }
 
     #[test]

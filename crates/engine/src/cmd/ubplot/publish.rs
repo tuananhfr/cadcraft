@@ -13,7 +13,7 @@ use crate::sheetplan::{PlotScale, ScanMode, ScanRequest, Severity, Sheet, SheetP
 use crate::{Result, Session};
 
 const COMMAND: &str = "ubplot.publish";
-const MAX_PAGES: usize = 256;
+const MAX_PAGES: usize = cadcraft_doc::MAX_PLOT_PAGES;
 
 pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     crate::sheetplan::plan::validate_request_value(params).map_err(|error| bad(COMMAND, error))?;
@@ -45,7 +45,7 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     }
     plan.sheets.sort_by_key(|sheet| sheet.order);
     if output == "merged" && plan.sheets.len() > MAX_PAGES {
-        return Err(bad(COMMAND, format!("at most {MAX_PAGES} pages fit in merged output")));
+        return Err(bad(COMMAND, format!("at most {MAX_PAGES} pages fit in merged output; publish it in parts (split)")));
     }
     #[cfg(target_arch = "wasm32")]
     if output == "split" && plan.sheets.len() > 20 {

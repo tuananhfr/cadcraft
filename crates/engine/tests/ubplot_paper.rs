@@ -366,3 +366,39 @@ fn paper_name_roundtrips_and_legacy_plan_defaults() {
     let legacy: cadcraft_engine::sheetplan::SheetPlan = serde_json::from_value(legacy).unwrap();
     assert!(legacy.sheets[0].paper_name.is_none());
 }
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn merged_over_page_cap_errors_without_partial_file() {
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    struct TempDir(PathBuf);
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let directory = TempDir(std::env::temp_dir().join(format!("ubplot-page-cap-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed))));
+    std::fs::create_dir(&directory.0).unwrap();
+    let destination = directory.0.join("merged.pdf");
+    let mut s = session(1);
+    PLOT_OPTIONS.with(|options| *options.borrow_mut() = Value::Null);
+    let mut plan = scan_papers(&mut s, json!({"mode": "window", "windows": [[[0, 0], [100, 50]]], "paper": "A3", "scale": "fit"}));
+    let original = plan.sheets[0].clone();
+    plan.sheets = (1..=1001)
+        .map(|order| {
+            let mut sheet = original.clone();
+            sheet.order = order;
+            sheet.sheet_id = format!("S-{order:04}");
+            sheet
+        })
+        .collect();
+    let error = s.execute("ubplot.publish", &json!({"plan": plan, "output": "merged", "path": destination})).unwrap_err().to_string();
+    assert!(error.contains("1000") && error.contains("split"), "{error}");
+    assert!(!destination.exists());
+    assert!(std::fs::read_dir(&directory.0).unwrap().next().is_none(), "no partial publication should be left behind");
+    PLOT_OPTIONS.with(|options| assert!(options.borrow().is_null(), "reject before rendering or writing"));
+}
