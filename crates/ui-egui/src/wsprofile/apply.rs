@@ -236,19 +236,31 @@ pub(crate) fn remap_screen(app: &mut CadApp, ctx: &egui::Context) {
     if !app.ws.area_known || area == previous || !area.is_finite() || !area.is_positive() {
         return;
     }
-    for group in &mut app.ui.docking.layout.floating {
+    remap_docking(&mut app.ui.docking, previous, area);
+    if let Some(base) = &mut app.ws.synced {
+        // The baseline must use the new points too; remapping both trees preserves pending user edits
+        // without mistaking screen geometry or float rounding for a change to the stored fractions.
+        let mut workspace = base.workspace();
+        remap_docking(&mut workspace, previous, area);
+        base.docking = workspace.layout;
+        base.hidden = workspace.hidden;
+    }
+}
+
+fn remap_docking(workspace: &mut Workspace, previous: egui::Rect, area: egui::Rect) {
+    for group in &mut workspace.layout.floating {
         group.rect = floating_rect(to_ratio(rect_points(group.rect), previous), area);
     }
-    for (_, location) in &mut app.ui.docking.hidden {
+    for (_, location) in &mut workspace.hidden {
         if let Some(rect) = &mut location.floating {
             *rect = floating_rect(to_ratio(rect_points(*rect), previous), area);
         }
     }
-    // Point sizes from a wide monitor would squeeze nested canvas splits past the clamp; keeping the
-    // stored tree's proportions also lets the old sizes return with the old screen.
-    scale_sizes(&mut app.ui.docking, previous, true);
-    scale_sizes(&mut app.ui.docking, area, false);
-    crate::docking::reclamp(app, area);
+    // Proportional sizes keep nested canvas splits usable after a shrink and recover on returning.
+    scale_sizes(workspace, previous, true);
+    scale_sizes(workspace, area, false);
+    // Command dispatch would observe new points against the old area before the screen tick updates it.
+    crate::dock_clamp::clamp_layout(&mut workspace.layout, area);
 }
 
 /// Panels whose `panels[]` entry outranks the user's dock tree: locked by policy or placed by

@@ -6,6 +6,7 @@ use cadcraft_engine::Session;
 use cadcraft_ui_egui::dock_clamp::{MAX_FLOAT_SHARE, MIN_RATIO};
 use cadcraft_ui_egui::docking::{Panel, Workspace};
 use cadcraft_ui_egui::toolbars;
+use cadcraft_ui_egui::wsprofile::SaveStatus;
 use cadcraft_ui_egui::wsprofile::schema::Dock;
 use cadcraft_ui_egui::wsprofile::store::MemoryStore;
 use cadcraft_ui_egui::{CadApp, Services};
@@ -636,4 +637,79 @@ fn ppp_change_with_shrink_keeps_layout_recoverable_h13() {
     close(stored_properties(&h), stored, 0.001, "the device layer keeps the floating proportions after returning");
     assert_eq!(h.state().ws.user.layout, user, "screen geometry stays on the device layer");
     assert_eq!(h.state().session.state().unwrap().is_dirty(), dirty);
+}
+
+#[test]
+fn saved_workspace_remaps_without_edits_or_saves() {
+    let _guard = test_lock();
+    let app = attached(MemoryStore::default());
+    let mut h = harness(app, 1920.0, 1080.0, 1.0);
+    h.state_mut().run("ui.dock", json!({"operation": "float", "panel": "properties", "rect": [960.0, 378.0, 420.0, 360.0]})).unwrap();
+    h.run_steps(4);
+    for scale in [1.0, 1.25, 1.0, 1.5, 1.0] {
+        // Choosing zoom is a device edit; only the subsequent screen remap must leave this save intact.
+        set(h.state_mut(), "/ui_scale", json!(scale));
+        h.state_mut().commit_workspace_now().unwrap();
+        let user = h.state().ws.user.clone();
+        let geometry = h.state().ws.device.layout_patch.clone();
+        let history = (h.state().ws.history.undo_len(), h.state().ws.history.redo_len());
+        let revision = h.state().ws.known_revision;
+        let store = h.state().ws.store.as_deref().unwrap();
+        let current = store.read_current();
+        let snapshots = store.snapshots();
+        let unchanged = |h: &Harness<'_, CadApp>| {
+            let app = h.state();
+            assert_eq!(app.ws.status, SaveStatus::SavedLocally);
+            assert!(!app.ws.autosave.pending());
+            assert!(!app.ws.needs_flush());
+            assert_eq!(app.ws.user, user);
+            assert_eq!(app.ws.device.layout_patch, geometry);
+            assert_eq!((app.ws.history.undo_len(), app.ws.history.redo_len()), history);
+            assert_eq!(app.ws.known_revision, revision);
+            let store = app.ws.store.as_deref().unwrap();
+            assert_eq!(store.read_current(), current);
+            assert_eq!(store.snapshots(), snapshots);
+        };
+        for _ in 0..8 {
+            h.run_steps(1);
+            unchanged(&h);
+        }
+        assert!((h.ctx.zoom_factor() - scale).abs() < 0.01);
+        for _ in 0..3 {
+            for (width, height, ppp) in [(1600.0, 900.0, 1.5), (1366.0, 768.0, 1.0), (1920.0, 1080.0, 1.0)] {
+                move_to_screen(&mut h, width, height, ppp);
+                unchanged(&h);
+            }
+        }
+        h.run_steps(60);
+        unchanged(&h);
+    }
+}
+
+#[test]
+fn screen_remap_preserves_pending_layout_edits() {
+    let _guard = test_lock();
+    let app = attached(MemoryStore::default());
+    let mut h = harness(app, 1920.0, 1080.0, 1.0);
+    h.state_mut().run("ui.dock", json!({"operation": "float", "panel": "properties", "rect": [960.0, 378.0, 420.0, 360.0]})).unwrap();
+    h.run_steps(4);
+    h.state_mut().commit_workspace_now().unwrap();
+    let history = h.state().ws.history.undo_len();
+    let stored = stored_properties(&h);
+    h.state_mut().ui.show_status_bar = false;
+    let group = h.state_mut().ui.docking.layout.floating.iter_mut().find(|group| group.panels.contains(&Panel::Properties)).unwrap();
+    group.rect[0] -= 192.0;
+    h.set_size(vec2(1366.0, 768.0));
+    h.run_steps(3);
+    assert_eq!(h.state().ws.status, SaveStatus::Unsaved);
+    assert!(h.state().ws.autosave.pending());
+    assert_eq!(h.state().ws.history.undo_len(), history + 1);
+    assert!(!h.state().ws.effective.layout.status_bar.visible);
+    let mut moved = stored;
+    moved[0] -= 0.1;
+    close(stored_properties(&h), moved, 0.000001, "the pending move is observed in the new area");
+    h.state_mut().run("ui.layout.undo", json!({})).unwrap();
+    h.run_steps(3);
+    assert!(h.state().ws.effective.layout.status_bar.visible);
+    close(stored_properties(&h), stored, 0.000001, "undo restores the saved layout");
 }
