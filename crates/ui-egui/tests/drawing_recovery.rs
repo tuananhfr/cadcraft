@@ -79,7 +79,7 @@ fn unsaved_drawings_reported_until_saved() {
     app.run("line", serde_json::json!({ "points": [[0, 0], [10, 10]] })).unwrap();
     assert!(app.has_unsaved_drawings());
 
-    app.run("save", serde_json::json!({ "path": path })).unwrap();
+    app.run("saveas", serde_json::json!({ "path": path })).unwrap();
     assert!(!app.has_unsaved_drawings());
     assert!(path.exists());
     std::fs::remove_dir_all(&dir).unwrap();
