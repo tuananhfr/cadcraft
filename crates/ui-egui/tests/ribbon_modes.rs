@@ -210,7 +210,7 @@ fn ribbon_buttons<'h>(h: &'h Harness<'_, CadApp>, label: &'h str) -> impl Iterat
         // Docked palettes can overlap the popup and share labels; use ancestry rather than screen position.
         let mut ancestor = Some(*node);
         while let Some(node) = ancestor {
-            if node.accesskit_node().id() == Id::new("cc_ribbon_flyout").accesskit_id() {
+            if node.accesskit_node().locate().0 == Id::new("cc_ribbon_flyout").accesskit_id() {
                 return true;
             }
             ancestor = node.parent();
