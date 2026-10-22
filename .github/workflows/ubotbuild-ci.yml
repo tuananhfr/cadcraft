@@ -176,7 +176,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   perf:
-    # On demand only: release builds of two test binaries; shared runners make the numbers indicative.
+    # On demand only: release builds of the ignored perf tests; shared runners make the numbers indicative.
     name: Workspace SLO
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.perf }}
     runs-on: ubuntu-24.04
@@ -203,6 +203,11 @@ jobs:
             cargo test --release -p cadcraft-ui-egui --test ws_perf -- --ignored --nocapture --test-threads=1
             cargo test --release -p cadcraft --bin cadcraft commit_p95 -- --ignored --nocapture
           } 2>&1 | tee perf.log
+      - name: ubplot 1,000-sheet benchmark
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          cargo test --release -p cadcraft-engine --test ubplot_bench -- --ignored --nocapture --test-threads=1 2>&1 | tee bench.log
       - name: Summary
         if: ${{ !cancelled() }}
-        run: grep -E 'P95=|proxies:|FAILED|panicked' perf.log >> "$GITHUB_STEP_SUMMARY" || true
+        run: grep -hE 'P95=|proxies:|^bench|name=|FAILED|panicked' perf.log bench.log >> "$GITHUB_STEP_SUMMARY" || true
