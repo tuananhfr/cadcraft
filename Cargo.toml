@@ -32,6 +32,8 @@ thiserror = "2"
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 log = "0.4"
+# SHA-256 for stable plot job ids (MIT OR Apache-2.0).
+sha2 = { version = "0.10", default-features = false }
 rayon = "1"
 
 # rendering / formats
