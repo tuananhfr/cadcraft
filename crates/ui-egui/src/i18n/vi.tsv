@@ -2063,3 +2063,4 @@ ribbon	Fonts	Phông chữ
 	Load unreviewed LISP file {name} (sha256 {sha})?	Tải tệp LISP chưa được duyệt {name} (sha256 {sha})?
 	Always	Luôn luôn
 	{name} was not loaded	Chưa tải tệp {name}
+	Template changes last for this visit	Các thay đổi mẫu bản vẽ chỉ được giữ trong phiên truy cập này

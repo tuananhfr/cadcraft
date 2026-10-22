@@ -2062,3 +2062,4 @@ ribbon	Plot	Друк креслення
 	Always	Завжди
 	{name} was not loaded	Файл {name} не завантажено
 	Enter name of LISP file to load	Введіть ім’я файлу LISP для завантаження
+	Template changes last for this visit	Зміни шаблонів діють лише протягом цього відвідування
