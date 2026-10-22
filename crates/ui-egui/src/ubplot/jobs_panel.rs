@@ -34,6 +34,7 @@ fn command(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     let action = params.get("action").and_then(Value::as_str).unwrap_or("open");
     if action == "open" {
         app.job_pump.open = true;
+        app.job_pump.focus_requested = true;
         return Ok(Value::Null);
     }
     let id = params.get("jobId").and_then(Value::as_str).ok_or_else(|| crate::tl!("Print job id is required").to_string())?;
@@ -80,13 +81,23 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context) {
     }
     let mut open = true;
     let mut action = None;
+    let mut focus = std::mem::take(&mut app.job_pump.focus_requested);
+    let window_id = egui::Id::new("ubplot_jobs_panel");
+    if focus {
+        // A keyboard focus request must reveal actions in a collapsed or covered window.
+        let mut collapsed = egui::collapsing_header::CollapsingState::load_with_default_open(ctx, window_id.with("collapsing"), true);
+        collapsed.set_open(true);
+        collapsed.store(ctx);
+        ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, window_id));
+    }
     egui::Window::new(crate::tl!("Plot Jobs"))
-        .id(egui::Id::new("ubplot_jobs_panel"))
+        .id(window_id)
         .open(&mut open)
         .default_width(360.0)
-        .default_pos(egui::pos2((ctx.content_rect().right() - 400.0).max(16.0), 100.0))
+        .default_pos(egui::pos2(ctx.content_rect().left() + 16.0, 100.0))
         .max_height((ctx.content_rect().height() - 160.0).max(120.0))
         .show(ctx, |ui| {
+            ui.label(crate::tl!("Type UBPLOT.JOBS to focus job actions; use Tab and Enter"));
             if !app.job_pump.available() {
                 ui.label(crate::tl!("Background printing is not available in this build"));
             }
@@ -97,7 +108,7 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context) {
                 for (id, manifest) in &app.job_pump.manifests {
                     ui.push_id(id, |ui| {
                         ui.label(crate::tf!("Print job {jobId}", jobId = id));
-                        ui.label(super::worker::status_label(manifest.status));
+                        ui.label(super::worker::status_label(manifest.status, app.job_pump.interrupted.contains(id)));
                         let progress =
                             app.job_pump.progress.as_ref().filter(|(active, _)| active == id).map(|(_, progress)| progress.clone()).unwrap_or_else(
                                 || Progress {
@@ -121,18 +132,20 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context) {
                         if app.job_pump.interrupted.contains(id) {
                             ui.colored_label(crate::theme::Tokens::get().warn, crate::tf!("Print job {jobId} was interrupted", jobId = id));
                             ui.horizontal(|ui| {
-                                if ui.button(crate::tl!("Resume")).clicked() {
+                                if job_button(ui, crate::tl!("Resume"), &mut focus).clicked() {
                                     action = Some(("ui.ubplot.jobs", json!({"action": "resume", "jobId": id})));
                                 }
-                                if ui.button(crate::tl!("Discard")).clicked() {
+                                if job_button(ui, crate::tl!("Discard"), &mut focus).clicked() {
                                     action = Some(("ui.ubplot.jobs", json!({"action": "discard", "jobId": id})));
                                 }
                             });
                         } else if app.job_pump.owns(id) || matches!(manifest.status, JobStatus::Queued | JobStatus::Running) {
-                            if ui.button(crate::tl!("Cancel")).clicked() {
+                            if job_button(ui, crate::tl!("Cancel"), &mut focus).clicked() {
                                 action = Some(("ubplot.jobs", json!({"action": "cancel", "jobId": id})));
                             }
-                        } else if matches!(manifest.status, JobStatus::Cancelled | JobStatus::Failed) && ui.button(crate::tl!("Resume")).clicked() {
+                        } else if matches!(manifest.status, JobStatus::Cancelled | JobStatus::Failed)
+                            && job_button(ui, crate::tl!("Resume"), &mut focus).clicked()
+                        {
                             action = Some(("ui.ubplot.jobs", json!({"action": "resume", "jobId": id})));
                         }
                         for file in &manifest.files {
@@ -178,4 +191,13 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context) {
         }
         ctx.request_repaint();
     }
+}
+
+fn job_button(ui: &mut egui::Ui, label: &str, focus: &mut bool) -> egui::Response {
+    let response = ui.button(label);
+    if std::mem::take(focus) {
+        response.request_focus();
+        response.scroll_to_me(Some(egui::Align::Center));
+    }
+    response
 }

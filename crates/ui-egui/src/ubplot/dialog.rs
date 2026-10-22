@@ -256,7 +256,18 @@ fn publish(app: &mut CadApp, state: &mut State, open: &mut bool) {
     match app.run("ubplot.publish", params) {
         Ok(result) => {
             if let Some(id) = result.get("jobId").and_then(Value::as_str) {
-                app.session.echo(crate::tf!("Print job {jobId} queued", jobId = id));
+                let message = if app.job_pump.interrupted.contains(id) {
+                    crate::tf!("Print job {jobId} already exists; use Resume or Discard in Plot Jobs", jobId = id)
+                } else if result.get("status").and_then(Value::as_str) == Some("QUEUED") {
+                    crate::tf!("Print job {jobId} queued", jobId = id)
+                } else {
+                    let status = result.get("status").cloned().and_then(|value| serde_json::from_value(value).ok());
+                    match status {
+                        Some(status) => crate::tf!("Print job {jobId}: {status}", jobId = id, status = super::worker::status_label(status, false)),
+                        None => crate::tf!("Print job {jobId}", jobId = id),
+                    }
+                };
+                app.session.echo(message);
                 let _ = app.run("ui.ubplot.jobs", Value::Null);
                 *open = false;
                 return;

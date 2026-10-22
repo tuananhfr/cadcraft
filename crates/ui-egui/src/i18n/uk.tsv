@@ -1958,14 +1958,18 @@
 	Print output is unavailable	Результат друку недоступний
 	Unknown print job action	Невідома дія із завданням друку
 	No print jobs	Немає завдань друку
+	Type UBPLOT.JOBS to focus job actions; use Tab and Enter	Введіть UBPLOT.JOBS для фокусу на діях; використовуйте Tab і Enter
 	Print job {jobId}	Завдання друку {jobId}
 	Print job {jobId} queued	Завдання друку {jobId} додано до черги
 	Print job {jobId} was interrupted	Завдання друку {jobId} було перервано
 	Print job {jobId}: {status}	Завдання друку {jobId}: {status}
+	Print job {jobId} already exists; use Resume or Discard in Plot Jobs	Завдання друку {jobId} вже існує; виберіть Продовжити або Відкинути у вікні Завдання друку
+	Print job {jobId} discarded	Завдання друку {jobId} відкинуто
 	{done}/{total} sheets	{done}/{total} аркушів
 	Current sheet: {sheet}	Поточний аркуш: {sheet}
 	Queued	У черзі
 	Running	Виконується
+	Interrupted	Перервано
 	Cancelled	Скасовано
 	Done	Готово
 	Failed	Помилка

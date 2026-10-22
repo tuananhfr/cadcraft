@@ -137,3 +137,37 @@ fn web_pump_reload_waits_for_resume_and_rejects_changed_source() {
     assert_eq!(renderer.calls.get(), 0);
     assert!(state.pump.interrupted.contains(&id));
 }
+
+#[test]
+fn web_resume_replaces_interruption_notice_through_completion() {
+    let renderer = Rc::new(Renderer { calls: Cell::new(0), elapsed_ms: 0 });
+    let mut state = state(renderer.clone());
+    let id = enqueue(&mut state);
+    state.app.session.take_queued_job().unwrap();
+    let store = state.app.session.job_store_mut().unwrap();
+    let mut manifest = PublishManifest::from_json(&store.read_manifest(&id).unwrap().unwrap()).unwrap();
+    manifest.status = JobStatus::Running;
+    store.commit(&id, &[], &manifest.to_json()).unwrap();
+    state.pump = FrameJobPump::with_renderer(&mut state.app.session, renderer.clone(), SheetBudget::web(), clock);
+    let mut h = Harness::builder().with_size(egui::vec2(1366.0, 768.0)).build_ui_state(
+        |ui, state: &mut State| {
+            if let Some(notice) = state.pump.advance(&mut state.app.session, ui.ctx()) {
+                state.app.set_status(notice);
+            }
+            state.app.logic(&ui.ctx().clone());
+            state.app.ui(ui);
+        },
+        state,
+    );
+    assert_eq!(h.state().app.status.as_ref().unwrap().0, format!("Print job {id} was interrupted"));
+    assert_eq!(renderer.calls.get(), 0);
+    let State { app, pump } = h.state_mut();
+    pump.resume(&mut app.session, &id).unwrap();
+    h.run_steps(1);
+    assert_eq!(h.state().app.status.as_ref().unwrap().0, format!("Print job {id}: Running"));
+    assert!(!h.state().pump.interrupted.contains(&id));
+    h.run_steps(20);
+    assert_eq!(h.state().pump.manifests[&id].status, JobStatus::Done);
+    assert_eq!(h.state().app.status.as_ref().unwrap().0, format!("Print job {id}: Done"));
+    assert_eq!(renderer.calls.get(), 8);
+}
