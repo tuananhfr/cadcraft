@@ -1,4 +1,5 @@
 mod interactive;
+mod publish;
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -39,6 +40,10 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("as ubplot.scan (JSON: scans and stores the plan, opens nothing); typed: prompts")
             .noundo()
             .interactive(|_| Ok(Box::new(interactive::UbplotM::default()))),
+        CommandSpec::new("ubplot.publish", "Publish Plot Frames", publish::run_publish)
+            .params("{plan?: SheetPlan (default: the last plan), output?: merged|split (merged), path?: file (merged) or file whose stem names split files, title?} → {plan, files: [{path?|name, sheets: [sheet_key], bytes, sha256, data?}], failed: [{sheetKey, issues}]}")
+            .noundo()
+            .enabled(has_doc),
         CommandSpec::new("ubplot.scan", "Scan Plot Frames", run_scan)
             .params("{mode: block|window|layout|last|plan, handles?, windows?: [[[x1,y1],[x2,y2]] | [[x,y]×4]], layouts?, paper?, scale?: \"1:100\"|\"fit\", overrides?: {sheet_key: {paper?, scale?, window?, sheetId?}}, exclude?: [sheet_key], plan? (mode plan)} → SheetPlan + summary")
             .noundo()

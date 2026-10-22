@@ -399,6 +399,7 @@ Engine commands only; UI-only ids are added by `ui-egui`. An id listed here neve
 | `trim` | Modify | edit | tr |
 | `u` | Edit | edit |  |
 | `ubplot` | File | file | ubp |
+| `ubplot.publish` | Other | file |  |
 | `ubplot.scan` | Other | read |  |
 | `ubplot.templates` | Other | read |  |
 | `undo` | Other | edit |  |

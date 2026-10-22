@@ -1,5 +1,7 @@
 # Plotters
 
+For ordered frame, window and layout PDF publishing, see [UBPLOT](ubplot.md).
+
 A plotter (output device) decides what a plot writes and on which paper sizes. Page setups
 and plots pick a device and one of its papers. Each paper carries margins, which bound its
 printable area. Layouts show the printable area as a dashed outline on the sheet.
