@@ -6,6 +6,7 @@ use serde_json::Value;
 
 pub const SHEETPLAN_SCHEMA: &str = "1.0";
 pub const MAX_SCAN_FRAMES: usize = 10_000;
+pub const MAX_AUDIT_ENTRIES: usize = 100_000;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct SheetPlan {
@@ -15,9 +16,11 @@ pub struct SheetPlan {
     pub sheets: Vec<Sheet>,
     #[serde(default)]
     pub issues: Vec<PreflightIssue>,
+    #[serde(default)]
+    pub audit: Vec<AuditEntry>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AuditEntry {
     pub at_ms: u64,
     pub by: String,
@@ -171,6 +174,8 @@ pub struct PreflightIssue {
 
 #[derive(Deserialize)]
 struct PlanHeader {
+    #[serde(default)]
+    audit: Vec<AuditEntry>,
     schema_version: String,
     job_id: String,
     #[serde(default)]
@@ -214,6 +219,9 @@ fn parse(v: &Value) -> Result<SheetPlan, String> {
     if input.len() > MAX_SCAN_FRAMES {
         return Err(format!("sheet count exceeds {MAX_SCAN_FRAMES}"));
     }
+    if v.get("audit").and_then(Value::as_array).is_some_and(|audit| audit.len() > MAX_AUDIT_ENTRIES) {
+        return Err(format!("audit count exceeds {MAX_AUDIT_ENTRIES}"));
+    }
     validate_input_size(v)?;
     let header = PlanHeader::deserialize(v).map_err(|error| error.to_string())?;
     if header.schema_version != SHEETPLAN_SCHEMA {
@@ -231,7 +239,14 @@ fn parse(v: &Value) -> Result<SheetPlan, String> {
         }
         previous = Some(sheet.order);
     }
-    Ok(SheetPlan { schema_version: header.schema_version, job_id: header.job_id, source_hash: header.source_hash, sheets, issues: header.issues })
+    Ok(SheetPlan {
+        schema_version: header.schema_version,
+        job_id: header.job_id,
+        source_hash: header.source_hash,
+        sheets,
+        issues: header.issues,
+        audit: header.audit,
+    })
 }
 
 pub(crate) fn validate_input_size(v: &Value) -> Result<(), String> {

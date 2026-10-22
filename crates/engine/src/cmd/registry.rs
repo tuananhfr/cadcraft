@@ -106,7 +106,7 @@ pub const FILE_IDS: &[&str] = &[
 ];
 
 // Not undoable (they steer or persist the session, not the drawing's undo stack) yet change state.
-pub const EDIT_IDS: &[&str] = &["undo", "u", "redo", "mredo", "bsave", "bsaveas", "bclose", "layout.set"];
+pub const EDIT_IDS: &[&str] = &["undo", "u", "redo", "mredo", "bsave", "bsaveas", "bclose", "layout.set", "ubplot.approve"];
 
 pub const LISP_IDS: &[&str] = &["appload", "load", "lisp"];
 pub const XREF_IDS: &[&str] = &["xref", "-xref", "xattach", "xopen", "xbind"];

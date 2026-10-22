@@ -505,6 +505,23 @@ fn split_publish_reports_renamed_files_as_info() {
         .map(|(index, id)| place(&mut s, "FRAME", [index as f64 * 500.0, 0.0], 1.0, 0.0, false, &[("SHEET_ID", id)]).hex())
         .collect::<Vec<_>>();
     scan(&mut s, &handles);
+    let approvals: Vec<_> = s
+        .ubplot
+        .last
+        .as_ref()
+        .unwrap()
+        .plan
+        .sheets
+        .iter()
+        .flat_map(|sheet| {
+            sheet
+                .issues
+                .iter()
+                .filter(|entry| entry.severity == Severity::Warn)
+                .map(|entry| json!({"sheetKey": cadcraft_engine::sheetplan::ids::sheet_key(sheet), "code": entry.code}))
+        })
+        .collect();
+    s.execute("ubplot.approve", &json!({"approvals": approvals, "by": "user"})).unwrap();
     for _ in 0..2 {
         let result = s.execute("ubplot.publish", &json!({"output": "split"})).unwrap();
         let plan = typed(&result["plan"]);

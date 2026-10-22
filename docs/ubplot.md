@@ -68,8 +68,8 @@ remain in `issues` and do not inflate those sheet counts.
 Clean and INFO-only sheets are `READY`; an unapproved WARN leaves a sheet in
 `NEEDS_PREVIEW`; any BLOCK makes it `BLOCKED`. Status derives from issues rather
 than a supplied status flag. A WARN approval requires both `approved_by_user` and a
-matching audit fingerprint; a BLOCK always blocks. Audit storage and the approval
-command arrive in B7. Paper/scale BLOCKs from resolution remain part of the verdict.
+matching audit fingerprint; a BLOCK always blocks. Paper/scale BLOCKs from resolution
+remain part of the verdict.
 
 Preflight checks xref INSERT bounds in each sheet's space, including nested block
 transforms and dynamic visibility. A block/window sheet uses its exact outline;
@@ -102,6 +102,32 @@ INFO `REVISION_NEWER`. A template's optional `superseded_by` adds WARN
 selected layout plot-style table, or `colors as displayed` for pages without a table.
 
 Templates take `action: "list" | "import" | "reset"`, and `text` for JSON import.
+
+Approve warnings before publishing:
+
+```json
+{"command":"ubplot.approve","params":{"approvals":[{"sheetKey":"S-001@1","code":"FRAME_OVERLAP"}],"by":"user"}}
+{"command":"ubplot.approve","params":{"approvals":[{"sheetKey":"*","code":"FONT_FALLBACK"}],"by":"agent:claude"}}
+```
+
+`ubplot.approve` takes an optional `plan` (otherwise the last plan), an `approvals`
+array of `{sheetKey, code}` items and `by`. It returns the updated SheetPlan and
+stores it as `last`. Sheet keys are `sheet_id@order`; plan-level issues use `"*"`.
+Only WARN is approvable. BLOCK, INFO, PASS, unknown sheets/codes or an invalid `by`
+reject the whole request without changing the plan. Split approval is not available yet.
+`by` must be `"user"` or `"agent:<name>"` with a non-empty name, and 1–64 characters
+in total. A call accepts at most 10,000 items; a plan holds at most 100,000 audit entries.
+Repeated items are deduplicated within a call; multiple issues with the same key/code
+are all approved, with one audit entry per distinct fingerprint.
+
+Every approval appends `{at_ms, by, action: "approve", sheet_key, code, fingerprint}`
+to `audit`. Old plans default to an empty audit. The fingerprint is the first twelve
+hexadecimal characters of SHA-256 over `code + "|" + sheet_key + "|" + message`.
+`approved_by_user` only counts with a matching approval audit entry. Rescanning or
+using `last` preserves unchanged approvals and audit history; a changed message
+expires approval and keeps the old record. Explicit `mode: "plan"` scans use the
+supplied approval flags and retain both the session and supplied audit histories.
+Native hosts install a Unix millisecond clock; web uses the browser clock. Without a clock hook, audit timestamps are zero.
 
 Publish parameters:
 
@@ -160,6 +186,12 @@ Issue codes:
 | WARN | `FRAME_DUPLICATE`, `FRAME_OVERLAP`, `FRAME_NESTED`, `FRAME_MIRRORED`, `FRAME_NONUNIFORM`, `XREF_UNLOADED`, `FONT_FALLBACK`, `FONT_MISSING`, `SHEET_ID_DUPLICATE`, `REVISION_OLD`, `TEMPLATE_SUPERSEDED` |
 | INFO | `PAPER_CUSTOM`, `SCALE_NOT_SET`, `UNITS_ASSUMED`, `HANDLE_DUPLICATE`, `SHEET_EXCLUDED`, `SOURCE_HASH_WEAK`, `XREF_MISSING_OUTSIDE`, `FONT_MAPPED`, `REVISION_NEWER`, `PLOT_STYLE`, `FILE_RENAMED` |
 
+Publish validates approval flags before rendering or writing. A flagged BLOCK returns
+`BLOCK_NOT_APPROVABLE`, even with a forged audit and regardless of who approved it.
+A flagged WARN without matching audit returns `APPROVAL_WITHOUT_AUDIT`. Remaining
+unapproved WARNs return `WARN_NOT_APPROVED: sheet_key:code, ...`, including plan-level
+warnings under `*`. There is no bypass flag; both merged and split output require approval.
+
 Command errors include `PLAN_STALE` (drawing changed since scan), `PLAN_INVALID`
 (invalid or unresolved plan), and `OUTPUT_IS_SOURCE` (output would overwrite the source).
-WARN approvals, job queues, resume, real printers and folder publishing are later phases.
+Job queues, resume, real printers and folder publishing are later phases.

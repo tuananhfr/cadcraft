@@ -1,3 +1,4 @@
+pub mod approval;
 pub mod codes;
 pub mod detect;
 pub mod ids;

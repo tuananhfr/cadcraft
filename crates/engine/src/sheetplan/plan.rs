@@ -116,6 +116,7 @@ pub(crate) fn build_plan_with_context(d: &Drawing, req: &ScanRequest, ctx: &Pref
         source_hash: source_hash.into(),
         sheets: Vec::new(),
         issues: Vec::new(),
+        audit: Vec::new(),
     };
     match req.mode {
         ScanMode::Block => {
@@ -226,6 +227,7 @@ pub(crate) fn build_plan_with_context(d: &Drawing, req: &ScanRequest, ctx: &Pref
             }
             plan.sheets = supplied.sheets;
             plan.issues = supplied.issues;
+            plan.audit = supplied.audit;
         }
         ScanMode::Last => return Err("last mode requires session state".into()),
     }

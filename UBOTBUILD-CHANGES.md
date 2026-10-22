@@ -48,6 +48,8 @@ This branch (`tuananhfr`) is UbotCAD, the UbotBuild build of [CADCraft](https://
 
 ## V2.2 GĐ2
 
+- `ubplot.approve` atomically approves WARN issues for users or named agents and appends fingerprinted audit records with host-provided timestamps. BLOCK, INFO and PASS cannot be approved. Rescans preserve unchanged approvals and audit history; changed issue messages require new approval. Publishing rejects forged flags and unapproved warnings with `BLOCK_NOT_APPROVABLE`, `APPROVAL_WITHOUT_AUDIT` or `WARN_NOT_APPROVED`; there is no bypass.
+
 - UBPLOT preflight reports missing/fallback fonts as plan-level WARN and explicit font mappings as INFO, restricted to styles used on the planned sheets. Cached `last` scans refresh process-wide font settings. Font reporting through FONTS keeps its existing JSON output.
 - Duplicate sheet ids warn on every copy. The optional `revisions` register compares template revision attributes in natural order, warning on old/missing revisions and reporting newer revisions as INFO. Superseded templates warn with their replacement id. Plan-level `PLOT_STYLE` reports each selected table or colors as displayed.
 - Successful split PDF delivery reports INFO `FILE_RENAMED` with the actual filename whenever its stem differs from the sheet id. Repeat publishes replace the diagnostic; merged publish and rescanning clear stale rename information.

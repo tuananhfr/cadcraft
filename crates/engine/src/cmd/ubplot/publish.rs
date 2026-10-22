@@ -6,10 +6,10 @@ use serde_json::{Value, json};
 
 use super::{LastPlan, bad, io, source_hash};
 use crate::cmd::file::base64_encode;
+use crate::sheetplan::approval::{issues, refresh_status, validate_approvals};
 use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::ids::{sha256_hex, sheet_key};
 use crate::sheetplan::paper::sheet_margins;
-use crate::sheetplan::preflight::derive_status;
 use crate::sheetplan::{PlotScale, ScanMode, ScanRequest, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, parse_plan};
 use crate::{Result, Session};
 
@@ -35,6 +35,14 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
             s.ubplot.last.as_ref().filter(|last| last.doc_uid == uid).ok_or_else(|| bad(COMMAND, "no previous UBPLOT plan"))?.plan.clone()
         }
     };
+    validate_approvals(&plan).map_err(|error| bad(COMMAND, error))?;
+    let warnings: BTreeSet<_> = issues(&plan)
+        .filter(|(_, issue)| issue.severity == Severity::Warn && !issue.approved_by_user)
+        .map(|(key, issue)| format!("{key}:{}", issue.code))
+        .collect();
+    if !warnings.is_empty() {
+        return Err(bad(COMMAND, format!("WARN_NOT_APPROVED: {}", warnings.into_iter().collect::<Vec<_>>().join(", "))));
+    }
     if source_hash(s)? != plan.source_hash {
         return Err(bad(COMMAND, "PLAN_STALE: drawing changed since scan; scan again"));
     }
@@ -54,9 +62,8 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     }
     for sheet in &mut plan.sheets {
         sheet.issues.retain(|entry| entry.code != codes::FILE_RENAMED);
-        sheet.status =
-            if plan.issues.iter().any(|entry| entry.severity == Severity::Block) { SheetStatus::Blocked } else { derive_status(sheet, &[]) };
     }
+    refresh_status(&mut plan);
     let names = split_names(&plan.sheets);
     let base = Path::new(path.unwrap_or("Drawing.pdf"));
     let destinations: Vec<PathBuf> = if output == "merged" {
@@ -153,7 +160,7 @@ fn serialize(plan: &SheetPlan) -> Result<String> {
     serde_json::to_string(plan).map_err(|error| bad(COMMAND, error.to_string()))
 }
 
-fn remember(s: &mut Session, plan: &SheetPlan, supplied: Option<&Value>) -> Result<()> {
+pub(super) fn remember(s: &mut Session, plan: &SheetPlan, supplied: Option<&Value>) -> Result<()> {
     let state = s.state()?;
     let (uid, revision) = (state.uid, state.revision);
     if let Some(last) = &mut s.ubplot.last

@@ -30,6 +30,28 @@ fn scan(s: &mut Session, handles: &[String]) -> Value {
     s.execute("ubplot.scan", &json!({"mode": "block", "handles": handles})).unwrap()
 }
 
+fn approve_warnings(s: &mut Session) {
+    let plan = &s.ubplot.last.as_ref().unwrap().plan;
+    let approvals: Vec<_> = plan
+        .sheets
+        .iter()
+        .flat_map(|sheet| {
+            sheet
+                .issues
+                .iter()
+                .filter(|entry| entry.severity == cadcraft_engine::sheetplan::Severity::Warn)
+                .map(|entry| json!({"sheetKey": cadcraft_engine::sheetplan::ids::sheet_key(sheet), "code": entry.code}))
+        })
+        .chain(
+            plan.issues
+                .iter()
+                .filter(|entry| entry.severity == cadcraft_engine::sheetplan::Severity::Warn)
+                .map(|entry| json!({"sheetKey": "*", "code": entry.code})),
+        )
+        .collect();
+    s.execute("ubplot.approve", &json!({"approvals": approvals, "by": "user"})).unwrap();
+}
+
 fn file_bytes(file: &Value) -> Vec<u8> {
     match file["path"].as_str() {
         Some(path) => std::fs::read(path).unwrap(),
@@ -121,6 +143,7 @@ fn sp03_nested_dynamic_rotated_pages_match_frames() {
         place(&mut s, "A1", [9000.0, 0.0], 1.0, 0.0, true, &[]).hex(),
     ];
     scan(&mut s, &handles);
+    approve_warnings(&mut s);
     let result = publish(&mut s);
     let pdf = pages(&file_bytes(&result["files"][0]));
     assert_eq!(pdf.len(), handles.len());
@@ -284,6 +307,7 @@ fn publish_block_outline_in_layout_and_model() {
     let entity = s.doc().unwrap().entity(model).unwrap().clone();
     let paper = s.doc_mut().unwrap().add(&Space::Paper("Layout1".into()), Common::default(), entity.kind.clone()).unwrap();
     scan(&mut s, &[model.hex(), paper.hex()]);
+    approve_warnings(&mut s);
     let result = publish(&mut s);
     assert_eq!(pages(&file_bytes(&result["files"][0])).len(), 2);
 }

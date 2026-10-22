@@ -4,10 +4,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use cadcraft_doc::{Drawing, Entity, EntityKind, MAX_BLOCK_DEPTH, Space, XrefStatus, entity_bounds};
 use cadcraft_geom::{Bounds2, Mat3};
 
+use super::approval::{approved, refresh_status};
 use super::codes::{self, issue};
-use super::ids::{sha256_hex, sheet_key};
+use super::ids::sheet_key;
 use super::outline::{Relation, relation};
-use super::{AuditEntry, FrameRegistry, PreflightIssue, Severity, Sheet, SheetPlan, SheetSource, SheetStatus};
+use super::{AuditEntry, FrameRegistry, Severity, Sheet, SheetPlan, SheetSource, SheetStatus};
 
 pub struct FontStatus {
     pub style: String,
@@ -40,14 +41,6 @@ pub fn derive_status(sheet: &Sheet, audit: &[AuditEntry]) -> SheetStatus {
     } else {
         SheetStatus::Ready
     }
-}
-
-fn approved(entry: &PreflightIssue, key: &str, audit: &[AuditEntry]) -> bool {
-    if !entry.approved_by_user {
-        return false;
-    }
-    let fingerprint: String = sha256_hex(format!("{}|{key}|{}", entry.code, entry.message).as_bytes()).chars().take(12).collect();
-    audit.iter().any(|record| record.action == "approve" && record.sheet_key == key && record.code == entry.code && record.fingerprint == fingerprint)
 }
 
 fn owned(code: &str) -> bool {
@@ -124,10 +117,7 @@ pub fn preflight(d: &Drawing, plan: &mut SheetPlan, ctx: &PreflightContext<'_>) 
         }
     }
     check_metadata(d, plan, ctx);
-    let blocked = plan.issues.iter().any(|entry| entry.severity == Severity::Block);
-    for sheet in &mut plan.sheets {
-        sheet.status = if blocked { SheetStatus::Blocked } else { derive_status(sheet, &[]) };
-    }
+    refresh_status(plan);
 }
 
 pub fn rev_cmp(mut a: &str, mut b: &str) -> Ordering {

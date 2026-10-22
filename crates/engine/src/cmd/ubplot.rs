@@ -1,17 +1,28 @@
 mod interactive;
 mod publish;
 
+use std::sync::OnceLock;
+
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::file::io;
 use super::{CommandSpec, has_doc};
+use crate::sheetplan::approval::{MAX_APPROVALS, approve, carry_over, merge_audit};
 use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::ids::sha256_hex;
 use crate::sheetplan::plan::{build_plan_with_context, validate_request_value};
 use crate::sheetplan::preflight::{PreflightContext, preflight, styles_on_sheets, verdict};
 use crate::sheetplan::{FrameRegistry, ScanMode, ScanRequest, Severity, SheetPlan};
 use crate::{EngineError, Result, Session};
+
+pub type ClockHook = fn() -> u64;
+
+static CLOCK: OnceLock<ClockHook> = OnceLock::new();
+
+pub fn set_clock(h: ClockHook) {
+    let _ = CLOCK.set(h);
+}
 
 pub struct UbplotState {
     pub registry: FrameRegistry,
@@ -41,6 +52,10 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("as ubplot.scan (JSON: scans and stores the plan, opens nothing); typed: prompts")
             .noundo()
             .interactive(|_| Ok(Box::new(interactive::UbplotM::default()))),
+        CommandSpec::new("ubplot.approve", "Approve Plot Warnings", run_approve)
+            .params("{plan?: SheetPlan (default: the last plan), approvals: [{sheetKey, code}], by: user|agent:<name>} → SheetPlan; only WARN is approvable; split is not available yet")
+            .noundo()
+            .enabled(has_doc),
         CommandSpec::new("ubplot.publish", "Publish Plot Frames", publish::run_publish)
             .params("{plan?: SheetPlan (default: the last plan), output?: merged|split (merged), path?: file (merged) or file whose stem names split files, title?} → {plan, files: [{path?|name, sheets: [sheet_key], bytes, sha256, data?}], failed: [{sheetKey, issues}]}")
             .noundo()
@@ -114,7 +129,18 @@ pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
         fonts: &fonts,
         web: cfg!(target_arch = "wasm32"),
     };
+    let previous = match request.plan.as_ref().filter(|_| request.mode == ScanMode::Plan) {
+        Some(value) => {
+            let mut previous = crate::sheetplan::parse_plan(value).map_err(|error| bad("ubplot.scan", error))?;
+            if let Some(last) = s.ubplot.last.as_ref().filter(|last| last.doc_uid == uid) {
+                previous.audit = merge_audit(&last.plan.audit, &previous.audit).map_err(|error| bad("ubplot.scan", error))?;
+            }
+            previous
+        }
+        None => s.ubplot.last.as_ref().filter(|last| last.doc_uid == uid).map(|last| &last.plan).unwrap_or(&plan).clone(),
+    };
     preflight(s.doc()?, &mut plan, &ctx);
+    carry_over(&previous, &mut plan);
     let result = plan_result(&plan, rescanned)?;
     s.ubplot.last = Some(LastPlan { doc_uid: uid, revision, request, plan });
     s.ubplot.review = false;
@@ -138,6 +164,38 @@ fn plan_result(plan: &SheetPlan, rescanned: bool) -> Result<Value> {
     if rescanned {
         object.insert("rescanned".into(), Value::Bool(true));
     }
+    Ok(result)
+}
+
+fn run_approve(s: &mut Session, params: &Value) -> Result<Value> {
+    const COMMAND: &str = "ubplot.approve";
+    validate_request_value(params).map_err(|error| bad(COMMAND, error))?;
+    if params.get("split").is_some() {
+        return Err(bad(COMMAND, "split approval is not available yet"));
+    }
+    let by = params.get("by").and_then(Value::as_str).ok_or_else(|| bad(COMMAND, "by must be user or agent:<name>"))?;
+    let input = params.get("approvals").and_then(Value::as_array).ok_or_else(|| bad(COMMAND, "approvals must be an array"))?;
+    if input.len() > MAX_APPROVALS {
+        return Err(bad(COMMAND, format!("at most {MAX_APPROVALS} approvals are allowed")));
+    }
+    let mut items = Vec::with_capacity(input.len());
+    for item in input {
+        let key = item.get("sheetKey").and_then(Value::as_str).ok_or_else(|| bad(COMMAND, "sheetKey must be a string"))?;
+        let code = item.get("code").and_then(Value::as_str).ok_or_else(|| bad(COMMAND, "code must be a string"))?;
+        items.push((key.to_string(), code.to_string()));
+    }
+    let supplied = params.get("plan");
+    let mut plan = match supplied {
+        Some(value) => crate::sheetplan::parse_plan(value).map_err(|error| bad(COMMAND, error))?,
+        None => {
+            let uid = s.state()?.uid;
+            s.ubplot.last.as_ref().filter(|last| last.doc_uid == uid).ok_or_else(|| bad(COMMAND, "no previous UBPLOT plan"))?.plan.clone()
+        }
+    };
+    let at_ms = CLOCK.get().map_or(0, |clock| clock());
+    approve(&mut plan, &items, by, at_ms).map_err(|error| bad(COMMAND, error))?;
+    let result = serde_json::to_value(&plan).map_err(|error| bad(COMMAND, error.to_string()))?;
+    publish::remember(s, &plan, supplied)?;
     Ok(result)
 }
 
