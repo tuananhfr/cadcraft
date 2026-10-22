@@ -289,7 +289,8 @@ mod reference {
                 _lock: lock,
                 previous_approvals: trust::approved(),
                 previous_roots: sandbox::write_roots(),
-                root: root.canonicalize().unwrap(),
+                // A canonical Windows root is a verbatim path, where LISP's "/" joins become part of the file name.
+                root,
             };
             trust::set_approved(Vec::new());
             assert!(trust::approve(&trust::source_sha(SOURCE)));
@@ -485,8 +486,8 @@ mod reference {
         let templates = session.lisp_var("*ubb-templates*").to_vec();
         assert_eq!(templates.len(), 2);
         assert!(to_text(&templates[0], true).contains("a1@1"));
-        assert!(to_text(&templates[0], true).contains("(frame (0 0) (841 0) (841 594) (0 594))"));
-        assert!(to_text(&templates[0], true).contains("(paper 841 594 T)"));
+        assert!(to_text(&templates[0], true).contains("(FRAME (0 0) (841 0) (841 594) (0 594))"));
+        assert!(to_text(&templates[0], true).contains("(PAPER 841 594 T)"));
         eval(&mut session, "(defun ubb:refresh-templates () nil)");
         eval(&mut session, "(setq *ubb-portable* T)");
         let portable: SheetPlan = serde_json::from_value(eval_json(&mut session, &format!("(ubb:plan-json {INSERTS})"))).unwrap();
