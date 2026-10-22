@@ -24,6 +24,7 @@ pub fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value,
         "ui.workspace.restore" => restore_revision(app, params),
         "ui.workspace.status" => Ok(app.workspace_status()),
         "ui.workspace.set" => set_value(app, params),
+        "ui.workspace.resolve" => resolve(app, params),
         "ui.layout.undo" => step_history(app, true),
         "ui.layout.redo" => step_history(app, false),
         _ => return None,
@@ -32,13 +33,20 @@ pub fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value,
 }
 
 /// Stores a switch or another whole-workspace change at once (D8); a failure is in `ws.status`.
-fn commit_now(app: &mut CadApp) -> bool {
-    app.ws.store.is_some() && app.commit_workspace_now().is_ok()
+fn commit_now(app: &mut CadApp) -> Result<bool, String> {
+    if app.ws.store.is_none() {
+        return Ok(false);
+    }
+    match app.commit_workspace(false) {
+        Ok(()) => Ok(true),
+        Err(error) if app.ws.status == SaveStatus::TabConflict => Err(error),
+        Err(_) => Ok(false),
+    }
 }
 
 fn save_outgoing(app: &mut CadApp) -> Result<(), String> {
     if app.ws.store.is_some() && app.ws.needs_flush() {
-        app.commit_workspace_now()?;
+        app.commit_workspace(false)?;
     }
     Ok(())
 }
@@ -68,7 +76,7 @@ fn select(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         if app.ui.dialog.as_deref() == Some(super::picker::PICKER_DIALOG) {
             app.ui.dialog = None;
         }
-        let saved = choosing && commit_now(app);
+        let saved = choosing && commit_now(app)?;
         return Ok(json!({"active": app.ws.active, "base_id": app.ws.user.base_id, "saved": saved}));
     }
     if preset_json(id).is_none() && !app.ws.profiles.iter().any(|profile| profile.profile_id == id) {
@@ -100,7 +108,7 @@ fn select(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     app.ws.rebuild();
     app.apply_workspace();
     app.ws.mark_changed();
-    let saved = commit_now(app);
+    let saved = commit_now(app)?;
     Ok(json!({"active": app.ws.active, "base_id": app.ws.user.base_id, "saved": saved}))
 }
 
@@ -169,7 +177,7 @@ fn save_as(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     app.ws.active = profile.profile_id.clone();
     app.ws.user = profile;
     app.ws.mark_changed();
-    let saved = commit_now(app);
+    let saved = commit_now(app)?;
     Ok(json!({"profile_id": app.ws.active, "name": name, "saved": saved}))
 }
 
@@ -266,7 +274,7 @@ fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     app.ws.rebuild();
     app.apply_workspace();
     app.ws.mark_changed();
-    let saved = commit_now(app);
+    let saved = commit_now(app)?;
     Ok(json!({"changes": changes, "revision": app.ws.user.revision, "saved": saved}))
 }
 
@@ -299,7 +307,7 @@ fn restore_revision(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     app.ws.rebuild();
     app.apply_workspace();
     app.ws.mark_changed();
-    if !commit_now(app) {
+    if !commit_now(app)? {
         return Err(match &app.ws.status {
             SaveStatus::Failed(error) => format!("Revision {revision} was restored but could not be saved: {error}"),
             _ => "No workspace storage is attached".into(),
@@ -345,7 +353,30 @@ fn set_value(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     app.ws.rebuild();
     app.apply_workspace();
     app.ws.mark_changed();
+    app.check_workspace_revision(false)?;
     Ok(json!({"pointer": pointer, "changed": true}))
+}
+
+fn resolve(app: &mut CadApp, params: &Value) -> Result<Value, String> {
+    let keep = params.get("keep").and_then(Value::as_str).ok_or("keep must be mine or theirs")?;
+    if !matches!(keep, "mine" | "theirs") {
+        return Err("keep must be mine or theirs".into());
+    }
+    if app.ws.status != SaveStatus::TabConflict {
+        return Err("No workspace tab conflict to resolve".into());
+    }
+    if keep == "theirs" {
+        app.adopt_stored_workspace()?;
+    } else {
+        let store = app.ws.store.as_ref().ok_or("No workspace storage is attached")?;
+        app.ws.known_revision = store.read_current().as_deref().and_then(startup::stored_revision).unwrap_or(0);
+        app.ws.status = SaveStatus::Unsaved;
+        app.commit_workspace(false)?;
+        if app.ui.dialog.as_deref() == Some(super::tab_conflict::DIALOG) {
+            app.ui.dialog = None;
+        }
+    }
+    Ok(json!({"keep": keep, "revision": app.ws.user.revision}))
 }
 
 fn optional_choice(value: &Value, valid: impl Fn(&str) -> bool, error: &str) -> Result<Option<String>, String> {

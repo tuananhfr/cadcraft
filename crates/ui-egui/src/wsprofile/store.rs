@@ -52,6 +52,10 @@ pub trait ProfileStore {
     fn read_policy(&self) -> Option<String> {
         None
     }
+    /// True once after another writer changed the stored set since the last call.
+    fn take_external_change(&mut self) -> bool {
+        false
+    }
     /// The current set as stored, also when it is too large or not UTF-8 for [`Self::read_current`].
     fn read_current_bytes(&self) -> Option<Vec<u8>> {
         self.read_current().map(String::into_bytes)

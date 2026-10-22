@@ -111,6 +111,7 @@ fn missing_marked_ui_literals(language: &str) -> BTreeSet<String> {
         include_str!("../wsprofile/mod.rs"),
         include_str!("../wsprofile/sync.rs"),
         include_str!("../wsprofile/conflict.rs"),
+        include_str!("../wsprofile/tab_conflict.rs"),
         include_str!("../shortcuts.rs"),
         include_str!("../quick_access.rs"),
         include_str!("../ribbon/mod.rs"),
