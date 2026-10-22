@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use cadcraft_doc::{Block, Common, Drawing, Entity, EntityKind, Handle, Insert, Line, LwPolyline, Space};
 use cadcraft_engine::cmd::file::{IoHooks, set_io};
-use cadcraft_engine::sheetplan::{Severity, SheetMode, SheetSource, SheetStatus, codes, ids::sheet_key};
+use cadcraft_engine::sheetplan::{Severity, SheetMode, SheetSource, SheetStatus, approval::fingerprint, codes, derive_status, ids::sheet_key};
 use cadcraft_engine::{Input, Session};
 use cadcraft_geom::{PolyVertex, Vec2, Vec3};
 use cadcraft_ui_egui::{CadApp, Services};
@@ -94,7 +94,11 @@ fn app(ambiguous: &[bool]) -> (CadApp, Vec<Handle>) {
 }
 
 fn harness(app: CadApp) -> Harness<'static, CadApp> {
-    let mut h = Harness::builder().with_size(vec2(1366.0, 768.0)).build_ui_state(
+    harness_size(app, vec2(1366.0, 768.0))
+}
+
+fn harness_size(app: CadApp, size: egui::Vec2) -> Harness<'static, CadApp> {
+    let mut h = Harness::builder().with_size(size).build_ui_state(
         |ui, app: &mut CadApp| {
             app.logic(&ui.ctx().clone());
             app.ui(ui);
@@ -174,8 +178,8 @@ fn exceptions_list_shows_only_warn_and_block() {
     let sheet = &mut app.session.ubplot.last.as_mut().unwrap().plan.sheets[3];
     sheet.issues.push(codes::issue(Severity::Warn, codes::FRAME_OVERLAP, "Synthetic overlapping frame.", Some(&sheet.sheet_id)));
     let mut h = harness(app);
-    assert!(h.query_by_label("FRAME_OVERLAP · 1 sheets").is_some());
-    assert!(h.query_by_label("FRAME_AMBIGUOUS · 1 sheets").is_some());
+    assert!(h.query_by_label("FRAME_OVERLAP · 1 sheets · WARN").is_some());
+    assert!(h.query_by_label("FRAME_AMBIGUOUS · 1 sheets · BLOCK").is_some());
     for order in 1..=3 {
         assert!(h.query_by_label(&format!("S-{order:03} · {order}")).is_none());
     }
@@ -211,6 +215,7 @@ fn publish_button_writes_file_via_pick_save() {
     let _guard = test_lock();
     let (mut app, frames) = app(&[false, false]);
     review(&mut app, &frames);
+    approve_warnings(&mut app);
     let path = temporary_pdf();
     let picked = path.clone();
     let suggestions = Rc::new(RefCell::new(Vec::new()));
@@ -313,6 +318,7 @@ fn cancelling_save_keeps_dialog_open() {
     let _guard = test_lock();
     let (mut app, frames) = app(&[false, false]);
     review(&mut app, &frames);
+    approve_warnings(&mut app);
     app.services.pick_save = Some(Box::new(|_| None));
     let mut h = harness(app);
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").click();
@@ -363,6 +369,7 @@ fn split_publish_keeps_failed_sheets_visible() {
     let _guard = test_lock();
     let (mut app, frames) = app(&[true, true]);
     review(&mut app, &frames);
+    approve_warnings(&mut app);
     let path = temporary_pdf();
     app.services.pick_save = Some(Box::new(move |_| Some(path.to_string_lossy().into_owned())));
     let mut h = harness(app);
@@ -375,4 +382,257 @@ fn split_publish_keeps_failed_sheets_visible() {
     assert!(h.query_by_label("S-001@1").is_some());
     assert!(h.query_by_label("S-002@2").is_some());
     assert!(h.state().session.log.iter().any(|line| line == "Published 0 file(s)"));
+}
+
+fn approve_warnings(app: &mut CadApp) {
+    let plan = &app.session.ubplot.last.as_ref().unwrap().plan;
+    let approvals: Vec<_> = plan
+        .issues
+        .iter()
+        .map(|issue| ("*".to_string(), issue))
+        .chain(plan.sheets.iter().flat_map(|sheet| sheet.issues.iter().map(move |issue| (sheet_key(sheet), issue))))
+        .filter(|(_, issue)| issue.severity == Severity::Warn)
+        .map(|(key, issue)| json!({"sheetKey": key, "code": issue.code}))
+        .collect();
+    if !approvals.is_empty() {
+        app.run("ubplot.approve", json!({"approvals": approvals, "by": "user"})).unwrap();
+    }
+}
+
+fn warn_sheets(app: &mut CadApp) {
+    let plan = &mut app.session.ubplot.last.as_mut().unwrap().plan;
+    for sheet in &mut plan.sheets {
+        sheet.issues.push(codes::issue(Severity::Warn, codes::FRAME_OVERLAP, "Synthetic overlapping frame.", Some(&sheet.sheet_id)));
+        sheet.status = derive_status(sheet, &plan.audit);
+    }
+}
+
+#[test]
+fn approve_all_same_cause_records_audit() {
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false, false, false]);
+    review(&mut app, &frames);
+    warn_sheets(&mut app);
+    let mut h = harness(app);
+    assert!(h.query_by_label("FRAME_OVERLAP · 3 sheets · WARN").is_some());
+    assert!(h.query_by_label("PASS 0 · INFO 0 · WARN 3 · BLOCK 0").is_some());
+    h.get_by_label("Approve all (3)").click();
+    h.run_steps(3);
+    assert!(h.query_by_label("Approve 3 warnings (FRAME_OVERLAP)? This is recorded in the audit log.").is_some());
+    assert!(h.state().session.ubplot.last.as_ref().unwrap().plan.audit.is_empty());
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Approve").click();
+    h.run_steps(3);
+    let plan = &h.state().session.ubplot.last.as_ref().unwrap().plan;
+    assert_eq!(plan.audit.len(), 3);
+    for sheet in &plan.sheets {
+        assert_eq!(sheet.status, SheetStatus::Ready);
+        let issue = sheet.issues.iter().find(|issue| issue.code == codes::FRAME_OVERLAP).unwrap();
+        assert!(issue.approved_by_user);
+        assert!(plan.audit.iter().any(|entry| {
+            entry.action == "approve"
+                && entry.by == "user"
+                && entry.sheet_key == sheet_key(sheet)
+                && entry.code == codes::FRAME_OVERLAP
+                && entry.fingerprint == fingerprint(issue, &sheet_key(sheet))
+        }));
+    }
+    assert_eq!(h.query_all_by_label("Approved").count(), 3);
+    assert!(
+        h.query_all_by_label("Approved")
+            .all(|node| { node.accesskit_node().is_disabled() && node.accesskit_node().toggled() == Some(egui::accesskit::Toggled::True) })
+    );
+    assert!(h.get_by_label("Approve all (0)").accesskit_node().is_disabled());
+}
+
+#[test]
+fn cancel_in_modal_approves_nothing() {
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false, false, false]);
+    review(&mut app, &frames);
+    warn_sheets(&mut app);
+    let original = app.session.ubplot.last.as_ref().unwrap().plan.clone();
+    let mut h = harness(app);
+    h.get_by_label("Approve all (3)").click();
+    h.run_steps(3);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Cancel").click();
+    h.run_steps(3);
+    assert!(h.query_by_label("Approve 3 warnings (FRAME_OVERLAP)? This is recorded in the audit log.").is_none());
+    assert_eq!(h.state().session.ubplot.last.as_ref().unwrap().plan, original);
+}
+
+#[test]
+fn block_group_has_no_approve_control() {
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[true]);
+    review(&mut app, &frames);
+    let h = harness(app);
+    assert!(h.query_by_label("FRAME_AMBIGUOUS · 1 sheets · BLOCK").is_some());
+    assert!(h.query_by_label("Cannot be approved: fix the cause or exclude the sheet").is_some());
+    for role in [egui::accesskit::Role::Button, egui::accesskit::Role::CheckBox] {
+        assert!(!h.query_all_by_role(role).any(|node| node.accesskit_node().label().is_some_and(|label| label.starts_with("Approve"))));
+    }
+    assert!(h.query_by_label("Pick window <").is_some());
+    assert!(h.query_by_label("Set paper for all").is_some());
+    assert!(h.query_by_label("Exclude all").is_some());
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
+}
+
+#[test]
+fn publish_disabled_until_warnings_approved() {
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false]);
+    review(&mut app, &frames);
+    warn_sheets(&mut app);
+    let picked = Rc::new(RefCell::new(0));
+    let calls = picked.clone();
+    app.services.pick_save = Some(Box::new(move |_| {
+        *calls.borrow_mut() += 1;
+        None
+    }));
+    let mut h = harness(app);
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").click();
+    h.run_steps(3);
+    assert_eq!(*picked.borrow(), 0);
+    h.get_by_label("Approved").click();
+    h.run_steps(3);
+    assert_eq!(h.state().session.ubplot.last.as_ref().unwrap().plan.audit.len(), 1);
+    assert!(!h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").click();
+    h.run_steps(3);
+    assert_eq!(*picked.borrow(), 1);
+}
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn split_panel_needs_explicit_click() {
+    let _guard = test_lock();
+    let (mut app, _) = app(&[]);
+    cadcraft_engine::cmd::plotters::set_plotter_store(cadcraft_engine::cmd::plotters::PlotterStore::memory());
+    app.run("plottermanager", json!({"action": "new", "name": "B9 A1", "paper": {"name": "A1 test", "width": 594, "height": 841}})).unwrap();
+    let config = app.run("plottermanager", json!({"action": "get", "name": "B9 A1"})).unwrap();
+    for paper in config["papers"].as_array().unwrap().iter().filter(|paper| paper["name"] != "A1 test") {
+        app.run("plottermanager", json!({"action": "set", "name": "B9 A1", "removePaper": paper["name"]})).unwrap();
+    }
+    app.run("ubplot.scan", json!({"mode": "window", "windows": [[[0, 0], [594, 2400]]], "paper": "594x2400", "scale": "1:1", "device": "B9 A1"}))
+        .unwrap();
+    app.session.ubplot.review = true;
+    let mut h = harness(app);
+    assert!(h.query_by_label("3 pieces").is_some());
+    assert!(h.query_by_label("Overlap (mm)").is_some());
+    let plan = &h.state().session.ubplot.last.as_ref().unwrap().plan;
+    assert!(!plan.sheets[0].split.as_ref().unwrap().approved);
+    assert!(plan.audit.is_empty());
+    h.run_steps(5);
+    assert!(!h.state().session.ubplot.last.as_ref().unwrap().plan.sheets[0].split.as_ref().unwrap().approved);
+    h.get_by_label("Approve split").click();
+    h.run_steps(3);
+    let plan = &h.state().session.ubplot.last.as_ref().unwrap().plan;
+    assert!(plan.sheets[0].split.as_ref().unwrap().approved);
+    assert_eq!(plan.sheets[0].split.as_ref().unwrap().overlap_mm, 20.0);
+    assert_eq!(plan.sheets[0].status, SheetStatus::Ready);
+    assert!(plan.audit.iter().any(|entry| entry.action == "split" && entry.by == "user" && entry.sheet_key == "S-001@1"));
+}
+
+#[test]
+fn info_only_sheets_are_hidden_by_default() {
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false]);
+    review(&mut app, &frames);
+    let sheet = &mut app.session.ubplot.last.as_mut().unwrap().plan.sheets[0];
+    sheet.issues.push(codes::issue(Severity::Info, codes::REVISION_NEWER, "Newer revision.", Some(&sheet.sheet_id)));
+    let mut h = harness(app);
+    assert!(h.query_by_label("S-001 · 1").is_none());
+    assert!(h.query_by_label("PASS 0 · INFO 1 · WARN 0 · BLOCK 0").is_some());
+    h.get_by_label("Show all sheets").click();
+    h.run_steps(3);
+    assert!(h.query_by_label("S-001 · 1").is_some());
+    assert!(h.query_by_label("REVISION_NEWER · 1 sheets · INFO").is_some());
+}
+
+#[test]
+fn publish_row_visible_at_200_percent_with_100_sheets() {
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false; 100]);
+    review(&mut app, &frames);
+    let mut h = harness_size(app, vec2(683.0, 384.0));
+    h.run_steps(5);
+    let dialog = h.get_by_role_and_label(egui::accesskit::Role::Window, "Quick Plot").rect();
+    let visible = dialog.intersect(h.ctx.content_rect());
+    for (role, label) in [
+        (egui::accesskit::Role::Button, "Publish"),
+        (egui::accesskit::Role::RadioButton, "Merged PDF"),
+        (egui::accesskit::Role::RadioButton, "One PDF per sheet"),
+    ] {
+        let rect = h.get_by_role_and_label(role, label).rect();
+        assert!(visible.contains_rect(rect), "{label} at {rect:?} is outside the visible dialog {visible:?}");
+    }
+    assert_eq!(h.state().session.ubplot.last.as_ref().unwrap().plan.sheets.len(), 100);
+}
+
+#[test]
+fn plan_warning_uses_one_global_audit_entry() {
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false, false, false]);
+    review(&mut app, &frames);
+    let plan = &mut app.session.ubplot.last.as_mut().unwrap().plan;
+    plan.issues.push(codes::issue(Severity::Warn, codes::FONT_FALLBACK, "Synthetic font fallback.", None));
+    let mut h = harness(app);
+    assert!(h.query_by_label("FONT_FALLBACK · 3 sheets · WARN").is_some());
+    assert_eq!(h.query_all_by_label("Approved").count(), 1);
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
+    h.get_by_label("Approve all (1)").click();
+    h.run_steps(3);
+    assert!(h.query_by_label("Approve 1 warnings (FONT_FALLBACK)? This is recorded in the audit log.").is_some());
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Approve").click();
+    h.run_steps(3);
+    let plan = &h.state().session.ubplot.last.as_ref().unwrap().plan;
+    assert_eq!(plan.audit.len(), 1);
+    assert_eq!(plan.audit[0].sheet_key, "*");
+    assert_eq!(plan.audit[0].code, codes::FONT_FALLBACK);
+    assert!(plan.issues.iter().find(|issue| issue.code == codes::FONT_FALLBACK).unwrap().approved_by_user);
+    assert!(plan.sheets.iter().all(|sheet| sheet.status == SheetStatus::Ready));
+    assert!(!h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
+}
+
+#[test]
+fn warning_checkbox_requires_matching_audit() {
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false]);
+    review(&mut app, &frames);
+    warn_sheets(&mut app);
+    approve_warnings(&mut app);
+    let sheet = &mut app.session.ubplot.last.as_mut().unwrap().plan.sheets[0];
+    sheet.issues.iter_mut().find(|issue| issue.code == codes::FRAME_OVERLAP).unwrap().message = "Changed warning cause.".into();
+    let mut h = harness(app);
+    let checkbox = h.get_by_label("Approved");
+    assert!(!checkbox.accesskit_node().is_disabled());
+    assert_eq!(checkbox.accesskit_node().toggled(), Some(egui::accesskit::Toggled::False));
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
+    h.get_by_label("Approved").click();
+    h.run_steps(3);
+    let plan = &h.state().session.ubplot.last.as_ref().unwrap().plan;
+    assert_eq!(plan.audit.len(), 2);
+    assert_ne!(plan.audit[0].fingerprint, plan.audit[1].fingerprint);
+    assert!(h.get_by_label("Approved").accesskit_node().is_disabled());
+    assert!(!h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
+}
+
+#[test]
+fn bulk_modal_does_not_approve_changed_warning() {
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false]);
+    review(&mut app, &frames);
+    warn_sheets(&mut app);
+    let mut h = harness(app);
+    h.get_by_label("Approve all (1)").click();
+    h.run_steps(3);
+    assert!(h.query_by_label("Approve 1 warnings (FRAME_OVERLAP)? This is recorded in the audit log.").is_some());
+    let plan = &mut h.state_mut().session.ubplot.last.as_mut().unwrap().plan;
+    plan.sheets[0].issues.iter_mut().find(|issue| issue.code == codes::FRAME_OVERLAP).unwrap().message = "Changed warning cause.".into();
+    h.run_steps(3);
+    assert!(h.query_by_label("Approve 1 warnings (FRAME_OVERLAP)? This is recorded in the audit log.").is_none());
+    let plan = &h.state().session.ubplot.last.as_ref().unwrap().plan;
+    assert!(plan.audit.is_empty());
+    assert!(!plan.sheets[0].issues.iter().find(|issue| issue.code == codes::FRAME_OVERLAP).unwrap().approved_by_user);
 }

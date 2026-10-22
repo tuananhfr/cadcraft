@@ -1851,3 +1851,35 @@
 	A3	A3
 	A4	A4
 	A5	A5
+
+# GĐ2 B9: preflight list.
+	PASS {p} · INFO {i} · WARN {w} · BLOCK {b}	УСПІХ {p} · ІНФО {i} · УВАГА {w} · БЛОК {b}
+	No sheets to publish	Немає аркушів для публікації
+	Fix or exclude blocked sheets before publishing a merged PDF	Виправте або виключіть заблоковані аркуші перед публікацією об’єднаного PDF
+	Approve all warnings before publishing	Підтвердьте всі попередження перед публікацією
+	{code} · {n} sheets · {severity}	{code} · {n} аркушів · {severity}
+	PASS	УСПІХ
+	INFO	ІНФО
+	WARN	УВАГА
+	BLOCK	БЛОК
+	Approve all ({n})	Підтвердити всі ({n})
+	Approve {n} warnings ({code})? This is recorded in the audit log.	Підтвердити {n} попереджень ({code})? Це буде записано в журналі аудиту.
+	Approve	Підтвердити
+	Approved	Підтверджено
+	Cannot be approved: fix the cause or exclude the sheet	Неможливо підтвердити: усуньте причину або виключіть аркуш
+	Overlap (mm)	Перекриття (мм)
+	{n} pieces	{n} частин
+	Approve split	Підтвердити поділ
+	Printer limits apply in the desktop app; the web app plots PDF.	Обмеження принтера діють у настільному застосунку; вебзастосунок друкує в PDF.
+	XREF_MISSING	Відсутнє зовнішнє посилання
+	XREF_UNLOADED	Зовнішнє посилання вивантажено
+	SCALE_PAPER_MISMATCH	Масштаб не відповідає паперу
+	PAPER_TOO_SMALL	Папір замалий
+	DEVICE_LIMIT_EXCEEDED	Перевищено обмеження пристрою
+	DEVICE_LIMIT_NEAR	Наближення до обмеження пристрою
+	DEVICE_UNAVAILABLE	Пристрій недоступний
+	FONT_MISSING	Шрифт відсутній
+	FONT_FALLBACK	Заміна відсутнього шрифту
+	SHEET_ID_DUPLICATE	Дубльований код аркуша
+	REVISION_OLD	Застаріла редакція
+	TEMPLATE_SUPERSEDED	Шаблон замінено новішим

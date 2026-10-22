@@ -1820,3 +1820,35 @@ ribbon	Output	Xuất bản
 	{n} sheets	{n} tờ
 	{sheet} · {order}	{sheet} · {order}
 	· {b} blocked · {w} warnings	· {b} bị chặn · {w} cảnh báo
+
+# GĐ2 B9: preflight list.
+	PASS {p} · INFO {i} · WARN {w} · BLOCK {b}	ĐẠT {p} · THÔNG TIN {i} · CẢNH BÁO {w} · CHẶN {b}
+	No sheets to publish	Không có tờ bản vẽ để xuất bản
+	Fix or exclude blocked sheets before publishing a merged PDF	Sửa hoặc loại trừ các tờ bị chặn trước khi xuất bản PDF gộp
+	Approve all warnings before publishing	Chấp nhận tất cả cảnh báo trước khi xuất bản
+	{code} · {n} sheets · {severity}	{code} · {n} tờ · {severity}
+	PASS	ĐẠT
+	INFO	THÔNG TIN
+	WARN	CẢNH BÁO
+	BLOCK	CHẶN
+	Approve all ({n})	Chấp nhận tất cả ({n})
+	Approve {n} warnings ({code})? This is recorded in the audit log.	Chấp nhận {n} cảnh báo ({code})? Thao tác này được ghi vào nhật ký kiểm tra.
+	Approve	Chấp nhận
+	Approved	Đã chấp nhận
+	Cannot be approved: fix the cause or exclude the sheet	Không thể chấp nhận: sửa nguyên nhân hoặc loại trừ tờ bản vẽ
+	Overlap (mm)	Phần chồng lấn (mm)
+	{n} pieces	{n} mảnh
+	Approve split	Chấp nhận chia tờ
+	Printer limits apply in the desktop app; the web app plots PDF.	Giới hạn máy in áp dụng trong ứng dụng máy tính; ứng dụng web in ra PDF.
+	XREF_MISSING	Thiếu tham chiếu ngoài
+	XREF_UNLOADED	Tham chiếu ngoài đã tạm gỡ
+	SCALE_PAPER_MISMATCH	Tỷ lệ không phù hợp với khổ giấy
+	PAPER_TOO_SMALL	Khổ giấy quá nhỏ
+	DEVICE_LIMIT_EXCEEDED	Vượt giới hạn thiết bị
+	DEVICE_LIMIT_NEAR	Gần giới hạn thiết bị
+	DEVICE_UNAVAILABLE	Thiết bị không khả dụng
+	FONT_MISSING	Thiếu phông chữ
+	FONT_FALLBACK	Thay thế phông chữ bị thiếu
+	SHEET_ID_DUPLICATE	Mã tờ bản vẽ trùng lặp
+	REVISION_OLD	Phiên bản sửa đổi cũ
+	TEMPLATE_SUPERSEDED	Mẫu đã được thay thế
