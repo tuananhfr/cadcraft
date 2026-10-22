@@ -64,6 +64,8 @@ pub struct JobRunner {
     groups: Vec<FileGroup>,
     completed_groups: BTreeSet<String>,
     pending: Option<PendingCommit>,
+    awaiting: Option<PendingCommit>,
+    frame_clock: Option<fn() -> u64>,
     write_failures: u8,
     cancel: Arc<AtomicBool>,
     loaded: Option<(u32, Arc<Drawing>)>,
@@ -243,11 +245,18 @@ impl JobRunner {
             groups,
             completed_groups: delivered,
             pending: None,
+            awaiting: None,
+            frame_clock: None,
             write_failures: 0,
             cancel: Arc::new(AtomicBool::new(false)),
             loaded: None,
             finished,
         })
+    }
+
+    /// Frame-driven hosts measure elapsed rendering without a background watchdog.
+    pub fn set_frame_clock(&mut self, clock: fn() -> u64) {
+        self.frame_clock = Some(clock);
     }
 
     pub fn cancel(&mut self) {
@@ -278,6 +287,20 @@ impl JobRunner {
         let result = serde_json::to_string(&pending.manifest)
             .map_err(|error| error.to_string())
             .and_then(|json| store.commit(&self.job.job_id, &pending.artifacts, &json));
+        match result {
+            Ok(()) => match store.poll() {
+                Ok(true) => self.finish_commit(store, pending, Ok(())),
+                Ok(false) => {
+                    self.awaiting = Some(pending);
+                    StepOutcome::Worked
+                }
+                Err(error) => self.finish_commit(store, pending, Err(error)),
+            },
+            Err(error) => self.finish_commit(store, pending, Err(error)),
+        }
+    }
+
+    fn finish_commit(&mut self, store: &mut dyn JobStore, pending: PendingCommit, result: Result<(), String>) -> StepOutcome {
         match result {
             Ok(()) => {
                 self.write_failures = 0;
@@ -320,6 +343,28 @@ impl JobRunner {
         budget: &SheetBudget,
         now_ms: u64,
     ) -> StepOutcome {
+        let durable = store.poll();
+        if let Some(pending) = self.awaiting.take() {
+            return match durable {
+                Ok(true) => self.finish_commit(store, pending, Ok(())),
+                Ok(false) => {
+                    self.awaiting = Some(pending);
+                    StepOutcome::Worked
+                }
+                Err(error) => self.finish_commit(store, pending, Err(error)),
+            };
+        }
+        match durable {
+            Ok(false) => return StepOutcome::Worked,
+            Err(error) => {
+                self.manifest.status = JobStatus::Failed;
+                self.manifest.updated_ms = now_ms;
+                self.manifest.issues.push(issue(Severity::Block, "STORE_WRITE_FAILED", error, None));
+                self.finished = true;
+                return StepOutcome::Finished(JobStatus::Failed);
+            }
+            Ok(true) => {}
+        }
         if self.finished {
             return StepOutcome::Finished(self.manifest.status);
         }
@@ -385,11 +430,21 @@ impl JobRunner {
         };
         // A timed-out attempt poisons its own flag; retries must still be able to render.
         let budget = SheetBudget { cancel: Arc::new(AtomicBool::new(false)), ..budget.clone() };
+        let started = self.frame_clock.map(|clock| clock());
         let result = budget.render(renderer, drawing, sheet);
+        let elapsed = started.zip(self.frame_clock).map(|(started, clock)| clock().saturating_sub(started));
         let Some(artifact) = manifest.sheets.get_mut(index) else {
             return self.internal_error(store, manifest);
         };
         artifact.attempts = artifact.attempts.saturating_add(1);
+        if elapsed.is_some_and(|elapsed| elapsed > budget.time_ms) {
+            artifact.issues.push(issue(
+                Severity::Warn,
+                "SHEET_SLOW",
+                "The sheet exceeded its frame rendering time budget.",
+                Some(&artifact.sheet_id),
+            ));
+        }
         match result {
             Ok(bytes) => {
                 artifact.status = SheetStatus::Done;
@@ -533,10 +588,17 @@ pub fn run_to_end(
     budget: &SheetBudget,
     now: &dyn Fn() -> u64,
 ) -> Result<PublishManifest, String> {
+    if !store.poll()? {
+        return Err("asynchronous print jobs require the frame pump".into());
+    }
     let mut runner = JobRunner::open(job, store, now())?;
     loop {
         if let StepOutcome::Finished(_) = runner.step(store, loader, renderer, budget, now()) {
             return Ok(runner.manifest);
+        }
+        // A synchronous loop cannot yield to the browser to complete an IndexedDB transaction.
+        if !store.poll()? {
+            return Err("asynchronous print jobs require the frame pump".into());
         }
     }
 }

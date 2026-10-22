@@ -14,9 +14,7 @@ use web_sys::{Event, IdbDatabase, IdbObjectStore, IdbRequest, IdbTransaction, Id
 pub use crate::idb_profile_store::{IdbError, Pending};
 use crate::idb_profile_store::{MAX_PRELOAD_RECORDS, Mirror, OwnedCommit};
 
-pub const DB_NAME: &str = "cadcraft";
-pub const DB_VERSION: u32 = 1;
-pub const STORES: &[&str] = &["workspace", "snapshots", "damaged", "meta", "autosave", "autosave_index", "instances"];
+pub use crate::idb_schema::{DB_NAME, DB_VERSION, STORES};
 pub const IDB_OPEN_TIMEOUT_MS: u32 = 3000;
 const MAX_PRELOAD_BYTES: usize = 32 << 20;
 
@@ -198,11 +196,8 @@ impl IdbStore {
         let callback = Closure::<dyn FnMut(Event)>::new(move |_| {
             let upgrade = || -> Result<(), JsValue> {
                 let db: IdbDatabase = upgrade_request.result()?.dyn_into()?;
-                // Later job stores extend STORES and bump DB_VERSION so existing databases gain them.
-                for name in STORES {
-                    if !db.object_store_names().contains(name) {
-                        db.create_object_store(name)?;
-                    }
+                for name in crate::idb_schema::missing_stores(|name| db.object_store_names().contains(name)) {
+                    db.create_object_store(name)?;
                 }
                 Ok(())
             };
@@ -222,7 +217,15 @@ impl IdbStore {
     }
 
     pub async fn preload(&self, store: &str, limit: usize) -> Result<Vec<(String, Vec<u8>)>, IdbError> {
-        let limit = limit.min(MAX_PRELOAD_RECORDS);
+        self.preload_bounded(store, limit.min(MAX_PRELOAD_RECORDS), MAX_PRELOAD_BYTES).await
+    }
+
+    pub async fn preload_print_jobs(&self, limit: usize, max_bytes: usize) -> Result<Vec<(String, Vec<u8>)>, IdbError> {
+        self.preload_bounded("print-jobs", limit.min(50_000), max_bytes.min(512 << 20)).await
+    }
+
+    async fn preload_bounded(&self, store: &str, limit: usize, max_bytes: usize) -> Result<Vec<(String, Vec<u8>)>, IdbError> {
+        let reject_truncated = store == "print-jobs";
         let transaction = self.db.transaction_with_str(store).map_err(js_error)?;
         let request = transaction.object_store(store).map_err(js_error)?.open_cursor().map_err(js_error)?;
         let records = Rc::new(RefCell::new(Vec::new()));
@@ -245,6 +248,9 @@ impl IdbStore {
                     let Ok(mut records) = collected.try_borrow_mut() else { return Err(JsValue::from_str("IndexedDB preload is busy")) };
                     if records.len() >= limit {
                         log::warn!("workspace: IndexedDB preload capped at {limit} records");
+                        if reject_truncated {
+                            return Err(JsValue::from_str("IndexedDB preload exceeds its record limit"));
+                        }
                         let _ = resolve.call0(&JsValue::UNDEFINED);
                         return Ok(());
                     }
@@ -252,7 +258,7 @@ impl IdbStore {
                     let bytes = cursor.value()?.dyn_into::<Uint8Array>()?;
                     let size = bytes.length() as usize;
                     let next = used.get().saturating_add(size).saturating_add(key.len());
-                    if next > MAX_PRELOAD_BYTES {
+                    if next > max_bytes {
                         return Err(JsValue::from_str("IndexedDB preload exceeds its byte limit"));
                     }
                     used.set(next);
@@ -283,12 +289,13 @@ impl IdbStore {
     }
 
     pub fn put_many(&self, store: &str, items: &[(String, Vec<u8>)]) -> Pending {
+        let limit = if store == "print-jobs" { 50_000 } else { MAX_PRELOAD_RECORDS };
         self.write(&[store], |transaction| {
             let store = transaction.object_store(store).map_err(js_error)?;
-            for (key, bytes) in items.iter().take(MAX_PRELOAD_RECORDS) {
+            for (key, bytes) in items.iter().take(limit) {
                 put(&store, key, bytes)?;
             }
-            if items.len() > MAX_PRELOAD_RECORDS {
+            if items.len() > limit {
                 return Err(IdbError::Unavailable("too many IndexedDB writes".into()));
             }
             Ok(())

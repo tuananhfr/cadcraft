@@ -413,7 +413,7 @@ impl CadApp {
             let first = text.split_whitespace().next().unwrap_or("");
             // `cmd {json}` is a programmatic call: the engine runs it with those parameters.
             let json_form = text.trim_start().get(first.len()..).is_some_and(|rest| rest.trim_start().starts_with('{'));
-            let jobs_command = cfg!(not(target_arch = "wasm32")) && cadcraft_engine::cmd::registry::resolve_command(first) == Some("ubplot.jobs");
+            let jobs_command = cadcraft_engine::cmd::registry::resolve_command(first) == Some("ubplot.jobs");
             if json_form && (menus::is_ui_command(&first.to_ascii_lowercase()) || jobs_command) {
                 let result = serde_json::from_str::<Value>(text.trim_start().get(first.len()..).unwrap_or(""))
                     .map_err(|error| error.to_string())
@@ -795,7 +795,6 @@ impl CadApp {
         }
         focus::exit_button(ui.ctx(), self);
         dialogs::show(self, ui.ctx());
-        #[cfg(not(target_arch = "wasm32"))]
         ubplot::jobs_panel::show(self, ui.ctx());
         wsprofile::conflict::show_conflict_dialog(ui.ctx(), self);
         palettes::patterns::prompt_picker(self, ui.ctx());

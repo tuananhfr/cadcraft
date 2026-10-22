@@ -8,12 +8,19 @@ pub enum WorkerEvent {
     Failed(String),
 }
 
-#[cfg(target_arch = "wasm32")]
-#[derive(Default)]
-pub struct JobPump {}
+pub use frame::FrameJobPump;
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) fn tick(_: &mut crate::CadApp, _: &egui::Context) {}
+pub use frame::FrameJobPump as JobPump;
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn tick(app: &mut crate::CadApp, ctx: &egui::Context) {
+    crate::i18n::with_language(app.language(), || {
+        if let Some(notice) = app.job_pump.advance(&mut app.session, ctx) {
+            app.set_status(notice);
+        }
+    });
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use desktop::tick;
@@ -416,3 +423,313 @@ mod desktop {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use desktop::status_label;
+
+mod frame {
+    use std::collections::{BTreeMap, BTreeSet, VecDeque};
+    use std::rc::Rc;
+    use std::sync::Arc;
+
+    use cadcraft_engine::Session;
+    use cadcraft_engine::sheetplan::codes::issue;
+    use cadcraft_engine::sheetplan::queue::{
+        JobRunner, JobStatus, JobStore, MAX_JOB_SHEETS, MAX_JOB_SOURCES, MAX_MANIFEST_BYTES, PdfSheetRenderer, PrintJob, SheetBudget, SheetRenderer,
+        SnapshotLoader, StepOutcome,
+    };
+    use cadcraft_engine::sheetplan::{Severity, parse_plan};
+
+    use super::{Progress, PublishManifest};
+
+    struct Pending {
+        job: PrintJob,
+        loader: SnapshotLoader,
+    }
+
+    pub struct FrameJobPump {
+        available: bool,
+        renderer: Rc<dyn SheetRenderer>,
+        budget: SheetBudget,
+        clock: fn() -> u64,
+        last_frame: Option<u64>,
+        pending: VecDeque<Pending>,
+        active: Option<(JobRunner, SnapshotLoader)>,
+        pub open: bool,
+        pub manifests: BTreeMap<String, PublishManifest>,
+        pub interrupted: BTreeSet<String>,
+        pub errors: BTreeMap<String, String>,
+        pub progress: Option<(String, Progress)>,
+        notice: bool,
+    }
+
+    impl Default for FrameJobPump {
+        fn default() -> Self {
+            Self {
+                available: false,
+                renderer: Rc::new(PdfSheetRenderer),
+                budget: SheetBudget::web(),
+                clock: || 0,
+                last_frame: None,
+                pending: VecDeque::new(),
+                active: None,
+                open: false,
+                manifests: BTreeMap::new(),
+                interrupted: BTreeSet::new(),
+                errors: BTreeMap::new(),
+                progress: None,
+                notice: false,
+            }
+        }
+    }
+
+    impl FrameJobPump {
+        pub fn with_clock(session: &mut Session, clock: fn() -> u64) -> Self {
+            Self::with_renderer(session, Rc::new(PdfSheetRenderer), SheetBudget::web(), clock)
+        }
+
+        pub fn with_renderer(session: &mut Session, renderer: Rc<dyn SheetRenderer>, budget: SheetBudget, clock: fn() -> u64) -> Self {
+            let mut pump = Self { renderer, budget, clock, ..Self::default() };
+            let Some(store) = session.job_store_mut() else { return pump };
+            pump.available = true;
+            for id in store.list_jobs().into_iter().take(MAX_JOB_SHEETS) {
+                match read_manifest(store, &id) {
+                    Ok(manifest) => {
+                        if matches!(manifest.status, JobStatus::Queued | JobStatus::Running) {
+                            pump.interrupted.insert(id.clone());
+                        }
+                        pump.manifests.insert(id, manifest);
+                    }
+                    Err(error) => {
+                        pump.errors.insert(id, error);
+                    }
+                }
+            }
+            pump.notice = !pump.interrupted.is_empty();
+            pump.open = pump.notice;
+            pump
+        }
+
+        pub fn available(&self) -> bool {
+            self.available
+        }
+
+        pub fn busy(&self) -> bool {
+            self.active.is_some() || !self.pending.is_empty()
+        }
+
+        pub fn owns(&self, id: &str) -> bool {
+            self.active.as_ref().is_some_and(|(runner, _)| runner.manifest().job_id == id)
+                || self.pending.iter().any(|pending| pending.job.job_id == id)
+        }
+
+        pub fn refresh(&mut self, session: &mut Session, id: &str) {
+            match store(session).and_then(|store| read_manifest(store, id)) {
+                Ok(manifest) => {
+                    self.manifests.insert(id.into(), manifest);
+                }
+                Err(error) => {
+                    self.errors.insert(id.into(), error);
+                }
+            }
+        }
+
+        pub fn resume(&mut self, session: &mut Session, id: &str) -> Result<(), String> {
+            if self.owns(id) {
+                return Err(crate::tl!("Print job is already queued or running").into());
+            }
+            if self.pending.len() >= MAX_JOB_SHEETS {
+                return Err(crate::tl!("Print job queue is full").into());
+            }
+            let manifest = read_manifest(store(session)?, id)?;
+            if manifest.status == JobStatus::Done {
+                return Ok(());
+            }
+            let bytes = store(session)?.read_artifact(id, "job.json")?.ok_or_else(|| crate::tl!("Stored print job is missing").to_string())?;
+            if bytes.len() > MAX_MANIFEST_BYTES {
+                return Err(crate::tl!("Stored print job exceeds supported limits").into());
+            }
+            let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+            let sources = value
+                .get("sources")
+                .and_then(serde_json::Value::as_array)
+                .filter(|sources| sources.len() <= MAX_JOB_SOURCES)
+                .ok_or_else(|| crate::tl!("Stored print job exceeds supported limits").to_string())?;
+            for source in sources {
+                parse_plan(source.get("plan").ok_or_else(|| crate::tl!("Stored print job is missing").to_string())?)?;
+            }
+            let job: PrintJob = serde_json::from_value(value).map_err(|error| error.to_string())?;
+            if job.job_id != id {
+                return Err(crate::tl!("Stored print job does not match its id").into());
+            }
+            let loader = snapshot(session)?;
+            if job.sources.len() != 1 || job.sources.first().is_none_or(|source| source.source_hash != loader.1) {
+                return Err("SOURCE_CHANGED: open the same source drawing before resuming this print job".into());
+            }
+            let mut manifest = manifest;
+            manifest.status = JobStatus::Queued;
+            manifest.updated_ms = (self.clock)();
+            store(session)?.commit(id, &[], &manifest.to_json())?;
+            self.manifests.insert(id.into(), manifest);
+            self.pending.push_back(Pending { job, loader });
+            self.interrupted.remove(id);
+            self.errors.remove(id);
+            Ok(())
+        }
+
+        pub fn discard_interrupted(&mut self, session: &mut Session, id: &str) -> Result<(), String> {
+            if self.owns(id) {
+                return Err(crate::tl!("Print job is already queued or running").into());
+            }
+            let mut manifest = read_manifest(store(session)?, id)?;
+            if manifest.status == JobStatus::Running {
+                manifest.status = JobStatus::Cancelled;
+                manifest.updated_ms = (self.clock)();
+                store(session)?.commit(id, &[], &manifest.to_json())?;
+            }
+            session.execute("ubplot.jobs", &serde_json::json!({"action": "remove", "jobId": id})).map_err(|error| error.to_string())?;
+            self.interrupted.remove(id);
+            self.manifests.remove(id);
+            self.errors.remove(id);
+            Ok(())
+        }
+
+        fn fail(&mut self, id: &str, error: String) {
+            if let Some(manifest) = self.manifests.get_mut(id) {
+                manifest.status = JobStatus::Failed;
+                manifest.issues.push(issue(Severity::Block, "STORE_WRITE_FAILED", &error, None));
+            }
+            self.errors.insert(id.into(), error);
+        }
+
+        pub fn advance(&mut self, session: &mut Session, ctx: &egui::Context) -> Option<String> {
+            if !self.available {
+                return None;
+            }
+            let frame = ctx.cumulative_frame_nr();
+            if self.last_frame == Some(frame) {
+                return None;
+            }
+            self.last_frame = Some(frame);
+            let notice = if std::mem::take(&mut self.notice) {
+                self.interrupted.first().map(|id| crate::tf!("Print job {jobId} was interrupted", jobId = id))
+            } else {
+                None
+            };
+            for _ in 0..MAX_JOB_SHEETS {
+                let Some(job) = session.take_queued_job() else { break };
+                let id = job.job_id.clone();
+                if self.owns(&id) {
+                    continue;
+                }
+                self.refresh(session, &id);
+                match snapshot(session) {
+                    Ok(loader) if self.pending.len() < MAX_JOB_SHEETS => self.pending.push_back(Pending { job, loader }),
+                    Ok(_) => {
+                        self.errors.insert(id, crate::tl!("Print job queue is full").into());
+                    }
+                    Err(error) => {
+                        self.errors.insert(id.clone(), error);
+                        self.interrupted.insert(id);
+                    }
+                }
+            }
+            for id in session.take_cancel_requests() {
+                self.pending.retain(|pending| pending.job.job_id != id);
+                if let Some((runner, _)) = &mut self.active
+                    && runner.manifest().job_id == id
+                {
+                    runner.cancel();
+                }
+                self.refresh(session, &id);
+            }
+            if self.active.is_none()
+                && let Some(pending) = self.pending.pop_front()
+            {
+                let id = pending.job.job_id.clone();
+                let start = store(session).and_then(|store| {
+                    let mut manifest = read_manifest(store, &id)?;
+                    manifest.status = JobStatus::Running;
+                    manifest.updated_ms = (self.clock)();
+                    store.commit(&id, &[], &manifest.to_json())?;
+                    let mut runner = JobRunner::open(pending.job, store, (self.clock)())?;
+                    runner.set_frame_clock(self.clock);
+                    Ok((runner, pending.loader))
+                });
+                match start {
+                    Ok(active) => self.active = Some(active),
+                    Err(error) => self.fail(&id, error),
+                }
+            }
+            let mut terminal = false;
+            if let Some((runner, loader)) = &mut self.active {
+                let id = runner.manifest().job_id.clone();
+                // A single step is the frame's entire rendering allowance, including retries and merges.
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    store(session).map(|store| runner.step(store, loader, self.renderer.as_ref(), &self.budget, (self.clock)()))
+                }));
+                self.progress = Some((id.clone(), runner.progress()));
+                self.manifests.insert(id.clone(), runner.manifest().clone());
+                match result {
+                    Ok(Ok(StepOutcome::Worked)) => {}
+                    Ok(Ok(StepOutcome::Finished(_))) => {
+                        terminal = true;
+                        session.echo(crate::tf!("Print job {jobId}: {status}", jobId = id, status = status_label(runner.manifest().status)));
+                    }
+                    Ok(Err(error)) => {
+                        self.fail(&id, error);
+                        terminal = true;
+                    }
+                    Err(_) => {
+                        self.fail(&id, crate::tl!("Print worker stopped unexpectedly").into());
+                        terminal = true;
+                    }
+                }
+            } else if let Ok(store) = store(session) {
+                match store.poll() {
+                    Ok(false) => ctx.request_repaint(),
+                    Err(error) => {
+                        self.errors.insert("storage".into(), error);
+                    }
+                    Ok(true) => {}
+                }
+            }
+            if terminal {
+                self.active = None;
+                self.progress = None;
+            }
+            if self.busy() {
+                ctx.request_repaint();
+            }
+            notice
+        }
+    }
+
+    fn store(session: &mut Session) -> Result<&mut (dyn JobStore + 'static), String> {
+        session.job_store_mut().ok_or_else(|| crate::tl!("Background printing is not available in this build").to_string())
+    }
+
+    fn read_manifest(store: &dyn JobStore, id: &str) -> Result<PublishManifest, String> {
+        let text = store.read_manifest(id)?.ok_or_else(|| crate::tl!("Stored print job is missing").to_string())?;
+        let manifest = PublishManifest::from_json(&text)?;
+        if manifest.job_id != id {
+            return Err(crate::tl!("Stored print job does not match its id").into());
+        }
+        Ok(manifest)
+    }
+
+    fn snapshot(session: &mut Session) -> Result<SnapshotLoader, String> {
+        let hash = cadcraft_engine::cmd::ubplot::source_hash(session).map_err(|error| error.to_string())?;
+        Ok(SnapshotLoader(Arc::new(session.doc().map_err(|error| error.to_string())?.clone()), hash))
+    }
+
+    pub(crate) fn status_label(status: JobStatus) -> &'static str {
+        match status {
+            JobStatus::Queued => crate::tl!("Queued"),
+            JobStatus::Running => crate::tl!("Running"),
+            JobStatus::Cancelled => crate::tl!("Cancelled"),
+            JobStatus::Done => crate::tl!("Done"),
+            JobStatus::Failed => crate::tl!("Failed"),
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) use frame::status_label;

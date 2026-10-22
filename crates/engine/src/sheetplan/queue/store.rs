@@ -3,6 +3,11 @@ use std::collections::BTreeMap;
 use super::types::{MAX_JOB_SHEETS, MAX_MANIFEST_BYTES, PrintJob};
 
 pub trait JobStore {
+    /// Async hosts return false until all submitted transactions are durable.
+    fn poll(&mut self) -> Result<bool, String> {
+        Ok(true)
+    }
+
     fn list_jobs(&self) -> Vec<String>;
     fn read_manifest(&self, job_id: &str) -> Result<Option<String>, String>;
     /// Artifacts precede the manifest so a committed manifest never names missing data.

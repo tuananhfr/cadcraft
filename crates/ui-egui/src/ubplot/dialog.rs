@@ -251,13 +251,10 @@ fn publish(app: &mut CadApp, state: &mut State, open: &mut bool) {
     let output = if state.split { "split" } else { "merged" };
     state.failed.clear();
     state.error = None;
-    #[cfg(not(target_arch = "wasm32"))]
-    let params = json!({"output": output, "path": path, "background": true});
-    #[cfg(target_arch = "wasm32")]
-    let params = json!({"output": output, "path": path});
+    let background = cfg!(not(target_arch = "wasm32")) || app.job_pump.available();
+    let params = json!({"output": output, "path": path, "background": background});
     match app.run("ubplot.publish", params) {
         Ok(result) => {
-            #[cfg(not(target_arch = "wasm32"))]
             if let Some(id) = result.get("jobId").and_then(Value::as_str) {
                 app.session.echo(crate::tf!("Print job {jobId} queued", jobId = id));
                 let _ = app.run("ui.ubplot.jobs", Value::Null);

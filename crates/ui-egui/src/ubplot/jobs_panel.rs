@@ -12,6 +12,18 @@ pub(crate) fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result
     {
         return Some(Err(crate::tl!("Print job is already queued or running").into()));
     }
+    #[cfg(target_arch = "wasm32")]
+    if resolved == "ubplot.jobs" {
+        let action = params.get("action").and_then(Value::as_str).unwrap_or("list");
+        if let Some(id) = params.get("jobId").and_then(Value::as_str) {
+            if action == "resume" {
+                return Some(app.job_pump.resume(&mut app.session, id).map(|()| json!({"manifest": app.job_pump.manifests.get(id)})));
+            }
+            if action == "remove" {
+                return Some(app.job_pump.discard_interrupted(&mut app.session, id).map(|()| json!({"jobId": id, "removed": true})));
+            }
+        }
+    }
     if id != "ui.ubplot.jobs" {
         return None;
     }
@@ -28,6 +40,9 @@ fn command(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     match action {
         "resume" => app.job_pump.resume(&mut app.session, id)?,
         "discard" => app.job_pump.discard_interrupted(&mut app.session, id)?,
+        #[cfg(target_arch = "wasm32")]
+        "folder" => return Err(crate::tl!("Print output is unavailable").into()),
+        #[cfg(not(target_arch = "wasm32"))]
         "folder" => {
             let name = params.get("file").and_then(Value::as_str).ok_or_else(|| crate::tl!("Print output is unavailable").to_string())?;
             let file = app
@@ -123,6 +138,7 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context) {
                         for file in &manifest.files {
                             ui.horizontal_wrapped(|ui| {
                                 ui.label(&file.name);
+                                #[cfg(not(target_arch = "wasm32"))]
                                 if ui.button(crate::tl!("Open folder")).clicked() {
                                     action = Some(("ui.ubplot.jobs", json!({"action": "folder", "jobId": id, "file": file.name})));
                                 }
@@ -152,7 +168,10 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context) {
                 if command == "ubplot.jobs"
                     && let Some(id) = params.get("jobId").and_then(Value::as_str)
                 {
+                    #[cfg(not(target_arch = "wasm32"))]
                     app.job_pump.refresh(id);
+                    #[cfg(target_arch = "wasm32")]
+                    app.job_pump.refresh(&mut app.session, id);
                 }
             }
             Err(error) => app.set_status(error),

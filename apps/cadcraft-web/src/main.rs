@@ -154,6 +154,11 @@ mod web {
         Services { pick_save: Some(Box::new(|name: &str| Some(name.to_string()))), ..Services::default() }
     }
 
+    fn print_clock() -> u64 {
+        let now = js_sys::Date::now();
+        if now.is_finite() && now >= 0.0 { now as u64 } else { 0 }
+    }
+
     pub fn start() {
         eframe::WebLogger::init(log::LevelFilter::Info).ok();
         cadcraft_engine::cmd::ubplot::set_clock(|| {
@@ -204,6 +209,7 @@ mod web {
                 create.instance_descriptor.backends = eframe::wgpu::Backends::GL;
             }
             let profile_store = crate::idb_profile_store::open().await;
+            let job_store = crate::job_store::BrowserKv::open().await;
             let result = eframe::WebRunner::new()
                 .start(
                     canvas,
@@ -265,6 +271,13 @@ mod web {
                                 message.push_str(&notice);
                                 app.set_status(notice);
                             }
+                        }
+                        match job_store {
+                            Ok(kv) => {
+                                app.session.set_job_store(Box::new(crate::job_store::IdbJobStore::new(kv, crate::download::download)));
+                                app.job_pump = cadcraft_ui_egui::ubplot::worker::JobPump::with_clock(&mut app.session, print_clock);
+                            }
+                            Err(error) => log::warn!("print jobs: IndexedDB unavailable: {error}"),
                         }
                         if query_param("lang").as_deref() == Some("qps") {
                             let _ = app.run("ui.language", serde_json::json!({"lang": "qps"}));
@@ -356,6 +369,10 @@ mod fonts;
 pub mod idb;
 #[cfg(any(target_arch = "wasm32", test))]
 pub mod idb_profile_store;
+#[cfg(any(target_arch = "wasm32", test))]
+mod idb_schema;
+#[cfg(any(target_arch = "wasm32", test))]
+pub mod job_store;
 #[cfg(any(target_arch = "wasm32", test))]
 mod profile_store;
 #[cfg(target_arch = "wasm32")]
