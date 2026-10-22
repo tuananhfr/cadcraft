@@ -127,9 +127,15 @@ fn validate_settings(settings: &PrintSettings) -> Result<(), String> {
     naming_tokens(&settings.naming)
 }
 
-fn validate_doc(doc: &ProfileDoc) -> Result<(), String> {
+pub(super) fn validate_doc(doc: &ProfileDoc) -> Result<(), String> {
     if doc.schema_version != PRINT_PROFILE_SCHEMA {
         return Err("unsupported print profile schema_version".into());
+    }
+    if let Some(project_id) = &doc.project_id {
+        if doc.level != ProfileLevel::Drawing {
+            return Err("only drawing print profiles may carry project_id".into());
+        }
+        super::store::validate_id(ProfileLevel::Project, project_id)?;
     }
     if doc.locks.len() > MAX_PROFILE_LOCKS {
         return Err("print profile exceeds 256 locks".into());
@@ -159,7 +165,7 @@ fn consume(remaining: &mut usize, bytes: usize) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_value(value: &Value, depth: usize, remaining: &mut usize) -> Result<(), String> {
+pub(super) fn validate_value(value: &Value, depth: usize, remaining: &mut usize) -> Result<(), String> {
     if depth > MAX_PROFILE_DEPTH {
         return Err("print profile JSON depth exceeds 32".into());
     }

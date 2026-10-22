@@ -420,6 +420,8 @@ fn main() -> eframe::Result {
             // Autosave files (SAVEFILEPATH) default to `<settings dir>/autosave`.
             if let Some(dir) = config_dir() {
                 app.enable_autosave(&dir.join("autosave"));
+                app.session
+                    .set_print_profile_store(Box::new(cadcraft_engine::sheetplan::profile::DirPrintProfileStore::new(dir.join("print-profiles"))));
                 // Startup LISP (acad.lsp, acaddoc.lsp) is read from `<settings>/support`; the
                 // folder is made so it is there to put them in.
                 let support = dir.join("support");

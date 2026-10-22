@@ -1969,3 +1969,4 @@
 	Could not recover the drawing	Не вдалося відновити креслення
 	Drawing autosave queue is full	Черга автозбереження креслень заповнена
 	Could not autosave the drawing: {error}	Не вдалося автоматично зберегти креслення: {error}
+	Print settings last for this visit	Налаштування друку діють лише протягом цього відвідування

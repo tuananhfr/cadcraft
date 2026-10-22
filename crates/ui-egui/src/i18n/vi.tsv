@@ -1973,3 +1973,4 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	Could not recover the drawing	Không thể khôi phục bản vẽ
 	Drawing autosave queue is full	Hàng đợi tự lưu bản vẽ đã đầy
 	Could not autosave the drawing: {error}	Không thể tự lưu bản vẽ: {error}
+	Print settings last for this visit	Thiết lập in chỉ được giữ trong phiên truy cập này

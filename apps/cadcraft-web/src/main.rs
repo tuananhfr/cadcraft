@@ -269,6 +269,9 @@ mod web {
                         if query_param("lang").as_deref() == Some("qps") {
                             let _ = app.run("ui.language", serde_json::json!({"lang": "qps"}));
                         }
+                        app.session.set_print_profile_store(Box::new(cadcraft_engine::sheetplan::profile::MemoryPrintProfileStore::default()));
+                        app.session.echo("Print settings last for this visit");
+                        app.set_status(cadcraft_ui_egui::tl!("Print settings last for this visit"));
                         // `?cpu`: no render state for the app, so the canvas draws with egui shapes.
                         if !crate::wants_cpu(&query())
                             && let Some(rs) = &cc.wgpu_render_state
