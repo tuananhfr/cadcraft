@@ -716,7 +716,12 @@ pub fn shortcuts(app: &mut CadApp, ctx: &egui::Context) {
     }
     let fire = crate::shortcuts::pressed(app, ctx);
     for id in &fire {
-        let id = id.as_str();
+        // Customize edits the layout, so its undo keys must not reach the drawing behind it.
+        let id = match (app.ui.dialog.as_deref() == Some(crate::customize::DIALOG), id.as_str()) {
+            (true, "u") => "ui.layout.undo",
+            (true, "redo") => "ui.layout.redo",
+            _ => id.as_str(),
+        };
         // ISOPLANE (F5, Ctrl+E) switches the plane without cancelling the active command.
         if id == "isoplane" {
             if let Some(m) = app.session.execute(id, &json!({})).ok().and_then(|v| v.get("message").and_then(Value::as_str).map(str::to_string)) {
