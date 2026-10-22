@@ -7,7 +7,7 @@ use super::{CLOCK, bad, publish, source_hash};
 use crate::cmd::file::{budget_plot, merge_pdf};
 use crate::sheetplan::approval::{carry_over, issues, merge_audit, validate_approvals, validate_issue_approvals};
 use crate::sheetplan::codes::issue;
-use crate::sheetplan::queue::store::validate_name;
+use crate::sheetplan::queue::store::{validate_name, validate_output_file_name};
 use crate::sheetplan::queue::*;
 use crate::sheetplan::{PreflightIssue, Severity, SheetPlan, SheetStatus, parse_plan};
 use crate::{EngineError, Result, Session};
@@ -70,12 +70,10 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
         .map_err(|error| bad(PUBLISH, error.to_string()))?;
     if let Some(path) = path {
         let path = Path::new(path);
+        let name = path.file_name().and_then(|name| name.to_str()).ok_or_else(|| bad(PUBLISH, "path needs a file name"))?;
+        validate_output_file_name(name).map_err(|error| bad(PUBLISH, error))?;
         output.stem = path.file_stem().and_then(|stem| stem.to_str()).ok_or_else(|| bad(PUBLISH, "path needs a file stem"))?.into();
         output.dir = Some(path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or(Path::new(".")).to_string_lossy().into());
-    }
-    validate_name(&output.stem).map_err(|error| bad(PUBLISH, error))?;
-    if output.stem.len() > 160 {
-        return Err(bad(PUBLISH, "output stem exceeds 160 bytes"));
     }
     let plan = queue_plan(s, params)?;
     let source = JobSource { path: s.state()?.path.clone(), source_hash: plan.source_hash.clone(), plan };

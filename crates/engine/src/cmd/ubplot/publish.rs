@@ -10,6 +10,7 @@ use crate::sheetplan::approval::{carry_over, issues, merge_audit, refresh_status
 use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::ids::{sha256_hex, sheet_key};
 use crate::sheetplan::paper::sheet_margins;
+use crate::sheetplan::queue::store::validate_output_file_name;
 use crate::sheetplan::{PlotScale, ScanMode, ScanRequest, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, parse_plan};
 use crate::{Result, Session};
 
@@ -89,6 +90,10 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
         let stem = base.file_stem().and_then(|name| name.to_str()).unwrap_or("Drawing");
         names.iter().map(|name| base.with_file_name(format!("{stem}-{name}.pdf"))).collect()
     };
+    for destination in &destinations {
+        let name = destination.file_name().and_then(|name| name.to_str()).ok_or_else(|| bad(COMMAND, "output needs a file name"))?;
+        validate_output_file_name(name).map_err(|error| bad(COMMAND, error))?;
+    }
     #[cfg(not(target_arch = "wasm32"))]
     if path.is_some()
         && let Some(source) = s.state()?.path.as_deref()
@@ -96,7 +101,8 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
         check_source(base, source)?;
         for destination in &destinations {
             check_source(destination, source)?;
-            check_source(&temporary_path(destination, &plan.job_id), source)?;
+            let temporary = temporary_path(destination, &plan.job_id).map_err(|error| bad(COMMAND, error))?;
+            check_source(&temporary, source)?;
         }
     }
     let blocked: Vec<_> = plan.sheets.iter().filter(|sheet| sheet.status == SheetStatus::Blocked).map(sheet_key).collect();
@@ -355,17 +361,18 @@ fn finish(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn temporary_path(path: &Path, job_id: &str) -> PathBuf {
-    let mut name = path.as_os_str().to_os_string();
-    name.push(format!(".{job_id}.part"));
-    PathBuf::from(name)
+fn temporary_path(path: &Path, job_id: &str) -> std::result::Result<PathBuf, String> {
+    let name = path.file_name().and_then(|name| name.to_str()).ok_or_else(|| "output needs a file name".to_string())?;
+    let temporary = crate::sheetplan::queue::DirJobStore::temp_name(job_id, name);
+    validate_output_file_name(&temporary)?;
+    Ok(path.with_file_name(temporary))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 fn store(path: &Path, job_id: &str, bytes: &[u8]) -> std::result::Result<(), String> {
     use std::io::Write;
 
-    let temporary = temporary_path(path, job_id);
+    let temporary = temporary_path(path, job_id)?;
     // Never truncate an existing temp file belonging to another publisher.
     let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temporary).map_err(|error| error.to_string())?;
     let result = file.write_all(bytes).and_then(|()| file.sync_all());

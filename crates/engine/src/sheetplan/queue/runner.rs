@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use cadcraft_doc::Drawing;
 
 use super::render::{RenderFailure, SheetBudget, SheetRenderer};
-use super::store::{JobStore, artifact_name, validate_name};
+use super::store::{JobStore, artifact_name, validate_name, validate_output_file_name};
 use super::types::*;
 use crate::hash::sha256_hex;
 use crate::sheetplan::codes::issue;
@@ -82,12 +82,15 @@ fn page_count(sheet: &Sheet) -> Result<u32, String> {
 }
 
 fn safe_sheet_id(id: &str) -> String {
-    let name: String = id.chars().take(64).map(|ch| if ch.is_ascii_alphanumeric() || ch == '-' { ch } else { '-' }).collect();
+    let name: String = id
+        .chars()
+        .take(64)
+        .map(|ch| if ch.is_control() || matches!(ch, '/' | '\\' | '<' | '>' | ':' | '"' | '|' | '?' | '*') { '-' } else { ch })
+        .collect();
     if name.is_empty() { "sheet".into() } else { name }
 }
 
 fn groups(job: &PrintJob, sheets: &[(usize, usize)]) -> Result<Vec<FileGroup>, String> {
-    validate_name(&job.output.stem)?;
     let mut result: Vec<FileGroup> = Vec::new();
     for (index, &(source, sheet)) in sheets.iter().enumerate() {
         let sheet = job.sources.get(source).and_then(|source| source.plan.sheets.get(sheet)).ok_or("missing job sheet")?;
@@ -112,8 +115,8 @@ fn groups(job: &PrintJob, sheets: &[(usize, usize)]) -> Result<Vec<FileGroup>, S
         if job.output.mode == OutputMode::Merged {
             group.name = if single { format!("{}.pdf", job.output.stem) } else { format!("{}-{:03}.pdf", job.output.stem, index + 1) };
         }
-        validate_name(&group.name)?;
-        if !names.insert(group.name.to_ascii_lowercase()) {
+        validate_output_file_name(&group.name)?;
+        if !names.insert(group.name.to_lowercase()) {
             return Err("output file names collide; use distinct sheet orders or IDs".into());
         }
     }

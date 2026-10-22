@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json};
 
+use super::store::validate_output_file_name;
 use crate::hash::sha256_hex;
 use crate::sheetplan::codes::issue;
 use crate::sheetplan::ids::{job_id, sheet_key};
@@ -146,6 +147,12 @@ impl PrintJob {
         if !valid_pages(output.pages_per_file) {
             return Err(invalid("PAGES_PER_FILE_INVALID", "pages_per_file is outside the PDF page limits."));
         }
+        if output.stem.is_empty() || output.stem.len() > 251 {
+            return Err(invalid("OUTPUT_NAME_INVALID", "invalid output file name: output stem must contain 1 to 251 UTF-8 bytes"));
+        }
+        if let Err(error) = validate_output_file_name(&format!("{}.pdf", output.stem)) {
+            return Err(vec![issue(Severity::Block, "OUTPUT_NAME_INVALID", error, None)]);
+        }
         if retry_limit > MAX_RETRY_LIMIT {
             return Err(invalid("RETRY_LIMIT_INVALID", "Retry limit exceeds the supported limit."));
         }
@@ -269,8 +276,14 @@ impl PublishManifest {
         if manifest.schema_version != MANIFEST_SCHEMA {
             return Err(format!("unsupported manifest schema_version {}", manifest.schema_version));
         }
+        for file in &manifest.files {
+            validate_output_file_name(&file.name)?;
+        }
         let mut keys = BTreeSet::new();
         for sheet in &manifest.sheets {
+            if let Some(name) = &sheet.output_file {
+                validate_output_file_name(name)?;
+            }
             let index = usize::try_from(sheet.source_index).map_err(|error| error.to_string())?;
             if sheet.order == 0 || manifest.sources.get(index).is_none() {
                 return Err("manifest contains an invalid sheet order or source index".into());

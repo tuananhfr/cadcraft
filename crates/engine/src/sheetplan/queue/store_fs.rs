@@ -2,7 +2,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
-use super::store::{JobStore, validate_bytes, validate_commit, validate_delete, validate_name};
+use super::store::{JobStore, validate_bytes, validate_commit, validate_delete, validate_name, validate_output_file_name};
 use super::types::{MAX_JOB_SHEETS, MAX_JOB_SOURCES, MAX_MANIFEST_BYTES, PrintJob};
 
 pub struct DirJobStore {
@@ -23,7 +23,15 @@ impl DirJobStore {
     }
 
     pub fn temp_name(job_id: &str, file: &str) -> String {
-        format!("{file}.{job_id}.part")
+        if file.len().saturating_add(job_id.len()).saturating_add(6) <= 255 {
+            return format!("{file}.{job_id}.part");
+        }
+        // Leave room for the suffix without splitting UTF-8 or colliding on a truncated prefix.
+        let id = if job_id.len() <= 64 { job_id.to_string() } else { crate::hash::sha256_hex(job_id.as_bytes()) };
+        let suffix = format!(".{}.{id}.part", crate::hash::sha256_hex(file.as_bytes()));
+        let limit = 255_usize.saturating_sub(suffix.len());
+        let prefix: String = file.char_indices().take_while(|(offset, ch)| offset.saturating_add(ch.len_utf8()) <= limit).map(|(_, ch)| ch).collect();
+        format!("{prefix}{suffix}")
     }
 
     fn job_dir(&self, job_id: &str) -> Result<PathBuf, String> {
@@ -178,14 +186,16 @@ impl JobStore for DirJobStore {
 
     fn deliver(&mut self, job: &PrintJob, file_name: &str, bytes: &[u8]) -> Result<String, String> {
         validate_name(&job.job_id)?;
-        validate_name(file_name)?;
+        validate_output_file_name(file_name)?;
         validate_bytes(bytes)?;
         if job.sources.len() > MAX_JOB_SOURCES {
             return Err("job source count exceeds supported limits".into());
         }
         let dir = job.output.dir.as_deref().filter(|dir| !dir.is_empty()).ok_or_else(|| "output directory is required".to_string())?;
         let path = Path::new(dir).join(file_name);
-        let temporary = Path::new(dir).join(Self::temp_name(&job.job_id, file_name));
+        let temp_name = Self::temp_name(&job.job_id, file_name);
+        validate_output_file_name(&temp_name)?;
+        let temporary = Path::new(dir).join(temp_name);
         for source in &job.sources {
             if let Some(source) = &source.path {
                 check_source(&path, source)?;
