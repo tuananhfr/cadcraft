@@ -18,7 +18,7 @@ use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, St
 
 pub(crate) struct Guarded {
     inner: Box<dyn Interactive>,
-    /// What panicked in `prompt` or `preview`; the command ends at the next input.
+    /// A failed callback ends the command at the next input, which can restore the drawing.
     broken: Cell<Option<&'static str>>,
 }
 
@@ -72,6 +72,15 @@ impl Interactive for Guarded {
         }
         catch_unwind(AssertUnwindSafe(|| self.inner.preview(s, cursor))).unwrap_or_else(|_| {
             self.broken.set(Some("panic in preview"));
+            Vec::new()
+        })
+    }
+    fn marks(&self, s: &Session) -> Vec<crate::prompt::Mark> {
+        if self.broken.get().is_some() {
+            return Vec::new();
+        }
+        catch_unwind(AssertUnwindSafe(|| self.inner.marks(s))).unwrap_or_else(|_| {
+            self.broken.set(Some("panic in marks"));
             Vec::new()
         })
     }
@@ -129,6 +138,10 @@ mod tests {
             assert_ne!(self.0, "preview", "preview panicked");
             vec![dot(cursor)]
         }
+        fn marks(&self, _s: &Session) -> Vec<crate::prompt::Mark> {
+            assert_ne!(self.0, "marks", "marks panicked");
+            vec![crate::prompt::Mark { outline: vec![Vec2::ZERO], label: "1".into(), warn: false }]
+        }
     }
 
     /// Start a PanicM the way `Session::start` starts an interactive command.
@@ -141,6 +154,7 @@ mod tests {
             "begin" => |_| Ok(Box::new(PanicM("begin"))),
             "prompt" => |_| Ok(Box::new(PanicM("prompt"))),
             "preview" => |_| Ok(Box::new(PanicM("preview"))),
+            "marks" => |_| Ok(Box::new(PanicM("marks"))),
             _ => |_| Ok(Box::new(PanicM("input"))),
         };
         let machine = Guarded::create("panictest", factory, s)?;
@@ -152,6 +166,23 @@ mod tests {
 
     fn points(s: &Session) -> usize {
         s.doc().unwrap().model.iter().count()
+    }
+
+    #[test]
+    fn panics_in_marks_restore_the_drawing_on_next_input() {
+        let mut s = Session::new();
+        start(&mut s, "marks").unwrap();
+        assert_eq!(points(&s), 1);
+        assert!(s.marks().is_empty());
+        assert!(s.marks().is_empty());
+        assert!(s.preview(Vec2::ZERO).is_empty());
+        assert!(s.current_prompt().unwrap().message.contains("Internal error"));
+        assert!(matches!(s.input(Input::Enter), Err(EngineError::Internal(_, message)) if message == "panic in marks"));
+        assert!(s.running.is_none());
+        assert!(s.marks().is_empty());
+        assert_eq!(points(&s), 0);
+        s.cmdline("line 0,0 1,0").unwrap();
+        assert!(s.running.is_some());
     }
 
     #[test]

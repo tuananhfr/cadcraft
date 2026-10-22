@@ -87,3 +87,42 @@ fn escape_during_a_mode_cancels_the_command() {
     s.cmdline("").unwrap();
     assert_eq!(left(&s), vec![0.0, 30.0]);
 }
+
+#[test]
+fn shift_pick_removes_at_any_select_prompt() {
+    use cadcraft_engine::Input;
+
+    let mut s = drawing();
+    let handles: Vec<_> = s.doc().unwrap().model.iter().map(|entity| entity.handle).collect();
+    let (a, b) = (handles[0], handles[1]);
+    s.start("erase").unwrap();
+    s.input(Input::Pick(vec![a, b])).unwrap();
+    s.input_removing(Input::Pick(vec![a])).unwrap();
+    assert_eq!(s.selection(), [b]);
+    s.input(Input::Enter).unwrap();
+    assert_eq!(left(&s), [0.0, 30.0]);
+    s.start("erase").unwrap();
+    s.input(Input::Pick(vec![a])).unwrap();
+    assert_eq!(s.selection(), [a]);
+    s.input(Input::Enter).unwrap();
+    assert_eq!(left(&s), [30.0]);
+}
+
+#[test]
+fn shift_pick_removal_is_undoable_and_does_not_latch() {
+    use cadcraft_engine::Input;
+
+    let mut s = drawing();
+    let handles: Vec<_> = s.doc().unwrap().model.iter().map(|entity| entity.handle).collect();
+    let (a, b, c) = (handles[0], handles[1], handles[2]);
+    s.start("erase").unwrap();
+    s.input(Input::Pick(vec![a, b])).unwrap();
+    s.input_removing(Input::Pick(vec![a])).unwrap();
+    s.input(Input::Text("Undo".into())).unwrap();
+    assert!(s.selection().contains(&a));
+    s.input_removing(Input::Pick(vec![a])).unwrap();
+    s.input(Input::Pick(vec![c])).unwrap();
+    assert_eq!(s.selection(), [b, c]);
+    s.input(Input::Enter).unwrap();
+    assert_eq!(left(&s), [0.0]);
+}

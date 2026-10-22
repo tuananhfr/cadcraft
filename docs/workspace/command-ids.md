@@ -398,6 +398,7 @@ Engine commands only; UI-only ids are added by `ui-egui`. An id listed here neve
 | `transparencydisplay` | Other | read |  |
 | `trim` | Modify | edit | tr |
 | `u` | Edit | edit |  |
+| `ubplot` | File | file | ubp |
 | `ubplot.scan` | Other | read |  |
 | `ubplot.templates` | Other | read |  |
 | `undo` | Other | edit |  |

@@ -5,6 +5,14 @@
 # Empty context = ordinary label; @plural = one|few|many forms with {n}.
 # Keep command IDs, keywords, technology/product names and user data unchanged.
 # External References palette (#525).
+	Quick Plot...	Швидкий друк...
+	Plot frames by [Block/Window/Layout/Last] <Block>:	Друкувати рамки за [Block/Window/Layout/Last] <Block>:
+	Select frame blocks	Виберіть блоки рамок
+	Specify first corner of sheet window	Укажіть перший кут вікна аркуша
+	Enter layout names (comma-separated) or *	Введіть назви аркушів через кому або *
+	No frames selected	Рамки не вибрано
+	{n} frame(s) added, {m} ignored (not frames), {t} total	Додано рамок: {n}, проігноровано (не рамки): {m}, усього: {t}
+	UBPLOT: {n} sheet(s), {b} blocked, {w} warning(s)	UBPLOT: аркушів: {n}, заблоковано: {b}, попереджень: {w}
 	Scan Plot Frames	Сканувати рамки для друку
 	Plot Frame Templates	Шаблони рамок для друку
 	Apply	Застосувати

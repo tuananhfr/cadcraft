@@ -1,3 +1,5 @@
+mod interactive;
+
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -31,6 +33,12 @@ pub struct LastPlan {
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
+        CommandSpec::new("ubplot", "Quick Plot...", run_ubplot)
+            .alias(&["ubp"])
+            .menu(&["File", "Quick Plot..."])
+            .params("as ubplot.scan (JSON: scans and stores the plan, opens nothing); typed: prompts")
+            .noundo()
+            .interactive(|_| Ok(Box::new(interactive::UbplotM::default()))),
         CommandSpec::new("ubplot.scan", "Scan Plot Frames", run_scan)
             .params("{mode: block|window|layout|last|plan, handles?, windows?: [[[x1,y1],[x2,y2]] | [[x,y]×4]], layouts?, paper?, scale?: \"1:100\"|\"fit\", overrides?: {sheet_key: {paper?, scale?, window?, sheetId?}}, exclude?: [sheet_key], plan? (mode plan)} → SheetPlan + summary")
             .noundo()
@@ -43,6 +51,10 @@ pub fn specs() -> Vec<CommandSpec> {
 
 fn bad(command: &str, message: impl Into<String>) -> EngineError {
     EngineError::BadParams { cmd: command.into(), msg: message.into() }
+}
+
+fn run_ubplot(s: &mut Session, params: &Value) -> Result<Value> {
+    run_scan(s, params)
 }
 
 pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
