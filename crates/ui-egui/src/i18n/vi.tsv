@@ -1861,3 +1861,17 @@ ribbon	Walls and Openings	Tường và lỗ mở
 
 # GĐ3 Task 2: ribbon modes rendering.
 	Show ribbon	Hiện Ribbon
+
+# GĐ3 Task 3: ribbon tabs and context menu.
+	Show or Hide Ribbon Tab	Hiện hoặc ẩn thẻ Ribbon
+	Reset Ribbon	Đặt lại Ribbon
+	Customize Ribbon…	Tùy biến Ribbon…
+	Hide Tab	Ẩn thẻ
+	Show Tabs	Hiện thẻ
+	Expanded	Mở rộng
+	Compact	Thu gọn
+	Tabs Only	Chỉ thẻ
+	Hidden	Ẩn
+	»	»
+	visible must be a boolean	visible phải là giá trị luận lý
+	At least one ribbon tab must stay visible	Phải giữ ít nhất một thẻ Ribbon hiển thị

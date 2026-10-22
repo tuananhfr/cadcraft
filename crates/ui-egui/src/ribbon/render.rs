@@ -81,36 +81,33 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
     };
     egui::Panel::top("cc_ribbon").exact_size(height).frame(egui::Frame::NONE.fill(Tokens::get().chrome)).show(ui, |ui| {
         if mode == RibbonMode::Hidden {
+            ui.ctx().data_mut(|data| data.remove::<Vec<Id>>(Id::new("cc_ribbon_menu_stops")));
             return;
         }
         ui.spacing_mut().item_spacing.y = 0.0;
-        let mut responses = Vec::new();
+        let background = ui.interact(ui.max_rect(), ui.id().with("ribbon_context"), egui::Sense::click());
+        ui.ctx().data_mut(|data| data.insert_temp(state_id, active.clone()));
         let mut open = None;
         ui.allocate_ui_with_layout(vec2(ui.available_width(), TAB_HEIGHT), Layout::left_to_right(Align::Center), |ui| {
-            egui::ScrollArea::horizontal().id_salt("ribbon_tabs").show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    for tab in &tabs {
-                        let response = ui.push_id(&tab.id, |ui| ui.add(egui::Button::selectable(active == tab.id, tab_label(tab)))).inner;
-                        crate::icons::describe_control(ui, &response, tab_label(tab), Some(active == tab.id), true);
-                        if response.has_focus() {
-                            response.scroll_to_me(None);
-                        }
-                        if response.clicked() {
-                            open = Some(egui::SetOpenCommand::Bool(active != tab.id || !egui::Popup::is_id_open(ui.ctx(), popup_id)));
-                            active = tab.id.clone();
-                            response.request_focus();
-                        }
-                        if response.double_clicked() {
-                            run(app, "ui.ribbon.collapse", json!({"collapsed": mode != RibbonMode::TabsOnly}));
-                            open = Some(egui::SetOpenCommand::Bool(false));
-                        }
-                        responses.push(response);
-                    }
-                });
-            });
+            if let Some(index) = tab_strip(ui, app, &(0..tabs.len()).collect::<Vec<_>>())
+                && let Some(tab) = tabs.get(index)
+            {
+                open = Some(egui::SetOpenCommand::Bool(active != tab.id || !egui::Popup::is_id_open(ui.ctx(), popup_id)));
+                active = tab.id.clone();
+            }
         });
+        let ids: Vec<(usize, Id)> = ui.ctx().data(|data| data.get_temp(Id::new("cc_ribbon_tab_responses"))).unwrap_or_default();
+        let responses: Vec<_> =
+            (0..tabs.len()).map(|index| ids.iter().find(|(held, _)| *held == index).and_then(|(_, id)| ui.ctx().read_response(*id))).collect();
+        if responses.iter().flatten().any(egui::Response::double_clicked) {
+            run(app, "ui.ribbon.collapse", json!({"collapsed": mode != RibbonMode::TabsOnly}));
+            open = Some(egui::SetOpenCommand::Bool(false));
+        }
+        let mut stops: Vec<_> = ids.iter().map(|(_, id)| *id).collect();
+        stops.push(background.id);
+        ui.ctx().data_mut(|data| data.insert_temp(Id::new("cc_ribbon_menu_stops"), stops));
         if !app.cmd.ime_composing() && !ui.ctx().text_edit_focused() {
-            let focused = responses.iter().position(|response| response.has_focus());
+            let focused = responses.iter().position(|response| response.as_ref().is_some_and(egui::Response::has_focus));
             let navigation =
                 focused.or_else(|| if egui::Popup::is_id_open(ui.ctx(), popup_id) { tabs.iter().position(|tab| tab.id == active) } else { None });
             if let Some(index) = navigation {
@@ -132,9 +129,10 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
                     && let Some(tab) = tabs.get(next)
                 {
                     active = tab.id.clone();
-                    if let Some(response) = responses.get(next) {
+                    ui.ctx().data_mut(|data| data.insert_temp(Id::new("cc_ribbon_focus_tab"), tab.id.clone()));
+                    ui.ctx().request_repaint();
+                    if let Some(response) = responses.get(next).and_then(Option::as_ref) {
                         response.request_focus();
-                        response.scroll_to_me(Some(Align::Center));
                     }
                 }
                 if focused.is_some()
@@ -142,6 +140,13 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
                 {
                     open = Some(egui::SetOpenCommand::Bool(true));
                 }
+            }
+        }
+        if mode == RibbonMode::TabsOnly {
+            match open {
+                Some(egui::SetOpenCommand::Bool(true)) => egui::Popup::open_id(ui.ctx(), popup_id),
+                Some(egui::SetOpenCommand::Bool(false)) => egui::Popup::close_id(ui.ctx(), popup_id),
+                _ => {}
             }
         }
         if let Some(index) = tabs.iter().position(|tab| tab.id == active) {
@@ -157,7 +162,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
                     }
                 }
                 RibbonMode::TabsOnly => {
-                    if let Some(response) = responses.get(index) {
+                    if let Some(response) = responses.get(index).and_then(Option::as_ref) {
                         let was_open = egui::Popup::is_id_open(ui.ctx(), popup_id);
                         let screen = ui.ctx().content_rect();
                         let below = (screen.bottom() - response.rect.bottom()).max(1.0);
@@ -189,8 +194,150 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
                 RibbonMode::Hidden => {}
             }
         }
+        ribbon_context_menu(ui, app, &background, None);
     });
     ui.ctx().data_mut(|data| data.insert_temp(state_id, active));
+}
+
+pub(crate) fn claim_menu_key(app: &CadApp, ctx: &egui::Context) {
+    if app.cmd.ime_composing() || ctx.text_edit_focused() || app.ui.dialog.is_some() {
+        return;
+    }
+    let Some(focused) = ctx.memory(|memory| memory.focused()) else { return };
+    let stops: Vec<Id> = ctx.data(|data| data.get_temp(Id::new("cc_ribbon_menu_stops"))).unwrap_or_default();
+    // Consume before global shortcuts so Shift+F10 cannot also toggle Polar Tracking.
+    if stops.contains(&focused) && ctx.input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::F10)) {
+        ctx.data_mut(|data| data.insert_temp(Id::new("cc_ribbon_menu_key"), focused));
+    }
+}
+
+fn tab_strip(ui: &mut egui::Ui, app: &mut CadApp, tabs: &[usize]) -> Option<usize> {
+    let visible = super::visible_tabs(app);
+    let active: String = ui.ctx().data(|data| data.get_temp(Id::new("cc_ribbon_active"))).unwrap_or_default();
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let gap = ui.spacing().item_spacing.x;
+    let padding = ui.spacing().button_padding.x * 2.0;
+    let width = |label: &str| ui.painter().layout_no_wrap(label.to_string(), font.clone(), Tokens::get().text).size().x + padding;
+    let widths: Vec<_> = tabs.iter().filter_map(|index| visible.get(*index).map(|tab| (*index, width(tab_label(tab))))).collect();
+    let available = ui.available_width().max(0.0);
+    let overflow = widths.iter().map(|(_, width)| width + gap).sum::<f32>() - gap > available;
+    let budget = (available - if overflow { width(crate::tl!("»")).max(TAB_HEIGHT) + gap } else { 0.0 }).max(0.0);
+    let selected = visible.iter().position(|tab| tab.id == active);
+    let mut shown = Vec::new();
+    let mut remaining = budget;
+    // Reserve the active tab before filling the strip, including after an overflow selection.
+    if let Some((index, width)) = widths.iter().find(|(index, _)| Some(*index) == selected) {
+        shown.push(*index);
+        remaining -= width.min(budget) + gap;
+    }
+    for (index, width) in &widths {
+        if Some(*index) != selected && *width <= remaining {
+            shown.push(*index);
+            remaining -= width + gap;
+        }
+    }
+    let focus: Option<String> = ui.ctx().data_mut(|data| data.remove_temp(Id::new("cc_ribbon_focus_tab")));
+    let mut responses = Vec::new();
+    let mut chosen = None;
+    for (index, width) in &widths {
+        let Some(tab) = visible.get(*index).filter(|_| shown.contains(index)) else { continue };
+        let response = ui
+            .push_id(&tab.id, |ui| {
+                ui.add_sized(vec2(width.min(budget), TAB_HEIGHT), egui::Button::selectable(active == tab.id, tab_label(tab)).truncate())
+            })
+            .inner;
+        crate::icons::describe_control(ui, &response, tab_label(tab), Some(active == tab.id), true);
+        if focus.as_deref() == Some(tab.id.as_str()) {
+            response.request_focus();
+        }
+        if response.clicked() {
+            chosen = Some(*index);
+            response.request_focus();
+        }
+        responses.push((*index, response.id));
+        ribbon_context_menu(ui, app, &response, Some(&tab.id));
+    }
+    if overflow {
+        ui.menu_button(crate::tl!("»"), |ui| {
+            egui::ScrollArea::vertical().max_height(ui.ctx().content_rect().height() * 0.75).show(ui, |ui| {
+                for index in tabs.iter().filter(|index| !shown.contains(index)) {
+                    let Some(tab) = visible.get(*index) else { continue };
+                    if ui.button(tab_label(tab)).clicked() {
+                        chosen = Some(*index);
+                        ui.ctx().data_mut(|data| data.insert_temp(Id::new("cc_ribbon_focus_tab"), tab.id.clone()));
+                        ui.close();
+                    }
+                }
+            });
+        });
+    }
+    ui.ctx().data_mut(|data| data.insert_temp(Id::new("cc_ribbon_tab_responses"), responses));
+    chosen
+}
+
+fn ribbon_context_menu(ui: &mut egui::Ui, app: &mut CadApp, anchor: &egui::Response, tab: Option<&str>) {
+    let claimed = ui.ctx().data(|data| data.get_temp::<Id>(Id::new("cc_ribbon_menu_key"))) == Some(anchor.id);
+    let keyboard = claimed || (anchor.has_focus() && !app.cmd.ime_composing() && ui.input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::F10)));
+    if claimed {
+        ui.ctx().data_mut(|data| data.remove::<Id>(Id::new("cc_ribbon_menu_key")));
+    }
+    let popup_id = anchor.id.with("tab_context");
+    let open = keyboard || anchor.secondary_clicked();
+    if open {
+        let position = if keyboard { anchor.rect.left_bottom() } else { ui.ctx().pointer_interact_pos().unwrap_or(anchor.rect.left_bottom()) };
+        ui.ctx().data_mut(|data| data.insert_temp(popup_id.with("position"), position));
+    }
+    // Keep the anchor after the opening frame, including when the menu was opened by keyboard.
+    let position = ui.ctx().data(|data| data.get_temp::<egui::Pos2>(popup_id.with("position"))).unwrap_or(anchor.rect.left_bottom());
+    let mut chosen = None;
+    egui::Popup::menu(anchor).id(popup_id).at_position(position).open_memory(open.then_some(egui::SetOpenCommand::Bool(true))).show(|ui| {
+        let customize = ui.button(crate::tl!("Customize Ribbon…"));
+        if keyboard {
+            customize.request_focus();
+        }
+        if customize.clicked() {
+            chosen = Some(("ui.customize.open", json!({})));
+            ui.close();
+        }
+        ui.menu_button(crate::tl!("Display Mode"), |ui| {
+            let current = app.ws.effective.layout.ribbon.effective_mode();
+            for (label, mode, value) in [
+                (crate::tl!("Expanded"), RibbonMode::Expanded, "expanded"),
+                (crate::tl!("Compact"), RibbonMode::Compact, "compact"),
+                (crate::tl!("Tabs Only"), RibbonMode::TabsOnly, "tabs_only"),
+                (crate::tl!("Hidden"), RibbonMode::Hidden, "hidden"),
+            ] {
+                if ui.radio(current == mode, label).clicked() {
+                    chosen = Some(("ui.ribbon.mode", json!({"mode": value})));
+                    ui.close();
+                }
+            }
+        });
+        if ui.add_enabled(tab.is_some(), egui::Button::new(crate::tl!("Hide Tab"))).clicked() {
+            chosen = Some(("ui.ribbon.tab.visible", json!({"tab": tab, "visible": false})));
+            ui.close();
+        }
+        ui.menu_button(crate::tl!("Show Tabs"), |ui| {
+            let mut tabs = app.ws.effective.layout.ribbon.tabs.clone();
+            tabs.sort_by_key(|tab| tab.order);
+            egui::ScrollArea::vertical().max_height(ui.ctx().content_rect().height() * 0.75).show(ui, |ui| {
+                for tab in tabs {
+                    let mut visible = tab.visible;
+                    if ui.checkbox(&mut visible, tab_label(&tab)).changed() {
+                        chosen = Some(("ui.ribbon.tab.visible", json!({"tab": tab.id, "visible": visible})));
+                        ui.close();
+                    }
+                }
+            });
+        });
+        if ui.button(crate::tl!("Reset Ribbon")).clicked() {
+            chosen = Some(("ui.ribbon.reset", json!({})));
+            ui.close();
+        }
+    });
+    if let Some((command, params)) = chosen {
+        run(app, command, params);
+    }
 }
 
 pub(crate) fn flyout(ui: &mut egui::Ui, app: &mut CadApp, tab: usize) {

@@ -1859,3 +1859,17 @@
 
 # GĐ3 Task 2: ribbon modes rendering.
 	Show ribbon	Показати стрічку
+
+# GĐ3 Task 3: ribbon tabs and context menu.
+	Show or Hide Ribbon Tab	Показати або приховати вкладку стрічки
+	Reset Ribbon	Скинути стрічку
+	Customize Ribbon…	Налаштувати стрічку…
+	Hide Tab	Приховати вкладку
+	Show Tabs	Показати вкладки
+	Expanded	Розгорнута
+	Compact	Компактна
+	Tabs Only	Лише вкладки
+	Hidden	Прихована
+	»	»
+	visible must be a boolean	visible має бути логічним значенням
+	At least one ribbon tab must stay visible	Принаймні одна вкладка стрічки має залишатися видимою

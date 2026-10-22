@@ -209,10 +209,7 @@ fn tabs_only_flyout_reaches_every_command_at_200_percent_tc11() {
         let layout = h.state().ws.user.layout.clone();
         for tab in tabs {
             let title = cadcraft_ui_egui::i18n::with_language(h.state().language(), || cadcraft_ui_egui::i18n::ribbon(&tab.label).to_string());
-            h.get_by_label(&title).scroll_to_me();
-            h.run_steps(3);
-            h.get_by_label(&title).click();
-            h.run_steps(4);
+            select_ribbon_tab(&mut h, &title);
             assert!(popup_open(&h), "{language}: {}", tab.id);
             assert_eq!(h.state().canvas.rect.unwrap(), before, "flyout must not move the canvas");
             for id in tab.groups.iter().flat_map(|group| &group.commands) {
@@ -350,4 +347,208 @@ fn flyout_is_keyboard_operable() {
         h.run_steps(2);
     }
     assert!(!popup_open(&h));
+}
+
+fn select_ribbon_tab(h: &mut Harness<'_, CadApp>, title: &str) {
+    if h.query_by_role_and_label(egui::accesskit::Role::Tab, title).is_some() {
+        h.get_by_role_and_label(egui::accesskit::Role::Tab, title).click();
+    } else {
+        h.get_by_label("»").click();
+        h.run_steps(3);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, title).click();
+    }
+    h.run_steps(4);
+}
+
+#[test]
+fn tab_overflow_keeps_every_tab_reachable() {
+    let _guard = test_lock();
+    let mut app = familiar("tabs_only");
+    app.run("options", json!({"interfaceLanguage": "vi"})).unwrap();
+    for number in 0..5 {
+        app.run("ui.ribbon.tab.add", json!({"label": format!("Overflow test tab {number}")})).unwrap();
+    }
+    let mut h = harness(app);
+    h.set_size(vec2(640.0, 360.0));
+    h.run_steps(5);
+    let tabs = cadcraft_ui_egui::ribbon::visible_tabs(h.state());
+    let layout = h.state().ws.user.layout.clone();
+    assert!(h.query_by_label("»").is_some());
+    assert!(tabs.iter().any(|tab| {
+        let title = cadcraft_ui_egui::i18n::with_language("vi", || cadcraft_ui_egui::i18n::ribbon(&tab.label).to_string());
+        h.query_by_role_and_label(egui::accesskit::Role::Tab, &title).is_none()
+    }));
+    for tab in tabs {
+        let title = cadcraft_ui_egui::i18n::with_language("vi", || cadcraft_ui_egui::i18n::ribbon(&tab.label).to_string());
+        let overflowed = h.query_by_role_and_label(egui::accesskit::Role::Tab, &title).is_none();
+        if overflowed {
+            h.get_by_label("»").click();
+            h.run_steps(3);
+            let item = h.get_by_role_and_label(egui::accesskit::Role::Button, &title);
+            inside(h.ctx.content_rect(), item.rect());
+            item.click();
+            h.run_steps(4);
+        } else {
+            select_ribbon_tab(&mut h, &title);
+        }
+        let active: String = h.ctx.data(|data| data.get_temp(Id::new("cc_ribbon_active"))).unwrap();
+        assert_eq!(active, tab.id);
+        let item = h.get_by_role_and_label(egui::accesskit::Role::Tab, &title);
+        inside(h.ctx.content_rect(), item.rect());
+        assert_eq!(item.accesskit_node().is_selected(), Some(true));
+        assert!(popup_open(&h));
+        h.key_press(Key::Escape);
+        h.run_steps(3);
+    }
+    assert_eq!(h.state().ws.user.layout, layout);
+    assert!(!h.state().session.state().unwrap().is_dirty());
+}
+
+#[test]
+fn context_menu_hides_and_restores_a_tab() {
+    let _guard = test_lock();
+    let mut h = harness(familiar("expanded"));
+    h.get_by_role_and_label(egui::accesskit::Role::Tab, "Annotate").click_button(egui::PointerButton::Secondary);
+    h.run_steps(3);
+    h.get_by_label("Hide Tab").click();
+    h.run_steps(3);
+    assert!(!h.state().ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.id == "annotate").unwrap().visible);
+    assert!(h.query_by_role_and_label(egui::accesskit::Role::Tab, "Annotate").is_none());
+    h.get_by_label("Home").click_button(egui::PointerButton::Secondary);
+    h.run_steps(3);
+    h.get_by_label("Show Tabs ⏵").click();
+    h.run_steps(3);
+    h.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Annotate").click();
+    h.run_steps(3);
+    assert!(h.state().ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.id == "annotate").unwrap().visible);
+    assert!(h.query_by_role_and_label(egui::accesskit::Role::Tab, "Annotate").is_some());
+    let restored = restarted(h.state_mut());
+    assert!(restored.ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.id == "annotate").unwrap().visible);
+    assert!(!restored.session.state().unwrap().is_dirty());
+}
+
+#[test]
+fn ribbon_reset_restores_only_the_ribbon() {
+    let _guard = test_lock();
+    let policy = json!({"layers": [{"level": "company", "patch": {"ribbon": {"tabs": [{"id": "home", "label": "Company Home"}]}}, "locks": []}]});
+    let mut app = attached(MemoryStore { policy: Some(policy.to_string()), ..MemoryStore::default() });
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    let ribbon = app.ws.below_user().ribbon;
+    assert_eq!(ribbon.tabs.iter().find(|tab| tab.id == "home").unwrap().label, "Company Home");
+    app.run("ui.ribbon.tab.rename", json!({"tab": "home", "label": "My tab"})).unwrap();
+    app.run("ui.ribbon.tab.visible", json!({"tab": "annotate", "visible": false})).unwrap();
+    app.run("ui.ribbon.mode", json!({"mode": "compact"})).unwrap();
+    app.run("aliasedit", json!({"set": {"LL": "line"}})).unwrap();
+    app.run("ui.quickaccess.pin", json!({"id": "line"})).unwrap();
+    app.run("ui.shortcut.bind", json!({"command": "line", "key": "Ctrl+Shift+L"})).unwrap();
+    let before = app.ws.user.layout.clone();
+    let steps = app.ws.history.undo_len();
+    let mut expected = before.clone();
+    expected.ribbon = ribbon;
+    assert_eq!(app.run("ui.ribbon.reset", json!({})).unwrap()["changed"], true);
+    assert_eq!(app.ws.user.layout, expected);
+    assert_eq!(app.ws.effective.layout, expected);
+    assert_eq!(app.ws.history.undo_len(), steps + 1);
+    app.run("ui.layout.undo", json!({})).unwrap();
+    assert_eq!(app.ws.user.layout, before);
+    app.run("ui.layout.redo", json!({})).unwrap();
+    assert_eq!(app.ws.user.layout, expected);
+    assert_eq!(app.run("ui.ribbon.reset", json!({})).unwrap()["changed"], false);
+    let restored = restarted(&mut app);
+    assert_eq!(restored.ws.effective.layout, expected);
+    assert_eq!(cadcraft_engine::cmd::resolve_alias("LL"), "line");
+    assert!(!restored.session.state().unwrap().is_dirty());
+}
+
+#[test]
+fn customize_ribbon_entry_opens_the_ribbon_page() {
+    let _guard = test_lock();
+    let mut h = harness(familiar("expanded"));
+    h.state_mut().run("ui.customize.open", json!({})).unwrap();
+    h.run_steps(3);
+    h.get_by_label("Keyboard").click();
+    h.run_steps(3);
+    h.get_by_label("Close").click();
+    h.run_steps(3);
+    let polar = h.state().session.settings.polarmode;
+    h.get_by_label("Home").focus();
+    h.run_steps(2);
+    h.key_press_modifiers(egui::Modifiers::SHIFT, Key::F10);
+    h.run_steps(3);
+    assert!(h.get_by_label("Customize Ribbon…").is_focused());
+    assert_eq!(h.state().session.settings.polarmode, polar);
+    h.key_press(Key::Enter);
+    h.run_steps(4);
+    assert_eq!(h.state().ui.dialog.as_deref(), Some(cadcraft_ui_egui::customize::DIALOG));
+    assert!(h.query_by_label("Ribbon tabs").is_some());
+    assert!(h.query_by_label("Ribbon groups").is_some());
+}
+
+#[test]
+fn last_visible_tab_cannot_be_hidden() {
+    let _guard = test_lock();
+    let mut app = familiar("expanded");
+    let tabs = app.ws.effective.layout.ribbon.tabs.clone();
+    for tab in tabs.iter().filter(|tab| tab.visible && tab.id != "home") {
+        app.run("ui.ribbon.tab.visible", json!({"tab": tab.id, "visible": false})).unwrap();
+    }
+    let before = app.ws.user.layout.clone();
+    let steps = app.ws.history.undo_len();
+    assert_eq!(app.run("ui.ribbon.tab.visible", json!({"tab": "home", "visible": false})).unwrap_err(), "At least one ribbon tab must stay visible");
+    assert_eq!(app.ws.user.layout, before);
+    assert_eq!(app.ws.history.undo_len(), steps);
+    assert!(!app.session.state().unwrap().is_dirty());
+}
+
+#[test]
+fn ribbon_context_menu_selects_every_display_mode() {
+    let _guard = test_lock();
+    for (label, mode) in
+        [("Expanded", RibbonMode::Expanded), ("Compact", RibbonMode::Compact), ("Tabs Only", RibbonMode::TabsOnly), ("Hidden", RibbonMode::Hidden)]
+    {
+        let mut h = harness(familiar("expanded"));
+        if mode == RibbonMode::Compact {
+            let ribbon = egui::containers::panel::PanelState::load(&h.ctx, Id::new("cc_ribbon")).unwrap().outer_rect;
+            let pos = egui::pos2(ribbon.right() - 4.0, ribbon.top() + 14.0);
+            h.hover_at(pos);
+            for pressed in [true, false] {
+                h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE });
+                h.run_steps(2);
+            }
+            assert!(h.get_by_label("Hide Tab").accesskit_node().is_disabled());
+        } else {
+            h.get_by_label("Home").click_button(egui::PointerButton::Secondary);
+            h.run_steps(3);
+        }
+        h.get_by_label("Display Mode ⏵").click();
+        h.run_steps(3);
+        h.get_by_role_and_label(egui::accesskit::Role::RadioButton, label).click();
+        h.run_steps(3);
+        assert_eq!(h.state().ws.effective.layout.ribbon.effective_mode(), mode);
+        assert!(!h.state().session.state().unwrap().is_dirty());
+    }
+}
+
+#[test]
+fn ribbon_tab_visibility_rejects_invalid_params_and_respects_lock() {
+    let _guard = test_lock();
+    let policy = json!({"layers": [{"level": "company", "patch": {}, "locks": ["/ribbon/tabs/home/visible"]}]});
+    let mut app = attached(MemoryStore { policy: Some(policy.to_string()), ..MemoryStore::default() });
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    let before = app.ws.user.layout.clone();
+    let steps = app.ws.history.undo_len();
+    for params in [
+        json!({}),
+        json!({"tab": "home"}),
+        json!({"tab": "home", "visible": "false"}),
+        json!({"tab": "home", "visible": null}),
+        json!({"tab": "unknown", "visible": false}),
+    ] {
+        assert!(app.run("ui.ribbon.tab.visible", params).is_err());
+        assert_eq!(app.ws.user.layout, before);
+        assert_eq!(app.ws.history.undo_len(), steps);
+    }
+    assert_eq!(app.run("ui.ribbon.tab.visible", json!({"tab": "home", "visible": false})).unwrap_err(), LOCKED_MESSAGE);
+    assert_eq!(app.ws.user.layout, before);
+    assert_eq!(app.ws.history.undo_len(), steps);
 }

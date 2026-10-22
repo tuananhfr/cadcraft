@@ -34,6 +34,8 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.ribbon.tab.add", "Add Ribbon Tab", &[], None),
     ("ui.ribbon.tab.rename", "Rename Ribbon Tab", &[], None),
     ("ui.ribbon.tab.remove", "Remove Ribbon Tab", &[], None),
+    ("ui.ribbon.tab.visible", "Show or Hide Ribbon Tab", &[], None),
+    ("ui.ribbon.reset", "Reset Ribbon", &[], None),
     ("ui.ribbon.tab.move", "Move Ribbon Tab", &[], None),
     ("ui.ribbon.group.add", "Add Ribbon Group", &[], None),
     ("ui.ribbon.group.rename", "Rename Ribbon Group", &[], None),
@@ -737,6 +739,7 @@ pub fn activate(app: &mut CadApp, id: &str) {
 pub fn shortcuts(app: &mut CadApp, ctx: &egui::Context) {
     crate::clipboard::mirror(app, ctx);
     crate::toolbars::claim_menu_key(ctx);
+    crate::ribbon::render::claim_menu_key(app, ctx);
     let customize = app.ui.dialog.as_deref() == Some(crate::customize::DIALOG);
     // Customize keeps focus on its page buttons, so only a focused text field there owns the undo keys.
     let focused = ctx.egui_wants_keyboard_input();

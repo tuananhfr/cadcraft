@@ -76,8 +76,13 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
             | "ui.ribbon.button.remove"
             | "ui.ribbon.collapse"
             | "ui.ribbon.mode"
+            | "ui.ribbon.tab.visible"
+            | "ui.ribbon.reset"
     ) {
         return None;
+    }
+    if command == "ui.ribbon.reset" {
+        return Some(crate::wsprofile::reset_ribbon(app).map(|changed| json!({"changed": changed})));
     }
     Some((|| {
         let mut ribbon = app.ws.effective.layout.ribbon.clone();
@@ -112,7 +117,16 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
             let tab_id = text(params, "tab")?;
             let from =
                 ribbon.tabs.iter().position(|tab| tab.id == tab_id.as_ref()).ok_or_else(|| crate::tl!("Ribbon tab was not found").to_string())?;
-            if command == "ui.ribbon.tab.remove" {
+            if command == "ui.ribbon.tab.visible" {
+                let visible = params.get("visible").and_then(Value::as_bool).ok_or_else(|| crate::tl!("visible must be a boolean").to_string())?;
+                // Contextual tabs can disappear with selection, so keep a persistent tab available.
+                if !visible && !ribbon.tabs.iter().any(|tab| tab.id != tab_id.as_ref() && tab.visible && tab.contextual.is_none()) {
+                    return Err(crate::tl!("At least one ribbon tab must stay visible").to_string());
+                }
+                if let Some(tab) = ribbon.tabs.get_mut(from) {
+                    tab.visible = visible;
+                }
+            } else if command == "ui.ribbon.tab.remove" {
                 ribbon.tabs.remove(from);
             } else if command == "ui.ribbon.tab.move" {
                 let mut tabs: Vec<_> = ribbon.tabs.iter().filter(|tab| tab.contextual.is_none()).cloned().collect();
