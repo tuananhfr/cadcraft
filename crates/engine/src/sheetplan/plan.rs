@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use cadcraft_doc::{Drawing, Handle};
 use cadcraft_geom::Vec2;
-use cadcraft_render::paper::paper_size;
+use cadcraft_render::paper::{insunits_mm, paper_size};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -83,8 +83,9 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
     }
     let request = serde_json::to_value(req).map_err(|error| error.to_string())?;
     validate_request_value(&request)?;
+    let (unit_mm, assumed) = drawing_unit_mm(d);
     if let Some(scale) = &req.scale {
-        parse_scale(scale)?;
+        parse_scale(scale, unit_mm)?;
     }
     if let Some(paper) = &req.paper {
         paper_dimensions(paper)?;
@@ -114,7 +115,7 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
                 }
             }
             for (index, candidate) in super::detect_frames(d, &handles, reg).into_iter().enumerate() {
-                plan.sheets.push(block_sheet(candidate, order(index)?, reg));
+                plan.sheets.push(block_sheet(candidate, order(index)?, reg, unit_mm));
             }
         }
         ScanMode::Window => {
@@ -125,7 +126,7 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
                 sheet.paper_mm = paper_dimensions(req.paper.as_deref().unwrap_or("A3"))?;
                 sheet.landscape = (b - a).len() > (c - b).len();
                 sheet.plot_scale = match &req.scale {
-                    Some(scale) => parse_scale(scale)?,
+                    Some(scale) => parse_scale(scale, unit_mm)?,
                     None => {
                         sheet.issues.push(issue(
                             Severity::Info,
@@ -184,7 +185,7 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
                 match &sheet.source {
                     SheetSource::Block { .. } => {
                         let candidate = candidates.next().ok_or_else(|| "FRAME_NOT_FOUND: missing frame candidate".to_string())?;
-                        let detected = block_sheet(candidate, sheet.order, reg);
+                        let detected = block_sheet(candidate, sheet.order, reg, unit_mm);
                         sheet.source = detected.source;
                         sheet.frame_template_id = detected.frame_template_id;
                         sheet.attributes = detected.attributes;
@@ -208,6 +209,15 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
         }
         ScanMode::Last => return Err("last mode requires session state".into()),
     }
+    plan.issues.retain(|entry| entry.code != codes::UNITS_ASSUMED);
+    if assumed {
+        plan.issues.push(issue(
+            Severity::Info,
+            codes::UNITS_ASSUMED,
+            "INSUNITS is unitless or unknown; drawing units are assumed to be millimetres.",
+            None,
+        ));
+    }
     let excluded: BTreeSet<_> = req.exclude.iter().map(String::as_str).collect();
     let mut sheets = Vec::with_capacity(plan.sheets.len());
     for mut sheet in plan.sheets {
@@ -217,12 +227,13 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
                 sheet.paper_mm = paper_dimensions(paper)?;
                 sheet.issues.retain(|i| i.code != codes::PAPER_CUSTOM);
             }
-            if let Some(scale) = &req.scale {
-                sheet.plot_scale = parse_scale(scale)?;
-            }
+        }
+        if let Some(scale) = &req.scale {
+            sheet.plot_scale = parse_scale(scale, unit_mm)?;
+            sheet.scale_label = Some(scale.clone());
         }
         if let Some(settings) = req.overrides.get(&key) {
-            apply_override(&mut sheet, settings)?;
+            apply_override(&mut sheet, settings, unit_mm)?;
         }
         if excluded.contains(key.as_str()) {
             plan.issues.push(issue(Severity::Info, codes::SHEET_EXCLUDED, format!("Sheet {key} was excluded."), Some(&sheet.sheet_id)));
@@ -261,8 +272,15 @@ fn positive(value: f64) -> bool {
     value.is_finite() && value > 0.0
 }
 
-fn parse_scale(text: &str) -> Result<PlotScale, String> {
-    PlotScale::parse(text).ok_or_else(|| "scale must be fit or a finite positive ratio".into())
+pub(crate) fn drawing_unit_mm(d: &Drawing) -> (f64, bool) {
+    match insunits_mm(d.header.i64("INSUNITS", 0)) {
+        Some(unit_mm) => (unit_mm, false),
+        None => (1.0, true),
+    }
+}
+
+fn parse_scale(text: &str, unit_mm: f64) -> Result<PlotScale, String> {
+    PlotScale::from_real_ratio(text, unit_mm).ok_or_else(|| "scale must be fit or a finite positive ratio".into())
 }
 
 fn paper_dimensions(name: &str) -> Result<[f64; 2], String> {
@@ -308,13 +326,14 @@ fn empty_sheet(order: u32, source: SheetSource) -> Sheet {
         paper_mm: [297.0, 420.0],
         landscape: true,
         plot_scale: PlotScale::Fit,
+        scale_label: None,
         status: SheetStatus::NeedsPreview,
         issues: Vec::new(),
         attributes: BTreeMap::new(),
     }
 }
 
-fn block_sheet(candidate: FrameCandidate, order: u32, reg: &FrameRegistry) -> Sheet {
+fn block_sheet(candidate: FrameCandidate, order: u32, reg: &FrameRegistry, unit_mm: f64) -> Sheet {
     let template = reg.find(&candidate.effective_name);
     let mut sheet = empty_sheet(
         order,
@@ -342,6 +361,13 @@ fn block_sheet(candidate: FrameCandidate, order: u32, reg: &FrameRegistry) -> Sh
     } else {
         PlotScale::Fit
     };
+    if let PlotScale::Ratio { paper_mm, drawing_units } = &sheet.plot_scale {
+        let ratio = drawing_units / paper_mm * unit_mm;
+        if positive(ratio) {
+            // Six significant digits keep detected INSERT scales readable without changing the stored ratio.
+            sheet.scale_label = format!("{ratio:.5e}").parse::<f64>().ok().filter(|value| positive(*value)).map(|value| format!("1:{value}"));
+        }
+    }
     let [w, h] = candidate.local_mm;
     if [w, h].into_iter().all(positive) {
         sheet.landscape = w > h;
@@ -377,7 +403,7 @@ fn frame_issue(code: &str) -> bool {
     )
 }
 
-fn apply_override(sheet: &mut Sheet, settings: &SheetOverride) -> Result<(), String> {
+fn apply_override(sheet: &mut Sheet, settings: &SheetOverride, unit_mm: f64) -> Result<(), String> {
     if let Some(window) = settings.window {
         if !window.into_iter().flatten().all(f64::is_finite) {
             return Err("window coordinates must be finite".into());
@@ -395,7 +421,8 @@ fn apply_override(sheet: &mut Sheet, settings: &SheetOverride) -> Result<(), Str
         sheet.issues.retain(|i| i.code != codes::PAPER_CUSTOM);
     }
     if let Some(scale) = &settings.scale {
-        sheet.plot_scale = parse_scale(scale)?;
+        sheet.plot_scale = parse_scale(scale, unit_mm)?;
+        sheet.scale_label = Some(scale.clone());
         sheet.issues.retain(|i| i.code != codes::SCALE_NOT_SET);
     }
     if let Some(id) = &settings.sheet_id {

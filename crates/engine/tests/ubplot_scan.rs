@@ -55,6 +55,7 @@ fn preview_outline_renders_the_rotated_frame() {
 
 fn scan_setup(count: usize) -> (Session, Vec<String>) {
     let mut s = Session::new();
+    s.doc_mut().unwrap().header.set_i64("INSUNITS", 4);
     frame_block(s.doc_mut().unwrap(), "FRAME-A3", 420.0, 297.0);
     let handles = (0..count)
         .map(|index| place(&mut s, "FRAME-A3", [(index % 10) as f64 * 500.0, (index / 10) as f64 * 400.0], 1.0, 0.0, false, &[]).hex())

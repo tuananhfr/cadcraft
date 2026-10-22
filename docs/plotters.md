@@ -108,6 +108,13 @@ In the file name, characters other than letters, digits, spaces and `-_()+,` bec
     printable area's lower-left origin; offsets are millimetres, default to `[0, 0]`, and are
     bounded to ±100,000 mm. PDF and PNG support these controls. SVG plots keep their extents view;
     an active offset is rejected rather than ignored. Layout plots do not use model offsets.
+  - `scale` is a positive number or ratio such as `"1:100"`. By default it means paper
+    units per drawing unit: paper units are millimetres with `MEASUREMENT=1`, inches
+    otherwise. This legacy meaning is unchanged.
+  - `scaleMode: "real"` interprets `scale` as a physical ratio using `INSUNITS`,
+    independently of `MEASUREMENT`. For example, a metre drawing (`INSUNITS=6`) at
+    `"1:100"` prints 1 m as 10 mm. Unitless or unknown INSUNITS codes assume mm.
+    Use `fit: false` to apply the explicit scale with the current Model plotter.
   - `exportpdf` takes the same options and always writes PDF.
 
 Model-space PDF plots don't apply the paper's margins yet. They fit the drawing inside the

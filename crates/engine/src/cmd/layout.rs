@@ -80,11 +80,11 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["File", "Print..."])
             .key("Cmd+P")
             .alias(&["print"])
-            .params("{path? (else returns base64 `data`), layout?: current|\"Model\", paper?, landscape?, fit?: bool, scale?: number | \"1:50\", center?: bool (Model, default true), offset?: [x,y] mm (Model, when center is false; each within ±100000), lineweights?: bool, plotTransparency?: bool (default: the page setup's; PLOTTRANSPARENCYOVERRIDE 0/2 overrides it), plotArea?: extents|display|limits|window (Model) | layout, window?: [[x1,y1],[x2,y2]]} (typed or from the menu: the Plot dialog)")
+            .params("{path? (else returns base64 `data`), layout?: current|\"Model\", paper?, landscape?, fit?: bool, scale?: number | \"1:50\", scaleMode?: \"real\" (physical ratio using INSUNITS; default: paper units per drawing unit), center?: bool (Model, default true), offset?: [x,y] mm (Model, when center is false; each within ±100000), lineweights?: bool, plotTransparency?: bool (default: the page setup's; PLOTTRANSPARENCYOVERRIDE 0/2 overrides it), plotArea?: extents|display|limits|window (Model) | layout, window?: [[x1,y1],[x2,y2]]} (typed or from the menu: the Plot dialog)")
             .noundo(),
         CommandSpec::new("exportpdf", "Export to PDF...", |s, p| run_plot(s, &super::plotters::plot_options(s, p, "exportpdf")?, "exportpdf"))
             .menu(&["File", "Export to PDF..."])
-            .params("{path? (else returns base64 `data`), layout?, paper?, landscape?, fit?, scale?, center?: bool (Model, default true), offset?: [x,y] mm (Model, when center is false; each within ±100000), lineweights?, plotTransparency?, plotArea?, window?} (as PLOT)")
+            .params("{path? (else returns base64 `data`), layout?, paper?, landscape?, fit?, scale?, scaleMode?: \"real\" (as PLOT), center?: bool (Model, default true), offset?: [x,y] mm (Model, when center is false; each within ±100000), lineweights?, plotTransparency?, plotArea?, window?} (as PLOT)")
             .noundo(),
         CommandSpec::new("mspace", "Model Space (in viewport)", run_mspace)
             .alias(&["ms"])
@@ -804,6 +804,17 @@ fn run_plot(s: &mut Session, p: &Value, cmd: &str) -> Result<Value> {
     if let Some(o) = opts.as_object_mut() {
         if let Some(v) = p.get("scale") {
             let k = parse_scale(v).ok_or_else(|| bad(cmd, "`scale` must be positive: paper units per drawing unit, or a ratio such as \"1:50\""))?;
+            let k = if str_param(p, "scaleMode") == Some("real") {
+                let d = s.doc()?;
+                let (unit_mm, _) = crate::sheetplan::plan::drawing_unit_mm(d);
+                let converted = k * unit_mm / cadcraft_render::paper::paper_unit_mm(d);
+                if !converted.is_finite() || converted <= 0.0 {
+                    return Err(bad(cmd, "real scale must be finite and positive after unit conversion"));
+                }
+                converted
+            } else {
+                k
+            };
             o.insert("scale".into(), json!(k));
         }
         if let Some(w) = plot_window(s, p, cmd, &space)? {

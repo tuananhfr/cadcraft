@@ -22,6 +22,15 @@ Scan parameters:
 - `plan`: a SheetPlan for `mode: "plan"`. Scan resolves flat block references into outlines.
 
 `last` reuses the last scan request for the current drawing and rescans after edits.
+Scan ratios are physical ratios based on `INSUNITS`, independent of `MEASUREMENT`.
+For example, `"1:100"` in a metre drawing (`INSUNITS=6`) means 1 m becomes 10 mm on
+paper. The stored `plot_scale` remains millimetres on paper per drawing unit, so this
+example stores `"1:0.1"`; `scale_label` retains the requested `"1:100"`. Scale overrides
+use the same conversion. Frame-derived ratios retain the INSERT scale and get a
+`scale_label` of `1:(INSERT scale × millimetres per drawing unit)`, rounded to six
+significant digits. Unitless (`INSUNITS=0`) and unknown codes assume millimetres and
+add one plan-level INFO issue, `UNITS_ASSUMED`.
+
 Templates take `action: "list" | "import" | "reset"`, and `text` for JSON import.
 
 Publish parameters:
@@ -40,8 +49,8 @@ Sheets always print by numeric `order`, with their sheet ids as PDF page labels.
 Block and window pages use their exact rectangle outlines, including rotation and
 mirroring. Blocks print in their owning model or layout space. Paper size and landscape
 come from each sheet, with zero margins. In this phase, frame crops fit the paper sized
-by scan; scan's block paper dimensions encode the selected ratio. Physical unit-aware
-scale and extended paper support are planned separately.
+by scan. Applying explicit scales during publishing and extended paper support are
+planned separately.
 
 A merged plan containing any blocked sheet is rejected before writing, listing the
 blocked sheet keys. Split output renders other sheets and reports every blocked sheet
@@ -72,7 +81,7 @@ Issue codes:
 | --- | --- |
 | BLOCK | `FRAME_AMBIGUOUS`, `FRAME_NOT_FOUND`, `FRAME_MINSERT`, `PAPER_TOO_LARGE`, `RENDER_FAILED` |
 | WARN | `FRAME_DUPLICATE`, `FRAME_OVERLAP`, `FRAME_NESTED`, `FRAME_MIRRORED`, `FRAME_NONUNIFORM` |
-| INFO | `PAPER_CUSTOM`, `SCALE_NOT_SET`, `HANDLE_DUPLICATE`, `SHEET_EXCLUDED`, `SOURCE_HASH_WEAK` |
+| INFO | `PAPER_CUSTOM`, `SCALE_NOT_SET`, `UNITS_ASSUMED`, `HANDLE_DUPLICATE`, `SHEET_EXCLUDED`, `SOURCE_HASH_WEAK` |
 
 Command errors include `PLAN_STALE` (drawing changed since scan), `PLAN_INVALID`
 (invalid or unresolved plan), and `OUTPUT_IS_SOURCE` (output would overwrite the source).

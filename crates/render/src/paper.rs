@@ -76,6 +76,34 @@ pub fn paper_size(name: &str) -> Option<&'static PaperSize> {
     PAPER_SIZES.iter().find(|p| norm(p.name) == n || p.aliases.iter().any(|a| norm(a) == n))
 }
 
+/// Unitless and unknown DXF INSUNITS codes need an explicit assumption at the plotting boundary.
+pub fn insunits_mm(code: i64) -> Option<f64> {
+    Some(match code {
+        1 => 25.4,
+        2 => 304.8,
+        3 => 1_609_344.0,
+        4 => 1.0,
+        5 => 10.0,
+        6 => 1000.0,
+        7 => 1e6,
+        8 => 2.54e-5,
+        9 => 0.0254,
+        10 => 914.4,
+        11 => 1e-7,
+        12 => 1e-6,
+        13 => 1e-3,
+        14 => 100.0,
+        15 => 1e4,
+        16 => 1e5,
+        17 => 1e12,
+        18 => 1.495978707e14,
+        19 => 9.4607304725808e18,
+        20 => 3.0856776e19,
+        21 => 304.8006096,
+        _ => return None,
+    })
+}
+
 /// Millimetres per paper-space unit for a drawing (1 for metric, 25.4 for imperial).
 pub fn paper_unit_mm(d: &Drawing) -> f64 {
     if d.header.i64("MEASUREMENT", 0) == 1 { 1.0 } else { 25.4 }
@@ -125,6 +153,39 @@ pub fn sheet(d: &Drawing, layout: &str) -> Option<Sheet> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn insunits_table() {
+        let expected = [
+            25.4,
+            304.8,
+            1_609_344.0,
+            1.0,
+            10.0,
+            1000.0,
+            1e6,
+            2.54e-5,
+            0.0254,
+            914.4,
+            1e-7,
+            1e-6,
+            1e-3,
+            100.0,
+            1e4,
+            1e5,
+            1e12,
+            1.495978707e14,
+            9.4607304725808e18,
+            3.0856776e19,
+            304.8006096,
+        ];
+        for (code, mm) in (1..=21).zip(expected) {
+            assert_eq!(insunits_mm(code), Some(mm), "INSUNITS={code}");
+        }
+        for code in [i64::MIN, -1, 0, 22, i64::MAX] {
+            assert_eq!(insunits_mm(code), None, "INSUNITS={code}");
+        }
+    }
 
     #[test]
     fn lookup_and_sheet() {

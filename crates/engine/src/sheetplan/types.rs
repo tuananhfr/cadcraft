@@ -29,6 +29,8 @@ pub struct Sheet {
     pub paper_mm: [f64; 2],
     pub landscape: bool,
     pub plot_scale: PlotScale,
+    #[serde(default)]
+    pub scale_label: Option<String>,
     pub status: SheetStatus,
     #[serde(default)]
     pub issues: Vec<PreflightIssue>,
@@ -68,6 +70,23 @@ impl PlotScale {
         let paper_mm = paper.trim().parse::<f64>().ok()?;
         let drawing_units = drawing.trim().parse::<f64>().ok()?;
         Self::ratio(paper_mm, drawing_units)
+    }
+
+    /// Real-world lengths must be converted independently of the drawing's paper-space convention.
+    pub fn from_real_ratio(text: &str, unit_mm: f64) -> Option<PlotScale> {
+        if !positive_finite(unit_mm) {
+            return None;
+        }
+        match Self::parse(text)? {
+            Self::Fit => Some(Self::Fit),
+            Self::Ratio { paper_mm, drawing_units } => {
+                let drawing_units = drawing_units / unit_mm;
+                if !positive_finite(paper_mm / drawing_units) {
+                    return None;
+                }
+                Self::ratio(paper_mm, drawing_units)
+            }
+        }
     }
 
     fn ratio(paper_mm: f64, drawing_units: f64) -> Option<Self> {
@@ -163,6 +182,8 @@ struct SheetInput {
     #[serde(default)]
     landscape: Option<bool>,
     plot_scale: PlotScale,
+    #[serde(default)]
+    scale_label: Option<String>,
     status: SheetStatus,
     #[serde(default)]
     issues: Vec<PreflightIssue>,
@@ -283,6 +304,7 @@ fn parse_sheet(v: &Value) -> Result<Sheet, String> {
         paper_mm: input.paper_mm,
         landscape: input.landscape.unwrap_or(width > height),
         plot_scale: input.plot_scale,
+        scale_label: input.scale_label,
         status,
         issues: input.issues,
         attributes: input.attributes,

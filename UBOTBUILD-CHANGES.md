@@ -45,3 +45,8 @@ This branch (`tuananhfr`) is UbotCAD, the UbotBuild build of [CADCraft](https://
 ## V2.2 GĐ1A
 
 - UBPLOT selection follows AutoCAD: Shift removes, Enter finishes, Esc cancels; this replaces the spec’s “Ctrl add/remove, ESC finish”.
+
+## V2.2 GĐ2
+
+- UBPLOT scan ratios now follow INSUNITS independently of MEASUREMENT: `1:100` in a metre drawing stores 10 mm on paper per drawing unit. `scale_label` preserves the requested ratio or the frame-derived physical ratio (six significant digits). Unitless and unknown INSUNITS codes assume mm and report plan-level INFO `UNITS_ASSUMED`.
+- PLOT and EXPORTPDF accept `scaleMode: "real"` to interpret an explicit `scale` as a physical ratio using INSUNITS. Without it, scale keeps its existing paper-units-per-drawing-unit meaning. Explicit scaling still requires `fit: false` for Model until the separate fit-default change lands.

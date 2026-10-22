@@ -11,6 +11,7 @@ pub const FRAME_NESTED: &str = "FRAME_NESTED";
 pub const FRAME_MIRRORED: &str = "FRAME_MIRRORED";
 pub const FRAME_NONUNIFORM: &str = "FRAME_NONUNIFORM";
 pub const PAPER_CUSTOM: &str = "PAPER_CUSTOM";
+pub const UNITS_ASSUMED: &str = "UNITS_ASSUMED";
 pub const SCALE_NOT_SET: &str = "SCALE_NOT_SET";
 pub const HANDLE_DUPLICATE: &str = "HANDLE_DUPLICATE";
 pub const SHEET_EXCLUDED: &str = "SHEET_EXCLUDED";
