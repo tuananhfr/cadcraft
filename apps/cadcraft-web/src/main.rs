@@ -6,7 +6,7 @@
 //! with egui shapes instead of the GPU canvas, `?sample` opens the sample drawing. Saving downloads
 //! the drawing through the browser (`download.rs`). With `?host=parent` (inside an `<iframe>`), a
 //! same-origin parent page sends the drawing to open and stores what CADCraft saves instead
-//! (`host.rs`). The workspace layout is kept in `localStorage` (`profile_store.rs`).
+//! (`host.rs`). The workspace layout is kept in IndexedDB, with a localStorage fallback.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 #[cfg(target_arch = "wasm32")]
@@ -43,6 +43,7 @@ mod web {
         Option<crate::leave_guard::LeaveGuard>,
         Option<crate::fullscreen::WebFullscreen>,
         pub(crate) egui::Context,
+        #[allow(dead_code)] Option<FlushListeners>,
     );
 
     impl eframe::App for Shell {
@@ -76,6 +77,7 @@ mod web {
             let Ok(app) = self.0.try_borrow() else { return };
             storage.set_string(cadcraft_ui_egui::options::PROFILE_KEY, app.profile_json());
             storage.set_string(cadcraft_ui_egui::PREFS_KEY, app.prefs_json());
+            storage.set_string(cadcraft_ui_egui::autosave::PREFS_KEY, cadcraft_ui_egui::autosave::prefs_json());
         }
         fn persist_egui_memory(&self) -> bool {
             false
@@ -89,39 +91,53 @@ mod web {
         }
     }
 
-    /// Saves a layout change that is still inside the autosave delay when the tab is hidden or
-    /// closed: no frame runs after that, so the frame loop cannot do it.
-    fn flush_when_leaving(app: &Rc<RefCell<CadApp>>) {
-        let Some(window) = web_sys::window() else { return };
-        let flush = |app: &Rc<RefCell<CadApp>>| {
-            if let Ok(mut app) = app.try_borrow_mut()
-                && app.ws.store.is_some()
-                && app.ws.needs_flush()
-                && let Err(error) = app.commit_workspace_now()
-            {
-                log::warn!("workspace: {error}");
+    struct FlushListeners {
+        window: web_sys::Window,
+        document: web_sys::Document,
+        on_hide: Closure<dyn FnMut()>,
+        on_visibility: Closure<dyn FnMut()>,
+    }
+
+    impl Drop for FlushListeners {
+        fn drop(&mut self) {
+            let _ = self.window.remove_event_listener_with_callback("pagehide", self.on_hide.as_ref().unchecked_ref());
+            let _ = self.document.remove_event_listener_with_callback("visibilitychange", self.on_visibility.as_ref().unchecked_ref());
+        }
+    }
+
+    fn flush_when_leaving(app: &Rc<RefCell<CadApp>>, ctx: &egui::Context) -> Option<FlushListeners> {
+        let window = web_sys::window()?;
+        let document = window.document()?;
+        let flush = |app: &Rc<RefCell<CadApp>>, ctx: &egui::Context| {
+            if let Ok(mut app) = app.try_borrow_mut() {
+                app.browser_autosave_urgent(ctx);
+                if app.ws.store.is_some()
+                    && app.ws.needs_flush()
+                    && let Err(error) = app.commit_workspace_now()
+                {
+                    log::warn!("workspace: {error}");
+                }
             }
         };
         let on_hide = {
             let app = Rc::clone(app);
-            Closure::<dyn FnMut()>::new(move || flush(&app))
+            let ctx = ctx.clone();
+            Closure::<dyn FnMut()>::new(move || flush(&app, &ctx))
         };
-        if window.add_event_listener_with_callback("pagehide", on_hide.as_ref().unchecked_ref()).is_ok() {
-            on_hide.forget();
-        }
-        let Some(document) = window.document() else { return };
         let on_visibility = {
             let app = Rc::clone(app);
+            let ctx = ctx.clone();
             let document = document.clone();
             Closure::<dyn FnMut()>::new(move || {
                 if document.hidden() {
-                    flush(&app);
+                    flush(&app, &ctx);
                 }
             })
         };
-        if document.add_event_listener_with_callback("visibilitychange", on_visibility.as_ref().unchecked_ref()).is_ok() {
-            on_visibility.forget();
-        }
+        let listeners = FlushListeners { window, document, on_hide, on_visibility };
+        listeners.window.add_event_listener_with_callback("pagehide", listeners.on_hide.as_ref().unchecked_ref()).ok()?;
+        listeners.document.add_event_listener_with_callback("visibilitychange", listeners.on_visibility.as_ref().unchecked_ref()).ok()?;
+        Some(listeners)
     }
 
     fn query() -> String {
@@ -187,6 +203,7 @@ mod web {
             {
                 create.instance_descriptor.backends = eframe::wgpu::Backends::GL;
             }
+            let profile_store = crate::idb_profile_store::open().await;
             let result = eframe::WebRunner::new()
                 .start(
                     canvas,
@@ -208,19 +225,45 @@ mod web {
                         if let Some(prefs) = cc.storage.and_then(|s| s.get_string(cadcraft_ui_egui::PREFS_KEY)) {
                             app.load_prefs(&prefs);
                         }
-                        // After the preferences: a profile that names a theme or language overrides them.
+                        if let Some(prefs) = cc.storage.and_then(|s| s.get_string(cadcraft_ui_egui::autosave::PREFS_KEY)) {
+                            cadcraft_ui_egui::autosave::load_prefs(&prefs);
+                        }
+                        // A workspace can override the language and theme loaded from preferences.
                         // Blocked storage still gets a store, one that reports every save as failed.
-                        match crate::profile_store::open() {
-                            Some(mut store) => {
-                                store.repaint_on_external_change(&cc.egui_ctx);
-                                app.attach_profile_store(Box::new(store));
+                        let safe_mode = query_param("safe").is_some();
+                        match profile_store {
+                            Ok(mut opened) => {
+                                opened.profile.repaint_on_external_change(&cc.egui_ctx);
+                                if safe_mode {
+                                    app.attach_profile_store_safe(Box::new(opened.profile));
+                                } else {
+                                    app.attach_profile_store(Box::new(opened.profile));
+                                }
+                                opened.autosave.set_context(&cc.egui_ctx);
+                                app.enable_browser_autosave(Box::new(opened.autosave), opened.instance, opened.leftovers);
                             }
-                            None => {
-                                log::warn!("workspace: localStorage is not available; the layout will not be saved");
-                                app.attach_profile_store(Box::new(cadcraft_ui_egui::wsprofile::store::MemoryStore {
-                                    fail_writes: true,
-                                    ..Default::default()
-                                }));
+                            Err(error) => {
+                                log::warn!("workspace: IndexedDB unavailable: {}", error.message());
+                                let fallback = if safe_mode { crate::profile_store::open_safe() } else { crate::profile_store::open() };
+                                let store: Box<dyn cadcraft_ui_egui::wsprofile::store::ProfileStore> = match fallback {
+                                    Some(mut store) => {
+                                        store.repaint_on_external_change(&cc.egui_ctx);
+                                        Box::new(store)
+                                    }
+                                    None => Box::new(cadcraft_ui_egui::wsprofile::store::MemoryStore { fail_writes: true, ..Default::default() }),
+                                };
+                                if safe_mode {
+                                    app.attach_profile_store_safe(store);
+                                } else {
+                                    app.attach_profile_store(store);
+                                }
+                                let notice = cadcraft_ui_egui::tl!("Saving in limited browser storage");
+                                let message = app.ws.message.get_or_insert_with(String::new);
+                                if !message.is_empty() {
+                                    message.push(' ');
+                                }
+                                message.push_str(&notice);
+                                app.set_status(notice);
                             }
                         }
                         if query_param("lang").as_deref() == Some("qps") {
@@ -267,8 +310,8 @@ mod web {
                             guard.set(app.has_unsaved_drawings());
                         }
                         let app = Rc::new(RefCell::new(app));
-                        flush_when_leaving(&app);
-                        let mut shell = Shell(app, inbox, host, reduced_motion, fonts, leave_guard, None, cc.egui_ctx.clone());
+                        let flush_listeners = flush_when_leaving(&app, &cc.egui_ctx);
+                        let mut shell = Shell(app, inbox, host, reduced_motion, fonts, leave_guard, None, cc.egui_ctx.clone(), flush_listeners);
                         let fullscreen = match crate::fullscreen::install(&shell) {
                             Ok(fullscreen) => fullscreen,
                             Err(error) => {
@@ -304,9 +347,15 @@ fn wants_cpu(query: &str) -> bool {
 }
 
 #[cfg(any(target_arch = "wasm32", test))]
+pub mod drawing_autosave;
+#[cfg(any(target_arch = "wasm32", test))]
 mod font_index;
 #[cfg(target_arch = "wasm32")]
 mod fonts;
+#[cfg(target_arch = "wasm32")]
+pub mod idb;
+#[cfg(any(target_arch = "wasm32", test))]
+pub mod idb_profile_store;
 #[cfg(any(target_arch = "wasm32", test))]
 mod profile_store;
 #[cfg(target_arch = "wasm32")]

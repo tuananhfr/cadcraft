@@ -13,11 +13,13 @@ pub struct DeviceState {
     pub ui_scale: f32,
     pub screen: Option<ScreenProfile>,
     pub layout_patch: Value,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 impl Default for DeviceState {
     fn default() -> Self {
-        Self { ui_scale: 1.0, screen: None, layout_patch: Value::Object(Map::new()) }
+        Self { ui_scale: 1.0, screen: None, layout_patch: Value::Object(Map::new()), extra: Map::new() }
     }
 }
 

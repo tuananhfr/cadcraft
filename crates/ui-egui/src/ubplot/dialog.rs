@@ -44,6 +44,7 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     }
     let mut action = None;
     let available = ctx.content_rect().size() - vec2(32.0, 48.0);
+    let compact = ctx.content_rect().height() < 480.0;
     egui::Window::new(crate::tl!("Quick Plot"))
         .id(egui::Id::new(super::DIALOG))
         .open(open)
@@ -55,7 +56,9 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         .show(ctx, |ui| {
             // Reserve the footer before scrolling so publishing stays reachable at high zoom.
             let body_height = (ui.available_height() - 76.0).max(40.0);
-            egui::ScrollArea::vertical().id_salt("ubplot_body").max_height(body_height).auto_shrink([false, false]).show(ui, |ui| {
+            let body = egui::ScrollArea::vertical().id_salt("ubplot_body").max_height(body_height).auto_shrink([false, false]);
+            let body = if compact { body.scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible) } else { body };
+            body.show(ui, |ui| {
                 ui.heading(crate::tl!("Scan"));
                 let (mut pass, mut info, mut warn, mut block) = (0, 0, 0, 0);
                 for sheet in &plan.sheets {
@@ -75,7 +78,7 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                 });
                 ui.separator();
                 ui.heading(crate::tl!("Preview"));
-                thumbnails(app, ui, &plan, &mut state);
+                thumbnails(app, ui, &plan, &mut state, compact);
                 ui.separator();
                 ui.heading(crate::tl!("Exceptions"));
                 super::exceptions::show(ui, &plan, &request, &mut state.exceptions, &mut action);
@@ -100,7 +103,18 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                     action = Some(Action::Publish);
                 }
                 if let Some(reason) = reason {
-                    button.on_disabled_hover_text(reason);
+                    button.on_disabled_hover_ui(|ui| {
+                        ui.label(reason);
+                        if !state.split
+                            && let Some(issue) = plan
+                                .issues
+                                .iter()
+                                .chain(plan.sheets.iter().flat_map(|sheet| &sheet.issues))
+                                .find(|issue| issue.severity == Severity::Block)
+                        {
+                            ui.label(super::exceptions::issue_label(&issue.code));
+                        }
+                    });
                 }
             });
         });
@@ -131,15 +145,17 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     }
 }
 
-fn thumbnails(app: &mut CadApp, ui: &mut egui::Ui, plan: &SheetPlan, state: &mut State) {
+fn thumbnails(app: &mut CadApp, ui: &mut egui::Ui, plan: &SheetPlan, state: &mut State, compact: bool) {
     let columns = ((ui.available_width() / 176.0).floor() as usize).clamp(1, 16);
     let rows = plan.sheets.len().div_ceil(columns);
     let mut budget = 2_usize;
-    egui::ScrollArea::vertical().id_salt("ubplot_thumbnails").max_height((ui.ctx().content_rect().height() * 0.2).clamp(48.0, 140.0)).show_rows(
-        ui,
-        188.0,
-        rows,
-        |ui, range| {
+    // At high zoom, wheel input over previews must reach the exceptions in the parent body.
+    let source = egui::scroll_area::ScrollSource { mouse_wheel: !compact, ..Default::default() };
+    egui::ScrollArea::vertical()
+        .id_salt("ubplot_thumbnails")
+        .max_height((ui.ctx().content_rect().height() * 0.2).clamp(48.0, 140.0))
+        .scroll_source(source)
+        .show_rows(ui, 188.0, rows, |ui, range| {
             let visible_orders: BTreeSet<_> =
                 plan.sheets.iter().skip(range.start * columns).take(range.len() * columns).map(|sheet| sheet.order).collect();
             // Retaining viewport rows bounds GPU memory even when every sheet has been visited.
@@ -177,8 +193,7 @@ fn thumbnails(app: &mut CadApp, ui: &mut egui::Ui, plan: &SheetPlan, state: &mut
                     }
                 });
             }
-        },
-    );
+        });
 }
 
 fn thumbnail(app: &mut CadApp, ctx: &egui::Context, sheet: &Sheet) -> Result<TextureHandle, String> {

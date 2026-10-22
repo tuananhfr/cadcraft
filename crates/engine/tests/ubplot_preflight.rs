@@ -481,7 +481,12 @@ fn superseded_template_warns() {
         }]
     });
     s.execute("ubplot.templates", &json!({"action": "import", "text": template.to_string()})).unwrap();
-    let plan = typed(&scan(&mut s, &handles));
+    let mut plan = typed(&scan(&mut s, &handles));
+    assert_eq!(plan.sheets[0].frame_template_id.as_deref(), Some("generic@1"));
+    plan.sheets[0].frame_template_id = Some("v1@1".into());
+    let revisions = BTreeMap::new();
+    let ctx = PreflightContext { registry: &s.ubplot.registry, device: None, device_missing: false, revisions: &revisions, fonts: &[], web: false };
+    preflight(s.doc().unwrap(), &mut plan, &ctx);
     let entry = plan.sheets[0].issues.iter().find(|entry| entry.code == codes::TEMPLATE_SUPERSEDED).unwrap();
     assert_eq!(entry.severity, Severity::Warn);
     assert_eq!(entry.sheet_id.as_deref(), Some("S-001"));

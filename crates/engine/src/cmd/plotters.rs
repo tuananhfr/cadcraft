@@ -15,6 +15,7 @@ use cadcraft_geom::{Bounds2, Vec2};
 use serde_json::{Value, json};
 
 use super::*;
+use crate::sheetplan::{PreflightIssue, Severity, codes};
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Session, Step};
 
 /// Where plotter configuration files live. Names are file names ending in
@@ -286,7 +287,7 @@ pub fn page_device(cmd: &str, p: &Value, page: &mut PageSetup) -> Result<bool> {
 /// png or svg; EXPORTPDF always writes PDF) and `resolution`; a paper of the device becomes
 /// `width`/`height`/`margins` (mm) and, when not given, the device's orientation. Plots
 /// without a device are unchanged.
-pub(crate) fn plot_options(s: &Session, p: &Value, cmd: &str) -> Result<Value> {
+pub(crate) fn plot_options(s: &Session, p: &Value, cmd: &str) -> Result<(Value, Vec<PreflightIssue>)> {
     let given = str_param(p, "device").map(str::trim);
     let layout = match str_param(p, "layout") {
         Some(n) if n.eq_ignore_ascii_case("model") => None,
@@ -301,8 +302,27 @@ pub(crate) fn plot_options(s: &Session, p: &Value, cmd: &str) -> Result<Value> {
         Some(n) => Some(find_device(n).ok_or_else(|| unknown_device(cmd, n))?),
         None => layout.as_ref().and_then(|pg| find_device(&pg.device)),
     };
+    let mut warnings = Vec::new();
+    if given.is_none()
+        && dev.is_none()
+        && let Some(page) = &layout
+        && !page.device.trim().is_empty()
+        && !page.device.trim().eq_ignore_ascii_case(NO_DEVICE)
+    {
+        warnings.push(codes::issue(
+            Severity::Warn,
+            codes::DEVICE_UNAVAILABLE,
+            format!("Plotter `{}` is not installed; plotted to PDF instead", page.device),
+            None,
+        ));
+    }
     let mut out = if p.is_object() { p.clone() } else { json!({}) };
-    let (Some(dev), Some(o)) = (dev, out.as_object_mut()) else { return Ok(out) };
+    if !warnings.is_empty()
+        && let Some(o) = out.as_object_mut()
+    {
+        o.insert("output".into(), json!("pdf"));
+    }
+    let (Some(dev), Some(o)) = (dev, out.as_object_mut()) else { return Ok((out, warnings)) };
     o.remove("device");
     let output = if cmd == "exportpdf" { PlotOutput::Pdf } else { dev.output };
     o.insert("output".into(), json!(output.as_str()));
@@ -328,7 +348,7 @@ pub(crate) fn plot_options(s: &Session, p: &Value, cmd: &str) -> Result<Value> {
             o.insert("landscape".into(), json!(dev.orientation == Orientation::Landscape));
         }
     }
-    Ok(out)
+    Ok((out, warnings))
 }
 
 /// Whether a plot draws transparency, as PLOTTRANSPARENCYOVERRIDE decides: 0 never, 2 always,

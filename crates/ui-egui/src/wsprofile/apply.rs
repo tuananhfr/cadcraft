@@ -70,6 +70,7 @@ impl Fingerprint {
                 layer_list: app.ui.show_layer_list,
                 properties_all: app.ui.properties_all,
                 in_window_menu: app.ui.in_window_menu,
+                ..ViewState::default()
             },
             theme: app.ui.theme.as_str(),
             language: app.ui.interface_language.code(),
@@ -228,22 +229,39 @@ pub(crate) fn sync_scale(app: &mut CadApp, ctx: &egui::Context) {
     }
 }
 
-/// Remaps live floating panels when the window or zoom changes, including after startup.
+/// Remaps live floating panels and docked sizes when the window, zoom or display scale changes,
+/// including after startup, then clamps them around the canvas.
 pub(crate) fn remap_screen(app: &mut CadApp, ctx: &egui::Context) {
     let area = ctx.content_rect();
     let previous = app.ws.area;
     if !app.ws.area_known || area == previous || !area.is_finite() || !area.is_positive() {
         return;
     }
-    for group in &mut app.ui.docking.layout.floating {
+    remap_docking(&mut app.ui.docking, previous, area);
+    if let Some(base) = &mut app.ws.synced {
+        // The baseline must use the new points too; remapping both trees preserves pending user edits
+        // without mistaking screen geometry or float rounding for a change to the stored fractions.
+        let mut workspace = base.workspace();
+        remap_docking(&mut workspace, previous, area);
+        base.docking = workspace.layout;
+        base.hidden = workspace.hidden;
+    }
+}
+
+fn remap_docking(workspace: &mut Workspace, previous: egui::Rect, area: egui::Rect) {
+    for group in &mut workspace.layout.floating {
         group.rect = floating_rect(to_ratio(rect_points(group.rect), previous), area);
     }
-    for (_, location) in &mut app.ui.docking.hidden {
+    for (_, location) in &mut workspace.hidden {
         if let Some(rect) = &mut location.floating {
             *rect = floating_rect(to_ratio(rect_points(*rect), previous), area);
         }
     }
-    crate::docking::reclamp(app, area);
+    // Proportional sizes keep nested canvas splits usable after a shrink and recover on returning.
+    scale_sizes(workspace, previous, true);
+    scale_sizes(workspace, area, false);
+    // Command dispatch would observe new points against the old area before the screen tick updates it.
+    crate::dock_clamp::clamp_layout(&mut workspace.layout, area);
 }
 
 /// Panels whose `panels[]` entry outranks the user's dock tree: locked by policy or placed by
@@ -763,6 +781,7 @@ fn panels_from_docking(workspace: &Workspace, area: egui::Rect, previous: &[Pane
             y_ratio: 0.0,
             width_ratio: unit_or(width_ratio, 0.2),
             height_ratio: unit_or(height_ratio, 1.0),
+            extra: earlier(item.panel).map(|state| state.extra.clone()).unwrap_or_default(),
         });
     }
     for group in &workspace.layout.floating {
@@ -778,6 +797,7 @@ fn panels_from_docking(workspace: &Workspace, area: egui::Rect, previous: &[Pane
                 y_ratio,
                 width_ratio,
                 height_ratio,
+                extra: earlier(*panel).map(|state| state.extra.clone()).unwrap_or_default(),
             });
         }
     }

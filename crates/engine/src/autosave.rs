@@ -170,6 +170,11 @@ impl Autosaver {
         self.plan_with(s, now, minutes, dir, false)
     }
 
+    /// Flush before a host stops presenting frames, while still respecting disabled autosave.
+    pub fn plan_urgent(&mut self, s: &Session, now: f64, minutes: u32, dir: &str) -> Vec<Job> {
+        self.plan_with(s, now, minutes, dir, true)
+    }
+
     /// [`Autosaver::plan`], with `urgent` writing every drawing with changes not yet autosaved
     /// now instead of `minutes` after the change (autosave still off when `minutes` is 0).
     fn plan_with(&mut self, s: &Session, now: f64, minutes: u32, dir: &str, urgent: bool) -> Vec<Job> {

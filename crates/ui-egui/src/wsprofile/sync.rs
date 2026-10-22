@@ -166,7 +166,8 @@ impl CadApp {
         bases.entry(self.ws.user.profile_id.clone()).or_insert_with(|| self.ws.user.clone());
         self.ws.sync = SyncState { remote: Some(remote), bases, ..SyncState::default() };
         // Persist before any edits so a crash between a local commit and its sync hook keeps the base.
-        if self.ws.store.is_some()
+        if !self.ws.safe_mode
+            && self.ws.store.is_some()
             && !self.ws.needs_flush()
             && let Err(reason) = self.persist_sync_bases()
         {
@@ -176,7 +177,13 @@ impl CadApp {
 
     /// Called after a successful local commit; no store, uncommitted edits, or no remote is a no-op.
     pub fn sync_now(&mut self) {
-        if self.ws.sync.busy || self.ws.store.is_none() || self.ws.needs_flush() {
+        if self.ws.safe_mode
+            || self.ws.suspended
+            || self.ws.unkept_backup.is_some()
+            || self.ws.sync.busy
+            || self.ws.store.is_none()
+            || self.ws.needs_flush()
+        {
             return;
         }
         let Some(mut remote) = self.ws.sync.remote.take() else { return };
@@ -285,6 +292,9 @@ impl CadApp {
     }
 
     fn persist_sync_bases(&mut self) -> Result<(), String> {
+        if self.ws.safe_mode || self.ws.suspended || self.ws.unkept_backup.is_some() {
+            return Err("workspace saving is suspended".into());
+        }
         let bases = serde_json::to_value(&self.ws.sync.bases).map_err(|error| error.to_string())?;
         if self.ws.set_extra.get(BASES_KEY) == Some(&bases) {
             return Ok(());

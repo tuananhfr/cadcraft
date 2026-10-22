@@ -9,10 +9,12 @@ pub mod commands;
 pub mod conflict;
 pub mod device;
 pub mod history;
+pub mod import_preview;
 pub mod merge;
 pub mod migrate;
 pub mod picker;
 pub mod presets;
+pub mod save_state;
 pub mod schema;
 pub mod screen;
 pub mod startup;
@@ -20,6 +22,7 @@ pub mod store;
 pub mod sync;
 pub mod tab_conflict;
 pub mod validate;
+pub mod wire;
 
 use serde_json::{Map, Value, json};
 
@@ -32,7 +35,7 @@ use merge::{Effective, Layer, Level, apply_patch_locked, diff_patch, effective};
 use presets::{PRESET_IDS, SAFE_PRESET, preset};
 use schema::{SCHEMA_VERSION, WorkspaceLayout, WorkspaceProfile};
 use startup::{FALLBACK_MESSAGE, Fallback, NOT_KEPT_MESSAGE, POLICY_MESSAGE};
-use store::{ProfileSet, ProfileStore};
+use store::{Commit, Durability, ProfileSet, ProfileStore, TAB_CONFLICT_MESSAGE, expired_snapshots};
 
 pub const WORKSPACE_FILE: FileKind = FileKind { label: "Workspace (JSON)", extensions: &["json"] };
 
@@ -111,6 +114,7 @@ pub struct WsState {
     pub profiles: Vec<WorkspaceProfile>,
     /// A notice for the user (fallback, policy refusal); also shown in the status bar.
     pub message: Option<String>,
+    pub(crate) import_preview: Option<import_preview::Preview>,
     /// What the last apply could not place.
     pub report: ApplyReport,
     /// The content rect ratios are taken against; follows the window each frame.
@@ -129,6 +133,13 @@ pub struct WsState {
     pub(crate) synced: Option<Fingerprint>,
     /// A damaged set startup could not copy aside; commits wait until the copy succeeds.
     unkept_damage: Option<Vec<u8>>,
+    unkept_backup: Option<String>,
+    pub suspended: bool,
+    pub safe_mode: bool,
+    /// The store accepted the last commit but has not reported it durable yet.
+    writing: bool,
+    /// The user changed the workspace since it was loaded.
+    edited: bool,
     failed_commits: u32,
     now: f64,
     drag_before: Option<WorkspaceLayout>,
@@ -159,6 +170,7 @@ impl Default for WsState {
             active: SAFE_PRESET.into(),
             profiles: Vec::new(),
             message: None,
+            import_preview: None,
             report: ApplyReport::default(),
             area: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0)),
             set_extra: Map::new(),
@@ -168,6 +180,11 @@ impl Default for WsState {
             toolbar_drag: crate::toolbars::DragPhase::Idle,
             synced: None,
             unkept_damage: None,
+            unkept_backup: None,
+            suspended: false,
+            safe_mode: false,
+            writing: false,
+            edited: false,
             failed_commits: 0,
             now: 0.0,
             drag_before: None,
@@ -216,15 +233,16 @@ impl WsState {
 
     /// Whether a change is not stored yet; a host checks this before it exits.
     pub fn needs_flush(&self) -> bool {
-        self.autosave.pending() || matches!(self.status, SaveStatus::Failed(_) | SaveStatus::TabConflict)
+        !self.safe_mode && !self.suspended && (self.autosave.pending() || matches!(self.status, SaveStatus::Failed(_) | SaveStatus::TabConflict))
     }
 
     fn mark_changed(&mut self) {
-        if self.status == SaveStatus::TabConflict {
+        if self.safe_mode || self.suspended || self.status == SaveStatus::TabConflict {
             return;
         }
         self.autosave.changed(self.now);
         self.status = SaveStatus::Unsaved;
+        self.edited = true;
     }
 }
 
@@ -364,10 +382,10 @@ pub(crate) fn sync_aliases(app: &mut CadApp, before: &[(String, String)]) -> Res
     let result = edit_layout(app, |layout| {
         for alias in before.keys().chain(after.keys()) {
             if before.get(alias) != after.get(alias) {
+                let key = layout.aliases.keys().find(|held| held.eq_ignore_ascii_case(alias)).cloned().unwrap_or_else(|| alias.clone());
+                layout.aliases.retain(|held, _| !held.eq_ignore_ascii_case(alias));
                 if let Some(command) = after.get(alias) {
-                    layout.aliases.insert(alias.clone(), command.clone());
-                } else {
-                    layout.aliases.remove(alias);
+                    layout.aliases.insert(key, command.clone());
                 }
             }
         }
@@ -420,7 +438,7 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
     app.ws.device.screen = Some(screen::ScreenProfile {
         work_area: [area.min.x, area.min.y, area.width(), area.height()],
         pixel_ratio: ctx.native_pixels_per_point().filter(|ratio| ratio.is_finite() && *ratio > 0.0).unwrap_or(1.0),
-        ..screen::ScreenProfile::default()
+        ..app.ws.device.screen.clone().unwrap_or_default()
     });
     app.ws.area_known = true;
     if down {
@@ -443,8 +461,9 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
         }
     }
     app.ws.released = released;
-    let external = app.ws.store.as_mut().is_some_and(|store| store.take_external_change());
+    let external = !app.ws.safe_mode && app.ws.store.as_mut().is_some_and(|store| store.take_external_change());
     if external
+        && !app.ws.suspended
         && !app.ws.needs_flush()
         && let Err(error) = app.adopt_stored_workspace()
     {
@@ -454,13 +473,21 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
     if app.ui.dialog.as_deref() != Some(picker::PICKER_DIALOG) {
         app.ws.first_run_picker_open = false;
     }
+    if !app.ws.safe_mode && app.ws.writing {
+        let durability = app.ws.store.as_mut().map_or(Durability::Committed, |store| store.durability());
+        if durability == Durability::Pending {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        } else {
+            let _ = app.settle_commit(durability, true);
+        }
+    }
     // The debounce does not store while the picker waits, so a layout settling under it is not written as a choice.
-    let storing = !app.ws.first_run_picker_open;
+    let storing = !app.ws.safe_mode && !app.ws.first_run_picker_open && !app.ws.suspended;
     if !down && storing && app.ws.autosave.due(time) {
         let _ = app.commit_workspace_now();
     }
     if storing && app.ws.autosave.pending() {
-        let wait = std::time::Duration::try_from_secs_f64(app.ws.autosave.wait_secs()).unwrap_or(std::time::Duration::from_millis(750));
+        let wait = std::time::Duration::try_from_secs_f64(app.ws.autosave.wait_secs()).unwrap_or(std::time::Duration::from_millis(600));
         ctx.request_repaint_after(wait);
     }
 }
@@ -484,15 +511,53 @@ pub fn rfc3339(unix_ms: f64) -> String {
 }
 
 impl CadApp {
+    /// Keeps storage unopened so a damaged workspace cannot affect the recovery session.
+    pub fn attach_profile_store_safe(&mut self, store: Box<dyn ProfileStore>) {
+        let policy = self.ws.policy();
+        let user = startup::fresh_user(SAFE_PRESET, &policy);
+        let device = DeviceState::default();
+        let layers = startup::layers_for(&user, &policy, &device);
+        self.ws = WsState {
+            user,
+            device,
+            effective: effective(&layers),
+            layers,
+            store: Some(store),
+            sync: std::mem::take(&mut self.ws.sync),
+            safe_mode: true,
+            suspended: self.ws.suspended,
+            area: self.ws.area,
+            now: self.ws.now,
+            ..WsState::default()
+        };
+        if matches!(self.ui.dialog.as_deref(), Some(picker::PICKER_DIALOG | tab_conflict::DIALOG)) {
+            self.ui.dialog = None;
+        }
+        self.apply_workspace();
+        let message = save_state::LayoutSave::SafeMode.label();
+        self.ws.message = Some(message.clone());
+        self.set_status(message);
+    }
+
     /// Takes over profile storage: restores the stored workspace (or SIMPLE) and shows it.
     pub fn attach_profile_store(&mut self, mut store: Box<dyn ProfileStore>) {
-        let revision = store.read_current().as_deref().and_then(startup::stored_revision).unwrap_or(0);
+        self.ws.safe_mode = false;
+        self.ws.message = None;
+        let raw = store.read_current();
+        let revision = raw.as_deref().and_then(startup::stored_revision).unwrap_or(0);
         let (restored, unkept) = startup::open(store.as_mut());
         self.ws.known_revision = revision.max(restored.user.revision);
         let damaged = matches!(restored.fallback, Some(Fallback::Corrupt(_) | Fallback::NewerMajor(_) | Fallback::Invalid(_)));
         let kept = unkept.is_none();
         self.ws.unkept_damage = unkept;
+        self.ws.unkept_backup = match &restored.fallback {
+            None => raw.filter(|raw| startup::needs_backup(raw)),
+            Some(Fallback::RestoredSnapshot { revision, .. }) => store.read_snapshot(*revision).filter(|raw| startup::needs_backup(raw)),
+            _ => None,
+        };
         self.ws.failed_commits = 0;
+        self.ws.writing = false;
+        self.ws.edited = false;
         let mut notices: Vec<String> = Vec::new();
         if let Some(Fallback::RestoredSnapshot { revision, .. }) = &restored.fallback {
             notices.push(if kept {
@@ -509,6 +574,9 @@ impl CadApp {
         } else if damaged {
             notices.push(if kept { FALLBACK_MESSAGE.into() } else { NOT_KEPT_MESSAGE.into() });
         }
+        if damaged || matches!(restored.fallback, Some(Fallback::RestoredSnapshot { .. })) {
+            notices.push(crate::tl!("Restart in safe mode: add ?safe to the address / --safe-mode").into());
+        }
         if let Some(problem) = store.read_policy().and_then(|raw| startup::policy_problem(&raw)) {
             log::warn!("workspace: policy: {problem}");
             notices.push(format!("{POLICY_MESSAGE}: {problem}"));
@@ -518,7 +586,7 @@ impl CadApp {
         self.ws.device = restored.set.device.clone().unwrap_or_default();
         self.ws.device.screen = Some(screen::ScreenProfile {
             work_area: [self.ws.area.min.x, self.ws.area.min.y, self.ws.area.width(), self.ws.area.height()],
-            ..screen::ScreenProfile::default()
+            ..self.ws.device.screen.clone().unwrap_or_default()
         });
         self.ws.user = restored.user;
         self.ws.layers = restored.layers;
@@ -536,6 +604,9 @@ impl CadApp {
         self.ws.first_run = matches!(restored.fallback, Some(Fallback::NoProfile));
         self.ws.fallback = restored.fallback;
         self.apply_workspace();
+        if self.ws.unkept_backup.is_some() && self.ws.fallback.is_none() && !self.ws.suspended {
+            let _ = self.commit_workspace(false);
+        }
         if !notices.is_empty() {
             let notice = notices.join(" ");
             self.ws.message = Some(notice.clone());
@@ -572,6 +643,12 @@ impl CadApp {
     }
 
     pub(super) fn adopt_stored_workspace(&mut self) -> Result<(), String> {
+        if self.ws.safe_mode {
+            return Err("safe mode".into());
+        }
+        if self.ws.suspended {
+            return Err(commands::ROLLBACK_MESSAGE.into());
+        }
         let store = self.ws.store.take().ok_or("No workspace storage is attached")?;
         self.attach_profile_store(store);
         self.ws.drag_before = None;
@@ -588,17 +665,61 @@ impl CadApp {
     }
 
     pub(super) fn check_workspace_revision(&mut self, interactive: bool) -> Result<(), String> {
+        if self.ws.safe_mode {
+            return Ok(());
+        }
         let raw = self.ws.store.as_ref().and_then(|store| store.read_current());
         let stored = raw.as_deref().and_then(startup::stored_revision).unwrap_or(0);
         if stored > self.ws.known_revision || self.ws.status == SaveStatus::TabConflict {
-            self.ws.status = SaveStatus::TabConflict;
-            self.ws.autosave.clear();
-            if interactive {
-                self.ui.dialog = Some(tab_conflict::DIALOG.into());
-            }
-            return Err("Workspace changed in another tab".into());
+            return Err(self.enter_tab_conflict(interactive));
         }
         Ok(())
+    }
+
+    /// Stops autosave until the user resolves the conflict; returns the error to report.
+    fn enter_tab_conflict(&mut self, interactive: bool) -> String {
+        self.ws.status = SaveStatus::TabConflict;
+        self.ws.writing = false;
+        self.ws.autosave.clear();
+        if interactive {
+            self.ui.dialog = Some(tab_conflict::DIALOG.into());
+        }
+        TAB_CONFLICT_MESSAGE.into()
+    }
+
+    /// Arms the next attempt after a commit that did not reach storage; returns the error to report.
+    fn commit_failed(&mut self, error: String) -> String {
+        // Storage that is full or blocked now may not be later: try again, less and less often.
+        let delay = (RETRY_SECS * 2f64.powi(self.ws.failed_commits.min(4) as i32)).min(MAX_RETRY_SECS);
+        self.ws.failed_commits = self.ws.failed_commits.saturating_add(1);
+        self.ws.writing = false;
+        self.ws.autosave.retry(self.ws.now, delay);
+        self.ws.status = SaveStatus::Failed(error.clone());
+        self.set_status(format!("Could not save workspace: {error}"));
+        error
+    }
+
+    /// Acts on what the store reports for the commit it accepted last.
+    fn settle_commit(&mut self, durability: Durability, interactive: bool) -> Result<(), String> {
+        match durability {
+            Durability::Committed => {
+                self.ws.writing = false;
+                // An edit made while the write was pending is still unsaved.
+                if !self.ws.autosave.pending() {
+                    self.ws.status = SaveStatus::SavedLocally;
+                }
+                self.ws.failed_commits = 0;
+                self.sync_now();
+                Ok(())
+            }
+            Durability::Pending => {
+                self.ws.writing = true;
+                self.ws.status = SaveStatus::Unsaved;
+                Ok(())
+            }
+            Durability::Failed(error) => Err(self.commit_failed(error)),
+            Durability::Conflict { .. } => Err(self.enter_tab_conflict(interactive)),
+        }
     }
 
     /// Stores the workspace now: next revision, a snapshot of it, then the current set.
@@ -607,24 +728,35 @@ impl CadApp {
     }
 
     pub(super) fn commit_workspace(&mut self, interactive: bool) -> Result<(), String> {
+        if self.ws.safe_mode {
+            return Err("safe mode".into());
+        }
+        if self.ws.suspended {
+            return Err(commands::ROLLBACK_MESSAGE.into());
+        }
         observe(self, true);
-        // localStorage cannot check and write atomically; IndexedDB transactions will close this race.
-        self.check_workspace_revision(interactive)?;
+        if self.ws.status == SaveStatus::TabConflict {
+            return Err(self.enter_tab_conflict(interactive));
+        }
         let policy = self.ws.policy();
+        let expected = self.ws.known_revision;
         let Some(store) = self.ws.store.as_mut() else { return Err("No workspace storage is attached".into()) };
-        let newest = store.snapshots().into_iter().max().unwrap_or(0);
+        let mut revisions = store.snapshots();
+        let newest = revisions.iter().copied().max().unwrap_or(0);
         let mut user = self.ws.user.clone();
-        user.revision = newest.max(user.revision).max(self.ws.known_revision).saturating_add(1);
+        user.revision = newest.max(user.revision).max(expected).saturating_add(1);
         user.updated_at = rfc3339(crate::now_ms());
         if user.created_at.is_empty() {
             user.created_at = user.updated_at.clone();
         }
+        revisions.push(user.revision);
+        let prune = expired_snapshots(&revisions);
         let mut profiles = self.ws.profiles.clone();
         if let Some(saved) = profiles.iter_mut().find(|profile| profile.profile_id == self.ws.active) {
             *saved = user.clone();
         }
         let set = ProfileSet {
-            schema_version: SCHEMA_VERSION.into(),
+            schema_version: SCHEMA_VERSION,
             active: self.ws.active.clone(),
             profiles,
             user: Some(user.clone()),
@@ -632,6 +764,7 @@ impl CadApp {
             extra: self.ws.set_extra.clone(),
         };
         let unkept_damage = &mut self.ws.unkept_damage;
+        let unkept_backup = &mut self.ws.unkept_backup;
         let written = startup::set_text(&set, &policy).and_then(|json| {
             // Never write a set the next startup would refuse: that would lose every setting.
             startup::parse_set_with(&json, &policy).map_err(|fallback| format!("it would not read back: {}", startup::describe(&fallback)))?;
@@ -640,30 +773,28 @@ impl CadApp {
                     .map_err(|error| format!("the damaged workspace could not be kept, so it is not replaced: {error}"))?;
                 *unkept_damage = None;
             }
-            store.push_snapshot(user.revision, &json)?;
-            store.write_current(&json)
+            if let Some(raw) = unkept_backup.as_deref() {
+                store.keep_backup("1.0.0", raw)?;
+                *unkept_backup = None;
+            }
+            store.write_commit(Commit { expected, revision: user.revision, json: &json, prune })
         });
-        match written {
-            Ok(()) => {
-                self.ws.known_revision = user.revision;
-                self.ws.user = user;
-                self.ws.profiles = set.profiles;
-                self.ws.status = SaveStatus::SavedLocally;
-                self.ws.autosave.clear();
-                self.ws.failed_commits = 0;
-                self.sync_now();
-                Ok(())
-            }
+        let durability = match written {
+            Ok(()) => store.durability(),
             Err(error) => {
-                // Storage that is full or blocked now may not be later: try again, less and less often.
-                let delay = (RETRY_SECS * 2f64.powi(self.ws.failed_commits.min(4) as i32)).min(MAX_RETRY_SECS);
-                self.ws.failed_commits = self.ws.failed_commits.saturating_add(1);
-                self.ws.autosave.retry(self.ws.now, delay);
-                self.ws.status = SaveStatus::Failed(error.clone());
-                self.set_status(format!("Could not save workspace: {error}"));
-                Err(error)
+                // The store refuses a commit over a newer one; another tab wrote it.
+                let stored = store.read_current().as_deref().and_then(startup::stored_revision).unwrap_or(0);
+                return Err(if stored > expected { self.enter_tab_conflict(interactive) } else { self.commit_failed(error) });
             }
+        };
+        if !matches!(durability, Durability::Conflict { .. }) {
+            // Accepted, even if not durable yet: the store now holds this revision.
+            self.ws.known_revision = user.revision;
+            self.ws.user = user;
+            self.ws.profiles = set.profiles;
+            self.ws.autosave.clear();
         }
+        self.settle_commit(durability, interactive)
     }
 
     /// Saved state for `ui.workspace.status`.
@@ -684,21 +815,32 @@ impl CadApp {
             SaveStatus::Failed(error) => Some(error.clone()),
             _ => None,
         };
+        let label = if ws.safe_mode {
+            save_state::LayoutSave::SafeMode.label()
+        } else if ws.suspended {
+            "Saving suspended".into()
+        } else {
+            ws.status.label().into()
+        };
         json!({
-            "status": ws.status.as_str(),
-            "label": ws.status.label(),
+            "status": if ws.safe_mode { "safe_mode" } else if ws.suspended { "suspended" } else { ws.status.as_str() },
+            "label": label,
+            "safe_mode": ws.safe_mode,
             "error": error,
             "message": ws.message,
             "active": ws.active,
             "base_id": ws.user.base_id,
             "revision": ws.user.revision,
             "pending": ws.autosave.pending(),
+            "layout_save": save_state::LayoutSave::from_ws(ws).as_str(),
+            "drawing_save": save_state::DrawingSave::from_app(self).as_str(),
             "persisted": ws.store.is_some(),
+            "persisted_storage": ws.store.as_ref().and_then(|store| store.persisted_storage()),
             "fallback": fallback,
             "restored_revision": restored_revision,
             "undo": ws.history.undo_len(),
             "redo": ws.history.redo_len(),
-            "snapshots": ws.store.as_ref().map(|store| store.snapshots()).unwrap_or_default(),
+            "snapshots": if ws.safe_mode { Vec::new() } else { ws.store.as_ref().map(|store| store.snapshots()).unwrap_or_default() },
             "workspaces": ws.choices().iter().map(|choice| json!({"id": choice.id, "name": choice.name, "preset": choice.preset})).collect::<Vec<_>>(),
             "unknown_commands": ws.report.unknown_commands,
             "unknown_panels": ws.report.unknown_panels,

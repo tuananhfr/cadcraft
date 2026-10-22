@@ -117,6 +117,10 @@ impl eframe::App for App {
 /// File format hooks for the engine (it stays I/O-agnostic).
 pub fn install_io() {
     #[cfg(not(target_arch = "wasm32"))]
+    cadcraft_engine::sheetplan::registry_store::set_registry_store_factory(|| {
+        Ok(Box::new(cadcraft_engine::sheetplan::registry_store::DirRegistryStore::settings_default()?))
+    });
+    #[cfg(not(target_arch = "wasm32"))]
     cadcraft_engine::cmd::ubplot::set_clock(|| {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -282,25 +286,42 @@ fn control_flag(current: Option<u16>, value: Option<String>) -> Option<u16> {
     current
 }
 
+#[derive(Default)]
+struct LaunchArgs {
+    control_port: Option<u16>,
+    files: Vec<String>,
+    sample: bool,
+    safe_mode: bool,
+    version: bool,
+}
+
+fn parse_launch_args(mut args: impl Iterator<Item = String>, control_port: Option<u16>) -> LaunchArgs {
+    let mut launch = LaunchArgs { control_port, ..LaunchArgs::default() };
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--control" => launch.control_port = control_flag(launch.control_port, args.next()),
+            "--sample" => launch.sample = true,
+            "--safe-mode" => launch.safe_mode = true,
+            "--version" | "-V" => {
+                launch.version = true;
+                break;
+            }
+            _ => launch.files.push(arg),
+        }
+    }
+    launch
+}
+
 fn main() -> eframe::Result {
     // First, so every start-up record is captured; see `logging`.
     let logger = logging::install();
     // lossy, so a value that is not Unicode is reported like any other bad port instead of ignored
-    let mut control_port =
+    let control_port =
         control_port_from("CADCRAFT_CONTROL_PORT", std::env::var_os("CADCRAFT_CONTROL_PORT").map(|p| p.to_string_lossy().into_owned()));
-    let mut files = Vec::new();
-    let mut sample = false;
-    let mut args = std::env::args().skip(1);
-    while let Some(a) = args.next() {
-        match a.as_str() {
-            "--control" => control_port = control_flag(control_port, args.next()),
-            "--sample" => sample = true,
-            "--version" | "-V" => {
-                println!("{}", version_string());
-                return Ok(());
-            }
-            _ => files.push(a),
-        }
+    let LaunchArgs { control_port, files, sample, safe_mode, version } = parse_launch_args(std::env::args().skip(1), control_port);
+    if version {
+        println!("{}", version_string());
+        return Ok(());
     }
     // The log file lives under the settings directory; opened after the arguments, so `--version`
     // leaves no file behind. Records logged until now are written to it first.
@@ -384,7 +405,13 @@ fn main() -> eframe::Result {
             // A scripted or sample run wants a drawing, not a first-run question (D4).
             app.skip_first_run_picker = sample || control_port.is_some();
             // After the preferences: a profile that names a theme or language overrides them.
-            if let Some(opened) = workspace::open_default() {
+            if safe_mode {
+                let store: Box<dyn cadcraft_ui_egui::wsprofile::store::ProfileStore> = match config_dir() {
+                    Some(dir) => Box::new(profile_store::FileProfileStore::new(dir.join("workspace"))),
+                    None => Box::new(cadcraft_ui_egui::wsprofile::store::MemoryStore::default()),
+                };
+                app.attach_profile_store_safe(store);
+            } else if let Some(opened) = workspace::open_default() {
                 app.attach_profile_store(Box::new(opened.store));
                 if let Some(notice) = opened.notice {
                     eprintln!("CADCraft workspace: {notice}");
@@ -449,7 +476,7 @@ fn main() -> eframe::Result {
 
 #[cfg(test)]
 mod tests {
-    use super::{config_dir_from, control_flag, control_port_from, filters_for_kind, filters_for_save, follow_desktop};
+    use super::{config_dir_from, control_flag, control_port_from, filters_for_kind, filters_for_save, follow_desktop, parse_launch_args};
     use cadcraft_ui_egui::wsprofile::WORKSPACE_FILE;
     use std::ffi::OsString;
     use std::path::PathBuf;
@@ -478,6 +505,18 @@ mod tests {
     fn workspace_dialogs_offer_json_first() {
         assert_eq!(filters_for_kind(&WORKSPACE_FILE, false), vec![("Workspace (JSON)", &["json"][..])]);
         assert_eq!(filters_for_kind(&WORKSPACE_FILE, true), vec![("Workspace (JSON)", &["json"][..]), ("All files", &["*"][..])]);
+    }
+
+    #[test]
+    fn safe_mode_flag_is_parsed() {
+        let args = ["--sample", "drawing.dxf", "--safe-mode", "--control", "7979"].into_iter().map(str::to_string);
+        let launch = parse_launch_args(args, None);
+        assert!(launch.safe_mode);
+        assert!(launch.sample);
+        assert_eq!(launch.files, ["drawing.dxf"]);
+        assert_eq!(launch.control_port, Some(7979));
+        assert!(!launch.version);
+        assert!(!parse_launch_args(std::iter::empty(), None).safe_mode);
     }
 
     #[test]
