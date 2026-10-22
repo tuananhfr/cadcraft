@@ -127,7 +127,7 @@ fn validate_settings(settings: &PrintSettings) -> Result<(), String> {
     naming_tokens(&settings.naming)
 }
 
-fn validate_doc(doc: &ProfileDoc) -> Result<(), String> {
+pub(super) fn validate_doc(doc: &ProfileDoc) -> Result<(), String> {
     if doc.schema_version != PRINT_PROFILE_SCHEMA {
         return Err("unsupported print profile schema_version".into());
     }
@@ -159,7 +159,7 @@ fn consume(remaining: &mut usize, bytes: usize) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_value(value: &Value, depth: usize, remaining: &mut usize) -> Result<(), String> {
+pub(super) fn validate_value(value: &Value, depth: usize, remaining: &mut usize) -> Result<(), String> {
     if depth > MAX_PROFILE_DEPTH {
         return Err("print profile JSON depth exceeds 32".into());
     }

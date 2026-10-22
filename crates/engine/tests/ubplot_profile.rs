@@ -286,3 +286,344 @@ fn profile_document_count_is_bounded_with_a_notice() {
     assert_eq!(issues.len(), 1);
     assert_eq!(issues[0].code, PROFILE_LEVEL_SKIPPED);
 }
+
+#[test]
+fn upgrade_reads_unversioned_doc() {
+    let original = doc(ProfileLevel::User, json!({"paper": "A3", "pdf_layers": false}), &["/paper"]);
+    let mut value = serde_json::to_value(&original).unwrap();
+    value.as_object_mut().unwrap().remove("schema_version");
+    assert_eq!(migrate(value).unwrap(), original);
+}
+
+#[test]
+fn store_write_failure_keeps_effective() {
+    let original = doc(ProfileLevel::User, json!({"paper": "A3"}), &[]);
+    let mut store = MemoryPrintProfileStore::default();
+    let json = serde_json::to_string(&original).unwrap();
+    store.write(original.level, &original.id, &json).unwrap();
+    store.fail_writes = true;
+    let mut session = cadcraft_engine::Session::new();
+    session.set_print_profile_store(Box::new(store));
+    let before = session.effective_print_profile();
+    let changed = doc(ProfileLevel::User, json!({"paper": "A4"}), &[]);
+    let error = session.write_print_profile(&changed).unwrap_err();
+    assert!(error.contains("print profile store write failed"));
+    assert_eq!(session.effective_print_profile(), before);
+    assert_eq!(before.settings.paper.as_deref(), Some("A3"));
+}
+
+#[test]
+fn memory_store_round_trip_keeps_previous_good_and_sorted_ids() {
+    let mut store = MemoryPrintProfileStore::default();
+    let first = doc(ProfileLevel::User, json!({"paper": "A3"}), &[]);
+    let second = doc(ProfileLevel::User, json!({"paper": "A4"}), &[]);
+    let first_json = serde_json::to_string(&first).unwrap();
+    store.write(first.level, &first.id, &first_json).unwrap();
+    store.write(second.level, &second.id, &serde_json::to_string(&second).unwrap()).unwrap();
+    assert_eq!(store.read_last_good(first.level, &first.id).as_deref(), Some(first_json.as_str()));
+    assert_eq!(load_doc(&mut store, second.level, &second.id), (Some(second), None));
+    for id in ["z-project", "a-project"] {
+        let mut project = doc(ProfileLevel::Project, json!({}), &[]);
+        project.id = id.into();
+        store.write(project.level, id, &serde_json::to_string(&project).unwrap()).unwrap();
+    }
+    assert_eq!(store.list(ProfileLevel::Project), vec!["a-project", "z-project"]);
+    assert_eq!(store.list(ProfileLevel::User), vec!["default"]);
+    assert!(store.list(ProfileLevel::Platform).is_empty());
+}
+
+#[test]
+fn hostile_profile_store_inputs_are_rejected_without_changes() {
+    let mut store = MemoryPrintProfileStore::default();
+    let original = doc(ProfileLevel::User, json!({"paper": "A3"}), &[]);
+    let json = serde_json::to_string(&original).unwrap();
+    store.write(original.level, "default", &json).unwrap();
+    let long_id = "a".repeat(65);
+    for id in ["", "..", "../a", "a/b", "a\\b", "A", "é", "a.json", "a:b", &long_id] {
+        assert!(store.read(ProfileLevel::User, id).is_err(), "{id}");
+        assert!(store.write(ProfileLevel::User, id, &json).is_err(), "{id}");
+        assert!(store.read_last_good(ProfileLevel::User, id).is_none(), "{id}");
+        assert!(store.keep_damaged(ProfileLevel::User, id, b"{").is_err(), "{id}");
+    }
+    assert!(store.write(ProfileLevel::Platform, "default", &json).is_err());
+    let oversized = " ".repeat(MAX_PROFILE_BYTES + 1);
+    assert!(store.write(ProfileLevel::User, "default", &oversized).is_err());
+    assert!(store.keep_damaged(ProfileLevel::User, "default", oversized.as_bytes()).is_err());
+    for settings in [json!({"pages_per_file": 0}), json!({"naming": "{date}"}), json!(7)] {
+        let invalid = doc(ProfileLevel::User, settings, &[]);
+        assert!(store.write(invalid.level, &invalid.id, &serde_json::to_string(&invalid).unwrap()).is_err());
+    }
+    assert!(store.write(ProfileLevel::Company, "default", &json).is_err());
+    assert!(store.write(ProfileLevel::User, "other", &json).is_err());
+    assert_eq!(store.read(ProfileLevel::User, "default").unwrap(), Some(json.as_bytes().to_vec()));
+    assert_eq!(load_doc(&mut store, ProfileLevel::User, "default"), (Some(original), None));
+}
+
+#[test]
+fn migration_rejects_future_schema_and_excessive_depth() {
+    let original = doc(ProfileLevel::User, json!({}), &[]);
+    let mut future = serde_json::to_value(&original).unwrap();
+    future.as_object_mut().unwrap().insert("schema_version".into(), json!(9));
+    assert_eq!(migrate(future), Err(MigrateError::Future(9)));
+    let mut deep = Value::Null;
+    for _ in 0..=MAX_PROFILE_DEPTH {
+        deep = json!({"child": deep});
+    }
+    let mut value = serde_json::to_value(&original).unwrap();
+    value.as_object_mut().unwrap().insert("settings".into(), deep);
+    assert!(migrate(value).is_err());
+}
+
+#[test]
+fn drawing_keys_use_title_namespace_and_normalized_native_paths() {
+    let hash: String = sha256_hex("Drawing1".as_bytes()).chars().take(16).collect();
+    assert_eq!(drawing_key(None, "Drawing1"), format!("name:{hash}"));
+    assert_ne!(drawing_key(None, "Drawing1"), drawing_key(None, "Drawing2"));
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let expected: String = sha256_hex(b"c:/plans/a.dxf").chars().take(16).collect();
+        assert_eq!(drawing_key(Some("C:\\Plans\\A.dxf"), "unused"), expected);
+        assert_eq!(drawing_key(Some("c:/plans/./sub/../a.dxf"), "different"), expected);
+        assert_ne!(drawing_key(Some("/plans/a.dxf"), "a"), drawing_key(Some("/other/a.dxf"), "a"));
+    }
+    #[cfg(target_arch = "wasm32")]
+    assert_eq!(drawing_key(Some("ignored/path.dxf"), "Drawing1"), format!("name:{hash}"));
+    let mut store = MemoryPrintProfileStore::default();
+    let mut drawing = doc(ProfileLevel::Drawing, json!({"paper": "A3"}), &[]);
+    drawing.id = drawing_key(None, "Drawing1");
+    store.write(drawing.level, &drawing.id, &serde_json::to_string(&drawing).unwrap()).unwrap();
+    assert_eq!(load_doc(&mut store, drawing.level, &drawing.id), (Some(drawing), None));
+}
+
+#[test]
+fn session_uses_active_drawing_and_handles_start_tab() {
+    let mut session = cadcraft_engine::Session::empty();
+    assert_eq!(session.effective_print_profile(), effective(&[]));
+    let first = session.new_drawing(false);
+    let mut drawing = doc(ProfileLevel::Drawing, json!({"paper": "A3"}), &[]);
+    drawing.id = drawing_key(None, &session.docs[first].title);
+    session.write_print_profile(&drawing).unwrap();
+    assert_eq!(session.effective_print_profile().settings.paper.as_deref(), Some("A3"));
+    session.new_drawing(false);
+    assert_eq!(session.effective_print_profile().settings.paper, None);
+    session.active = first;
+    assert_eq!(session.effective_print_profile().settings.paper.as_deref(), Some("A3"));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+mod persistence {
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use cadcraft_engine::{Session, doc::Drawing};
+
+    use super::*;
+
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new() -> Self {
+            let path = std::env::temp_dir().join(format!("cadcraft-g6-t2-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+            std::fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn stored(store: &mut dyn PrintProfileStore, profile: &ProfileDoc) {
+        store.write(profile.level, &profile.id, &serde_json::to_string(profile).unwrap()).unwrap();
+    }
+
+    fn damaged_bytes(temp: &TempDir) -> Vec<Vec<u8>> {
+        std::fs::read_dir(temp.0.join("user/damaged")).unwrap().map(|entry| std::fs::read(entry.unwrap().path()).unwrap()).collect()
+    }
+
+    #[test]
+    fn profile_survives_restart() {
+        let temp = TempDir::new();
+        let mut session = Session::new();
+        session.set_print_profile_store(Box::new(DirPrintProfileStore::new(temp.0.clone())));
+        session.write_print_profile(&doc(ProfileLevel::Company, json!({"device": "Plotter A"}), &["/device"])).unwrap();
+        session.write_print_profile(&doc(ProfileLevel::User, json!({"device": "CADCraft PDF", "paper": "A3"}), &[])).unwrap();
+        let before = session.effective_print_profile();
+        drop(session);
+        let mut session = Session::new();
+        session.set_print_profile_store(Box::new(DirPrintProfileStore::new(temp.0.clone())));
+        assert_eq!(session.effective_print_profile(), before);
+        assert_eq!(before.settings.device, "Plotter A");
+        assert_eq!(before.settings.paper.as_deref(), Some("A3"));
+    }
+
+    #[test]
+    fn corrupt_profile_restores_last_good() {
+        let temp = TempDir::new();
+        let mut store = DirPrintProfileStore::new(temp.0.clone());
+        let first = doc(ProfileLevel::User, json!({"paper": "A3"}), &[]);
+        stored(&mut store, &first);
+        stored(&mut store, &doc(ProfileLevel::User, json!({"paper": "A4"}), &[]));
+        let path = temp.0.join("user/default.json");
+        std::fs::write(&path, b"{").unwrap();
+        let (loaded, notice) = load_doc(&mut store, ProfileLevel::User, "default");
+        assert_eq!(loaded, Some(first));
+        assert!(notice.unwrap().contains("restored the last good copy"));
+        assert_eq!(std::fs::read(&path).unwrap(), b"{");
+        assert_eq!(damaged_bytes(&temp), vec![b"{".to_vec()]);
+        let _ = load_doc(&mut store, ProfileLevel::User, "default");
+        assert_eq!(damaged_bytes(&temp), vec![b"{".to_vec()]);
+    }
+
+    #[test]
+    fn missing_current_recovers_last_good_after_interrupted_write() {
+        let temp = TempDir::new();
+        let mut store = DirPrintProfileStore::new(temp.0.clone());
+        let good = doc(ProfileLevel::User, json!({"paper": "A3"}), &[]);
+        stored(&mut store, &good);
+        std::fs::remove_file(temp.0.join("user/default.json")).unwrap();
+        let (loaded, notice) = load_doc(&mut store, ProfileLevel::User, "default");
+        assert_eq!(loaded, Some(good));
+        assert!(notice.unwrap().contains("restored the last good copy"));
+        assert!(!temp.0.join("user/default.json").exists());
+    }
+
+    #[test]
+    fn future_schema_kept_as_damaged() {
+        let temp = TempDir::new();
+        let mut store = DirPrintProfileStore::new(temp.0.clone());
+        let first = doc(ProfileLevel::User, json!({"paper": "A3"}), &[]);
+        stored(&mut store, &first);
+        let mut future = serde_json::to_value(doc(ProfileLevel::User, json!({"paper": "A4"}), &[])).unwrap();
+        future.as_object_mut().unwrap().insert("schema_version".into(), json!(9));
+        let raw = serde_json::to_vec_pretty(&future).unwrap();
+        let path = temp.0.join("user/default.json");
+        std::fs::write(&path, &raw).unwrap();
+        let (loaded, notice) = load_doc(&mut store, ProfileLevel::User, "default");
+        assert_eq!(loaded, Some(first));
+        assert!(notice.unwrap().contains("restored"));
+        assert_eq!(std::fs::read(&path).unwrap(), raw);
+        assert_eq!(damaged_bytes(&temp), vec![raw]);
+    }
+
+    #[test]
+    fn drawing_level_never_touches_dwg() {
+        let temp = TempDir::new();
+        let path = temp.0.join("a.dxf");
+        let bytes = b"0\nSECTION\n2\nHEADER\n0\nENDSEC\n0\nEOF\n";
+        std::fs::write(&path, bytes).unwrap();
+        let root = temp.0.join("settings/print-profiles");
+        let mut session = Session::empty();
+        let path_text = path.to_string_lossy().into_owned();
+        session.open_drawing(Drawing::new_metric(), "a.dxf", Some(path_text.clone()));
+        let before = session.state().unwrap().doc.clone();
+        let revision = session.state().unwrap().revision;
+        session.set_print_profile_store(Box::new(DirPrintProfileStore::new(root.clone())));
+        let mut drawing = doc(ProfileLevel::Drawing, json!({"paper": "A3"}), &[]);
+        drawing.id = drawing_key(Some(&path_text), "a.dxf");
+        session.write_print_profile(&drawing).unwrap();
+        assert_eq!(session.effective_print_profile().settings.paper.as_deref(), Some("A3"));
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        assert!(root.join("drawing").join(format!("{}.json", drawing.id)).is_file());
+        assert!(std::sync::Arc::ptr_eq(&before, &session.state().unwrap().doc));
+        assert_eq!(session.state().unwrap().revision, revision);
+    }
+
+    #[test]
+    fn damaged_profile_without_backup_is_reported_and_skipped() {
+        let temp = TempDir::new();
+        std::fs::create_dir(temp.0.join("user")).unwrap();
+        std::fs::write(temp.0.join("user/default.json"), b"{").unwrap();
+        let mut store = DirPrintProfileStore::new(temp.0.clone());
+        let (loaded, notice) = load_doc(&mut store, ProfileLevel::User, "default");
+        assert!(loaded.is_none());
+        assert!(notice.unwrap().contains("no last good copy"));
+        assert_eq!(damaged_bytes(&temp), vec![b"{".to_vec()]);
+        let mut session = Session::new();
+        session.set_print_profile_store(Box::new(store));
+        assert_eq!(session.effective_print_profile(), effective(&[]));
+        assert_eq!(session.log.len(), 1);
+        session.effective_print_profile();
+        assert_eq!(session.log.len(), 1);
+    }
+
+    #[test]
+    fn dir_store_bounds_files_and_rejects_hostile_ids() {
+        let temp = TempDir::new();
+        let mut store = DirPrintProfileStore::new(temp.0.clone());
+        let good = doc(ProfileLevel::User, json!({"paper": "A3"}), &[]);
+        stored(&mut store, &good);
+        for id in ["../a", "a/b", "a\\b", "a:b", "a.json", "..", ""] {
+            assert!(store.read(ProfileLevel::User, id).is_err());
+            assert!(store.write(ProfileLevel::User, id, "{}").is_err());
+            assert!(store.read_last_good(ProfileLevel::User, id).is_none());
+            assert!(store.keep_damaged(ProfileLevel::User, id, b"{").is_err());
+        }
+        let oversized = vec![b' '; MAX_PROFILE_BYTES + 1];
+        std::fs::write(temp.0.join("user/default.json"), &oversized).unwrap();
+        assert!(store.read(ProfileLevel::User, "default").is_err());
+        let (loaded, notice) = load_doc(&mut store, ProfileLevel::User, "default");
+        assert_eq!(loaded, Some(good));
+        assert!(notice.unwrap().contains("restored"));
+        assert_eq!(std::fs::read(temp.0.join("user/default.json")).unwrap(), oversized);
+    }
+
+    #[test]
+    fn stale_temp_file_refuses_write_and_keeps_current() {
+        let temp = TempDir::new();
+        let mut store = DirPrintProfileStore::new(temp.0.clone());
+        let good = doc(ProfileLevel::User, json!({"paper": "A3"}), &[]);
+        stored(&mut store, &good);
+        let path = temp.0.join("user/default.json");
+        let before = std::fs::read(&path).unwrap();
+        std::fs::write(temp.0.join("user/default.json.part"), b"in-flight writer").unwrap();
+        let next = doc(ProfileLevel::User, json!({"paper": "A4"}), &[]);
+        assert!(store.write(next.level, &next.id, &serde_json::to_string(&next).unwrap()).is_err());
+        assert_eq!(std::fs::read(path).unwrap(), before);
+        assert_eq!(load_doc(&mut store, ProfileLevel::User, "default"), (Some(good), None));
+    }
+
+    #[test]
+    fn drawing_title_keys_have_safe_filenames_and_round_trip_in_list() {
+        let temp = TempDir::new();
+        let mut store = DirPrintProfileStore::new(temp.0.clone());
+        let mut drawing = doc(ProfileLevel::Drawing, json!({"paper": "A3"}), &[]);
+        drawing.id = drawing_key(None, "unsaved drawing");
+        stored(&mut store, &drawing);
+        let hash = drawing.id.strip_prefix("name:").unwrap();
+        assert!(temp.0.join("drawing").join(format!("name--{hash}.json")).is_file());
+        assert_eq!(store.list(ProfileLevel::Drawing), vec![drawing.id.clone()]);
+        assert!(store.read(ProfileLevel::Drawing, &format!("name--{hash}")).is_err());
+        assert_eq!(load_doc(&mut store, drawing.level, &drawing.id), (Some(drawing), None));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_profile_paths_never_modify_external_files() {
+        use std::os::unix::fs::symlink;
+
+        let temp = TempDir::new();
+        let outside = TempDir::new();
+        let source = outside.0.join("drawing.dxf");
+        std::fs::write(&source, b"drawing bytes").unwrap();
+        std::fs::create_dir(temp.0.join("user")).unwrap();
+        symlink(&source, temp.0.join("user/default.json")).unwrap();
+        let mut store = DirPrintProfileStore::new(temp.0.clone());
+        let profile = doc(ProfileLevel::User, json!({"paper": "A3"}), &[]);
+        assert!(store.read(profile.level, &profile.id).is_err());
+        assert!(store.write(profile.level, &profile.id, &serde_json::to_string(&profile).unwrap()).is_err());
+        assert_eq!(std::fs::read(&source).unwrap(), b"drawing bytes");
+        let nested = temp.0.join("nested");
+        std::fs::create_dir(&nested).unwrap();
+        symlink(&outside.0, nested.join("drawing")).unwrap();
+        let mut store = DirPrintProfileStore::new(nested);
+        let mut drawing = profile;
+        drawing.level = ProfileLevel::Drawing;
+        assert!(store.write(drawing.level, &drawing.id, &serde_json::to_string(&drawing).unwrap()).is_err());
+        assert_eq!(std::fs::read_dir(&outside.0).unwrap().count(), 1);
+    }
+}
