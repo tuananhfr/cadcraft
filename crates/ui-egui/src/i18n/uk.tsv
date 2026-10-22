@@ -1816,3 +1816,38 @@
 	This command is not available on this platform.	Ця команда недоступна на цій платформі.
 	No matching commands.	Відповідних команд немає.
 	Commands	Команди
+	Scan	Сканування
+	{n} sheets	{n} аркушів
+	· {b} blocked · {w} warnings	· заблоковано: {b} · попереджень: {w}
+	Rescan	Повторне сканування
+	Exceptions	Винятки
+	Show all sheets	Показати всі аркуші
+	Merged PDF	Об’єднаний PDF
+	One PDF per sheet	Окремий PDF для кожного аркуша
+	Failed sheets	Аркуші з помилками
+	Preview unavailable	Попередній перегляд недоступний
+	Loading preview…	Завантаження попереднього перегляду…
+	Preview {order}	Попередній перегляд {order}
+	All sheets	Усі аркуші
+	{code} · {n} sheets	{code} · {n} аркушів
+	Exclude all	Виключити всі
+	Set paper for all	Задати формат для всіх
+	{sheet} · {order}	{sheet} · {order}
+	Pick window <	Вибрати вікно <
+	Published {k} file(s)	Опубліковано файлів: {k}
+	FRAME_AMBIGUOUS	Неоднозначна рамка
+	FRAME_NOT_FOUND	Рамку не знайдено
+	FRAME_MINSERT	Масив вставок рамки
+	PAPER_TOO_LARGE	Завеликий формат паперу
+	RENDER_FAILED	Помилка формування зображення
+	FRAME_DUPLICATE	Дубльована рамка
+	FRAME_OVERLAP	Рамки перекриваються
+	FRAME_NESTED	Вкладена рамка
+	FRAME_MIRRORED	Дзеркальна рамка
+	FRAME_NONUNIFORM	Нерівномірний масштаб рамки
+	A0	A0
+	A1	A1
+	A2	A2
+	A3	A3
+	A4	A4
+	A5	A5

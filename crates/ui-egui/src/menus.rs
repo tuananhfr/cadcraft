@@ -177,6 +177,9 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
     if let Some(r) = crate::bedit::route(app, id, params) {
         return Some(r);
     }
+    if let Some(r) = crate::ubplot::route(app, id, params) {
+        return Some(r);
+    }
     if let Some(r) = crate::managers::route(app, id, params) {
         return Some(r);
     }

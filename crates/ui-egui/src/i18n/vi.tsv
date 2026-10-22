@@ -1783,3 +1783,40 @@ ribbon	Output	Xuất bản
 	Unloaded	Đã tạm gỡ
 	Unreferenced	Không được tham chiếu
 	Unresolved	Chưa phân giải
+# Quick Plot dialog (GĐ1A A9).
+	A0	A0
+	A1	A1
+	A2	A2
+	A3	A3
+	A4	A4
+	A5	A5
+	All sheets	Tất cả tờ bản vẽ
+	Exceptions	Ngoại lệ
+	Exclude all	Loại trừ tất cả
+	FRAME_AMBIGUOUS	Khung bản vẽ không rõ ràng
+	FRAME_DUPLICATE	Khung bản vẽ trùng lặp
+	FRAME_MINSERT	Khung bản vẽ chèn dạng mảng
+	FRAME_MIRRORED	Khung bản vẽ bị lấy đối xứng
+	FRAME_NESTED	Khung bản vẽ lồng nhau
+	FRAME_NONUNIFORM	Khung bản vẽ tỷ lệ không đều
+	FRAME_NOT_FOUND	Không tìm thấy khung bản vẽ
+	FRAME_OVERLAP	Các khung bản vẽ chồng lên nhau
+	Failed sheets	Tờ bản vẽ bị lỗi
+	Loading preview…	Đang tải bản xem trước…
+	Merged PDF	Gộp một PDF
+	One PDF per sheet	Mỗi tờ một PDF
+	PAPER_TOO_LARGE	Khổ giấy quá lớn
+	Pick window <	Chọn cửa sổ <
+	Preview unavailable	Không có bản xem trước
+	Preview {order}	Xem trước {order}
+	Publish	Xuất bản
+	Published {k} file(s)	Đã xuất {k} tệp
+	RENDER_FAILED	Lỗi dựng hình
+	Rescan	Quét lại
+	Scan	Quét
+	Set paper for all	Đặt khổ giấy cho tất cả
+	Show all sheets	Hiện tất cả tờ bản vẽ
+	{code} · {n} sheets	{code} · {n} tờ
+	{n} sheets	{n} tờ
+	{sheet} · {order}	{sheet} · {order}
+	· {b} blocked · {w} warnings	· {b} bị chặn · {w} cảnh báo
