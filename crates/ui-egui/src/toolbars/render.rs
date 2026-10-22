@@ -118,7 +118,7 @@ pub(crate) fn ribbon_drop_zone(ctx: &egui::Context, app: &CadApp, rect: Rect, ac
             rect.center(),
             egui::Align2::CENTER_CENTER,
             crate::tl!("Drop to add as a ribbon group"),
-            egui::TextStyle::Button.resolve(&ctx.style()),
+            egui::TextStyle::Button.resolve(&ctx.global_style()),
             t.text,
         );
     }
