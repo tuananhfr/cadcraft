@@ -143,6 +143,7 @@ const MARKED_UI_SOURCES: &[(&str, &str)] = &[
     ("customize/mod.rs", include_str!("../customize/mod.rs")),
     ("customize/ribbon_tab.rs", include_str!("../customize/ribbon_tab.rs")),
     ("customize/toolbars_tab.rs", include_str!("../customize/toolbars_tab.rs")),
+    ("customize/alias_tab.rs", include_str!("../customize/alias_tab.rs")),
     ("customize/keyboard_tab.rs", include_str!("../customize/keyboard_tab.rs")),
     ("customize/quick_access_tab.rs", include_str!("../customize/quick_access_tab.rs")),
     ("toolbars/mod.rs", include_str!("../toolbars/mod.rs")),

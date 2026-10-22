@@ -47,6 +47,11 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.ribbon.button.add", "Add to Ribbon", &[], None),
     ("ui.ribbon.button.remove", "Remove from Ribbon", &[], None),
     ("ui.ribbon.collapse", "Minimize Ribbon", &["Window", "Minimize Ribbon"], None),
+    ("ui.alias.set", "Assign Alias", &[], None),
+    ("ui.alias.remove", "Remove Alias", &[], None),
+    ("ui.alias.reset", "Reset Aliases", &[], None),
+    ("ui.alias.export", "Export Aliases...", &[], None),
+    ("ui.alias.import", "Import Aliases...", &[], None),
     ("ui.shortcut.bind", "Assign Shortcut", &[], None),
     ("ui.shortcut.unbind", "Remove Shortcut", &[], None),
     ("ui.quickaccess.pin", "Add to Quick Access", &[], None),
@@ -167,6 +172,9 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
         return Some(result);
     }
     if let Some(result) = crate::palette::route(app, id, params) {
+        return Some(result);
+    }
+    if let Some(result) = crate::customize::alias_tab::route(app, id, params) {
         return Some(result);
     }
     if let Some(result) = crate::customize::route(app, id, params) {
