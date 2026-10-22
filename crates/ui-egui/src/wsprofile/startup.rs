@@ -1,5 +1,5 @@
 //! Reading the stored workspace at startup (spec §7): last good set → validate → migrate → policy
-//! layers. Anything unreadable falls back to SIMPLE and the damaged text is kept as a snapshot.
+//! layers. Damaged sets restore the last good snapshot before SIMPLE; damaged bytes are kept.
 
 use serde_json::{Map, Value};
 
@@ -7,13 +7,16 @@ use super::merge::{Layer, Level, diff_patch, effective, try_apply_patch};
 use super::migrate::{MigrateError, migrate};
 use super::presets::{SAFE_PRESET, preset, preset_json};
 use super::schema::{OwnerType, ProfileStatus, WorkspaceLayout, WorkspaceProfile};
-use super::store::{CORRUPT_SNAPSHOT, MAX_SET_BYTES, MAX_USER_PROFILES, ProfileSet, ProfileStore};
+use super::store::{CORRUPT_SNAPSHOT, KEEP_SNAPSHOTS, MAX_SET_BYTES, MAX_USER_PROFILES, ProfileSet, ProfileStore};
 use super::validate::{Issue, Mode, validate};
 
 pub const FALLBACK_MESSAGE: &str = "Workspace could not be read; using SIMPLE. The damaged copy was kept.";
+pub const RESTORED_MESSAGE: &str = "Workspace could not be read; restored the last good copy (revision {revision}). The damaged copy was kept.";
 pub const NOT_KEPT_MESSAGE: &str =
     "Workspace could not be read; using SIMPLE. The damaged copy could not be kept, so it is not overwritten until it can be.";
 pub const POLICY_MESSAGE: &str = "The workspace policy could not be read and was ignored";
+/// How many snapshots startup tries before giving up on them.
+const MAX_SNAPSHOT_TRIES: usize = KEEP_SNAPSHOTS;
 /// Policy files are small and few; more layers than this are ignored.
 const MAX_POLICY_LAYERS: usize = 8;
 /// A stored profile keeps its own layer over its base and policy here instead of a whole
@@ -27,6 +30,11 @@ pub enum Fallback {
     Corrupt(String),
     NewerMajor(String),
     Invalid(Vec<Issue>),
+    /// `current` could not be used; snapshot `revision` was, after `reason`.
+    RestoredSnapshot {
+        revision: u64,
+        reason: String,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -34,11 +42,11 @@ pub struct Restored {
     pub user: WorkspaceProfile,
     pub layers: Vec<Layer>,
     pub fallback: Option<Fallback>,
-    /// The rest of the stored set (saved profiles, active choice); default after a fallback.
+    /// The rest of the stored set (saved profiles, active choice); default when no set can be used.
     pub set: ProfileSet,
 }
 
-/// Loads the stored set, or SIMPLE when there is none or it cannot be used.
+/// Loads the stored set, the last valid snapshot after damage, or SIMPLE when neither can be used.
 pub fn restore(store: &mut dyn ProfileStore) -> Restored {
     open(store).0
 }
@@ -55,7 +63,8 @@ pub(crate) fn open(store: &mut dyn ProfileStore) -> (Restored, Option<Vec<u8>>) 
                 Err(error) => {
                     let bytes = error.into_bytes();
                     let unkept = keep_copy(store, &bytes).err().map(|_| bytes);
-                    return (fallback_to_safe(policy, Fallback::Corrupt("the stored workspace is not UTF-8 text".into())), unkept);
+                    let fallback = Fallback::Corrupt("the stored workspace is not UTF-8 text".into());
+                    return (snapshot_or_safe(store, policy, fallback), unkept);
                 }
             },
         },
@@ -68,9 +77,26 @@ pub(crate) fn open(store: &mut dyn ProfileStore) -> (Restored, Option<Vec<u8>>) 
         }
         Err(fallback) => {
             let unkept = keep_copy(store, raw.as_bytes()).err().map(|_| raw.into_bytes());
-            (fallback_to_safe(policy, fallback), unkept)
+            (snapshot_or_safe(store, policy, fallback), unkept)
         }
     }
+}
+
+fn snapshot_or_safe(store: &dyn ProfileStore, policy: Vec<Layer>, fallback: Fallback) -> Restored {
+    if matches!(fallback, Fallback::Corrupt(_) | Fallback::Invalid(_)) {
+        let mut revisions = store.snapshots();
+        revisions.sort_unstable_by(|a, b| b.cmp(a));
+        revisions.dedup();
+        for revision in revisions.into_iter().filter(|revision| *revision != CORRUPT_SNAPSHOT).take(MAX_SNAPSHOT_TRIES) {
+            let Some(raw) = store.read_snapshot(revision) else { continue };
+            let Ok(set) = parse_set_with(&raw, &policy) else { continue };
+            let user = working_profile(&set, &policy);
+            let layers = layers_for(&user, &policy);
+            let fallback = Some(Fallback::RestoredSnapshot { revision, reason: describe(&fallback) });
+            return Restored { user, layers, fallback, set };
+        }
+    }
+    fallback_to_safe(policy, fallback)
 }
 
 /// Keeps a damaged set: beside the snapshots where the store can, else as snapshot
@@ -202,7 +228,7 @@ pub(crate) fn check_profile(profile: &WorkspaceProfile, policy: &[Layer]) -> Res
 pub fn describe(fallback: &Fallback) -> String {
     match fallback {
         Fallback::NoProfile => "nothing is stored".into(),
-        Fallback::Corrupt(reason) => reason.clone(),
+        Fallback::Corrupt(reason) | Fallback::RestoredSnapshot { reason, .. } => reason.clone(),
         Fallback::NewerMajor(version) => format!("it was written for a newer schema {version}"),
         Fallback::Invalid(issues) => issues
             .iter()
