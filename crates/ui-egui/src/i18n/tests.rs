@@ -101,26 +101,322 @@ fn translations_cover_commands_menus_tools_and_snap_labels() {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+enum Section {
+    Menus(&'static str),
+    UiCommands,
+    ToolSets,
+    Snap,
+    Literals(&'static str),
+    Prompts,
+    Ribbon,
+}
+
+const VI_DONE: &[Section] = &[
+    Section::Menus("File"),
+    Section::Menus("Edit"),
+    Section::Menus("View"),
+    Section::Menus("Insert"),
+    Section::Menus("Format"),
+    Section::Menus("Tools"),
+    Section::Menus("Draw"),
+    Section::Menus("Dimension"),
+    Section::Menus("Modify"),
+    Section::Menus("Window"),
+    Section::Menus("Help"),
+    Section::Menus(""),
+    Section::UiCommands,
+    Section::ToolSets,
+    Section::Snap,
+    Section::Literals("xrefs.rs"),
+    Section::Literals("canvas.rs"),
+    Section::Literals("chrome.rs"),
+    Section::Literals("cmdline.rs"),
+    Section::Literals("credits.rs"),
+    Section::Literals("palettes/quickcalc.rs"),
+    Section::Literals("palettes/patterns.rs"),
+    Section::Literals("dialogs.rs"),
+    Section::Literals("ubplot/dialog.rs"),
+    Section::Literals("palette/mod.rs"),
+    Section::Literals("managers.rs"),
+    Section::Literals("managers/battman.rs"),
+    Section::Literals("autosave.rs"),
+    Section::Literals("fontmgr.rs"),
+    Section::Literals("viewcube.rs"),
+    Section::Literals("hatchdlg.rs"),
+    Section::Literals("mtext_editor.rs"),
+    Section::Literals("layers.rs"),
+    Section::Literals("canvas/compare.rs"),
+    Section::Literals("canvas/blockedit.rs"),
+    Section::Literals("bedit.rs"),
+    Section::Literals("palettes.rs"),
+    Section::Literals("parametric.rs"),
+    Section::Literals("quick.rs"),
+    Section::Literals("vpscale.rs"),
+    Section::Literals("options/dialog.rs"),
+    Section::Literals("wsprofile/picker.rs"),
+    Section::Literals("wsprofile/mod.rs"),
+    Section::Literals("wsprofile/sync.rs"),
+    Section::Literals("wsprofile/conflict.rs"),
+    Section::Literals("wsprofile/tab_conflict.rs"),
+    Section::Literals("shortcuts.rs"),
+    Section::Literals("quick_access.rs"),
+    Section::Literals("ribbon/mod.rs"),
+    Section::Literals("ribbon/render.rs"),
+    Section::Literals("customize/mod.rs"),
+    Section::Literals("customize/ribbon_tab.rs"),
+    Section::Literals("customize/toolbars_tab.rs"),
+    Section::Literals("customize/keyboard_tab.rs"),
+    Section::Literals("customize/quick_access_tab.rs"),
+    Section::Literals("toolbars/mod.rs"),
+    Section::Literals("toolbars/render.rs"),
+    Section::Literals("toolbars/menu.rs"),
+    Section::Prompts,
+];
+
+const MARKED_UI_SOURCES: &[(&str, &str)] = &[
+    ("xrefs.rs", include_str!("../xrefs.rs")),
+    ("canvas.rs", include_str!("../canvas.rs")),
+    ("chrome.rs", include_str!("../chrome.rs")),
+    ("cmdline.rs", include_str!("../cmdline.rs")),
+    ("credits.rs", include_str!("../credits.rs")),
+    ("palettes/quickcalc.rs", include_str!("../palettes/quickcalc.rs")),
+    ("palettes/patterns.rs", include_str!("../palettes/patterns.rs")),
+    ("dialogs.rs", include_str!("../dialogs.rs")),
+    ("ubplot/dialog.rs", include_str!("../ubplot/dialog.rs")),
+    ("palette/mod.rs", include_str!("../palette/mod.rs")),
+    ("managers.rs", include_str!("../managers.rs")),
+    ("managers/battman.rs", include_str!("../managers/battman.rs")),
+    ("autosave.rs", include_str!("../autosave.rs")),
+    ("fontmgr.rs", include_str!("../fontmgr.rs")),
+    ("viewcube.rs", include_str!("../viewcube.rs")),
+    ("hatchdlg.rs", include_str!("../hatchdlg.rs")),
+    ("mtext_editor.rs", include_str!("../mtext_editor.rs")),
+    ("layers.rs", include_str!("../layers.rs")),
+    ("canvas/compare.rs", include_str!("../canvas/compare.rs")),
+    ("canvas/blockedit.rs", include_str!("../canvas/blockedit.rs")),
+    ("bedit.rs", include_str!("../bedit.rs")),
+    ("palettes.rs", include_str!("../palettes.rs")),
+    ("parametric.rs", include_str!("../parametric.rs")),
+    ("quick.rs", include_str!("../quick.rs")),
+    ("vpscale.rs", include_str!("../vpscale.rs")),
+    ("options/dialog.rs", include_str!("../options/dialog.rs")),
+    ("wsprofile/picker.rs", include_str!("../wsprofile/picker.rs")),
+    ("wsprofile/mod.rs", include_str!("../wsprofile/mod.rs")),
+    ("wsprofile/sync.rs", include_str!("../wsprofile/sync.rs")),
+    ("wsprofile/conflict.rs", include_str!("../wsprofile/conflict.rs")),
+    ("wsprofile/tab_conflict.rs", include_str!("../wsprofile/tab_conflict.rs")),
+    ("shortcuts.rs", include_str!("../shortcuts.rs")),
+    ("quick_access.rs", include_str!("../quick_access.rs")),
+    ("ribbon/mod.rs", include_str!("../ribbon/mod.rs")),
+    ("ribbon/render.rs", include_str!("../ribbon/render.rs")),
+    ("customize/mod.rs", include_str!("../customize/mod.rs")),
+    ("customize/ribbon_tab.rs", include_str!("../customize/ribbon_tab.rs")),
+    ("customize/toolbars_tab.rs", include_str!("../customize/toolbars_tab.rs")),
+    ("customize/keyboard_tab.rs", include_str!("../customize/keyboard_tab.rs")),
+    ("customize/quick_access_tab.rs", include_str!("../customize/quick_access_tab.rs")),
+    ("toolbars/mod.rs", include_str!("../toolbars/mod.rs")),
+    ("toolbars/render.rs", include_str!("../toolbars/render.rs")),
+    ("toolbars/menu.rs", include_str!("../toolbars/menu.rs")),
+];
+
+fn menu_tops() -> BTreeSet<&'static str> {
+    std::iter::once("")
+        .chain(crate::menus::MENUS.iter().copied())
+        .chain(cadcraft_engine::command_specs().iter().filter_map(|c| c.menu.first().copied()))
+        .chain(crate::menus::UI_COMMANDS.iter().filter_map(|(_, _, path, _)| path.first().copied()))
+        .collect()
+}
+
+fn section_sources(section: Section) -> BTreeSet<String> {
+    let mut sources = BTreeSet::new();
+    match section {
+        Section::Menus(top) => {
+            sources.extend(crate::menus::MENUS.iter().filter(|name| **name == top).map(|name| (*name).to_string()));
+            for c in cadcraft_engine::command_specs() {
+                if c.menu.first().copied().unwrap_or_default() == top {
+                    sources.insert(c.label.to_string());
+                    sources.extend(c.menu.iter().map(|name| (*name).to_string()));
+                }
+            }
+            for (_, label, path, _) in crate::menus::UI_COMMANDS {
+                if path.first().copied().unwrap_or_default() == top {
+                    sources.insert((*label).to_string());
+                    sources.extend(path.iter().map(|name| (*name).to_string()));
+                }
+            }
+        }
+        Section::UiCommands => {
+            for (_, label, path, _) in crate::menus::UI_COMMANDS {
+                sources.insert((*label).to_string());
+                sources.extend(path.iter().map(|name| (*name).to_string()));
+            }
+        }
+        Section::ToolSets => {
+            for groups in [crate::palettes::DRAFTING, crate::palettes::MODELING] {
+                for (name, large, small) in groups {
+                    sources.insert((*name).to_string());
+                    sources.extend(large.iter().chain(*small).map(|(_, _, label)| (*label).to_string()));
+                }
+            }
+        }
+        Section::Snap => sources.extend(cadcraft_engine::snap::mode::ALL.iter().map(|(_, name)| (*name).to_string())),
+        Section::Literals(file) => {
+            let (_, source) = MARKED_UI_SOURCES.iter().find(|(name, _)| *name == file).unwrap();
+            for marker in ["crate::tl!(", "crate::tf!("] {
+                for rest in source.split(marker).skip(1) {
+                    // These macros require a quoted literal. Use JSON's string decoding for escapes.
+                    let rest = rest.trim_start();
+                    let mut escape = false;
+                    let end = rest
+                        .char_indices()
+                        .skip(1)
+                        .find_map(|(i, c)| {
+                            if escape {
+                                escape = false;
+                                None
+                            } else if c == '\\' {
+                                escape = true;
+                                None
+                            } else if c == '"' {
+                                Some(i + 1)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap();
+                    let key: String = serde_json::from_str(&rest[..end]).unwrap();
+                    // Coordinate axes, glyph buttons and product names are not translated.
+                    if !["X", "Y", "B", "UbotCAD"].contains(&key.as_str()) {
+                        sources.insert(key);
+                    }
+                }
+            }
+            if file == "dialogs.rs" {
+                // Unit choices and shared style titles use dynamic translation to retain their source values.
+                sources.extend(
+                    crate::dialogs::LENGTH_TYPES
+                        .iter()
+                        .chain(&crate::dialogs::ANGLE_TYPES)
+                        .map(|(_, label)| *label)
+                        .chain(crate::dialogs::INSERTION_UNITS)
+                        .chain(["Text Style", "Table Style", "Multileader Style"])
+                        .map(str::to_string),
+                );
+            }
+        }
+        Section::Prompts => sources.extend(engine_prompt_keys()),
+        Section::Ribbon => {
+            for id in crate::wsprofile::presets::PRESET_IDS {
+                let profile = crate::wsprofile::presets::preset(id).unwrap();
+                for tab in profile.layout.ribbon.tabs {
+                    sources.insert(tab.label);
+                    sources.extend(tab.groups.into_iter().map(|group| group.label));
+                }
+            }
+        }
+    }
+    if !matches!(section, Section::Literals(_)) {
+        sources.remove("");
+    }
+    sources
+}
+
+fn displayed_prompt_key(key: &str) -> bool {
+    let mut words = key.split_whitespace().peekable();
+    let placeholders_only = words.peek().is_some()
+        && words.all(|word| {
+            word.strip_prefix('{').and_then(|word| word.strip_suffix('}')).is_some_and(|name| !name.is_empty() && !name.contains(['{', '}']))
+        });
+    !key.is_empty() && !placeholders_only
+}
+
+fn prompt_source_keys(source: &str) -> BTreeSet<String> {
+    let mut keys = BTreeSet::new();
+    for marker in ["Prompt::new(", "Prompt::tf("] {
+        for rest in source.split(marker).skip(1) {
+            let argument = widget_text_argument(rest, 0).unwrap();
+            let mut rest = argument;
+            while let Some(start) = rest.find('"') {
+                let mut decoder = serde_json::Deserializer::from_str(&rest[start..]).into_iter::<String>();
+                let key = decoder.next().unwrap().unwrap();
+                rest = &rest[start + decoder.byte_offset()..];
+                if displayed_prompt_key(&key) {
+                    keys.insert(key);
+                }
+            }
+        }
+    }
+    keys
+}
+
+fn engine_prompt_keys() -> BTreeSet<String> {
+    let mut keys = BTreeSet::new();
+    let mut directories = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../engine/src")];
+    while let Some(directory) = directories.pop() {
+        let mut entries: Vec<_> = std::fs::read_dir(directory).unwrap().map(|entry| entry.unwrap().path()).collect();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                directories.push(path);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                keys.extend(prompt_source_keys(&std::fs::read_to_string(path).unwrap()));
+            }
+        }
+    }
+    let static_count = keys.len();
+    for spec in cadcraft_engine::command_specs().iter().filter(|spec| spec.interactive.is_some()) {
+        // Fresh drawings prevent commands that finish during begin from changing later prompts.
+        let mut session = Session::new();
+        session.open_drawing(cadcraft_engine::sample::default_sample(), "Sample", None);
+        if session.start(spec.id).is_ok()
+            && let Some(prompt) = session.current_prompt()
+        {
+            let key = prompt.template.map_or(prompt.message, |template| template.source.to_string());
+            if displayed_prompt_key(&key) {
+                keys.insert(key);
+            }
+        }
+        session.cancel();
+    }
+    eprintln!("Engine prompt keys: {static_count} static, {} dynamic-only, {} total", keys.len() - static_count, keys.len());
+    keys
+}
+
+#[test]
+fn prompt_source_keys_balance_arguments_and_skip_placeholder_only_templates() {
+    let source = r#"
+        Prompt::new(if flag { "First, (point)" } else { "Second [point]" }, Accept::POINT);
+        Prompt::new(["Third", "Fourth"].get(index).copied().unwrap_or(""), Accept::POINT);
+        Prompt::tf("Block \"{name}\": enter an option", vec![("name", value)], Accept::TEXT);
+        Prompt::tf("{title} {message}", args, Accept::POINT);
+        Prompt::new("", Accept::TEXT);
+    "#;
+    let expected = BTreeSet::from(["First, (point)", "Second [point]", "Third", "Fourth", "Block \"{name}\": enter an option"].map(str::to_string));
+    assert_eq!(prompt_source_keys(source), expected);
+    assert!(displayed_prompt_key("(need {axes})"));
+    assert!(displayed_prompt_key("{snap} of"));
+    assert!(!displayed_prompt_key("{title} {message}"));
+}
+
+#[test]
+fn every_engine_prompt_has_a_vietnamese_translation() {
+    assert!(VI_DONE.iter().any(|section| matches!(section, Section::Prompts)));
+    let keys = section_sources(Section::Prompts);
+    eprintln!("Vietnamese engine prompt coverage: {} keys", keys.len());
+    assert!(keys.contains("Specify first point"));
+    let catalog = catalog("vi").unwrap();
+    let missing: Vec<_> = keys.into_iter().filter(|key| !catalog.contains_key(&("", key.as_str()))).collect();
+    assert!(missing.is_empty(), "missing Vietnamese engine prompts: {missing:?}");
+}
+
 fn missing_commands_menus_tools_and_snap_labels(language: &str) -> Vec<String> {
     let catalog = catalog(language).unwrap();
     let mut sources = BTreeSet::new();
-    sources.extend(crate::menus::MENUS.iter().copied());
-    for c in cadcraft_engine::command_specs() {
-        sources.insert(c.label);
-        sources.extend(c.menu.iter().copied());
+    for section in menu_tops().into_iter().map(Section::Menus).chain([Section::UiCommands, Section::ToolSets, Section::Snap]) {
+        sources.extend(section_sources(section));
     }
-    for (_, label, path, _) in crate::menus::UI_COMMANDS {
-        sources.insert(*label);
-        sources.extend(path.iter().copied());
-    }
-    for groups in [crate::palettes::DRAFTING, crate::palettes::MODELING] {
-        for (name, large, small) in groups {
-            sources.insert(*name);
-            sources.extend(large.iter().chain(*small).map(|(_, _, label)| *label));
-        }
-    }
-    sources.extend(cadcraft_engine::snap::mode::ALL.iter().map(|(_, name)| *name));
-    sources.into_iter().filter(|s| !s.is_empty() && !catalog.contains_key(&("", *s))).map(str::to_string).collect()
+    sources.into_iter().filter(|s| !catalog.contains_key(&("", s.as_str()))).collect()
 }
 
 const WIDGET_LITERAL_FILES: &[(&str, &str)] = &[
@@ -130,6 +426,7 @@ const WIDGET_LITERAL_FILES: &[(&str, &str)] = &[
     ("fontmgr.rs", include_str!("../fontmgr.rs")),
     ("viewcube.rs", include_str!("../viewcube.rs")),
     ("dialogs.rs", include_str!("../dialogs.rs")),
+    ("palette/mod.rs", include_str!("../palette/mod.rs")),
 ];
 
 fn widget_text_argument(arguments: &str, wanted: usize) -> Option<&str> {
@@ -264,88 +561,87 @@ fn every_marked_ui_literal_has_a_translation() {
 
 fn missing_marked_ui_literals(language: &str) -> BTreeSet<String> {
     let catalog = catalog(language).unwrap();
-    let sources = [
-        include_str!("../xrefs.rs"),
-        include_str!("../canvas.rs"),
-        include_str!("../chrome.rs"),
-        include_str!("../cmdline.rs"),
-        include_str!("../credits.rs"),
-        include_str!("../palettes/quickcalc.rs"),
-        include_str!("../palettes/patterns.rs"),
-        include_str!("../hatchdlg.rs"),
-        include_str!("../mtext_editor.rs"),
-        include_str!("../layers.rs"),
-        include_str!("../canvas/compare.rs"),
-        include_str!("../canvas/blockedit.rs"),
-        include_str!("../bedit.rs"),
-        include_str!("../palettes.rs"),
-        include_str!("../parametric.rs"),
-        include_str!("../quick.rs"),
-        include_str!("../vpscale.rs"),
-        include_str!("../options/dialog.rs"),
-        include_str!("../wsprofile/picker.rs"),
-        include_str!("../wsprofile/mod.rs"),
-        include_str!("../wsprofile/sync.rs"),
-        include_str!("../wsprofile/conflict.rs"),
-        include_str!("../wsprofile/tab_conflict.rs"),
-        include_str!("../shortcuts.rs"),
-        include_str!("../quick_access.rs"),
-        include_str!("../ribbon/mod.rs"),
-        include_str!("../ribbon/render.rs"),
-        include_str!("../customize/mod.rs"),
-        include_str!("../customize/ribbon_tab.rs"),
-        include_str!("../customize/toolbars_tab.rs"),
-        include_str!("../customize/keyboard_tab.rs"),
-        include_str!("../customize/quick_access_tab.rs"),
-        include_str!("../toolbars/mod.rs"),
-        include_str!("../toolbars/render.rs"),
-        include_str!("../toolbars/menu.rs"),
-    ];
-    let mut missing = BTreeSet::new();
-    for source in sources.into_iter().chain(WIDGET_LITERAL_FILES.iter().map(|(_, source)| *source)) {
-        for marker in ["crate::tl!(", "crate::tf!("] {
-            for rest in source.split(marker).skip(1) {
-                // These macros require a quoted literal. Use JSON's string decoding for escapes.
-                let rest = rest.trim_start();
-                let mut escape = false;
-                let end = rest
-                    .char_indices()
-                    .skip(1)
-                    .find_map(|(i, c)| {
-                        if escape {
-                            escape = false;
-                            None
-                        } else if c == '\\' {
-                            escape = true;
-                            None
-                        } else if c == '"' {
-                            Some(i + 1)
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap();
-                let key: String = serde_json::from_str(&rest[..end]).unwrap();
-                // Coordinate axes, glyph buttons and product names are not translated.
-                if !["X", "Y", "B", "UbotCAD"].contains(&key.as_str()) && !catalog.contains_key(&("", key.as_str())) {
-                    missing.insert(key);
-                }
-            }
-        }
-    }
-    // Unit choices and shared style titles use dynamic translation to retain their source values.
-    for key in crate::dialogs::LENGTH_TYPES
+    MARKED_UI_SOURCES
         .iter()
-        .chain(&crate::dialogs::ANGLE_TYPES)
-        .map(|(_, label)| *label)
-        .chain(crate::dialogs::INSERTION_UNITS)
-        .chain(["Text Style", "Table Style", "Multileader Style"])
-    {
-        if !catalog.contains_key(&("", key)) {
-            missing.insert(key.to_string());
+        .flat_map(|(file, _)| section_sources(Section::Literals(file)))
+        .filter(|key| !catalog.contains_key(&("", key.as_str())))
+        .collect()
+}
+
+fn missing_vi_section(section: Section) -> BTreeSet<String> {
+    let catalog = catalog("vi").unwrap();
+    let context = if matches!(section, Section::Ribbon) { "ribbon" } else { "" };
+    section_sources(section)
+        .into_iter()
+        .filter(|key| !catalog.contains_key(&(context, key.as_str())) && !catalog.contains_key(&("", key.as_str())))
+        .collect()
+}
+
+#[test]
+fn section_sources_keep_menu_and_literal_boundaries() {
+    let file = section_sources(Section::Menus("File"));
+    assert!(file.contains("File"));
+    assert!(file.contains("New Drawing..."));
+    assert!(!file.contains("Line"));
+    assert!(!file.contains("Drawing as bytes"));
+    let unplaced = section_sources(Section::Menus(""));
+    assert!(unplaced.contains("Drawing as bytes"));
+    assert!(!unplaced.contains("New Drawing..."));
+    assert!(!unplaced.contains(""));
+    assert!(section_sources(Section::Menus("Tools")).contains("Geometric Constraints"));
+    assert!(section_sources(Section::Menus("Tools")).contains("Coincident"));
+    assert!(section_sources(Section::UiCommands).contains("Calibrate 3D Mouse"));
+    assert!(section_sources(Section::ToolSets).contains("Primitives"));
+    assert!(section_sources(Section::Snap).contains("Endpoint"));
+    let xrefs = section_sources(Section::Literals("xrefs.rs"));
+    assert!(xrefs.contains("Attach DWG..."));
+    assert!(xrefs.contains("References: {n}"));
+    assert!(!xrefs.contains("New Drawing..."));
+    assert!(section_sources(Section::Ribbon).contains("Home"));
+    assert!(!missing_vi_section(Section::Ribbon).contains("Home"));
+}
+
+#[test]
+fn vietnamese_sections_are_complete() {
+    let mut missing = Vec::new();
+    for section in VI_DONE {
+        let keys = missing_vi_section(*section);
+        if !keys.is_empty() {
+            missing.push(format!("{section:?}: {keys:?}"));
         }
     }
-    missing
+    assert!(missing.is_empty(), "missing Vietnamese section translations:\n{}", missing.join("\n"));
+}
+
+#[test]
+#[ignore]
+fn dump_missing_vi() {
+    let Some(directory) = std::env::var_os("I18N_DUMP_DIR") else {
+        eprintln!("Vietnamese catalog dump skipped: I18N_DUMP_DIR is unset");
+        return;
+    };
+    let directory = std::path::PathBuf::from(directory);
+    std::fs::create_dir_all(&directory).unwrap();
+    let sections = menu_tops()
+        .into_iter()
+        .map(Section::Menus)
+        .chain([Section::UiCommands, Section::ToolSets, Section::Snap])
+        .chain(MARKED_UI_SOURCES.iter().map(|(file, _)| Section::Literals(file)))
+        .chain([Section::Prompts, Section::Ribbon]);
+    for section in sections {
+        let name = match section {
+            Section::Menus("") => "menus-unplaced".to_string(),
+            Section::Menus(top) => format!("menus-{}", top.to_ascii_lowercase()),
+            Section::UiCommands => "ui-commands".to_string(),
+            Section::ToolSets => "tool-sets".to_string(),
+            Section::Snap => "snap".to_string(),
+            Section::Literals(file) => format!("literals-{}", file.replace(['/', '\\', '.'], "-")),
+            Section::Prompts => "prompts".to_string(),
+            Section::Ribbon => "ribbon".to_string(),
+        };
+        let rows: String = missing_vi_section(section).into_iter().map(|key| format!("\t{key}\t\n")).collect();
+        std::fs::write(directory.join(format!("vi-missing-{name}.tsv")), rows).unwrap();
+    }
 }
 
 #[test]

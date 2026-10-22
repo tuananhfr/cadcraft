@@ -1512,9 +1512,14 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
                 app.cmd.buffer.clear();
             }
             // Preserve a snap's viewport origin for DIST, and its deferred curve where needed.
-            let result = match app.canvas.snap {
-                Some(hit) => app.session.input_snapped(hit),
-                None => app.session.input(Input::Point(p)),
+            let result = if mods.shift && app.session.current_prompt().is_some_and(|prompt| prompt.accept.select) {
+                // Keep point preprocessing so group expansion and click-click windows still apply.
+                app.session.input_removing(Input::Point(p))
+            } else {
+                match app.canvas.snap {
+                    Some(hit) => app.session.input_snapped(hit),
+                    None => app.session.input(Input::Point(p)),
+                }
             };
             if let Err(e) = result {
                 app.session.echo(e.to_string());
@@ -1546,7 +1551,13 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             && let Some(end) = ui.input(|i| i.pointer.interact_pos())
         {
             let end = xf.to_world(end);
-            let done = if app.session.prompting() { app.session.input(Input::Point(end)) } else { app.session.idle_click(end, mods.shift) };
+            let done = if mods.shift && app.session.current_prompt().is_some_and(|prompt| prompt.accept.select) {
+                app.session.input_removing(Input::Point(end))
+            } else if app.session.prompting() {
+                app.session.input(Input::Point(end))
+            } else {
+                app.session.idle_click(end, mods.shift)
+            };
             if let Err(e) = done {
                 app.session.echo(e.to_string());
             }
@@ -1800,6 +1811,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             draw_list(&painter, &xf, &list, bg, false);
         }
     }
+    crate::ubplot::overlay::draw_marks(&painter, &xf, &app.session.marks(), &t);
     // Pending selection window.
     if let (Some(pw), Some(c)) = (app.session.pending_window, raw_world) {
         let a = xf.to_screen(pw.corner);

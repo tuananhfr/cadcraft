@@ -45,6 +45,7 @@ pub mod managers;
 pub mod menus;
 pub mod opening;
 pub mod options;
+pub mod palette;
 pub mod palettes;
 pub mod parametric;
 pub mod plotstyles;
@@ -55,6 +56,7 @@ pub mod shortcut_menus;
 pub mod shortcuts;
 pub mod theme;
 pub mod toolbars;
+pub mod ubplot;
 pub mod viewcube;
 pub mod vpscale;
 pub mod wsprofile;
@@ -231,6 +233,8 @@ impl Services {
 
 pub struct CadApp {
     pub system_languages: Vec<String>,
+    /// Debug locale is session-only so serializing preferences cannot persist it.
+    pub(crate) pseudo_locale: bool,
     /// Whether the operating system shows animations, as the host reads it; `None` when the OS
     /// states nothing or the host cannot ask ([`animation`]).
     pub system_animations: Option<bool>,
@@ -291,12 +295,14 @@ pub struct CadApp {
     /// Workspace profile layers, layout undo and their storage ([`wsprofile`]).
     pub ws: wsprofile::WsState,
     pub customize: customize::State,
+    pub palette: palette::State,
 }
 
 impl CadApp {
     pub fn new(session: Session, services: Services) -> Self {
         CadApp {
             system_languages: Vec::new(),
+            pseudo_locale: false,
             system_animations: None,
             session,
             ui: UiState::default(),
@@ -334,12 +340,16 @@ impl CadApp {
             bedit: bedit::State::default(),
             ws: wsprofile::WsState::default(),
             customize: customize::State::default(),
+            palette: palette::State::default(),
         }
     }
 
     /// The interface language shown: the chosen one, or English when this computer has no font
     /// for it (Chinese or Korean without a suitable font would be boxes).
     pub fn language(&self) -> &'static str {
+        if self.pseudo_locale {
+            return "qps";
+        }
         let l = self.ui.interface_language.resolve(&self.system_languages);
         if theme::can_show(l) { l } else { "en" }
     }
@@ -633,6 +643,7 @@ impl CadApp {
         self.issue_screenshots(ctx);
         self.gpu_fault_tick(ctx);
         managers::plot_window_resume(self, ctx);
+        ubplot::resume(self, ctx);
         hatchdlg::resume(self);
         self.autosave_tick(ctx);
         wsprofile::apply::sync_scale(self, ctx);

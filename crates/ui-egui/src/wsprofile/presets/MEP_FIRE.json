@@ -279,6 +279,20 @@
               "commands": ["hatchedit", "hatchpick", "hatchtoback"]
             }
           ]
+        },
+        {
+          "id": "output",
+          "label": "Output",
+          "order": 102,
+          "visible": true,
+          "contextual": null,
+          "groups": [
+            {
+              "id": "quickplot",
+              "label": "Quick Plot",
+              "commands": ["ubplot", "plot", "publish", "pdfbook", "preview"]
+            }
+          ]
         }
       ]
     },

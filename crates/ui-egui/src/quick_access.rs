@@ -9,37 +9,18 @@ pub fn search(app: &CadApp, prefix: &str) -> Vec<Suggestion> {
     if prefix.is_empty() || prefix.contains(char::is_whitespace) {
         return Vec::new();
     }
-    let prefix = prefix.to_ascii_lowercase();
-    let mut out = crate::cmdline::all_suggestions(&prefix);
-    let mut add = |id: &str, label: &'static str| {
-        if (id.contains(&prefix) || label.to_ascii_lowercase().contains(&prefix)) && !out.iter().any(|entry| entry.id.eq_ignore_ascii_case(id)) {
-            out.push(Suggestion { id: id.to_ascii_uppercase(), display: id.to_ascii_uppercase(), label });
-        }
-    };
-    for command in cadcraft_engine::cmd::registry::command_registry() {
-        add(command.stable_id, command.label);
-    }
-    for (id, label, _, _) in crate::menus::UI_COMMANDS {
-        if !label.is_empty() && !crate::menus::command_hidden(id) {
-            add(id, label);
-        }
-    }
-    let resolved = cadcraft_engine::cmd::resolve_alias(&prefix);
-    out.sort_by_key(|entry| {
-        let id = entry.id.to_ascii_lowercase();
-        let tier = if id == resolved || id == prefix {
-            0
-        } else if id.starts_with(&prefix) {
-            1
-        } else if cadcraft_engine::find_command(&id).is_some_and(|spec| spec.aliases.iter().any(|alias| alias.starts_with(&prefix))) {
-            2
-        } else {
-            3
-        };
-        (tier, !app.ws.effective.layout.favorites.iter().any(|favorite| entry.id.eq_ignore_ascii_case(favorite)))
-    });
-    out.truncate(8);
-    out
+    let index = crate::palette::index::SearchIndex::build(app.language(), &crate::shortcuts::active(app));
+    let legacy = crate::cmdline::all_suggestions(prefix);
+    index
+        .search(prefix, &app.session.recent_commands(8), &app.ws.effective.layout.favorites, 8)
+        .iter()
+        .filter_map(|hit| {
+            let entry = index.entry(hit)?;
+            let id = entry.id.to_ascii_uppercase();
+            let display = legacy.iter().find(|suggestion| suggestion.id == id).map_or_else(|| id.clone(), |suggestion| suggestion.display.clone());
+            Some(Suggestion { id, display, label: entry.label_en })
+        })
+        .collect()
 }
 
 pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<Result<Value, String>> {
@@ -138,16 +119,10 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         let response =
             ui.add(egui::TextEdit::singleline(&mut query).hint_text(crate::tl!("Search commands...")).desired_width(100.0).char_limit(1024));
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, crate::tl!("Search commands...")));
-        if response.clicked() || response.changed() {
-            if !app.ui.show_command_line
-                && let Err(error) = app.run("ui.toggle.cmdline", json!({"on": true}))
-            {
-                app.set_status(error);
-            }
-            if !query.is_empty() {
-                app.cmd.buffer = query;
-            }
-            response.surrender_focus();
+        if (response.clicked() || response.changed())
+            && let Err(error) = app.run("ui.palette", json!({"query": query}))
+        {
+            app.set_status(error);
         }
         let mut action = None;
         let active =

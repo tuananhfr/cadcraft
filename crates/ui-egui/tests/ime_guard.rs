@@ -147,7 +147,7 @@ fn typed_aliases_dispatch_after_commit_h07() {
 #[test]
 fn typing_in_text_fields_never_dispatches_alias_tc06() {
     let mut dispatched = Vec::new();
-    // The Quick Access "Search commands..." box feeds the command line by design, so it is not a text field here.
+    // The palette deliberately runs selections on Enter; passive filters must only edit their query.
     for label in ["Find command", "Filter"] {
         let mut h = harness();
         match label {

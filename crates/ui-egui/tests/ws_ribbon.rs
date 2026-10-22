@@ -29,6 +29,7 @@ fn shortcut_defaults_unchanged() {
         (sc(cmd_shift, Key::S), "ui.saveas"),
         (sc(cmd, Key::S), "qsave"),
         (sc(cmd, Key::P), "plot"),
+        (sc(cmd_shift, Key::P), "ui.palette"),
         (sc(cmd, Key::A), "selectall"),
         (sc(cmd_shift, Key::C), "copybase"),
         (sc(cmd, Key::C), "copyclip"),
@@ -189,6 +190,28 @@ fn quick_access_pin_unpin_reorder() {
     h.get_by_label("Line").click();
     h.run_steps(3);
     assert_eq!(running(h.state()), Some("line"));
+}
+
+#[test]
+fn ubplot_on_output_tab_and_qat_pin_survives_restart() {
+    let _guard = test_lock();
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.workspace.select", json!({"id": "SHEET_PUBLISH"})).unwrap();
+    let output = app.ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.id == "output").unwrap();
+    let quickplot = output.groups.iter().find(|group| group.id == "quickplot").unwrap();
+    assert!(quickplot.commands.iter().any(|id| id == "ubplot"));
+    app.run("ui.quickaccess.pin", json!({"id": "ubplot"})).unwrap();
+    let mut restored = restarted(&mut app);
+    assert!(restored.ws.effective.layout.quick_access.iter().any(|id| id == "ubplot"));
+    restored.run("ui.toggle.menubar", json!({"on": true})).unwrap();
+    restored.run("ui.toggle.toolsets", json!({"on": false})).unwrap();
+    restored.run("ui.ribbon.collapse", json!({"collapsed": true})).unwrap();
+    let mut h = harness(restored);
+    h.get_by_label("More Quick Access commands").click();
+    h.run_steps(3);
+    h.get_by_label("Quick Plot...").click();
+    h.run_steps(3);
+    assert_eq!(running(h.state()), Some("ubplot"));
 }
 
 #[test]

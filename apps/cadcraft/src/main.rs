@@ -380,6 +380,9 @@ fn main() -> eframe::Result {
                     app.set_status(notice);
                 }
             }
+            if std::env::var("CADCRAFT_LOCALE").as_deref() == Ok("qps") {
+                let _ = app.run("ui.language", serde_json::json!({"lang": "qps"}));
+            }
             // Autosave files (SAVEFILEPATH) default to `<settings dir>/autosave`.
             if let Some(dir) = config_dir() {
                 app.enable_autosave(&dir.join("autosave"));

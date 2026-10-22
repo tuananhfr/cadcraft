@@ -108,6 +108,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.dialog.parameters", "Parameters Manager", &["Window", "Parameters Manager"], None),
     ("ui.dialog.dsettings", "Drafting Settings...", &[], None),
     ("ui.dialog.about", "About UbotCAD", &["Help", "About UbotCAD"], None),
+    ("ui.palette", "Command Palette...", &["Help", "Command Palette..."], None),
     ("ui.dialog.commands", "Command Reference", &["Help", "UbotCAD Help"], Some("F1")),
     ("ui.toggle.history", "Command History", &["Window", "Command History"], Some("F2")),
     ("ui.cmdline.lines", "Command Line History Lines", &[], None),
@@ -152,6 +153,9 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
     if let Some(result) = crate::quick_access::route(app, id, params) {
         return Some(result);
     }
+    if let Some(result) = crate::palette::route(app, id, params) {
+        return Some(result);
+    }
     if let Some(result) = crate::customize::route(app, id, params) {
         return Some(result);
     }
@@ -171,6 +175,9 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
         return Some(r);
     }
     if let Some(r) = crate::bedit::route(app, id, params) {
+        return Some(r);
+    }
+    if let Some(r) = crate::ubplot::route(app, id, params) {
         return Some(r);
     }
     if let Some(r) = crate::managers::route(app, id, params) {
@@ -219,9 +226,14 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
     }
     let r = match id {
         "ui.language" => {
+            if params.get("lang").and_then(Value::as_str) == Some("qps") {
+                app.pseudo_locale = true;
+                return Some(Ok(json!({"interfaceLanguage": "qps", "shown": "qps"})));
+            }
             let Some(preference) = params.get("lang").and_then(Value::as_str).and_then(crate::i18n::Preference::parse) else {
                 return Some(Err(format!("language must be {}", crate::i18n::Preference::codes())));
             };
+            app.pseudo_locale = false;
             app.ui.interface_language = preference;
             let shown = app.language();
             if shown != preference.resolve(&app.system_languages) {
