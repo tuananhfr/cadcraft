@@ -34,7 +34,7 @@ pub fn route(purpose: Purpose, name: &str, bytes: &[u8]) -> Result<(String, Valu
         Purpose::Drawing => Ok(("open".into(), json!({ "name": name, "data": base64_encode(bytes) }))),
         Purpose::Workspace => {
             let text = std::str::from_utf8(bytes).map_err(|_| cadcraft_ui_egui::tl!("Workspace import: the file is not UTF-8 text").to_string())?;
-            Ok(("ui.workspace.import".into(), json!({ "text": text })))
+            Ok(("preview".into(), json!({ "text": text })))
         }
     }
 }
@@ -45,11 +45,11 @@ mod tests {
     use cadcraft_engine::cmd::file::base64_decode;
 
     #[test]
-    fn workspace_upload_routes_to_import() {
+    fn web_upload_opens_the_preview() {
         let text = r#"{"schema_version":"1.0.0","name":"Workspace"}"#;
         let (id, params) = route(Purpose::Workspace, "Workspace.json", text.as_bytes()).unwrap();
         assert_eq!(accept(Purpose::Workspace), ".json");
-        assert_eq!(id, "ui.workspace.import");
+        assert_eq!(id, "preview");
         assert_eq!(params, json!({ "text": text }));
         assert!(params.get("path").is_none());
         assert!(params.get("data").is_none());

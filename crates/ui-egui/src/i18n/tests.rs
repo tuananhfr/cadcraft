@@ -132,6 +132,7 @@ const MARKED_UI_SOURCES: &[(&str, &str)] = &[
     ("vpscale.rs", include_str!("../vpscale.rs")),
     ("options/dialog.rs", include_str!("../options/dialog.rs")),
     ("wsprofile/picker.rs", include_str!("../wsprofile/picker.rs")),
+    ("wsprofile/import_preview.rs", include_str!("../wsprofile/import_preview.rs")),
     ("wsprofile/mod.rs", include_str!("../wsprofile/mod.rs")),
     ("wsprofile/save_state.rs", include_str!("../wsprofile/save_state.rs")),
     ("wsprofile/sync.rs", include_str!("../wsprofile/sync.rs")),

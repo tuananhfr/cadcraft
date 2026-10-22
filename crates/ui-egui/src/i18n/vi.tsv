@@ -1955,3 +1955,12 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	Safe Mode	Chế độ an toàn
 	Restart in safe mode: add ?safe to the address / --safe-mode	Khởi động lại ở chế độ an toàn: thêm ?safe vào địa chỉ / --safe-mode
 	Safe mode ended. Changes made in safe mode were discarded; the stored workspace was restored.	Đã thoát chế độ an toàn. Các thay đổi trong chế độ an toàn đã bị bỏ; không gian làm việc đã lưu được khôi phục.
+	The file is damaged or was edited by hand (checksum mismatch)	Tệp bị hỏng hoặc đã được sửa thủ công (mã kiểm tra không khớp)
+	The file has no checksum; it cannot be checked for damage	Tệp không có mã kiểm tra; không thể kiểm tra tệp có bị hỏng hay không
+	Workspace import is not available in safe mode	Không thể nhập không gian làm việc trong chế độ an toàn
+	Import Workspace	Nhập không gian làm việc
+	Changes	Thay đổi
+	Ignored device settings	Cài đặt thiết bị bị bỏ qua
+	Warnings	Cảnh báo
+	{count} more items	và {count} mục khác
+	Import	Nhập

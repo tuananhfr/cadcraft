@@ -2,6 +2,7 @@
 
 use serde_json::{Value, json};
 
+use super::canonical::{CHECKSUM_KEY, ChecksumCheck, verify_checksum, with_checksum};
 use super::device::{portable_profile, split_geometry};
 use super::history::Entry;
 use super::merge::{DELETE_KEY, changed_pointers, check, diff_patch, patch_for_pointer, strip_nulls, try_apply_patch};
@@ -14,6 +15,9 @@ use super::{LOCKED_MESSAGE, SaveStatus, WORKSPACE_FILE, observe, rfc3339, startu
 use crate::CadApp;
 
 pub(super) const MAX_NAME: usize = 100;
+pub(super) const CHECKSUM_MISMATCH: &str = "The file is damaged or was edited by hand (checksum mismatch)";
+pub(super) const CHECKSUM_MISSING: &str = "The file has no checksum; it cannot be checked for damage";
+pub(super) const IMPORT_SAFE_MODE: &str = "Workspace import is not available in safe mode";
 pub const ROLLBACK_MESSAGE: &str = "Restored the 1.0.0 workspace. Changes are not saved until restart.";
 
 pub fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
@@ -239,7 +243,7 @@ fn export_text(app: &CadApp) -> Result<(String, Vec<String>), String> {
     let profile = WorkspaceProfile { etag: None, tenant_id: None, owner_id: None, ..app.ws.user.clone() };
     let value = serde_json::to_value(&profile).map_err(|error| error.to_string())?;
     let (value, ignored) = portable_profile(value);
-    let value = super::wire::to_wire(&value);
+    let value = with_checksum(super::wire::to_wire(&value));
     let text = serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?;
     validate(&text, Mode::Import).map_err(|issues| format!("This workspace cannot be exported: {}", issues_text(&issues)))?;
     Ok((text, ignored))
@@ -279,26 +283,40 @@ fn read_file(_path: &str) -> Result<String, String> {
 }
 
 fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
+    if app.ws.safe_mode {
+        return Err(IMPORT_SAFE_MODE.into());
+    }
     let text = match (params.get("text").and_then(Value::as_str), params.get("path").and_then(Value::as_str)) {
         (Some(text), _) => text.to_string(),
         (None, Some(path)) => read_file(path)?,
         (None, None) if params.is_null() => match app.services.open_file(&WORKSPACE_FILE) {
-            Some(path) => read_file(&path)?,
+            Some(path) => return super::import_preview::open(app, read_file(&path)?),
             None => return Ok(Value::Null),
         },
         (None, None) => return Err("text or path is required".into()),
     };
-    let value = validate(&text, Mode::Import).map_err(|issues| format!("This workspace cannot be imported: {}", issues_text(&issues)))?;
+    // Bound parsing before hashing; field-name conversion would invalidate the original checksum.
+    let mut value = validate(&text, Mode::Local).map_err(|issues| format!("This workspace cannot be imported: {}", issues_text(&issues)))?;
+    let warnings = match verify_checksum(&value) {
+        ChecksumCheck::Valid => Vec::<String>::new(),
+        ChecksumCheck::Missing => vec![CHECKSUM_MISSING.into()],
+        ChecksumCheck::Mismatch { .. } => return Err(CHECKSUM_MISMATCH.into()),
+    };
+    validate(&text, Mode::Import).map_err(|issues| format!("This workspace cannot be imported: {}", issues_text(&issues)))?;
+    if let Some(fields) = value.as_object_mut() {
+        fields.remove(CHECKSUM_KEY);
+    }
     let (value, mut ignored) = portable_profile(value);
     let (value, normalized_ignored) = portable_profile(super::wire::from_wire(&value));
     ignored.extend(normalized_ignored);
     let migrated = migrate(value).map_err(|error| format!("This workspace cannot be imported: {error}"))?;
-    let mut profile: WorkspaceProfile =
-        serde_json::from_value(portable_profile(migrated.value).0).map_err(|error| format!("This workspace cannot be imported: {error}"))?;
+    let (value, migrated_ignored) = portable_profile(migrated.value);
+    ignored.extend(migrated_ignored);
+    let mut profile: WorkspaceProfile = serde_json::from_value(value).map_err(|error| format!("This workspace cannot be imported: {error}"))?;
     if let Some(tree) = &mut profile.layout.dock_tree {
         strip_nulls(tree);
     }
-    observe(app, true);
+    startup::check_profile(&profile, &app.ws.policy()).map_err(|error| format!("This workspace cannot be imported: {error}"))?;
     let mut changes = changed_pointers(&split_geometry(diff_patch(&app.ws.user.layout, &profile.layout)).0);
     if profile.theme != app.ws.user.theme {
         changes.push("/theme".into());
@@ -307,8 +325,9 @@ fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         changes.push("/locale".into());
     }
     if params.get("dry_run").and_then(Value::as_bool) == Some(true) {
-        return Ok(json!({"dry_run": true, "changes": changes, "ignored": ignored}));
+        return Ok(json!({"dry_run": true, "changes": changes, "ignored": ignored, "warnings": warnings}));
     }
+    observe(app, true);
     save_outgoing(app)?;
     app.ws.history.record_switch(app.ws.active.clone(), app.ws.user.clone());
     if let Some(base) = profile.base_id.as_deref().filter(|base| preset_json(base).is_some()) {
@@ -326,7 +345,7 @@ fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     app.apply_workspace();
     app.ws.mark_changed();
     let saved = commit_now(app)?;
-    Ok(json!({"changes": changes, "ignored": ignored, "revision": app.ws.user.revision, "saved": saved}))
+    Ok(json!({"changes": changes, "ignored": ignored, "warnings": warnings, "revision": app.ws.user.revision, "saved": saved}))
 }
 
 fn restore_revision(app: &mut CadApp, params: &Value) -> Result<Value, String> {

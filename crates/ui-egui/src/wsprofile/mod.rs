@@ -9,6 +9,7 @@ pub mod commands;
 pub mod conflict;
 pub mod device;
 pub mod history;
+pub mod import_preview;
 pub mod merge;
 pub mod migrate;
 pub mod picker;
@@ -113,6 +114,7 @@ pub struct WsState {
     pub profiles: Vec<WorkspaceProfile>,
     /// A notice for the user (fallback, policy refusal); also shown in the status bar.
     pub message: Option<String>,
+    pub(crate) import_preview: Option<import_preview::Preview>,
     /// What the last apply could not place.
     pub report: ApplyReport,
     /// The content rect ratios are taken against; follows the window each frame.
@@ -168,6 +170,7 @@ impl Default for WsState {
             active: SAFE_PRESET.into(),
             profiles: Vec::new(),
             message: None,
+            import_preview: None,
             report: ApplyReport::default(),
             area: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0)),
             set_extra: Map::new(),

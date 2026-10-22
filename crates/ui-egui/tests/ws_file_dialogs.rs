@@ -87,9 +87,12 @@ fn import_uses_the_workspace_open_dialog() {
     let exported = app.run("ui.workspace.export", json!({})).unwrap();
     std::fs::write(&path, exported["text"].as_str().unwrap()).unwrap();
 
+    let before = app.ws.user.clone();
     let imported = app.run("ui.workspace.import", Value::Null).unwrap();
 
-    assert_ne!(imported, Value::Null);
+    assert_eq!(imported["dry_run"], true);
+    assert_eq!(app.ui.dialog.as_deref(), Some(cadcraft_ui_egui::wsprofile::import_preview::DIALOG));
+    assert_eq!(app.ws.user, before);
     assert_eq!(*picked.borrow(), vec![WORKSPACE_FILE]);
     assert_eq!(calls.get(), 0);
 }

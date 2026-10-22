@@ -149,6 +149,10 @@ pub fn run_ui_command(app: &mut CadApp, id: &str, params: &Value) -> Option<Resu
     if let Some(result) = crate::i18n::with_language(app.language(), || crate::focus::route(app, id, params)) {
         return Some(result);
     }
+    // Preview and rejected imports must not capture pending UI edits into the workspace.
+    if id == "ui.workspace.import" {
+        return crate::i18n::with_language(app.language(), || crate::wsprofile::commands::route(app, id, params));
+    }
     // Pending interface edits belong to the command's undo step; automatic geometry repairs
     // belong to the existing drag instead of adding undo steps.
     let record = id != "ui.dock" || params.get("operation").and_then(Value::as_str) != Some("clamp");
