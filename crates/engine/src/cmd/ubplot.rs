@@ -62,6 +62,10 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{plan?: SheetPlan (default: the last plan), approvals?: [{sheetKey, code}], split?: [{sheetKey, overlapMm?}], by: user|agent:<name>} → SheetPlan; WARN approvals and explicit device splits are atomic")
             .noundo()
             .enabled(has_doc),
+        CommandSpec::new("ubplot.compare", "Compare Plot Plans", templates::run_compare)
+            .params("{a: SheetPlan, b: SheetPlan, tol?: 1e-6 (0 < tol <= 1)} → {same, diffs: [{index, field, a, b}]}; compares sheets by array index")
+            .noundo()
+            .enabled(always),
         CommandSpec::new("ubplot.folder", "Publish Plot Frames", jobs::run_folder)
             .params("{folder, out, recursive?: true, maxDepth?: 16, maxFiles?: 1000, mode?: merged|split, pagesPerFile?: 256, layouts?: false, background?: false} → {manifest, skipped_files} or {jobId, status, skipped_files}; desktop only")
             .noundo()

@@ -345,3 +345,82 @@ fn cli_ubplot_layouts_work_with_missing_settings() {
     assert!(out.join("plot.pdf").is_file());
     assert!(!temp.0.join("settings").exists());
 }
+
+#[test]
+fn cli_ubplot_compare_exit_codes() {
+    let temp = TempDir::new();
+    let a_path = temp.0.join("plan a.json");
+    let b_path = temp.0.join("plan b.json");
+    let sheet = json!({
+        "sheet_id": "KT-01", "order": 1, "mode": "block",
+        "source": {"kind": "block", "block_handle": "A1", "effective_name": "FRAME-A3",
+            "outline": [[0, 0], [420, 0], [420, 297], [0, 297]], "rotation_deg": 0},
+        "frame_template_id": "a3@1", "paper_mm": [297, 420], "landscape": true,
+        "plot_scale": "1:1", "status": "NEEDS_PREVIEW"
+    });
+    let a = json!({"schema_version": "1.0", "job_id": "lisp", "source_hash": "", "sheets": [sheet]});
+    fs::write(&a_path, a.to_string()).unwrap();
+    fs::write(&b_path, a.to_string()).unwrap();
+    let equal = cli_command(&temp).arg("--compare").arg(&a_path).arg(&b_path).output().unwrap();
+    assert_eq!(equal.status.code(), Some(0), "{}", String::from_utf8_lossy(&equal.stderr));
+    assert!(equal.stdout.is_empty());
+    assert!(equal.stderr.is_empty());
+    let mut b = a.clone();
+    b["sheets"][0]["source"]["outline"][0][0] = json!(0.1);
+    fs::write(&b_path, b.to_string()).unwrap();
+    let different = cli_command(&temp).arg("--compare").arg(&a_path).arg(&b_path).output().unwrap();
+    assert_eq!(different.status.code(), Some(1), "{}", String::from_utf8_lossy(&different.stderr));
+    assert!(different.stderr.is_empty());
+    let output = String::from_utf8(different.stdout).unwrap();
+    let lines: Vec<_> = output.lines().collect();
+    assert_eq!(lines.len(), 1);
+    let diff: Value = serde_json::from_str(lines[0]).unwrap();
+    assert_eq!(diff["index"], 0);
+    assert_eq!(diff["field"], "outline");
+    assert!(diff["a"].is_string());
+    assert!(diff["b"].is_string());
+    let tolerant = cli_command(&temp).arg("--compare").arg(&a_path).arg(&b_path).args(["--tol", "0.2"]).output().unwrap();
+    assert_eq!(tolerant.status.code(), Some(0));
+    assert!(tolerant.stdout.is_empty());
+
+    let mut ordered = a.clone();
+    let mut second = sheet.clone();
+    second["order"] = json!(2);
+    second["sheet_id"] = json!("KT-02");
+    ordered["sheets"].as_array_mut().unwrap().push(second);
+    let mut reversed = ordered.clone();
+    reversed["sheets"].as_array_mut().unwrap().reverse();
+    fs::write(&a_path, ordered.to_string()).unwrap();
+    fs::write(&b_path, reversed.to_string()).unwrap();
+    let response = cli_command(&temp).arg("--compare").arg(&a_path).arg(&b_path).output().unwrap();
+    assert_eq!(response.status.code(), Some(1));
+    assert_eq!(String::from_utf8_lossy(&response.stdout).lines().count(), 2);
+    assert!(String::from_utf8_lossy(&response.stdout).contains("sheet_id"));
+
+    for tol in ["0", "-1", "1.1", "NaN", "inf", "bad"] {
+        let response = cli_command(&temp).arg("--compare").arg(&a_path).arg(&b_path).args(["--tol", tol]).output().unwrap();
+        assert_eq!(response.status.code(), Some(2), "{tol}");
+        assert!(response.stdout.is_empty());
+        assert!(!response.stderr.is_empty());
+    }
+    fs::write(&b_path, "{").unwrap();
+    let invalid = cli_command(&temp).arg("--compare").arg(&a_path).arg(&b_path).output().unwrap();
+    assert_eq!(invalid.status.code(), Some(2));
+    assert!(invalid.stdout.is_empty());
+    fs::write(&b_path, "{}").unwrap();
+    let invalid = cli_command(&temp).arg("--compare").arg(&a_path).arg(&b_path).output().unwrap();
+    assert_eq!(invalid.status.code(), Some(2));
+    assert!(invalid.stdout.is_empty());
+    fs::remove_file(&b_path).unwrap();
+    let unreadable = cli_command(&temp).arg("--compare").arg(&a_path).arg(&b_path).output().unwrap();
+    assert_eq!(unreadable.status.code(), Some(2));
+    assert!(unreadable.stdout.is_empty());
+    assert!(!unreadable.stderr.is_empty());
+    for args in [vec!["--compare"], vec!["--compare", "a.json"], vec!["--tol", "0.1"]] {
+        let response = cli_command(&temp).args(args).output().unwrap();
+        assert_eq!(response.status.code(), Some(2));
+        assert!(response.stdout.is_empty());
+    }
+    assert!(!temp.0.join("settings").exists());
+    assert!(!temp.0.join(".ubplot-jobs").exists());
+}

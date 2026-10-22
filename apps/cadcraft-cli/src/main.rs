@@ -6,6 +6,7 @@
 //! cadcraft-cli run [FILE|--sample|--metric] [--script TEXT|--script-file F.scr] [--cmd 'id {json}']... [--save OUT] [--export OUT.png] [--window ... | --view ...]
 //! cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--templates FILE] [--layouts]
 //! cadcraft-cli ubplot FILE.(dwg|dxf) --out OUT.pdf [--mode merged|per-sheet] [--pages-per-file N] [--jobs-dir DIR] [--templates FILE]
+//! cadcraft-cli ubplot --compare A.json B.json [--tol X]
 //! cadcraft-cli commands [FILTER]                   command catalog (JSON)
 //! cadcraft-cli mcp [--connect HOST:PORT [--lazy] [--launch]]  MCP server on stdio (headless or bridged to the app)
 //! cadcraft-cli perf [N]                            timing table on a synthetic N-entity drawing
@@ -63,11 +64,14 @@ const USAGE: &str = "usage:
   cadcraft-cli run [FILE | --sample | --metric] [--script TEXT] [--script-file F.scr] [--cmd 'id {json}']... [--save OUT.dxf] [--export OUT.(png|svg|pdf)] [FRAMING]
   cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--templates FILE] [--layouts]
   cadcraft-cli ubplot FILE.(dwg|dxf) --out OUT.pdf [--mode merged|per-sheet] [--pages-per-file N] [--jobs-dir DIR] [--templates FILE]
+  cadcraft-cli ubplot --compare A.json B.json [--tol X]
   cadcraft-cli commands [FILTER]
   cadcraft-cli mcp [--connect HOST:PORT [--lazy] [--launch]]
   cadcraft-cli perf [N | FILE]
   cadcraft-cli sample (bracket|floorplan) OUT.(dxf|dwg|svg|png)
   cadcraft-cli --version
+
+ubplot comparison: exit 0 = same, 1 = different (one diff per line), 2 = invalid input.
 
 ubplot jobs: --jobs-dir defaults to <OUT directory>/.ubplot-jobs; repeat the same command to resume.
   --templates FILE overrides saved frame templates for this run only (strict registry JSON, at most 2 MiB).
@@ -443,7 +447,54 @@ fn run_ubplot(options: UbplotOptions, registry: Option<cadcraft_engine::sheetpla
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+fn compare_ubplot(args: &[String]) -> Result<bool, String> {
+    use std::io::Read;
+
+    let (a, b, tol) = match args {
+        [flag, a, b] if flag == "--compare" => (a, b, None),
+        [flag, a, b, option, tol] if flag == "--compare" && option == "--tol" => (a, b, Some(tol)),
+        _ => return Err("use --compare A.json B.json [--tol X]".into()),
+    };
+    let mut params = serde_json::Map::new();
+    if let Some(tol) = tol {
+        let tol = tol.parse::<f64>().map_err(|_| "tol must be a number")?;
+        if !tol.is_finite() || tol <= 0.0 || tol > 1.0 {
+            return Err("tol must be finite and within 0 < tol <= 1".into());
+        }
+        params.insert("tol".into(), json!(tol));
+    }
+    let read = |path: &str| -> Result<Value, String> {
+        const MAX_PLAN_BYTES: u64 = 64 * 1024 * 1024;
+        let file = std::fs::File::open(path).map_err(|error| format!("{path}: {error}"))?;
+        let mut text = String::new();
+        file.take(MAX_PLAN_BYTES + 1).read_to_string(&mut text).map_err(|error| format!("{path}: {error}"))?;
+        if text.len() as u64 > MAX_PLAN_BYTES {
+            return Err(format!("{path}: plan exceeds 64 MiB"));
+        }
+        serde_json::from_str(&text).map_err(|error| format!("{path}: {error}"))
+    };
+    params.insert("a".into(), read(a)?);
+    params.insert("b".into(), read(b)?);
+    let result = Session::empty().execute("ubplot.compare", &Value::Object(params)).map_err(|error| error.to_string())?;
+    let diffs = result.get("diffs").and_then(Value::as_array).ok_or("comparison did not return diffs")?;
+    for diff in diffs {
+        outln!("{}", serde_json::to_string(diff).map_err(|error| error.to_string())?);
+    }
+    result.get("same").and_then(Value::as_bool).ok_or_else(|| "comparison did not return same".into())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn ubplot(args: &[String]) -> ExitCode {
+    if args.iter().any(|arg| matches!(arg.as_str(), "--compare" | "--tol")) {
+        return match compare_ubplot(args) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::FAILURE,
+            Err(error) => {
+                eprintln!("ubplot: {error}");
+                ExitCode::from(2)
+            }
+        };
+    }
     let options = match parse_ubplot_args(args) {
         Ok(options) => options,
         Err(error) => {

@@ -107,6 +107,20 @@ pub(super) fn run_templates(s: &mut Session, params: &Value) -> Result<Value> {
     Ok(result)
 }
 
+pub(super) fn run_compare(_s: &mut Session, params: &Value) -> Result<Value> {
+    use crate::sheetplan::compare::{compare, parse_ordered, tolerance};
+
+    const COMMAND: &str = "ubplot.compare";
+    validate_request_value(params).map_err(|error| bad(COMMAND, error))?;
+    let plan = |key: &str| {
+        let value = params.get(key).ok_or_else(|| bad(COMMAND, format!("{key} is required")))?;
+        parse_ordered(value).map_err(|error| bad(COMMAND, error))
+    };
+    let tol = tolerance(params.get("tol")).map_err(|error| bad(COMMAND, error))?;
+    let diffs = compare(&plan("a")?, &plan("b")?, tol);
+    Ok(json!({"same": diffs.is_empty(), "diffs": diffs}))
+}
+
 pub(super) fn run_report(s: &mut Session, params: &Value) -> Result<Value> {
     const COMMAND: &str = "ubplot.report";
     validate_request_value(params).map_err(|error| bad(COMMAND, error))?;
@@ -241,15 +255,26 @@ fn export_lisp(registry: &FrameRegistry) -> String {
                 GeometryRule::EnclosingRect => "(enclosing_rect)".into(),
             })
             .collect();
+        let frame = template.geometry.iter().find_map(|rule| match rule {
+            GeometryRule::LocalRect { min, max } => {
+                let [x0, y0] = *min;
+                let [x1, y1] = *max;
+                Some(format!("({x0} {y0}) ({x1} {y0}) ({x1} {y1}) ({x0} {y1})"))
+            }
+            _ => None,
+        });
+        let paper = template.media_mm.first().map(|[w, h]| format!("{w} {h} {}", if w > h { "T" } else { "nil" }));
         for block in &template.block_names {
             entries.push(format!(
-                "  ({} (id . {}) (geometry {}) (sheet_id_tags {}) (revision_tags {}) (revision . {}))",
+                "  ({} (id . {}) (geometry {}) (sheet_id_tags {}) (revision_tags {}) (revision . {}) (frame {}) (paper {}))",
                 lisp_string(block),
                 lisp_string(&template.versioned_id()),
                 geometry.join(" "),
                 lisp_strings(&template.attributes.sheet_id),
                 lisp_strings(&template.attributes.revision),
-                lisp_string(&template.revision)
+                lisp_string(&template.revision),
+                frame.as_deref().unwrap_or(""),
+                paper.as_deref().unwrap_or("")
             ));
         }
     }
