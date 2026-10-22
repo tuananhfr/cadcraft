@@ -304,7 +304,7 @@ fn detect_one(d: &Drawing, h: Handle, reg: &FrameRegistry, spaces: &SpaceRectang
     }
     candidate.effective_name = dynblock::effective_name(d, h).unwrap_or_else(|| ins.block.clone());
     let template = reg.find(&candidate.effective_name);
-    candidate.template_id = template.map(|t| t.id.clone());
+    candidate.template_id = template.map(|t| t.versioned_id());
     let mut attribute_bytes = 0_usize;
     for a in ins.attribs.iter().take(MAX_FRAME_LEAVES) {
         let bytes = a.tag.len().saturating_add(a.text.value.len());
@@ -402,7 +402,7 @@ fn reference_data_within_limits(d: &Drawing, reg: &FrameRegistry) -> bool {
         || d.layouts.len() > MAX_SPACE_RECTS
         || d.foreign.objects.len() > MAX_FRAME_LEAVES
         || d.foreign.records.len() > MAX_FRAME_LEAVES
-        || reg.templates.len() > 500
+        || reg.templates.len() > super::MAX_TEMPLATES
     {
         return false;
     }
@@ -413,7 +413,7 @@ fn reference_data_within_limits(d: &Drawing, reg: &FrameRegistry) -> bool {
         }
         tags += object.tags.len();
     }
-    reg.templates.iter().take(500).all(|t| t.block_names.len() <= 64 && t.geometry.len() <= MAX_FRAME_LEAVES)
+    reg.templates.iter().take(super::MAX_TEMPLATES).all(|t| t.block_names.len() <= 64 && t.geometry.len() <= MAX_FRAME_LEAVES)
 }
 
 pub fn detect_frames(d: &Drawing, inserts: &[Handle], reg: &FrameRegistry) -> Vec<FrameCandidate> {

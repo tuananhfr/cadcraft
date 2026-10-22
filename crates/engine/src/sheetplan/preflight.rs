@@ -236,7 +236,7 @@ fn check_metadata(d: &Drawing, plan: &mut SheetPlan, ctx: &PreflightContext<'_>)
                 Some(&sheet.sheet_id),
             ));
         }
-        if let Some(template) = sheet.frame_template_id.as_ref().and_then(|id| ctx.registry.templates.iter().find(|template| &template.id == id)) {
+        if let Some(template) = sheet.frame_template_id.as_ref().and_then(|id| super::registry_store::resolve(ctx.registry, id)) {
             if let Some(successor) = &template.superseded_by {
                 sheet.issues.push(issue(
                     Severity::Warn,

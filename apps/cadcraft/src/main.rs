@@ -117,6 +117,10 @@ impl eframe::App for App {
 /// File format hooks for the engine (it stays I/O-agnostic).
 pub fn install_io() {
     #[cfg(not(target_arch = "wasm32"))]
+    cadcraft_engine::sheetplan::registry_store::set_registry_store_factory(|| {
+        Ok(Box::new(cadcraft_engine::sheetplan::registry_store::DirRegistryStore::settings_default()?))
+    });
+    #[cfg(not(target_arch = "wasm32"))]
     cadcraft_engine::cmd::ubplot::set_clock(|| {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

@@ -13,7 +13,8 @@ use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::ids::sha256_hex;
 use crate::sheetplan::plan::{build_plan_with_context, validate_request_value};
 use crate::sheetplan::preflight::{PreflightContext, preflight, styles_on_sheets, verdict};
-use crate::sheetplan::{FrameRegistry, ScanMode, ScanRequest, Severity, SheetPlan};
+use crate::sheetplan::registry_store::{RegistryStore, open_host_registry, parse_registry, save_registry};
+use crate::sheetplan::{FrameRegistry, MAX_TEMPLATES, ScanMode, ScanRequest, Severity, SheetPlan};
 use crate::{EngineError, Result, Session};
 
 pub type ClockHook = fn() -> u64;
@@ -26,6 +27,8 @@ pub fn set_clock(h: ClockHook) {
 
 pub struct UbplotState {
     pub registry: FrameRegistry,
+    pub(crate) registry_store: Option<Box<dyn RegistryStore>>,
+    pub(crate) registry_notice: Option<String>,
     pub last: Option<LastPlan>,
     pub review: bool,
     hash_cache: Option<(u64, u64, String)>,
@@ -33,7 +36,8 @@ pub struct UbplotState {
 
 impl Default for UbplotState {
     fn default() -> Self {
-        Self { registry: FrameRegistry::builtin(), last: None, review: false, hash_cache: None }
+        let (registry, registry_store, registry_notice) = open_host_registry();
+        Self { registry, registry_store, registry_notice, last: None, review: false, hash_cache: None }
     }
 }
 
@@ -65,7 +69,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .noundo()
             .enabled(has_doc),
         CommandSpec::new("ubplot.templates", "Plot Frame Templates", run_templates)
-            .params("{action: list|import|reset, text?} → {templates:[{id, revision, blockNames}]}")
+            .params("{action: list|import|reset, text?} → {templates:[{id, version, versionedId, status, revision, blockNames, source, supersededBy}]}")
             .noundo(),
     ]
 }
@@ -78,7 +82,14 @@ fn run_ubplot(s: &mut Session, params: &Value) -> Result<Value> {
     run_scan(s, params)
 }
 
+fn registry_notice(s: &mut Session) {
+    if let Some(notice) = s.ubplot.registry_notice.take() {
+        s.echo(notice);
+    }
+}
+
 pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
+    registry_notice(s);
     validate_request_value(params).map_err(|error| bad("ubplot.scan", error))?;
     let incoming = ScanRequest::deserialize(params).map_err(|error| bad("ubplot.scan", error.to_string()))?;
     let (uid, revision) = {
@@ -234,26 +245,44 @@ fn run_templates(s: &mut Session, params: &Value) -> Result<Value> {
         Some(Value::String(action)) => action.as_str(),
         Some(_) => return Err(bad("ubplot.templates", "action must be list, import or reset")),
     };
-    match action {
-        "list" => {}
-        "reset" => s.ubplot.registry = FrameRegistry::builtin(),
+    registry_notice(s);
+    let mut notices = Vec::new();
+    let next = match action {
+        "list" => None,
+        "reset" => Some(FrameRegistry::builtin()),
         "import" => {
             let text = params.get("text").and_then(Value::as_str).ok_or_else(|| bad("ubplot.templates", "text is required for import"))?;
-            let imported = FrameRegistry::from_json(text).map_err(|error| bad("ubplot.templates", error))?;
+            let (imported, notice) = parse_registry(text, true).map_err(|error| bad("ubplot.templates", error))?;
+            notices.extend(notice);
             let merged = s.ubplot.registry.merged_with(imported);
             // Repeated small imports must obey the same registry limits as one import.
-            let text = serde_json::to_string(&merged).map_err(|error| bad("ubplot.templates", error.to_string()))?;
-            s.ubplot.registry = FrameRegistry::from_json(&text).map_err(|error| bad("ubplot.templates", error))?;
+            let (merged, notice) = parse_registry(&save_registry(&merged), true).map_err(|error| bad("ubplot.templates", error))?;
+            notices.extend(notice);
+            Some(merged)
         }
         _ => return Err(bad("ubplot.templates", "action must be list, import or reset")),
+    };
+    if let Some(next) = next {
+        if let Some(store) = s.ubplot.registry_store.as_mut() {
+            store
+                .write(&save_registry(&next))
+                .map_err(|error| bad("ubplot.templates", format!("could not save frame template registry: {error}")))?;
+        }
+        s.ubplot.registry = next;
+    }
+    for notice in notices {
+        s.echo(notice);
     }
     let templates: Vec<_> = s
         .ubplot
         .registry
         .templates
         .iter()
-        .take(500)
-        .map(|template| json!({"id": template.id, "revision": template.revision, "blockNames": template.block_names}))
+        .take(MAX_TEMPLATES)
+        .map(|template| {
+            json!({"id": template.id, "version": template.version, "versionedId": template.versioned_id(), "status": template.status,
+                "revision": template.revision, "blockNames": template.block_names, "source": template.source, "supersededBy": template.superseded_by})
+        })
         .collect();
     Ok(json!({"templates": templates}))
 }
