@@ -1,0 +1,47 @@
+# CADCraft Vietnamese interface catalog.
+# License: MIT OR Apache-2.0 (the repository LICENSE-MIT and LICENSE-APACHE).
+# Written from CADCraft's English strings; no proprietary translations were copied.
+# AI-assisted translations follow the approved Vietnamese glossary; native review is pending.
+# UTF-8 NFC: context<TAB>English source<TAB>Vietnamese translation.
+# Empty context = ordinary label; menu/ribbon = headings; @plural = a single count form.
+# Keep command IDs, keywords, technology/product names and user data unchanged.
+
+ribbon	Home	Vẽ
+ribbon	Insert	Chèn
+ribbon	Annotate	Ghi chú
+ribbon	Layers	Lớp bản vẽ
+ribbon	View	Hiển thị
+ribbon	Layout	Bố cục in
+ribbon	Properties	Thuộc tính
+ribbon	Xref	Tham chiếu ngoài
+ribbon	Plot	In bản vẽ
+ribbon	Draw	Vẽ
+menu	File	Tệp
+menu	Edit	Chỉnh sửa
+menu	View	Hiển thị
+menu	Insert	Chèn
+menu	Format	Định dạng
+menu	Tools	Công cụ
+menu	Draw	Vẽ
+menu	Dimension	Ghi kích thước
+menu	Modify	Hiệu chỉnh
+menu	Parametric	Tham số
+menu	Window	Cửa sổ
+menu	Help	Trợ giúp
+	Properties	Thuộc tính
+	Specify first point	Chỉ định điểm đầu
+	Open	Mở
+	Language	Ngôn ngữ
+	Layer	Lớp
+	Layers	Lớp bản vẽ
+	Model	Mô hình
+	Layout	Bố cục in
+	New	Mới
+	Save	Lưu
+	Close	Đóng
+	OK	Đồng ý
+	Cancel	Hủy
+	Interface Language	Ngôn ngữ giao diện
+	Current: {color}	Hiện hành: {color}
+@plural	{n} contributor	{n} người đóng góp
+	No font covers the Vietnamese interface	Không có phông chữ hỗ trợ giao diện tiếng Việt
