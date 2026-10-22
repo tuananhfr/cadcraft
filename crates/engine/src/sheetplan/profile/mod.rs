@@ -23,23 +23,52 @@ impl crate::Session {
         self.print_profile_store.write(doc.level, &doc.id, &json)
     }
 
-    pub fn effective_print_profile(&mut self) -> EffectiveProfile {
-        let mut keys = vec![(ProfileLevel::Company, "default".to_string())];
-        if let Some(state) = self.docs.get(self.active) {
-            keys.push((ProfileLevel::Drawing, drawing_key(state.path.as_deref(), &state.title)));
+    pub fn set_drawing_project(&mut self, project_id: Option<&str>) -> Result<(), String> {
+        let state = self.docs.get(self.active).ok_or("there is no drawing open")?;
+        let id = drawing_key(state.path.as_deref(), &state.title);
+        if let Some(project_id) = project_id {
+            store::validate_id(ProfileLevel::Project, project_id)?;
         }
-        keys.push((ProfileLevel::User, "default".to_string()));
+        let mut doc = self.load_print_profile_doc(ProfileLevel::Drawing, &id).unwrap_or_else(|| ProfileDoc {
+            schema_version: PRINT_PROFILE_SCHEMA,
+            level: ProfileLevel::Drawing,
+            id,
+            project_id: None,
+            revision: 0,
+            settings: serde_json::json!({}),
+            locks: Vec::new(),
+            updated_ms: 0,
+        });
+        doc.project_id = project_id.map(str::to_owned);
+        self.write_print_profile(&doc)
+    }
+
+    fn load_print_profile_doc(&mut self, level: ProfileLevel, id: &str) -> Option<ProfileDoc> {
+        let (doc, notice) = load_doc(self.print_profile_store.as_mut(), level, id);
+        if let Some(notice) = notice
+            && !self.log.contains(&notice)
+        {
+            self.echo(notice);
+        }
+        doc
+    }
+
+    pub fn effective_print_profile(&mut self) -> EffectiveProfile {
         let mut docs = Vec::new();
-        for (level, id) in keys {
-            let (doc, notice) = load_doc(self.print_profile_store.as_mut(), level, &id);
-            if let Some(notice) = notice
-                && !self.log.contains(&notice)
+        if let Some(company) = self.load_print_profile_doc(ProfileLevel::Company, "default") {
+            docs.push(company);
+        }
+        let drawing_id = self.docs.get(self.active).map(|state| drawing_key(state.path.as_deref(), &state.title));
+        if let Some(drawing) = drawing_id.and_then(|id| self.load_print_profile_doc(ProfileLevel::Drawing, &id)) {
+            if let Some(project_id) = drawing.project_id.as_deref()
+                && let Some(project) = self.load_print_profile_doc(ProfileLevel::Project, project_id)
             {
-                self.echo(notice);
+                docs.push(project);
             }
-            if let Some(doc) = doc {
-                docs.push(doc);
-            }
+            docs.push(drawing);
+        }
+        if let Some(user) = self.load_print_profile_doc(ProfileLevel::User, "default") {
+            docs.push(user);
         }
         let (profile, issues) = effective_with_issues(&docs);
         for issue in issues {

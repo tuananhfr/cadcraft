@@ -11,6 +11,7 @@ fn doc(level: ProfileLevel, settings: Value, locks: &[&str]) -> ProfileDoc {
         schema_version: PRINT_PROFILE_SCHEMA,
         level,
         id: "default".into(),
+        project_id: None,
         revision: 1,
         settings,
         locks: locks.iter().map(|lock| (*lock).to_string()).collect(),
@@ -291,8 +292,14 @@ fn profile_document_count_is_bounded_with_a_notice() {
 fn upgrade_reads_unversioned_doc() {
     let original = doc(ProfileLevel::User, json!({"paper": "A3", "pdf_layers": false}), &["/paper"]);
     let mut value = serde_json::to_value(&original).unwrap();
+    assert!(value.get("project_id").is_none());
     value.as_object_mut().unwrap().remove("schema_version");
-    assert_eq!(migrate(value).unwrap(), original);
+    let upgraded = migrate(value).unwrap();
+    assert_eq!(upgraded.project_id, None);
+    assert_eq!(upgraded, original);
+    let serialized = serde_json::to_value(&upgraded).unwrap();
+    assert!(serialized.get("project_id").is_none());
+    assert_eq!(serde_json::from_value::<ProfileDoc>(serialized).unwrap(), upgraded);
 }
 
 #[test]
@@ -410,6 +417,105 @@ fn session_uses_active_drawing_and_handles_start_tab() {
     assert_eq!(session.effective_print_profile().settings.paper.as_deref(), Some("A3"));
 }
 
+#[test]
+fn drawing_project_link_applies_project_layer() {
+    let mut session = cadcraft_engine::Session::new();
+    let company = doc(ProfileLevel::Company, json!({"device": "Company PDF", "paper": "A4"}), &["/paper"]);
+    let mut project = doc(ProfileLevel::Project, json!({"device": "Project PDF", "paper": "A3", "naming": "{sheet_id}"}), &[]);
+    project.id = "site-a".into();
+    session.write_print_profile(&company).unwrap();
+    session.write_print_profile(&project).unwrap();
+    session.set_drawing_project(Some("site-a")).unwrap();
+    let eff = session.effective_print_profile();
+    assert_eq!(eff.settings.device, "Project PDF");
+    assert_eq!(eff.origin.get("/device"), Some(&ProfileLevel::Project));
+    assert_eq!(eff.settings.paper.as_deref(), Some("A4"));
+    assert_eq!(eff.locked.get("/paper"), Some(&ProfileLevel::Company));
+    assert_eq!(eff.settings.naming, "{sheet_id}");
+
+    let mut drawing = doc(ProfileLevel::Drawing, json!({"naming": "{order}"}), &[]);
+    drawing.id = drawing_key(None, &session.state().unwrap().title);
+    drawing.project_id = Some("site-a".into());
+    session.write_print_profile(&drawing).unwrap();
+    let eff = session.effective_print_profile();
+    assert_eq!(eff.settings.naming, "{order}");
+    assert_eq!(eff.origin.get("/naming"), Some(&ProfileLevel::Drawing));
+
+    let user = doc(ProfileLevel::User, json!({"device": "User PDF", "paper": "A2"}), &[]);
+    session.write_print_profile(&user).unwrap();
+    let eff = session.effective_print_profile();
+    assert_eq!(eff.settings.device, "User PDF");
+    assert_eq!(eff.origin.get("/device"), Some(&ProfileLevel::User));
+    assert_eq!(eff.settings.paper.as_deref(), Some("A4"));
+    assert!(session.log.is_empty());
+}
+
+#[test]
+fn unlinked_drawing_skips_project() {
+    let mut session = cadcraft_engine::Session::new();
+    let company = doc(ProfileLevel::Company, json!({"device": "Company PDF"}), &[]);
+    let mut project = doc(ProfileLevel::Project, json!({"device": "Project PDF"}), &[]);
+    project.id = "site-a".into();
+    session.write_print_profile(&company).unwrap();
+    session.write_print_profile(&project).unwrap();
+    let expected = effective(&[company]);
+    assert_eq!(session.effective_print_profile(), expected);
+    let mut drawing = doc(ProfileLevel::Drawing, json!({}), &[]);
+    drawing.id = drawing_key(None, &session.state().unwrap().title);
+    session.write_print_profile(&drawing).unwrap();
+    assert_eq!(session.effective_print_profile(), expected);
+    session.set_drawing_project(Some("missing-project")).unwrap();
+    assert_eq!(session.effective_print_profile(), expected);
+    assert!(session.log.is_empty());
+}
+
+#[test]
+fn drawing_project_link_can_be_cleared_and_is_scoped_to_active_drawing() {
+    let mut session = cadcraft_engine::Session::empty();
+    for project_id in [Some("site-a"), None] {
+        assert_eq!(session.set_drawing_project(project_id), Err("there is no drawing open".into()));
+    }
+    let first = session.new_drawing(false);
+    let mut project = doc(ProfileLevel::Project, json!({"paper": "A3"}), &[]);
+    project.id = "site-a".into();
+    session.write_print_profile(&project).unwrap();
+    let before = session.state().unwrap().doc.clone();
+    let revision = session.state().unwrap().revision;
+    session.set_drawing_project(Some("site-a")).unwrap();
+    assert_eq!(session.effective_print_profile().settings.paper.as_deref(), Some("A3"));
+    assert!(std::sync::Arc::ptr_eq(&before, &session.state().unwrap().doc));
+    assert_eq!(session.state().unwrap().revision, revision);
+    session.new_drawing(false);
+    assert_eq!(session.effective_print_profile(), effective(&[]));
+    session.active = first;
+    assert_eq!(session.effective_print_profile().settings.paper.as_deref(), Some("A3"));
+    session.set_drawing_project(None).unwrap();
+    assert_eq!(session.effective_print_profile(), effective(&[]));
+    assert!(session.log.is_empty());
+}
+
+#[test]
+fn drawing_project_link_write_failure_keeps_effective() {
+    let mut session = cadcraft_engine::Session::new();
+    let mut store = MemoryPrintProfileStore::default();
+    let mut drawing = doc(ProfileLevel::Drawing, json!({}), &[]);
+    drawing.id = drawing_key(None, &session.state().unwrap().title);
+    drawing.project_id = Some("site-a".into());
+    let mut project = doc(ProfileLevel::Project, json!({"paper": "A3"}), &[]);
+    project.id = "site-a".into();
+    for profile in [&drawing, &project] {
+        store.write(profile.level, &profile.id, &serde_json::to_string(profile).unwrap()).unwrap();
+    }
+    store.fail_writes = true;
+    session.set_print_profile_store(Box::new(store));
+    let before = session.effective_print_profile();
+    assert_eq!(before.settings.paper.as_deref(), Some("A3"));
+    for project_id in [Some("site-b"), None] {
+        assert!(session.set_drawing_project(project_id).unwrap_err().contains("print profile store write failed"));
+        assert_eq!(session.effective_print_profile(), before);
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 mod persistence {
     use std::path::PathBuf;
@@ -443,6 +549,110 @@ mod persistence {
 
     fn damaged_bytes(temp: &TempDir) -> Vec<Vec<u8>> {
         std::fs::read_dir(temp.0.join("user/damaged")).unwrap().map(|entry| std::fs::read(entry.unwrap().path()).unwrap()).collect()
+    }
+
+    #[test]
+    fn project_id_rejected_outside_drawing_or_malformed() {
+        let temp = TempDir::new();
+        let mut store = DirPrintProfileStore::new(temp.0.clone());
+        let original = doc(ProfileLevel::User, json!({"paper": "A4"}), &[]);
+        stored(&mut store, &original);
+        let user_bytes = store.read(original.level, &original.id).unwrap();
+        let mut session = Session::new();
+        session.set_print_profile_store(Box::new(DirPrintProfileStore::new(temp.0.clone())));
+        let long_id = "a".repeat(65);
+        let invalid_ids = ["Site_A", "", long_id.as_str(), "site/a", "site\\a", "site.a", "site:a", "é"];
+        for id in invalid_ids {
+            assert!(session.set_drawing_project(Some(id)).is_err(), "{id}");
+        }
+        assert!(store.list(ProfileLevel::Drawing).is_empty());
+        session.set_drawing_project(Some("site-a")).unwrap();
+        let id = drawing_key(None, &session.state().unwrap().title);
+        let drawing_bytes = store.read(ProfileLevel::Drawing, &id).unwrap();
+        let backup = store.read_last_good(ProfileLevel::Drawing, &id);
+        let before = session.effective_print_profile();
+        for project_id in invalid_ids {
+            assert!(session.set_drawing_project(Some(project_id)).is_err(), "{project_id}");
+            assert_eq!(store.read(ProfileLevel::Drawing, &id).unwrap(), drawing_bytes);
+            assert_eq!(store.read_last_good(ProfileLevel::Drawing, &id), backup);
+            let mut invalid = doc(ProfileLevel::Drawing, json!({"device": "Invalid PDF"}), &[]);
+            invalid.project_id = Some(project_id.into());
+            assert!(migrate(serde_json::to_value(&invalid).unwrap()).is_err());
+            assert_eq!(effective_with_issues(&[invalid]).1.len(), 1);
+            assert_eq!(session.effective_print_profile(), before);
+        }
+        for level in [ProfileLevel::Platform, ProfileLevel::Company, ProfileLevel::Project, ProfileLevel::SheetSet, ProfileLevel::User] {
+            let mut invalid = original.clone();
+            invalid.level = level;
+            invalid.project_id = Some("site-a".into());
+            assert!(session.write_print_profile(&invalid).is_err());
+            assert!(migrate(serde_json::to_value(&invalid).unwrap()).is_err());
+            let (eff, issues) = effective_with_issues(&[invalid]);
+            assert_eq!(eff, effective(&[]));
+            assert_eq!(issues.len(), 1);
+            assert_eq!(issues[0].code, PROFILE_LEVEL_SKIPPED);
+        }
+        assert_eq!(store.read(original.level, &original.id).unwrap(), user_bytes);
+        assert_eq!(store.read(ProfileLevel::Drawing, &id).unwrap(), drawing_bytes);
+    }
+
+    #[test]
+    fn drawing_project_link_preserves_existing_doc_and_round_trips() {
+        let temp = TempDir::new();
+        let mut store = DirPrintProfileStore::new(temp.0.clone());
+        let mut session = Session::new();
+        session.set_print_profile_store(Box::new(DirPrintProfileStore::new(temp.0.clone())));
+        let id = drawing_key(None, &session.state().unwrap().title);
+        session.set_drawing_project(Some("site-a")).unwrap();
+        let created = load_doc(&mut store, ProfileLevel::Drawing, &id).0.unwrap();
+        assert_eq!(created.schema_version, 1);
+        assert_eq!(created.level, ProfileLevel::Drawing);
+        assert_eq!(created.id, id);
+        assert_eq!(created.project_id.as_deref(), Some("site-a"));
+        assert_eq!(created.settings, json!({}));
+        assert!(created.locks.is_empty());
+
+        let mut drawing = doc(ProfileLevel::Drawing, json!({"paper": "A3", "pdf_layers": false}), &["/pdf_layers"]);
+        drawing.id = id.clone();
+        stored(&mut store, &drawing);
+        let max_id = "a".repeat(64);
+        for project_id in [Some("site-b"), Some("0"), Some(max_id.as_str()), None] {
+            session.set_drawing_project(project_id).unwrap();
+            let mut expected = drawing.clone();
+            expected.project_id = project_id.map(str::to_owned);
+            assert_eq!(load_doc(&mut store, ProfileLevel::Drawing, &id), (Some(expected), None));
+        }
+        let bytes = store.read(ProfileLevel::Drawing, &id).unwrap().unwrap();
+        let value: Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(value.get("project_id").is_none());
+    }
+
+    #[test]
+    fn damaged_linked_project_uses_last_good_and_reports_once() {
+        let temp = TempDir::new();
+        let mut store = DirPrintProfileStore::new(temp.0.clone());
+        let mut first = doc(ProfileLevel::Project, json!({"paper": "A3"}), &[]);
+        first.id = "site-a".into();
+        stored(&mut store, &first);
+        let mut second = first.clone();
+        second.settings = json!({"paper": "A4"});
+        stored(&mut store, &second);
+        let path = temp.0.join("project/site-a.json");
+        std::fs::write(&path, b"{").unwrap();
+        let mut session = Session::new();
+        session.set_print_profile_store(Box::new(store));
+        session.set_drawing_project(Some("site-a")).unwrap();
+        let eff = session.effective_print_profile();
+        assert_eq!(eff.settings.paper.as_deref(), Some("A3"));
+        assert_eq!(eff.origin.get("/paper"), Some(&ProfileLevel::Project));
+        assert_eq!(session.log.len(), 1);
+        assert!(session.log[0].contains("Print profile project was damaged; restored the last good copy"));
+        assert_eq!(session.effective_print_profile(), eff);
+        assert_eq!(session.log.len(), 1);
+        assert_eq!(std::fs::read(path).unwrap(), b"{");
+        let archived: Vec<_> =
+            std::fs::read_dir(temp.0.join("project/damaged")).unwrap().map(|entry| std::fs::read(entry.unwrap().path()).unwrap()).collect();
+        assert_eq!(archived, vec![b"{".to_vec()]);
     }
 
     #[test]

@@ -131,6 +131,12 @@ pub(super) fn validate_doc(doc: &ProfileDoc) -> Result<(), String> {
     if doc.schema_version != PRINT_PROFILE_SCHEMA {
         return Err("unsupported print profile schema_version".into());
     }
+    if let Some(project_id) = &doc.project_id {
+        if doc.level != ProfileLevel::Drawing {
+            return Err("only drawing print profiles may carry project_id".into());
+        }
+        super::store::validate_id(ProfileLevel::Project, project_id)?;
+    }
     if doc.locks.len() > MAX_PROFILE_LOCKS {
         return Err("print profile exceeds 256 locks".into());
     }
