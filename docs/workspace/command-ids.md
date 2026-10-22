@@ -261,6 +261,7 @@ UI-only focus/fullscreen ids: `ui.fullscreen`, `ui.focusmode`, `cleanscreenon`, 
 | `line` | `cad.draw.line` | Draw | model, paper | available | edit | l |
 | `linetype` | `cad.format.linetype` | Format | model, paper | available | edit | lt, ltype |
 | `lisp` | `cad.other.lisp` | Other | model, paper | available | execute |  |
+| `lispsandbox` | `cad.other.lispsandbox` | Other | model, paper | available | file |  |
 | `list` | `cad.tools.list` | Tools | model, paper | available | read | li, ls |
 | `ltscale` | `cad.other.ltscale` | Other | model, paper | available | edit | lts |
 | `lwdisplay` | `cad.other.lwdisplay` | Other | model, paper | available | read |  |

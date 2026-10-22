@@ -1,5 +1,28 @@
 # Workspace profile security
 
+Desktop LISP writes are restricted to canonical allowed folders. The desktop host
+creates `<settings>/support` and `<settings>/lisp-out` at startup and installs them
+as the defaults; the current drawing's directory is not implicitly allowed.
+`lispsandbox {action: "list"|"add"|"remove", path}` manages the process-wide list
+(up to 64 existing directories). MCP may list folders but may not add or remove
+them. Changes last for the process; they are not saved in the workspace profile.
+
+The checks cover `open` in `w`/`a` mode (including a recheck at `close`), and
+`export`, `exportpdf`, `plot`, `publish`, and every `ubplot.*` output parameter
+(`path`, plus `out`/`dir` for `ubplot.*`) while `Session::lisp_running()` is true.
+`ubplot-publish` also requires a `.pdf` extension, ignoring case. A refusal uses
+`LISP write blocked: PATH is outside the allowed folders (LISPSANDBOX)`; `open`
+returns nil and echoes it. Existing parents and final symlink targets must stay
+within canonical roots; Windows comparisons ignore case. Missing parents are
+refused. Reads and browser file delivery retain their existing behavior.
+
+SAVE/SAVEAS/WBLOCK invoked through `(command ...)` still use the host's I/O hooks
+and are outside this write policy. LISP has no network builtin. This is a local
+application policy, not an OS sandbox: path checks cannot prevent another process
+from replacing directories or symlinks between validation and the filesystem call.
+Direct local `lisp {code}` callers already have control-channel/CLI authority;
+ordinary JSON commands outside a running LISP routine keep their existing paths.
+
 This is the W12 client threat model and proposed server contract (WP02/WP06),
 not evidence of deployed server security. The `/api/v1/cad-workspaces` prefix in
 [openapi.yaml](openapi.yaml) is a **PROPOSAL awaiting approval**, chosen to avoid

@@ -877,7 +877,11 @@ impl Session {
         let before = self.state().ok().map(|s| (s.doc.clone(), s.selection.clone(), s.uid));
         let editing = self.state().is_ok_and(|s| s.block_edit.is_some());
         let run = spec.run;
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(self, params)));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            #[cfg(not(target_arch = "wasm32"))]
+            lisp::sandbox::check_command(self, spec.id, params)?;
+            run(self, params)
+        }));
         let result = match result {
             Ok(r) => r,
             Err(p) => {

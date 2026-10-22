@@ -1,0 +1,299 @@
+#![cfg(not(target_arch = "wasm32"))]
+
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, Once};
+
+use cadcraft_engine::Session;
+use cadcraft_engine::cmd::file::{IoHooks, set_io};
+use cadcraft_engine::lisp::sandbox::{check_write, set_write_roots, write_roots};
+use cadcraft_engine::lisp::value::{Value as LispValue, to_text};
+use cadcraft_engine::sheetplan::{Severity, SheetPlan, ids};
+use serde_json::{Value, json};
+
+static SANDBOX_TEST: Mutex<()> = Mutex::new(());
+
+struct Sandbox {
+    _lock: MutexGuard<'static, ()>,
+    previous: Vec<PathBuf>,
+    base: PathBuf,
+    root: PathBuf,
+}
+
+impl Sandbox {
+    fn new(name: &str) -> Self {
+        let lock = SANDBOX_TEST.lock().unwrap_or_else(|error| error.into_inner());
+        let base = std::env::temp_dir().join(format!("cadcraft-lisp-sandbox-{}-{name}", std::process::id()));
+        std::fs::create_dir(&base).unwrap();
+        let base = base.canonicalize().unwrap();
+        let root = base.join("allowed");
+        std::fs::create_dir(&root).unwrap();
+        let previous = write_roots();
+        set_write_roots(vec![root.clone()]);
+        Self { _lock: lock, previous, base, root }
+    }
+}
+
+impl Drop for Sandbox {
+    fn drop(&mut self) {
+        set_write_roots(self.previous.clone());
+        let _ = std::fs::remove_dir_all(&self.base);
+    }
+}
+
+fn setup() -> Session {
+    static HOOKS: Once = Once::new();
+    HOOKS.call_once(|| {
+        set_io(IoHooks {
+            read: |_, _| Err("no reader in this test".into()),
+            write: |drawing, _| Ok(cadcraft_io::write_dxf(drawing).into_bytes()),
+            plot: Some(|drawing, space, options| cadcraft_io::plotter::plot(drawing, space, options).map_err(|error| error.to_string())),
+        });
+        cadcraft_engine::cmd::ubplot::set_clock(|| 42);
+    });
+    Session::new()
+}
+
+fn quoted(path: &Path) -> String {
+    literal(&path.to_string_lossy())
+}
+
+fn literal(text: &str) -> String {
+    to_text(&LispValue::str(text), true)
+}
+
+fn eval(session: &mut Session, code: &str) -> Value {
+    session.execute("lisp", &json!({"code": code})).unwrap()
+}
+
+fn refusal(path: &Path) -> String {
+    format!("LISP write blocked: {} is outside the allowed folders (LISPSANDBOX)", path.display())
+}
+
+fn blocked_open(session: &mut Session, path: &Path, mode: &str) {
+    let result = eval(session, &format!("(open {} \"{mode}\")", quoted(path)));
+    assert!(result.get("error").is_none(), "{result}");
+    assert_eq!(result["value"], "nil", "{result}");
+    assert!(result["output"].as_array().unwrap().iter().any(|line| line.as_str() == Some(refusal(path).as_str())), "{result}");
+}
+
+fn scan(session: &mut Session) -> Value {
+    let plan: SheetPlan = serde_json::from_value(
+        session.execute("ubplot.scan", &json!({"mode": "window", "windows": [[[0, 0], [420, 297]]], "scale": "fit"})).unwrap(),
+    )
+    .unwrap();
+    let approvals: Vec<_> = plan
+        .sheets
+        .iter()
+        .flat_map(|sheet| {
+            sheet
+                .issues
+                .iter()
+                .filter(|issue| issue.severity == Severity::Warn)
+                .map(|issue| json!({"sheetKey": ids::sheet_key(sheet), "code": issue.code}))
+        })
+        .chain(plan.issues.iter().filter(|issue| issue.severity == Severity::Warn).map(|issue| json!({"sheetKey": "*", "code": issue.code})))
+        .collect();
+    session.execute("ubplot.approve", &json!({"plan": plan, "approvals": approvals, "by": "user"})).unwrap()
+}
+
+#[test]
+fn sandbox_allows_writes_inside_roots() {
+    let sandbox = Sandbox::new("allowed");
+    let mut session = setup();
+    let path = sandbox.root.join("a.txt");
+    for (mode, line) in [("w", "first"), ("a", "second")] {
+        let code = format!(r#"(progn (setq f (open {} "{mode}")) (write-line "{line}" f) (close f))"#, quoted(&path));
+        let result = eval(&mut session, &code);
+        assert!(result.get("error").is_none(), "{result}");
+    }
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "first\nsecond\n");
+    assert_eq!(check_write(&path.to_string_lossy()).unwrap(), path);
+    assert_eq!(check_write(&sandbox.root.to_string_lossy()).unwrap(), sandbox.root);
+
+    let outside = sandbox.base.join("read-only.txt");
+    std::fs::write(&outside, "read outside roots\n").unwrap();
+    let code = format!(r#"(progn (setq f (open {} "r")) (setq line (read-line f)) (close f) line)"#, quoted(&outside));
+    assert_eq!(eval(&mut session, &code)["value"], literal("read outside roots"));
+
+    let revoked = sandbox.root.join("revoked.txt");
+    let result = eval(&mut session, &format!(r#"(setq f (open {} "w"))"#, quoted(&revoked)));
+    assert!(result.get("error").is_none(), "{result}");
+    set_write_roots(Vec::new());
+    let result = eval(&mut session, r#"(progn (write-line "blocked at close" f) (close f))"#);
+    assert!(result["output"].as_array().unwrap().iter().any(|line| line.as_str() == Some(refusal(&revoked).as_str())), "{result}");
+    assert!(!revoked.exists());
+}
+
+#[cfg(unix)]
+fn symlink(target: &Path, link: &Path, _: bool) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(windows)]
+fn symlink(target: &Path, link: &Path, directory: bool) -> std::io::Result<()> {
+    if directory { std::os::windows::fs::symlink_dir(target, link) } else { std::os::windows::fs::symlink_file(target, link) }
+}
+
+#[test]
+fn sandbox_blocks_traversal_and_symlink_escape() {
+    let sandbox = Sandbox::new("escapes");
+    let mut session = setup();
+    let traversal = sandbox.root.join("../x.txt");
+    let missing_parent = sandbox.root.join("missing/a.txt");
+    let prefix_sibling = sandbox.base.join("allowed-extra");
+    std::fs::create_dir(&prefix_sibling).unwrap();
+    for path in [&traversal, &missing_parent, &prefix_sibling.join("a.txt")] {
+        for mode in ["w", "a"] {
+            blocked_open(&mut session, path, mode);
+            assert!(!path.exists());
+        }
+    }
+
+    #[cfg(windows)]
+    assert!(check_write(&sandbox.root.join("case.txt").to_string_lossy().to_uppercase()).is_ok());
+    let outside = sandbox.base.join("outside");
+    std::fs::create_dir(&outside).unwrap();
+    let link = sandbox.root.join("escape");
+    if let Err(error) = symlink(&outside, &link, true) {
+        eprintln!("symlink cases skipped: OS refused to create symlink: {error}");
+        return;
+    }
+    blocked_open(&mut session, &link.join("new.txt"), "w");
+    assert!(!outside.join("new.txt").exists());
+    let victim = outside.join("existing.txt");
+    std::fs::write(&victim, "unchanged").unwrap();
+    let final_link = sandbox.root.join("final.txt");
+    if let Err(error) = symlink(&victim, &final_link, false) {
+        eprintln!("final symlink cases skipped: OS refused to create symlink: {error}");
+        return;
+    }
+    blocked_open(&mut session, &final_link, "a");
+    assert_eq!(std::fs::read_to_string(&victim).unwrap(), "unchanged");
+    let broken = sandbox.root.join("broken.txt");
+    symlink(&outside.join("absent.txt"), &broken, false).unwrap();
+    blocked_open(&mut session, &broken, "w");
+    assert!(!outside.join("absent.txt").exists());
+
+    let alias = sandbox.base.join("root-alias");
+    symlink(&sandbox.root, &alias, true).unwrap();
+    set_write_roots(vec![alias.clone()]);
+    assert_eq!(write_roots(), vec![sandbox.root.clone()]);
+    assert_eq!(check_write(&alias.join("new.txt").to_string_lossy()).unwrap(), sandbox.root.join("new.txt"));
+
+    let deferred = sandbox.root.join("deferred.txt");
+    let result = eval(&mut session, &format!(r#"(setq f (open {} "w"))"#, quoted(&deferred)));
+    assert!(result.get("error").is_none(), "{result}");
+    symlink(&victim, &deferred, false).unwrap();
+    let result = eval(&mut session, r#"(progn (write-line "must not append" f) (close f))"#);
+    assert!(result["output"].as_array().unwrap().iter().any(|line| line.as_str() == Some(refusal(&deferred).as_str())), "{result}");
+    assert_eq!(std::fs::read_to_string(&victim).unwrap(), "unchanged");
+
+    let output = sandbox.root.join("export.dxf");
+    let temporary = sandbox.root.join("export.dxf.cadcraft-tmp");
+    symlink(&victim, &temporary, false).unwrap();
+    session.cmdline("(getstring)").unwrap();
+    let error = session.execute("export", &json!({"path": output})).unwrap_err().to_string();
+    assert!(error.contains(&refusal(&temporary)), "{error}");
+    assert!(!output.exists());
+    assert_eq!(std::fs::read_to_string(&victim).unwrap(), "unchanged");
+    session.input(cadcraft_engine::Input::Text("continue".into())).unwrap();
+}
+
+#[test]
+fn sandbox_covers_commands_called_from_lisp() {
+    let sandbox = Sandbox::new("commands");
+    let mut session = setup();
+    let outside = sandbox.base.join("outside.dxf");
+    session.cmdline("(getstring)").unwrap();
+    assert!(session.lisp_running());
+    for command in ["export", "exportpdf", "plot", "publish", "ubplot.publish", "cad.file.export"] {
+        let error = session.execute(command, &json!({"path": outside})).unwrap_err().to_string();
+        assert!(error.contains(&refusal(&outside)), "{command}: {error}");
+    }
+    for key in ["path", "out", "dir"] {
+        let params = json!({(key): outside});
+        let error = session.execute("ubplot.scan", &params).unwrap_err().to_string();
+        assert!(error.contains(&refusal(&outside)), "{key}: {error}");
+    }
+    assert!(!outside.exists());
+    session.input(cadcraft_engine::Input::Text("continue".into())).unwrap();
+    assert!(!session.lisp_running());
+    session.execute("export", &json!({"path": outside})).unwrap();
+    assert!(outside.exists());
+
+    let plan = scan(&mut session);
+    let pdf = sandbox.base.join("outside.pdf");
+    let code = format!("(ubplot-publish {} {})", literal(&plan.to_string()), quoted(&pdf));
+    let result = eval(&mut session, &code);
+    assert!(result["error"].as_str().unwrap().contains(&refusal(&pdf)), "{result}");
+    assert!(!pdf.exists());
+    session.execute("ubplot.publish", &json!({"plan": plan, "path": pdf})).unwrap();
+    assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF-"));
+}
+
+#[test]
+fn sandbox_add_requires_existing_dir() {
+    let sandbox = Sandbox::new("manage");
+    let mut session = setup();
+    let missing = sandbox.base.join("missing");
+    let original = write_roots();
+    let error = session.execute("lispsandbox", &json!({"action": "add", "path": missing})).unwrap_err().to_string();
+    assert!(error.contains("existing directory"), "{error}");
+    let file = sandbox.root.join("file.txt");
+    std::fs::write(&file, "a file is not a root").unwrap();
+    assert!(session.execute("lispsandbox", &json!({"action": "add", "path": file})).is_err());
+    assert_eq!(write_roots(), original);
+
+    let extra = sandbox.base.join("extra");
+    std::fs::create_dir(&extra).unwrap();
+    session.execute("lispsandbox", &json!({"action": "add", "path": extra})).unwrap();
+    session.execute("lispsandbox", &json!({"action": "add", "path": extra.join(".")})).unwrap();
+    assert_eq!(write_roots(), vec![sandbox.root.clone(), extra.clone()]);
+    let listed = session.execute("lispsandbox", &json!({"action": "list"})).unwrap();
+    assert_eq!(listed["roots"], json!([sandbox.root, extra]));
+    session.execute("lispsandbox", &json!({"action": "remove", "path": extra})).unwrap();
+    assert_eq!(write_roots(), original);
+    assert!(check_write(&extra.join("denied.txt").to_string_lossy()).is_err());
+
+    let many = (0..65).map(|index| {
+        let path = sandbox.base.join(format!("root-{index}"));
+        std::fs::create_dir(&path).unwrap();
+        path
+    });
+    set_write_roots(many.collect());
+    assert_eq!(write_roots().len(), 64);
+    assert!(session.execute("lispsandbox", &json!({"action": "add", "path": extra})).is_err());
+    let meta = cadcraft_engine::cmd::registry::command_registry().into_iter().find(|meta| meta.stable_id == "lispsandbox").unwrap();
+    assert_eq!(meta.risk_class, cadcraft_engine::cmd::registry::RiskClass::File);
+}
+
+#[test]
+fn ubplot_publish_path_outside_roots_is_refused() {
+    let sandbox = Sandbox::new("publish-outside");
+    let mut session = setup();
+    let path = sandbox.base.join("outside.pdf");
+    let result = eval(&mut session, &format!(r#"(ubplot-publish "{{}}" {})"#, quoted(&path)));
+    assert_eq!(result["error"], refusal(&path));
+    assert!(!path.exists());
+}
+
+#[test]
+fn ubplot_publish_path_needs_pdf_extension() {
+    let sandbox = Sandbox::new("publish-extension");
+    let mut session = setup();
+    let plan = scan(&mut session);
+    for name in ["bad.txt", "bad.exe", "no-extension", "bad.pdf.exe"] {
+        let path = sandbox.root.join(name);
+        let code = format!("(ubplot-publish {} {})", literal(&plan.to_string()), quoted(&path));
+        let result = eval(&mut session, &code);
+        assert_eq!(result["error"], refusal(&path));
+        assert!(!path.exists());
+    }
+    for name in ["good.pdf", "GOOD.PDF"] {
+        let path = sandbox.root.join(name);
+        let code = format!("(ubplot-publish {} {})", literal(&plan.to_string()), quoted(&path));
+        let result = eval(&mut session, &code);
+        assert!(result.get("error").is_none(), "{result}");
+        assert!(std::fs::read(&path).unwrap().starts_with(b"%PDF-"));
+    }
+}

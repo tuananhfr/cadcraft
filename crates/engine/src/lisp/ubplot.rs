@@ -131,7 +131,16 @@ pub(super) fn scan(ctx: &mut Ctx<'_>, args: Vec<Value>) -> Result<Flow> {
 }
 
 fn publish_path(_ctx: &mut Ctx<'_>, path: Option<&Value>) -> Result<Option<String>> {
-    path.filter(|value| !value.is_nil()).map(|value| string(value).map(str::to_string)).transpose()
+    let path = path.filter(|value| !value.is_nil()).map(|value| string(value).map(str::to_string)).transpose()?;
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(path) = &path {
+        super::sandbox::check_write(path).map_err(LispError::new)?;
+        let extension = std::path::Path::new(path).extension().and_then(|extension| extension.to_str());
+        if !extension.is_some_and(|extension| extension.eq_ignore_ascii_case("pdf")) {
+            return Err(LispError::new(super::sandbox::blocked(path)));
+        }
+    }
+    Ok(path)
 }
 
 pub(super) fn publish(ctx: &mut Ctx<'_>, args: Vec<Value>) -> Result<Flow> {

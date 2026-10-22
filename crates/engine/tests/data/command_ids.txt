@@ -250,6 +250,7 @@ limits
 line
 linetype
 lisp
+lispsandbox
 list
 ltscale
 lwdisplay

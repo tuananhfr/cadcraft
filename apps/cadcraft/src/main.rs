@@ -397,6 +397,11 @@ fn main() -> eframe::Result {
                 if let Err(e) = std::fs::create_dir_all(&support) {
                     log::warn!("no LISP support folder {}: {e}", support.display());
                 }
+                let lisp_out = dir.join("lisp-out");
+                if let Err(e) = std::fs::create_dir_all(&lisp_out) {
+                    log::warn!("no LISP output folder {}: {e}", lisp_out.display());
+                }
+                cadcraft_engine::lisp::sandbox::set_write_roots(vec![support.clone(), lisp_out]);
                 app.session.set_lisp_support_dir(Some(support));
             }
             app.fontmgr.pick_file = Some(Box::new(pick_font));

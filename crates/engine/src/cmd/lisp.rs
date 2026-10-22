@@ -9,6 +9,10 @@ use crate::{Accept, CommandSpec, EngineError, Input, Interactive, Prompt, Result
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
+        #[cfg(not(target_arch = "wasm32"))]
+        CommandSpec::new("lispsandbox", "LISP write folders", run_lispsandbox)
+            .params("{action?: list|add|remove (default list), path?: existing directory} → {roots}")
+            .noundo(),
         CommandSpec::new("appload", "Load Application...", run_appload)
             .menu(&["Tools", "Load Application..."])
             .alias(&["ap"])
@@ -21,6 +25,42 @@ pub fn specs() -> Vec<CommandSpec> {
             )
             .noundo(),
     ]
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn run_lispsandbox(_: &mut Session, p: &Value) -> Result<Value> {
+    use crate::lisp::sandbox::{MAX_WRITE_ROOTS, same_path, set_write_roots, write_roots};
+
+    let action = str_param(p, "action").unwrap_or("list");
+    let mut roots = write_roots();
+    match action {
+        "list" => {}
+        "add" | "remove" => {
+            let path = str_param(p, "path").ok_or_else(|| bad("lispsandbox", "`path` is required"))?;
+            if path.is_empty() || path.len() > 4096 {
+                return Err(bad("lispsandbox", "`path` must contain 1 to 4096 bytes"));
+            }
+            let path = std::path::Path::new(path)
+                .canonicalize()
+                .ok()
+                .filter(|path| path.is_dir())
+                .ok_or_else(|| bad("lispsandbox", "`path` must be an existing directory"))?;
+            if action == "add" {
+                if !roots.iter().any(|root| same_path(root, &path)) {
+                    if roots.len() >= MAX_WRITE_ROOTS {
+                        return Err(bad("lispsandbox", format!("at most {MAX_WRITE_ROOTS} write folders are allowed")));
+                    }
+                    roots.push(path);
+                }
+            } else {
+                roots.retain(|root| !same_path(root, &path));
+            }
+            set_write_roots(roots);
+            roots = write_roots();
+        }
+        _ => return Err(bad("lispsandbox", "`action` must be list, add or remove")),
+    }
+    Ok(json!({"roots": roots}))
 }
 
 /// The text of a LISP file from `{path}` or `{name, data | text}`, and its name.

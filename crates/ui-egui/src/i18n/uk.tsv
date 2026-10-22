@@ -337,6 +337,7 @@
 	Equal	Рівність
 	Erase	Стерти
 	Evaluate	Обчислити
+	LISP write folders	Теки запису LISP
 	Evaluate LISP	Обчислити LISP
 	Exclude from new selection set	Виключити з нового набору вибраних об'єктів
 	Explode	Розчленувати

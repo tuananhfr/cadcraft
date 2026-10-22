@@ -210,3 +210,25 @@ fn a_lazy_bridge_starts_without_the_app_and_says_how_to_open_it() {
     assert_ne!(r["result"]["isError"], json!(true), "{r}");
     app.join().unwrap();
 }
+
+#[test]
+fn mcp_cannot_change_lisp_write_roots() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    for command in ["lispsandbox", "LISPSANDBOX", "cad.other.lispsandbox"] {
+        for action in ["add", "remove"] {
+            let r = call(
+                &mut s,
+                1,
+                "tools/call",
+                json!({"name": "execute", "arguments": {"command": command, "params": {"action": action, "path": "."}}}),
+            );
+            assert_eq!(r["result"]["isError"], true, "{r}");
+            assert!(r["result"]["content"][0]["text"].as_str().unwrap().to_ascii_lowercase().contains("only the user"), "{r}");
+        }
+    }
+    let listed = tool(&mut s, "execute", json!({"command": "lispsandbox", "params": {"action": "list"}}));
+    assert!(listed["roots"].is_array(), "{listed}");
+    tool(&mut s, "command_line", json!({"text": "lispsandbox"}));
+    tool(&mut s, "script", json!({"text": "lispsandbox\n"}));
+    assert_eq!(tool(&mut s, "execute", json!({"command": "lispsandbox"})), listed);
+}
