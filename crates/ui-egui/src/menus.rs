@@ -832,7 +832,12 @@ mod tests {
 
     #[test]
     fn plot_and_print_open_the_plot_dialog_and_exportpdf_asks_for_a_file() {
-        set_io(IoHooks { read: |_, _| Err("no reader in tests".into()), write: |_, _| Err("no writer in tests".into()), plot: Some(fake_plot) });
+        // The hooks are set once per process; UBPLOT scans in other lib tests hash through the writer.
+        set_io(IoHooks {
+            read: |_, _| Err("no reader in tests".into()),
+            write: |d, _| Ok(cadcraft_io::write_dxf(d).into_bytes()),
+            plot: Some(fake_plot),
+        });
         if io().and_then(|h| h.plot).is_none() {
             return; // another test installed hooks without a plotter first
         }

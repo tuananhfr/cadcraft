@@ -690,6 +690,12 @@ fn no_english_catalog_text_in_p0_screens_vi() {
         if screen == "LINE" {
             app.start("line");
         } else if dialog == Some(crate::ubplot::DIALOG) {
+            // First set wins per process: UBPLOT scans hash the drawing through the writer.
+            cadcraft_engine::cmd::file::set_io(cadcraft_engine::cmd::file::IoHooks {
+                read: |_, _| Err("no reader in tests".into()),
+                write: |d, _| Ok(cadcraft_io::write_dxf(d).into_bytes()),
+                plot: Some(|d, space, options| cadcraft_io::plotter::plot(d, space, options).map_err(|error| error.to_string())),
+            });
             app.run("ubplot.scan", json!({"mode": "window", "windows": [[[0, 0], [420, 297]]], "scale": "fit"})).unwrap();
             app.ui.dialog = dialog.map(str::to_string);
         } else if let Some(dialog) = dialog {
