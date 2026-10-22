@@ -61,7 +61,7 @@ fn unit_ratio<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f32, D::Erro
     Ok(clamp_finite(f32::deserialize(deserializer)?, 0.0, 1.0))
 }
 
-fn ui_scale<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f32, D::Error> {
+pub(crate) fn ui_scale<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f32, D::Error> {
     Ok(clamp_finite(f32::deserialize(deserializer)?, 0.75, 2.0))
 }
 
@@ -369,8 +369,6 @@ pub struct WorkspaceProfile {
     pub status: ProfileStatus,
     pub locale: Option<String>,
     pub theme: Option<String>,
-    #[serde(deserialize_with = "ui_scale")]
-    pub ui_scale: f32,
     /// RFC 3339.
     pub created_at: String,
     /// RFC 3339.
@@ -398,7 +396,6 @@ impl Default for WorkspaceProfile {
             status: ProfileStatus::Published,
             locale: None,
             theme: None,
-            ui_scale: 1.0,
             created_at: PRESET_TIMESTAMP.into(),
             updated_at: PRESET_TIMESTAMP.into(),
             layout: WorkspaceLayout::default(),
@@ -442,6 +439,12 @@ impl<'de> Deserialize<'de> for WorkspaceProfile {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let mut value = Value::deserialize(deserializer)?;
         hoist_root_layout_keys(&mut value);
+        if let Some(fields) = value.as_object_mut() {
+            if let Some(scale) = fields.remove("ui_scale") {
+                serde_json::from_value::<super::device::DeviceState>(serde_json::json!({"ui_scale": scale})).map_err(D::Error::custom)?;
+            }
+            fields.remove("uiScale");
+        }
         WorkspaceProfile::deserialize(value).map_err(D::Error::custom)
     }
 }

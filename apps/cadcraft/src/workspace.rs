@@ -291,7 +291,7 @@ mod tests {
         drop(cad);
         let mut cad = app();
         cad.attach_profile_store(Box::new(open(&root).store));
-        assert_eq!(cad.ws.user.ui_scale, 1.25);
+        assert_eq!(cad.ws.device.ui_scale, 1.25);
         assert!(cad.ws.fallback.is_none(), "{:?}", cad.ws.fallback);
         fs::remove_dir_all(root).unwrap();
     }

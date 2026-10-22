@@ -2,6 +2,7 @@
 
 use serde_json::{Value, json};
 
+use super::device::{portable_profile, split_geometry};
 use super::history::Entry;
 use super::merge::{DELETE_KEY, changed_pointers, check, diff_patch, patch_for_pointer, strip_nulls, try_apply_patch};
 use super::migrate::migrate;
@@ -116,12 +117,12 @@ fn reset(app: &mut CadApp) -> Result<Value, String> {
     observe(app, true);
     let below = app.ws.below_user();
     if let Some(base) = app.ws.user.base_id.as_deref().and_then(super::presets::preset) {
-        app.ws.user.ui_scale = base.ui_scale;
         app.ws.user.theme = base.theme;
         app.ws.user.locale = base.locale;
     }
     if below != app.ws.user.layout {
-        app.ws.history.record(std::mem::replace(&mut app.ws.user.layout, below));
+        app.ws.history.record(app.ws.local_layout());
+        app.ws.user.layout = below;
     }
     app.ws.rebuild();
     app.apply_workspace();
@@ -182,16 +183,18 @@ fn save_as(app: &mut CadApp, params: &Value) -> Result<Value, String> {
 }
 
 /// The working profile as a file to share: no host-specific identity, nothing a strict import refuses.
-fn export_text(app: &CadApp) -> Result<String, String> {
+fn export_text(app: &CadApp) -> Result<(String, Vec<String>), String> {
     let profile = WorkspaceProfile { etag: None, tenant_id: None, owner_id: None, ..app.ws.user.clone() };
-    let text = serde_json::to_string_pretty(&profile).map_err(|error| error.to_string())?;
+    let value = serde_json::to_value(&profile).map_err(|error| error.to_string())?;
+    let (value, ignored) = portable_profile(value);
+    let text = serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?;
     validate(&text, Mode::Import).map_err(|issues| format!("This workspace cannot be exported: {}", issues_text(&issues)))?;
-    Ok(text)
+    Ok((text, ignored))
 }
 
 fn export(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     observe(app, true);
-    let text = export_text(app)?;
+    let (text, ignored) = export_text(app)?;
     let path = match params.get("path").and_then(Value::as_str) {
         Some(path) => Some(path.to_string()),
         None if params.is_null() => app.services.save_file("Workspace.json", &WORKSPACE_FILE),
@@ -200,7 +203,7 @@ fn export(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     if let Some(path) = &path {
         write_file(path, &text)?;
     }
-    Ok(json!({"text": text, "path": path}))
+    Ok(json!({"text": text, "path": path, "ignored": ignored}))
 }
 
 fn write_file(path: &str, text: &str) -> Result<(), String> {
@@ -233,6 +236,7 @@ fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         (None, None) => return Err("text or path is required".into()),
     };
     let value = validate(&text, Mode::Import).map_err(|issues| format!("This workspace cannot be imported: {}", issues_text(&issues)))?;
+    let (value, ignored) = portable_profile(value);
     let migrated = migrate(value).map_err(|error| format!("This workspace cannot be imported: {error}"))?;
     let mut profile: WorkspaceProfile =
         serde_json::from_value(migrated.value).map_err(|error| format!("This workspace cannot be imported: {error}"))?;
@@ -240,10 +244,7 @@ fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         strip_nulls(tree);
     }
     observe(app, true);
-    let mut changes = changed_pointers(&diff_patch(&app.ws.user.layout, &profile.layout));
-    if profile.ui_scale != app.ws.user.ui_scale {
-        changes.push("/ui_scale".into());
-    }
+    let mut changes = changed_pointers(&split_geometry(diff_patch(&app.ws.user.layout, &profile.layout)).0);
     if profile.theme != app.ws.user.theme {
         changes.push("/theme".into());
     }
@@ -251,7 +252,7 @@ fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         changes.push("/locale".into());
     }
     if params.get("dry_run").and_then(Value::as_bool) == Some(true) {
-        return Ok(json!({"dry_run": true, "changes": changes}));
+        return Ok(json!({"dry_run": true, "changes": changes, "ignored": ignored}));
     }
     save_outgoing(app)?;
     app.ws.history.record_switch(app.ws.active.clone(), app.ws.user.clone());
@@ -261,15 +262,16 @@ fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         }
         app.ws.user.base_id = Some(base.to_string());
     }
-    app.ws.user.layout = profile.layout;
-    app.ws.user.ui_scale = profile.ui_scale;
+    let below = app.ws.below_user();
+    let (user, _) = split_geometry(diff_patch(&below, &profile.layout));
+    app.ws.user.layout = try_apply_patch(&below, &user)?;
     app.ws.user.theme = profile.theme;
     app.ws.user.locale = profile.locale;
     app.ws.rebuild();
     app.apply_workspace();
     app.ws.mark_changed();
     let saved = commit_now(app)?;
-    Ok(json!({"changes": changes, "revision": app.ws.user.revision, "saved": saved}))
+    Ok(json!({"changes": changes, "ignored": ignored, "revision": app.ws.user.revision, "saved": saved}))
 }
 
 fn restore_revision(app: &mut CadApp, params: &Value) -> Result<Value, String> {
@@ -290,6 +292,9 @@ fn restore_revision(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     app.ws.history.record_switch(app.ws.active.clone(), app.ws.user.clone());
     let current = app.ws.user.revision;
     app.ws.user = WorkspaceProfile { revision: current, ..restored };
+    if let Some(device) = set.device {
+        app.ws.device = device;
+    }
     app.ws.active = set.active;
     // Workspaces saved since that revision stay; the restore is about the layout, not the list.
     for profile in set.profiles {
@@ -314,35 +319,54 @@ fn set_value(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     let pointer = params.get("pointer").and_then(Value::as_str).ok_or("pointer is required")?;
     let value = params.get("value").cloned().ok_or("value is required")?;
     observe(app, true);
+    let scope = params.get("scope").and_then(Value::as_str).unwrap_or("user");
+    if !matches!(scope, "user" | "device") {
+        return Err("scope must be user or device".into());
+    }
     let mut next = app.ws.user.clone();
+    let mut device = app.ws.device.clone();
+    let before = app.ws.local_layout();
+    let mut layout_changed = false;
     match pointer {
         "/ui_scale" => {
             let scale = value.as_f64().filter(|scale| scale.is_finite()).ok_or("ui_scale must be a number")?;
-            next.ui_scale = (scale as f32).clamp(0.75, 2.0);
+            device.ui_scale = scale.clamp(0.75, 2.0) as f32;
         }
-        "/theme" => {
+        "/theme" if scope == "user" => {
             next.theme =
                 optional_choice(&value, |theme| crate::theme::ThemePref::parse(theme).is_some(), "theme must be system, light, dark or null")?
         }
-        "/locale" => {
+        "/locale" if scope == "user" => {
             next.locale = optional_choice(&value, |code| crate::i18n::Preference::parse(code).is_some(), "locale must be a language code or null")?
         }
+        "/theme" | "/locale" => return Err("device scope accepts only ui_scale and layout geometry".into()),
         _ => {
             check(&app.ws.effective, pointer).map_err(|_| LOCKED_MESSAGE.to_string())?;
             if value.get(DELETE_KEY).is_some() {
                 return Err(format!("{DELETE_KEY} is not a value"));
             }
             let patch = patch_for_pointer(pointer, value)?;
-            next.layout = try_apply_patch(&app.ws.user.layout, &patch).map_err(|error| format!("{pointer}: {error}"))?;
-            if next.layout == app.ws.user.layout {
+            let (user_patch, _) = split_geometry(patch.clone());
+            let has_user_fields = changed_pointers(&user_patch)
+                .iter()
+                .any(|pointer| !["/panels/", "/toolbars/"].iter().any(|prefix| pointer.strip_prefix(*prefix).is_some_and(|id| !id.contains('/'))));
+            if scope == "device" && has_user_fields {
+                return Err("device scope accepts only layout geometry".into());
+            }
+            next.layout = try_apply_patch(&next.layout, &user_patch).map_err(|error| format!("{pointer}: {error}"))?;
+            let layout = try_apply_patch(&before, &patch).map_err(|error| format!("{pointer}: {error}"))?;
+            device.layout_patch = split_geometry(diff_patch(&next.layout, &layout)).1;
+            if layout == before {
                 return Ok(json!({"pointer": pointer, "changed": false}));
             }
+            layout_changed = true;
         }
     }
     startup::check_profile(&next, &app.ws.policy()).map_err(|reason| format!("{pointer} cannot be stored: {reason}"))?;
-    if next.layout != app.ws.user.layout {
-        app.ws.history.record(app.ws.user.layout.clone());
+    if layout_changed {
+        app.ws.history.record(before);
     }
+    app.ws.device = device;
     app.ws.user = next;
     app.ws.rebuild();
     app.apply_workspace();
@@ -390,12 +414,12 @@ fn step_history(app: &mut CadApp, undo: bool) -> Result<Value, String> {
     let pending = if undo { app.ws.history.peek_undo() } else { app.ws.history.peek_redo() };
     let now = match pending {
         Some(Entry::Switch { .. }) => Entry::Switch { active: app.ws.active.clone(), user: Box::new(app.ws.user.clone()) },
-        _ => Entry::Layout(app.ws.user.layout.clone()),
+        _ => Entry::Layout(app.ws.local_layout()),
     };
     let step = if undo { app.ws.history.undo(now) } else { app.ws.history.redo(now) };
     match step {
         None => return Err(if undo { "No layout change to undo".into() } else { "No layout change to redo".into() }),
-        Some(Entry::Layout(layout)) => app.ws.user.layout = layout,
+        Some(Entry::Layout(layout)) => app.ws.keep_layout(layout),
         Some(Entry::Switch { active, user }) => {
             // Revisions only grow, so the restored workspace cannot be older than a stored one.
             let revision = app.ws.user.revision.max(user.revision);

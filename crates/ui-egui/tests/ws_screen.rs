@@ -213,7 +213,7 @@ fn interface_scale_tracks_egui_zoom_without_committing_each_frame() {
     let revision = h.state().ws.user.revision;
     h.key_press_modifiers(Modifiers::COMMAND, Key::Equals);
     h.run_steps(3);
-    assert_eq!(h.state().ws.user.ui_scale, 1.6);
+    assert_eq!(h.state().ws.device.ui_scale, 1.6);
     assert_eq!(h.state().ws.user.revision, revision, "zoom uses the normal debounce");
     assert!(h.state().ws.autosave.pending());
     h.run_steps(3);
@@ -225,7 +225,7 @@ fn interface_scale_tracks_egui_zoom_without_committing_each_frame() {
     h.run_steps(60);
     assert_eq!(h.state().ws.user.revision, revision + 1, "unchanged frames do not save again");
     let restored = restarted(h.state_mut());
-    assert_eq!(restored.ws.user.ui_scale, 1.6);
+    assert_eq!(restored.ws.device.ui_scale, 1.6);
     let h = harness(restored, 1366.0, 768.0, 1.0);
     assert_eq!(h.ctx.zoom_factor(), 1.6);
 }
@@ -442,13 +442,13 @@ fn interface_scale_drag_commits_only_on_release() {
         h.hover_at(from + (to - from) * fraction);
         h.run_steps(2);
         assert_eq!(h.ctx.zoom_factor(), 1.0, "dragging does not move the interface under the pointer");
-        assert_eq!(h.state().ws.user.ui_scale, 1.0);
+        assert_eq!(h.state().ws.device.ui_scale, 1.0);
         assert_eq!(h.state().ws.user.revision, revision);
     }
     h.drop_at(to);
     h.run_steps(4);
     assert!(h.ctx.zoom_factor() > 1.0);
-    assert_eq!(h.ctx.zoom_factor(), h.state().ws.user.ui_scale);
+    assert_eq!(h.ctx.zoom_factor(), h.state().ws.device.ui_scale);
     let committed = h.ctx.zoom_factor();
     h.run_steps(4);
     assert_eq!(h.ctx.zoom_factor(), committed);
@@ -468,7 +468,7 @@ fn options_ui_scale_uses_camel_case_accepts_legacy_input_and_resets() {
     assert_eq!(result.get("uiScale"), Some(&json!(1.75)));
     let result = app.run("options", json!({"reset": true})).unwrap();
     assert_eq!(result.get("uiScale"), Some(&json!(1.0)));
-    assert_eq!(app.ws.user.ui_scale, 1.0);
+    assert_eq!(app.ws.device.ui_scale, 1.0);
     let result = app.run("options", json!({"reset": true, "uiScale": 1.25})).unwrap();
     assert_eq!(result.get("uiScale"), Some(&json!(1.25)));
 }

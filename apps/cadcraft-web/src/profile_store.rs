@@ -574,7 +574,7 @@ mod tests {
         let mut fresh = store(FakeStorage::default());
         fresh.write_current(&current).unwrap();
         again.attach_profile_store(Box::new(fresh));
-        assert_eq!(again.ws.user.ui_scale, 1.5);
+        assert_eq!(again.ws.device.ui_scale, 1.5);
         assert!(again.ws.fallback.is_none(), "{:?}", again.ws.fallback);
     }
 

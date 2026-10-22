@@ -102,14 +102,17 @@ fn ratios_and_scale_are_clamped() {
             "toolbars": [{"id": "t", "x_ratio": 4.0, "y_ratio": -1.0}]
         }
     }));
-    assert_eq!(profile.ui_scale, 2.0);
+    let device: cadcraft_ui_egui::wsprofile::device::DeviceState = serde_json::from_value(json!({"ui_scale": 9.0})).unwrap();
+    assert_eq!(device.ui_scale, 2.0);
+    assert!(serde_json::to_value(&profile).unwrap().get("ui_scale").is_none());
     assert_eq!(profile.layout.panels[0].x_ratio, 0.0);
     assert_eq!(profile.layout.panels[0].width_ratio, 1.0);
     assert_eq!(profile.layout.command_line.height_ratio, 1.0);
     assert_eq!(profile.layout.command_line.x_ratio, 0.0);
     assert_eq!(profile.layout.toolbars[0].x_ratio, 1.0);
     assert_eq!(profile.layout.toolbars[0].y_ratio, 0.0);
-    assert_eq!(parse(json!({"ui_scale": 0.1})).ui_scale, 0.75);
+    let device: cadcraft_ui_egui::wsprofile::device::DeviceState = serde_json::from_value(json!({"ui_scale": 0.1})).unwrap();
+    assert_eq!(device.ui_scale, 0.75);
 }
 
 #[test]
@@ -325,7 +328,7 @@ fn simple_equals_current_ui() {
     assert_eq!(simple.layout.command_line.lines, 3);
     let panel_ids: Vec<&str> = simple.layout.panels.iter().map(|panel| panel.id.as_str()).collect();
     assert_eq!(panel_ids, ["toolSets", "layers", "properties", "externalReferences"]);
-    assert_eq!(simple.ui_scale, 1.0);
+    assert!(serde_json::to_value(&simple).unwrap().get("ui_scale").is_none());
 }
 
 #[test]
