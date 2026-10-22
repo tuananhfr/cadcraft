@@ -39,8 +39,8 @@ fn frame(s: &mut Session, width: f64, height: f64) -> usize {
     d.layers.push(Layer::new("Measured frame"));
     frame_block(d, "Test frame", width, height);
     let block = Arc::make_mut(d.blocks.get_mut("Test frame").unwrap());
-    let rectangle = block.entities.iter_mut().find(|entity| matches!(entity.kind, EntityKind::LwPolyline(_))).unwrap();
-    rectangle.common.layer = "Measured frame".into();
+    let handle = block.entities.iter().find(|entity| matches!(entity.kind, EntityKind::LwPolyline(_))).unwrap().handle;
+    block.entities.modify(handle, |entity| entity.common.layer = "Measured frame".into());
     layer
 }
 
@@ -146,8 +146,8 @@ fn add_paper_frame(s: &mut Session, name: &str, width: f64, height: f64, at: [f6
     d.layers.push(Layer::new(&layer_name));
     frame_block(d, name, width, height);
     let block = Arc::make_mut(d.blocks.get_mut(name).unwrap());
-    let rectangle = block.entities.iter_mut().find(|entity| matches!(entity.kind, EntityKind::LwPolyline(_))).unwrap();
-    rectangle.common.layer = layer_name;
+    let handle = block.entities.iter().find(|entity| matches!(entity.kind, EntityKind::LwPolyline(_))).unwrap().handle;
+    block.entities.modify(handle, |entity| entity.common.layer = layer_name);
     (place(s, name, at, scale, 0.0, false, &[]).hex(), layer)
 }
 
