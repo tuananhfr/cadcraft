@@ -27,6 +27,17 @@ Test paths are under `crates/ui-egui/tests/`; each reference is `test_file::test
 | UX15 Corrupt | partial | `ws_persist::corrupt_store_falls_back_ux15`, `second_damaged_start_keeps_both_copies`, `ws_migrate::corrupt_fixtures_error_not_panic` | Lead gate and native/web corrupt-profile recovery evidence. |
 | UX16 Stress | partial | New ignored `ws_perf::restore_p95`, `switch_p95`; `ws_merge::layout_history_is_capped_and_a_new_change_drops_redo`, `ws_persist::commit_writes_snapshot_and_keeps_20` | Release numbers, FileProfileStore commit benchmark, and profiler evidence. Structure/texture counts do not prove absence of a memory leak. |
 
+## V2.2/V3.1 GĐ0: TC12 / TC13 source inventory
+
+2026-10-22 · These TC numbers refer to UX/Workspace V3.1 and are separate from the V2.1 UX cases above. No GĐ0 gate, browser QA or desktop smoke was run for this documentation task. Test references describe assertions in source, not passing execution results.
+
+| Case / scope | Status | Evidence in source | Still owed |
+|---|---|---|---|
+| TC12 Browser-key blocking | partial | `web_keys::web_defaults_avoid_browser_reserved_keys`, `web_defaults_keep_every_safe_desktop_binding`, `web_binder_rejects_browser_keys`, `web_active_drops_browser_keys_from_profiles`, `web_menu_hides_browser_reserved_hints`; `shortcuts.rs` filters defaults/profile dispatch, rejects browser keys and hides menu hints. Shift+F10 and Ctrl+Shift+C are reserved; F8/F9 remain. | Lead native/wasm gate; browser verification that F5/Ctrl+R remain browser actions and menus omit F5/Ctrl+E hints. Alternative web defaults are intentionally deferred to GĐ3, so this is not full TC12 acceptance. |
+| TC13 beforeunload protection only | partial | `drawing_recovery::unsaved_drawings_reported_until_saved` asserts clean → dirty after LINE → clean after SAVEAS. `closing.rs::has_unsaved_drawings` checks all open drawings; `apps/cadcraft-web/src/leave_guard.rs` requests confirmation only when dirty; `main.rs` refreshes the flag and omits the guard for `?host=parent`. | Lead gate and browser evidence after a user gesture: dirty reload/navigation/close prompts; cancelling retains the drawing; a clean page does not prompt. Embedded parent behavior needs separate verification. Browser crash/forced termination and drawing autosave/recovery are outside this fix; GĐ4 remains outstanding. |
+
+T3 Customize keyboard routing lands separately and is not implemented in this checkout: its agreed behavior sends Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y to layout history even with a focused Customize page button, lets a focused text field retain the keys, and blocks other shortcuts while a Customize widget has focus. Integration and lead verification remain pending.
+
 ## Measured
 
 | Metric | Samples / SLO | Result |
