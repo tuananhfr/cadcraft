@@ -54,6 +54,7 @@ pub mod shortcut_menus;
 pub mod shortcuts;
 pub mod theme;
 pub mod toolbars;
+pub mod ubplot;
 pub mod viewcube;
 pub mod vpscale;
 pub mod wsprofile;
@@ -648,6 +649,7 @@ impl CadApp {
         self.issue_screenshots(ctx);
         self.gpu_fault_tick(ctx);
         managers::plot_window_resume(self, ctx);
+        ubplot::resume(self, ctx);
         hatchdlg::resume(self);
         self.autosave_tick(ctx);
         wsprofile::apply::sync_scale(self, ctx);

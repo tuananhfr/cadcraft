@@ -15,6 +15,7 @@ pub fn show(app: &mut CadApp, ctx: &egui::Context) {
     let mut open = true;
     match d.as_str() {
         crate::customize::DIALOG => crate::customize::dialog(app, ctx, &mut open),
+        crate::ubplot::DIALOG => crate::ubplot::dialog(app, ctx, &mut open),
         "spacemouse" => crate::spacemouse::dialog(app, ctx, &mut open),
         "language" => language(app, ctx, &mut open),
         "layers" => crate::layers::dialog(app, ctx, &mut open),
