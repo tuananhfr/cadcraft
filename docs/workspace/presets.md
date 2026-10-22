@@ -61,6 +61,7 @@ Standing ribbon tabs (D6), in order:
 | View | Navigate, Viewports, Display |
 | Layout | Layouts, Layout Viewports, Page |
 | Tools | Inquiry, Select, Settings, Cleanup |
+| Output | Quick Plot (`ubplot plot publish pdfbook preview`) |
 
 Contextual tabs, shown only for a matching selection: `Dimension` (`contextual: "dimension"`, group
 Edit Dimension) and `Hatch` (`contextual: "hatch"`, group Hatch Edit).
