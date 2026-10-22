@@ -189,7 +189,7 @@ fn panel_shows_review_state() {
 #[test]
 fn panel_folder_controls_use_sandbox_commands() {
     use egui_kittest::Harness;
-    use egui_kittest::kittest::{NodeT, Queryable};
+    use egui_kittest::kittest::Queryable;
 
     let _permissions = Permissions::new();
     sandbox::set_write_roots(Vec::new());
@@ -206,7 +206,7 @@ fn panel_folder_controls_use_sandbox_commands() {
     harness.run_steps(3);
     harness.get_by_label("Add").click();
     harness.run_steps(3);
-    assert_eq!(sandbox::write_roots(), [root.clone()]);
+    assert_eq!(sandbox::write_roots(), std::slice::from_ref(&root));
     assert!(harness.query_by_label(root.to_string_lossy().as_ref()).is_some());
     harness.get_by_label("Remove").click();
     harness.run_steps(3);
