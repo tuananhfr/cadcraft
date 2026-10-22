@@ -119,10 +119,10 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         let response =
             ui.add(egui::TextEdit::singleline(&mut query).hint_text(crate::tl!("Search commands...")).desired_width(100.0).char_limit(1024));
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, crate::tl!("Search commands...")));
-        if response.clicked() || response.changed() {
-            if let Err(error) = app.run("ui.palette", json!({"query": query})) {
-                app.set_status(error);
-            }
+        if (response.clicked() || response.changed())
+            && let Err(error) = app.run("ui.palette", json!({"query": query}))
+        {
+            app.set_status(error);
         }
         let mut action = None;
         let active =
