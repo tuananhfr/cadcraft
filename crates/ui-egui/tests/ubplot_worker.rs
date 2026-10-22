@@ -345,7 +345,7 @@ fn typed_jobs_list_keeps_json_reply() {
     assert_eq!(result[0]["status"], "QUEUED");
 }
 
-fn enqueue_folder(app: &mut CadApp, dir: &TempDir) -> String {
+fn enqueue_folder(app: &mut CadApp, dir: &TempDir, close_drawing: bool) -> String {
     let input = dir.0.join("input");
     std::fs::create_dir(&input).unwrap();
     for (name, count) in [("a", 1), ("b", 2)] {
@@ -370,6 +370,11 @@ fn enqueue_folder(app: &mut CadApp, dir: &TempDir) -> String {
     template.block_names = vec!["FRAME-A3".into()];
     registry.templates.insert(0, template);
     app.run("ubplot.templates", json!({"action": "import", "text": serde_json::to_string(&registry).unwrap()})).unwrap();
+    // Template import needs a drawing; the folder job itself must not.
+    if close_drawing {
+        app.session.execute("closeall", &json!({})).unwrap();
+        assert!(app.session.doc().is_err());
+    }
     let response = app.run("ubplot.folder", json!({"folder": input, "out": dir.0.join("out"), "background": true})).unwrap();
     assert_eq!(response["status"], "QUEUED");
     response["jobId"].as_str().unwrap().to_string()
@@ -406,7 +411,7 @@ fn folder_job_resumes_with_folder_loader() {
         let dir = TempDir::new();
         let renderer = Arc::new(TestRenderer::default());
         let mut previous = app(7, &dir, renderer.clone());
-        let id = enqueue_folder(&mut previous, &dir);
+        let id = enqueue_folder(&mut previous, &dir, false);
         let job = previous.session.take_queued_job().unwrap();
         assert_eq!(job.job_id, id);
         assert!(is_folder_job(previous.session.job_store_mut().unwrap(), &id).unwrap());
@@ -446,9 +451,7 @@ fn folder_job_queues_without_an_open_drawing() {
     let dir = TempDir::new();
     let renderer = Arc::new(TestRenderer::default());
     let mut app = app(7, &dir, renderer.clone());
-    app.session.execute("closeall", &json!({})).unwrap();
-    assert!(app.session.doc().is_err());
-    let id = enqueue_folder(&mut app, &dir);
+    let id = enqueue_folder(&mut app, &dir, true);
     let mut h = harness(app);
     drive_until(&mut h, |app| app.job_pump.manifests.get(&id).is_some_and(|manifest| manifest.status == JobStatus::Done));
     assert_folder_result(&dir, &id, &renderer);
