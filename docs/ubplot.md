@@ -19,6 +19,7 @@ Scan parameters:
 - `paper`, `scale`: optional paper choice (below) and `"fit"` or ratio such as `"1:100"`.
 - `overrides`: settings keyed by `sheet_id@order`, with `paper`, `scale`, `window`, `sheetId`.
 - `exclude`: explicit sheet keys to exclude, reported as `SHEET_EXCLUDED`.
+- `revisions`: optional sheet-id-to-revision register, for example `{"KT-01": "C"}`.
 - `plan`: a SheetPlan for `mode: "plan"`. Scan resolves flat block references into outlines.
 
 `last` reuses the last scan request for the current drawing and rescans after edits.
@@ -83,6 +84,23 @@ Traversal is bounded to 16 nested levels and 200,000 visited entities; reaching 
 limit adds BLOCK `XREF_SCAN_LIMIT` to every sheet. Repeating preflight replaces its
 own issues and recomputes statuses without duplicating diagnostics.
 
+Font preflight considers text styles used by visible entities on the planned sheets,
+including nested INSERT transforms and layout viewport model bounds. The current text
+style and unused definitions alone do not trigger issues. Missing fonts produce plan-level
+WARN `FONT_FALLBACK` naming the replacement, or `FONT_MISSING` naming the built-in stroke
+font. An explicit usable mapping produces INFO `FONT_MAPPED` instead. Font diagnostics
+have `sheet_id: null`; no fonts are bundled. A `last` scan refreshes font diagnostics even
+when drawing geometry is cached. Font traversal follows the renderer's block-depth limit
+and rejects scans exceeding 200,000 visited entities/copies/cells.
+
+Every sheet sharing an exact sheet id receives WARN `SHEET_ID_DUPLICATE`. Revisions use
+the template's `attributes.revision` tag list and compare with `revisions[sheet_id]` by
+natural order: `B < C`, `9 < 10`, `A2 < A10`, ignoring letter case and numeric leading
+zeroes. An older or missing revision adds WARN `REVISION_OLD`; a newer revision adds
+INFO `REVISION_NEWER`. A template's optional `superseded_by` adds WARN
+`TEMPLATE_SUPERSEDED` naming its successor. Plan-level INFO `PLOT_STYLE` names each
+selected layout plot-style table, or `colors as displayed` for pages without a table.
+
 Templates take `action: "list" | "import" | "reset"`, and `text` for JSON import.
 
 Publish parameters:
@@ -117,7 +135,11 @@ are never truncated. On success no temporary file remains. Normalized output pat
 (including split destinations and temporary paths) must differ from the source drawing;
 Windows comparison ignores case. Split names replace forbidden characters, preserve
 Unicode letters, and append `-{order}` for duplicate ids and Windows device names
-(`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`).
+(`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`). Successful split delivery adds
+INFO `FILE_RENAMED` to a sheet when the actual output filename stem differs from its
+sheet id, including the base-name prefix, sanitization and collision suffixes. The message
+names the delivered file. Repeating publish replaces this diagnostic; merged publish and
+rescanning remove stale rename diagnostics.
 
 On the web, a supplied path provides the download name through the host delivery hook;
 there is no filesystem write. Split downloads are limited to 20 files because browsers
@@ -135,8 +157,8 @@ Issue codes:
 | Severity | Codes |
 | --- | --- |
 | BLOCK | `FRAME_AMBIGUOUS`, `FRAME_NOT_FOUND`, `FRAME_MINSERT`, `PAPER_TOO_SMALL`, `PAPER_TOO_LARGE`, `SCALE_PAPER_MISMATCH`, `RENDER_FAILED`, `XREF_MISSING`, `XREF_SCAN_LIMIT` |
-| WARN | `FRAME_DUPLICATE`, `FRAME_OVERLAP`, `FRAME_NESTED`, `FRAME_MIRRORED`, `FRAME_NONUNIFORM`, `XREF_UNLOADED` |
-| INFO | `PAPER_CUSTOM`, `SCALE_NOT_SET`, `UNITS_ASSUMED`, `HANDLE_DUPLICATE`, `SHEET_EXCLUDED`, `SOURCE_HASH_WEAK`, `XREF_MISSING_OUTSIDE` |
+| WARN | `FRAME_DUPLICATE`, `FRAME_OVERLAP`, `FRAME_NESTED`, `FRAME_MIRRORED`, `FRAME_NONUNIFORM`, `XREF_UNLOADED`, `FONT_FALLBACK`, `FONT_MISSING`, `SHEET_ID_DUPLICATE`, `REVISION_OLD`, `TEMPLATE_SUPERSEDED` |
+| INFO | `PAPER_CUSTOM`, `SCALE_NOT_SET`, `UNITS_ASSUMED`, `HANDLE_DUPLICATE`, `SHEET_EXCLUDED`, `SOURCE_HASH_WEAK`, `XREF_MISSING_OUTSIDE`, `FONT_MAPPED`, `REVISION_NEWER`, `PLOT_STYLE`, `FILE_RENAMED` |
 
 Command errors include `PLAN_STALE` (drawing changed since scan), `PLAN_INVALID`
 (invalid or unresolved plan), and `OUTPUT_IS_SOURCE` (output would overwrite the source).

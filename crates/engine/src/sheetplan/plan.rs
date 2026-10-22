@@ -54,12 +54,14 @@ pub struct ScanRequest {
     #[serde(default)]
     pub exclude: Vec<String>,
     #[serde(default)]
+    pub revisions: BTreeMap<String, String>,
+    #[serde(default)]
     pub plan: Option<Value>,
 }
 
 pub(crate) fn validate_request_value(value: &Value) -> Result<(), String> {
     super::types::validate_input_size(value)?;
-    for name in ["handles", "windows", "layouts", "exclude", "overrides"] {
+    for name in ["handles", "windows", "layouts", "exclude", "overrides", "revisions"] {
         let count = match value.get(name) {
             Some(Value::Array(items)) => items.len(),
             Some(Value::Object(items)) => items.len(),
@@ -77,7 +79,7 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
         registry: reg,
         device: None,
         device_missing: false,
-        revisions: &BTreeMap::new(),
+        revisions: &req.revisions,
         fonts: &[],
         web: cfg!(target_arch = "wasm32"),
     };
@@ -86,7 +88,10 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
 
 pub(crate) fn build_plan_with_context(d: &Drawing, req: &ScanRequest, ctx: &PreflightContext<'_>, source_hash: &str) -> Result<SheetPlan, String> {
     let reg = ctx.registry;
-    if [req.handles.len(), req.windows.len(), req.layouts.len(), req.overrides.len(), req.exclude.len()].into_iter().any(|n| n > MAX_SCAN_FRAMES) {
+    if [req.handles.len(), req.windows.len(), req.layouts.len(), req.overrides.len(), req.exclude.len(), req.revisions.len()]
+        .into_iter()
+        .any(|n| n > MAX_SCAN_FRAMES)
+    {
         return Err(format!("scan exceeds {MAX_SCAN_FRAMES} entries"));
     }
     // Validate opaque JSON before serde can recursively clone it into the canonical request.

@@ -53,6 +53,7 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
         return Err(bad(COMMAND, "web split output is limited to 20 files; use merged output"));
     }
     for sheet in &mut plan.sheets {
+        sheet.issues.retain(|entry| entry.code != codes::FILE_RENAMED);
         sheet.status =
             if plan.issues.iter().any(|entry| entry.severity == Severity::Block) { SheetStatus::Blocked } else { derive_status(sheet, &[]) };
     }
@@ -114,6 +115,16 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
                 .and_then(|bytes| finish(&destinations, index, path.is_some(), &plan.job_id, std::slice::from_ref(sheet), &bytes));
             match result {
                 Ok(file) => {
+                    if let Some(name) = file.get("name").and_then(Value::as_str)
+                        && Path::new(name).file_stem().and_then(|stem| stem.to_str()) != Some(sheet.sheet_id.as_str())
+                    {
+                        sheet.issues.push(issue(
+                            Severity::Info,
+                            codes::FILE_RENAMED,
+                            format!("Sheet `{}` is published as `{name}`.", sheet.sheet_id),
+                            Some(&sheet.sheet_id),
+                        ));
+                    }
                     sheet.status = SheetStatus::Done;
                     files.push(file);
                 }

@@ -1,4 +1,5 @@
-use std::collections::BTreeMap;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet};
 
 use cadcraft_doc::{Drawing, Entity, EntityKind, MAX_BLOCK_DEPTH, Space, XrefStatus, entity_bounds};
 use cadcraft_geom::{Bounds2, Mat3};
@@ -50,7 +51,22 @@ fn approved(entry: &PreflightIssue, key: &str, audit: &[AuditEntry]) -> bool {
 }
 
 fn owned(code: &str) -> bool {
-    matches!(code, codes::XREF_MISSING | codes::XREF_UNLOADED | codes::XREF_MISSING_OUTSIDE | codes::XREF_SCAN_LIMIT)
+    matches!(
+        code,
+        codes::XREF_MISSING
+            | codes::XREF_UNLOADED
+            | codes::XREF_MISSING_OUTSIDE
+            | codes::XREF_SCAN_LIMIT
+            | codes::FONT_FALLBACK
+            | codes::FONT_MISSING
+            | codes::FONT_MAPPED
+            | codes::SHEET_ID_DUPLICATE
+            | codes::REVISION_OLD
+            | codes::REVISION_NEWER
+            | codes::TEMPLATE_SUPERSEDED
+            | codes::PLOT_STYLE
+            | codes::FILE_RENAMED
+    )
 }
 
 pub fn preflight(d: &Drawing, plan: &mut SheetPlan, ctx: &PreflightContext<'_>) {
@@ -107,9 +123,127 @@ pub fn preflight(d: &Drawing, plan: &mut SheetPlan, ctx: &PreflightContext<'_>) 
             }
         }
     }
+    check_metadata(d, plan, ctx);
     let blocked = plan.issues.iter().any(|entry| entry.severity == Severity::Block);
     for sheet in &mut plan.sheets {
         sheet.status = if blocked { SheetStatus::Blocked } else { derive_status(sheet, &[]) };
+    }
+}
+
+pub fn rev_cmp(mut a: &str, mut b: &str) -> Ordering {
+    fn segment(text: &str) -> (&str, &str, bool) {
+        let numeric = text.starts_with(|ch: char| ch.is_ascii_digit());
+        let end = text.find(|ch: char| ch.is_ascii_digit() != numeric).unwrap_or(text.len());
+        let (part, rest) = text.split_at(end);
+        (part, rest, numeric)
+    }
+    while !a.is_empty() && !b.is_empty() {
+        let (left, rest_a, left_numeric) = segment(a);
+        let (right, rest_b, right_numeric) = segment(b);
+        let order = if left_numeric && right_numeric {
+            // Length comparison avoids overflow for revision numbers of arbitrary size.
+            let left = left.trim_start_matches('0');
+            let right = right.trim_start_matches('0');
+            left.len().cmp(&right.len()).then_with(|| left.cmp(right))
+        } else {
+            left.chars().flat_map(char::to_lowercase).cmp(right.chars().flat_map(char::to_lowercase))
+        };
+        if order != Ordering::Equal {
+            return order;
+        }
+        a = rest_a;
+        b = rest_b;
+    }
+    a.is_empty().cmp(&b.is_empty()).reverse()
+}
+
+fn check_metadata(d: &Drawing, plan: &mut SheetPlan, ctx: &PreflightContext<'_>) {
+    for font in ctx.fonts {
+        let replacement = font.with.as_deref().unwrap_or("the built-in stroke font");
+        let message = format!("{} is drawn with {replacement}", font.font);
+        if font.mapped {
+            plan.issues.push(issue(Severity::Info, codes::FONT_MAPPED, message, None));
+        } else if font.state == cadcraft_fonts::FontState::Missing {
+            let code = if font.with.is_some() { codes::FONT_FALLBACK } else { codes::FONT_MISSING };
+            plan.issues.push(issue(Severity::Warn, code, message, None));
+        }
+    }
+    let mut counts = BTreeMap::<&str, usize>::new();
+    for sheet in &plan.sheets {
+        let count = counts.entry(&sheet.sheet_id).or_default();
+        *count = count.saturating_add(1);
+    }
+    let duplicates: BTreeSet<String> = counts.into_iter().filter(|(_, count)| *count > 1).map(|(id, _)| id.to_string()).collect();
+    let mut plot_styles = BTreeSet::new();
+    for sheet in &mut plan.sheets {
+        if duplicates.contains(&sheet.sheet_id) {
+            sheet.issues.push(issue(
+                Severity::Warn,
+                codes::SHEET_ID_DUPLICATE,
+                format!("Sheet id `{}` is used by more than one sheet.", sheet.sheet_id),
+                Some(&sheet.sheet_id),
+            ));
+        }
+        if let Some(template) = sheet.frame_template_id.as_ref().and_then(|id| ctx.registry.templates.iter().find(|template| &template.id == id)) {
+            if let Some(successor) = &template.superseded_by {
+                sheet.issues.push(issue(
+                    Severity::Warn,
+                    codes::TEMPLATE_SUPERSEDED,
+                    format!("Template `{}` is superseded by `{successor}`.", template.id),
+                    Some(&sheet.sheet_id),
+                ));
+            }
+            if let Some(expected) = ctx.revisions.get(&sheet.sheet_id) {
+                let revision = template
+                    .attributes
+                    .revision
+                    .iter()
+                    .find_map(|tag| {
+                        sheet.attributes.iter().find(|(key, value)| key.eq_ignore_ascii_case(tag) && !value.trim().is_empty()).map(|(_, v)| v.trim())
+                    })
+                    .unwrap_or("");
+                let (severity, code) = match rev_cmp(revision, expected.trim()) {
+                    Ordering::Less => (Severity::Warn, codes::REVISION_OLD),
+                    Ordering::Greater => (Severity::Info, codes::REVISION_NEWER),
+                    Ordering::Equal => (Severity::Pass, ""),
+                };
+                if severity != Severity::Pass {
+                    sheet.issues.push(issue(
+                        severity,
+                        code,
+                        format!("Revision `{revision}` compared with registered revision `{expected}`."),
+                        Some(&sheet.sheet_id),
+                    ));
+                }
+            }
+        } else if let Some(expected) = ctx.revisions.get(&sheet.sheet_id)
+            && rev_cmp("", expected.trim()) == Ordering::Less
+        {
+            sheet.issues.push(issue(
+                Severity::Warn,
+                codes::REVISION_OLD,
+                format!("Revision is missing; registered revision is `{expected}`."),
+                Some(&sheet.sheet_id),
+            ));
+        }
+        let space = sheet_space(d, sheet);
+        let table =
+            space.as_ref().and_then(Space::layout).and_then(|name| d.layout(name)).map(|layout| layout.page.plot_style_table.as_str()).unwrap_or("");
+        plot_styles.insert(if cadcraft_doc::no_plot_style_table(table) { "colors as displayed" } else { table });
+    }
+    if plot_styles.is_empty() {
+        plot_styles.insert("colors as displayed");
+    }
+    for table in plot_styles {
+        plan.issues.push(issue(Severity::Info, codes::PLOT_STYLE, table, None));
+    }
+}
+
+fn sheet_space(d: &Drawing, sheet: &Sheet) -> Option<Space> {
+    match &sheet.source {
+        SheetSource::Block { block_handle, .. } => cadcraft_doc::Handle::parse_hex(block_handle).and_then(|handle| d.space_of(handle)),
+        SheetSource::Window { .. } => Some(Space::Model),
+        SheetSource::Layout { name } => Some(Space::Paper(name.clone())),
     }
 }
 
@@ -198,24 +332,28 @@ fn overlaps(bounds: Bounds2, outline: &[[f64; 2]; 4]) -> bool {
 }
 
 fn intersects_sheet(d: &Drawing, sheet: &Sheet, reference: &Reference) -> bool {
+    intersects_bounds(d, sheet, &reference.space, reference.bounds)
+}
+
+fn intersects_bounds(d: &Drawing, sheet: &Sheet, space: &Space, bounds: Bounds2) -> bool {
     match &sheet.source {
         SheetSource::Block { block_handle, outline, .. } => {
-            let space = cadcraft_doc::Handle::parse_hex(block_handle).and_then(|handle| d.space_of(handle));
-            space.as_ref() == Some(&reference.space) && overlaps(reference.bounds, outline)
+            let owner = cadcraft_doc::Handle::parse_hex(block_handle).and_then(|handle| d.space_of(handle));
+            owner.as_ref() == Some(space) && overlaps(bounds, outline)
         }
-        SheetSource::Window { outline, .. } => reference.space == Space::Model && overlaps(reference.bounds, outline),
+        SheetSource::Window { outline, .. } => *space == Space::Model && overlaps(bounds, outline),
         SheetSource::Layout { name } => {
             let Some(layout) = d.layout(name) else { return false };
-            if reference.space == Space::Paper(name.clone()) {
+            if *space == Space::Paper(name.clone()) {
                 let page = &layout.page;
                 let (w, h) = if page.landscape {
                     (page.width_mm.max(page.height_mm), page.width_mm.min(page.height_mm))
                 } else {
                     (page.width_mm.min(page.height_mm), page.width_mm.max(page.height_mm))
                 };
-                return overlaps(reference.bounds, &[[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]]);
+                return overlaps(bounds, &[[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]]);
             }
-            reference.space == Space::Model
+            *space == Space::Model
                 && layout.entities.iter().take(MAX_XREF_ENTITIES).any(|entity| {
                     let EntityKind::Viewport(viewport) = &entity.kind else { return false };
                     if !viewport.on || !d.is_visible(entity) {
@@ -227,12 +365,146 @@ fn intersects_sheet(d: &Drawing, sheet: &Sheet, reference: &Reference) -> bool {
                         return false;
                     }
                     let center = viewport.view_center;
-                    let bounds = Bounds2::new(
+                    let view = Bounds2::new(
                         center - cadcraft_geom::Vec2::new(half_width, half_height),
                         center + cadcraft_geom::Vec2::new(half_width, half_height),
                     );
-                    overlaps(reference.bounds, &bounds.corners().map(|point| [point.x, point.y]))
+                    overlaps(bounds, &view.corners().map(|point| [point.x, point.y]))
                 })
         }
+    }
+}
+
+pub(crate) fn styles_on_sheets(d: &Drawing, plan: &SheetPlan) -> Result<BTreeSet<String>, String> {
+    let mut walk = UsedStyles { names: BTreeSet::new(), remaining: MAX_XREF_ENTITIES };
+    if plan.sheets.is_empty() {
+        return Ok(walk.names);
+    }
+    if d.layouts.len() > MAX_XREF_ENTITIES {
+        return Err("Font traversal exceeded its safe layout limit.".into());
+    }
+    for (space, store) in
+        std::iter::once((Space::Model, &d.model)).chain(d.layouts.iter().map(|layout| (Space::Paper(layout.name.clone()), &layout.entities)))
+    {
+        for entity in store.iter() {
+            walk.visit(d, plan, entity, &space, Mat3::IDENTITY, 0)?;
+        }
+    }
+    Ok(walk.names)
+}
+
+struct UsedStyles {
+    names: BTreeSet<String>,
+    remaining: usize,
+}
+
+impl UsedStyles {
+    fn consume(&mut self) -> Result<(), String> {
+        self.remaining = self.remaining.checked_sub(1).ok_or_else(|| "Font traversal exceeded its safe entity limit.".to_string())?;
+        Ok(())
+    }
+
+    fn add(&mut self, name: &str) {
+        self.names.insert(name.to_ascii_lowercase());
+    }
+
+    fn visit(&mut self, d: &Drawing, plan: &SheetPlan, entity: &Entity, space: &Space, parent: Mat3, depth: usize) -> Result<(), String> {
+        self.consume()?;
+        if !d.is_visible(entity) {
+            return Ok(());
+        }
+        let local = entity_bounds(d, entity, depth);
+        let bounds = Bounds2::from_points(local.corners().map(|point| parent.apply(point)));
+        if !local.is_empty() && plan.sheets.iter().any(|sheet| intersects_bounds(d, sheet, space, bounds)) {
+            match &entity.kind {
+                EntityKind::Text(text) => self.add(&text.style),
+                EntityKind::MText(text) => self.add(&text.style),
+                EntityKind::Insert(insert) => {
+                    for attribute in &insert.attribs {
+                        self.consume()?;
+                        let mode = d.header.i64("ATTMODE", 1);
+                        if mode != 0 && (!attribute.invisible || mode == 2) {
+                            if let Some(text) = attribute.multiline_text() {
+                                self.add(&text.style);
+                            } else {
+                                self.add(&attribute.text.style);
+                            }
+                        }
+                    }
+                }
+                EntityKind::Dimension(dimension) => {
+                    if dimension.block.as_ref().and_then(|name| d.block(name)).is_none() || depth >= MAX_BLOCK_DEPTH {
+                        let style = d.dim_style(&dimension.style).cloned().unwrap_or_default().with_overrides(&dimension.overrides);
+                        self.add(&style.text_style);
+                    }
+                }
+                EntityKind::Tolerance(tolerance) => {
+                    self.add(&d.dim_style(&tolerance.style).cloned().unwrap_or_default().text_style);
+                }
+                EntityKind::MLeader(leader) => {
+                    if let Some(text) = &leader.text {
+                        self.add(&text.style);
+                    }
+                }
+                EntityKind::Table(table) => {
+                    let style = d.table_styles.iter().find(|style| style.name.eq_ignore_ascii_case(&table.style)).cloned().unwrap_or_default();
+                    for (row, cells) in table.cells.iter().enumerate() {
+                        self.consume()?;
+                        for cell in cells {
+                            self.consume()?;
+                            let name = if cell.style.trim().is_empty() { table.row_style(row) } else { &cell.style };
+                            self.add(&style.cell_style(name).text_style);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let EntityKind::Dimension(dimension) = &entity.kind
+            && let Some(block) = dimension.block.as_ref().and_then(|name| d.block(name))
+            && depth < MAX_BLOCK_DEPTH
+        {
+            for child in block.entities.iter() {
+                self.visit(d, plan, child, space, parent, depth + 1)?;
+            }
+        }
+        let insert = match &entity.kind {
+            EntityKind::Insert(insert) => Some(insert),
+            EntityKind::MLeader(leader) => leader.block.as_ref(),
+            _ => None,
+        };
+        if let Some(insert) = insert {
+            let Some(block) = d.block(&insert.block) else { return Ok(()) };
+            if block.xref_path.is_some() && block.xref_status != XrefStatus::Loaded {
+                return Ok(());
+            }
+            if depth >= MAX_BLOCK_DEPTH {
+                // The renderer also omits block contents beyond this depth.
+                return Ok(());
+            }
+            let hidden = super::detect::insert_hidden(d, entity);
+            if hidden.len() > MAX_XREF_ENTITIES {
+                return Err("Font traversal exceeded its safe visibility limit.".into());
+            }
+            for row in 0..insert.rows.clamp(1, 10_000) {
+                for column in 0..insert.cols.clamp(1, 10_000) {
+                    self.consume()?;
+                    let offset =
+                        cadcraft_geom::Vec2::new(insert.col_spacing * f64::from(column), insert.row_spacing * f64::from(row)).rotate(insert.rotation);
+                    let transform = parent.then_before(Mat3::translate(offset).then_before(insert.transform(block.base.xy())));
+                    if ![transform.a, transform.b, transform.c, transform.d, transform.e, transform.f].into_iter().all(f64::is_finite) {
+                        return Err("Font traversal found a non-finite block transform.".into());
+                    }
+                    for child in block.entities.iter() {
+                        if hidden.binary_search(&child.handle).is_ok() || matches!(&child.kind, EntityKind::AttDef(_)) {
+                            self.consume()?;
+                        } else {
+                            self.visit(d, plan, child, space, transform, depth + 1)?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }

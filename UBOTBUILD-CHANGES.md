@@ -48,6 +48,10 @@ This branch (`tuananhfr`) is UbotCAD, the UbotBuild build of [CADCraft](https://
 
 ## V2.2 GĐ2
 
+- UBPLOT preflight reports missing/fallback fonts as plan-level WARN and explicit font mappings as INFO, restricted to styles used on the planned sheets. Cached `last` scans refresh process-wide font settings. Font reporting through FONTS keeps its existing JSON output.
+- Duplicate sheet ids warn on every copy. The optional `revisions` register compares template revision attributes in natural order, warning on old/missing revisions and reporting newer revisions as INFO. Superseded templates warn with their replacement id. Plan-level `PLOT_STYLE` reports each selected table or colors as displayed.
+- Successful split PDF delivery reports INFO `FILE_RENAMED` with the actual filename whenever its stem differs from the sheet id. Repeat publishes replace the diagnostic; merged publish and rescanning clear stale rename information.
+
 - UBPLOT preflight checks xrefs against sheet outlines and layout viewport model bounds, with nested transforms and dynamic visibility. Essential missing references block with `XREF_MISSING`; unloaded references warn with `XREF_UNLOADED`; missing references outside all sheets report plan-level INFO `XREF_MISSING_OUTSIDE`. Web missing-reference messages explain that external references are not loaded there. Empty definitions have no usable AABB and remain plan-level diagnostics under the specified overlap rule.
 - Clean and INFO-only UBPLOT sheets now scan as `READY`; unapproved WARNs need preview and BLOCKs remain blocked, including paper/scale errors. `derive_status` verifies WARN audit fingerprints and is the path to `READY`. Scan summary now counts sheets by verdict with exactly `pass`, `info`, `warn`, `block` keys. Repeated preflight replaces its own diagnostics; traversal limits block with `XREF_SCAN_LIMIT`.
 

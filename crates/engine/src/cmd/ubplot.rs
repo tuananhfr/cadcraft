@@ -9,7 +9,7 @@ use super::{CommandSpec, has_doc};
 use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::ids::sha256_hex;
 use crate::sheetplan::plan::{build_plan_with_context, validate_request_value};
-use crate::sheetplan::preflight::{PreflightContext, verdict};
+use crate::sheetplan::preflight::{PreflightContext, preflight, styles_on_sheets, verdict};
 use crate::sheetplan::{FrameRegistry, ScanMode, ScanRequest, Severity, SheetPlan};
 use crate::{EngineError, Result, Session};
 
@@ -46,7 +46,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .noundo()
             .enabled(has_doc),
         CommandSpec::new("ubplot.scan", "Scan Plot Frames", run_scan)
-            .params("{mode: block|window|layout|last|plan, handles?, windows?: [[[x1,y1],[x2,y2]] | [[x,y]×4]], layouts?, paper?, scale?: \"1:100\"|\"fit\", overrides?: {sheet_key: {paper?, scale?, window?, sheetId?}}, exclude?: [sheet_key], plan? (mode plan)} → SheetPlan + summary")
+            .params("{mode: block|window|layout|last|plan, handles?, windows?: [[[x1,y1],[x2,y2]] | [[x,y]×4]], layouts?, paper?, scale?: \"1:100\"|\"fit\", revisions?: {sheet_id: revision}, overrides?: {sheet_key: {paper?, scale?, window?, sheetId?}}, exclude?: [sheet_key], plan? (mode plan)} → SheetPlan + summary")
             .noundo()
             .enabled(has_doc),
         CommandSpec::new("ubplot.templates", "Plot Frame Templates", run_templates)
@@ -81,7 +81,7 @@ pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
     } else {
         (incoming, None, false)
     };
-    let plan = if let Some(plan) = reused {
+    let mut plan = if let Some(plan) = reused {
         plan
     } else {
         let hash = source_hash(s)?;
@@ -89,7 +89,7 @@ pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
             registry: &s.ubplot.registry,
             device: None,
             device_missing: false,
-            revisions: &std::collections::BTreeMap::new(),
+            revisions: &request.revisions,
             fonts: &[],
             web: cfg!(target_arch = "wasm32"),
         };
@@ -100,6 +100,21 @@ pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
         }
         plan
     };
+    // A drawing too large to walk still scans; every style then counts as used, so no font warning is lost.
+    let used = styles_on_sheets(s.doc()?, &plan).ok();
+    let fonts: Vec<_> = super::fonts::style_status(s.doc()?)
+        .into_iter()
+        .filter(|font| used.as_ref().is_none_or(|used| used.contains(&font.style.to_ascii_lowercase())))
+        .collect();
+    let ctx = PreflightContext {
+        registry: &s.ubplot.registry,
+        device: None,
+        device_missing: false,
+        revisions: &request.revisions,
+        fonts: &fonts,
+        web: cfg!(target_arch = "wasm32"),
+    };
+    preflight(s.doc()?, &mut plan, &ctx);
     let result = plan_result(&plan, rescanned)?;
     s.ubplot.last = Some(LastPlan { doc_uid: uid, revision, request, plan });
     s.ubplot.review = false;
