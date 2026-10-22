@@ -6,7 +6,7 @@ use cadcraft_ui_egui::wsprofile::store::MemoryStore;
 use cadcraft_ui_egui::{CadApp, Services, customize, ribbon, toolbars};
 use egui::{Key, Modifiers, Pos2, vec2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::json;
 
 fn test_lock() -> MutexGuard<'static, ()> {
@@ -81,13 +81,18 @@ fn on_command<R>(h: &Harness<'_, CadApp>, command: &str, action: impl FnOnce(&eg
         let label = cadcraft_ui_egui::i18n::t(&label).to_string();
         return action(&h.query_all_by_label(&label).next().unwrap());
     }
-    // The tab list above has a "Hatch" row too; command rows follow their heading.
-    let heading = h.get_by_label("Ribbon commands").rect().bottom();
+    // Tab rows precede command rows (including "Hatch"); scrolling can move a command above its heading.
     let label = toolbars::resolve(command).label;
-    action(&h.query_all_by_label(&label).find(|node| node.rect().top() >= heading).unwrap())
+    let label = cadcraft_ui_egui::i18n::t(&label).to_string();
+    action(
+        &h.query_all_by_role_and_label(egui::accesskit::Role::Button, &label)
+            .next_back()
+            .unwrap_or_else(|| panic!("no Customize command {command} ({label})")),
+    )
 }
 
 fn focus_command(h: &mut Harness<'_, CadApp>, command: &str) {
+    scroll_dialog_to_end(h);
     on_command(h, command, |node| node.focus());
     h.run_steps(5);
 }
@@ -124,7 +129,6 @@ fn begin_drag(h: &mut Harness<'_, CadApp>, from: Pos2, to: Pos2) {
 
 fn drag_command(h: &mut Harness<'_, CadApp>, from: usize, to: usize) {
     let before = commands(h.state(), "draw");
-    scroll_dialog_to_end(h);
     focus_command(h, &before[to]);
     let source = command_rect(h, &before[from]).center();
     let target = command_rect(h, &before[to]);
@@ -162,6 +166,25 @@ fn eight_commands_reorder_by_drag_h01() {
     h.state_mut().ui.dialog = None;
     h.run_steps(5);
     assert_rendered_order(&h, &expected);
+}
+
+#[test]
+fn clicking_a_command_row_selects_it_before_reordering() {
+    let _guard = test_lock();
+    let mut h = harness(familiar());
+    let before = commands(h.state(), "draw");
+    scroll_dialog_to_end(&mut h);
+    on_command(&h, &before[1], |node| node.click());
+    h.run_steps(3);
+    on_command(&h, &before[1], |node| assert_eq!(node.accesskit_node().toggled(), Some(egui::accesskit::Toggled::True)));
+    assert_eq!(commands(h.state(), "draw"), before);
+    let steps = h.state().ws.history.undo_len();
+    h.get_by_label("Down").click();
+    h.run_steps(5);
+    let mut expected = before;
+    expected.swap(1, 2);
+    assert_eq!(commands(h.state(), "draw"), expected);
+    assert_eq!(h.state().ws.history.undo_len(), steps + 1);
 }
 
 #[test]

@@ -176,6 +176,9 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
                         let width = screen.width().min(1000.0);
                         let frame = egui::Frame::popup(ui.style());
                         let margin = frame.total_margin().sum();
+                        let content_width = (width - margin.x).max(1.0);
+                        // Popup width excludes its frame, and a rightmost tab still needs room for the whole flyout.
+                        let left = response.rect.left().clamp(screen.left(), (screen.right() - width).max(screen.left()));
                         let close_behavior = if matches!(open, Some(egui::SetOpenCommand::Bool(true))) {
                             egui::PopupCloseBehavior::IgnoreClicks
                         } else {
@@ -184,13 +187,16 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
                         egui::Popup::from_response(response)
                             .id(popup_id)
                             .open_memory(open)
+                            .at_position(egui::pos2(left, response.rect.bottom()))
                             .align(egui::RectAlign::BOTTOM_START)
                             .align_alternatives(&[])
-                            .width(width)
+                            .gap(0.0)
+                            .width(content_width)
                             .frame(frame)
                             .close_behavior(close_behavior)
                             .show(|ui| {
-                                ui.set_max_size(vec2((width - margin.x).max(1.0), (below - margin.y).max(1.0)));
+                                ui.set_width(content_width);
+                                ui.set_max_height((below - margin.y).max(1.0));
                                 flyout(ui, app, index);
                             });
                         if was_open && !egui::Popup::is_id_open(ui.ctx(), popup_id) && ui.input(|input| input.key_pressed(Key::Escape)) {
@@ -349,18 +355,18 @@ fn ribbon_context_menu(ui: &mut egui::Ui, app: &mut CadApp, anchor: &egui::Respo
 
 pub(crate) fn flyout(ui: &mut egui::Ui, app: &mut CadApp, tab: usize) {
     let Some(tab) = super::visible_tabs(app).get(tab).cloned() else { return };
-    egui::ScrollArea::both()
+    egui::ScrollArea::vertical()
         .id_salt((&tab.id, "flyout"))
-        .min_scrolled_width(1.0)
         .min_scrolled_height(1.0)
         .max_width(ui.available_width())
         .max_height(ui.available_height())
         .show(ui, |ui| {
-            ui.horizontal_top(|ui| {
-                ui.spacing_mut().item_spacing.x = GROUP_GAP;
+            let available = ui.available_width();
+            ui.with_layout(Layout::left_to_right(Align::Min).with_main_wrap(true), |ui| {
+                ui.spacing_mut().item_spacing = vec2(GROUP_GAP, GROUP_GAP);
                 for group in &tab.groups {
                     let columns = column_widths(ui, group);
-                    expanded_group(app, ui, &tab, group, &columns, group_width(&columns));
+                    expanded_group(app, ui, &tab, group, &columns, group_width(&columns).min(available));
                 }
             });
         });
@@ -516,15 +522,31 @@ fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
 }
 
 fn expanded_group(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGroup, columns: &[f32], width: f32) {
+    let inner_width = (width - 2.0 * GROUP_PADDING).max(COLUMN_WIDTH);
+    let mut left = 0.0;
+    let mut top = 0.0;
+    // Custom groups may be wider than the screen; wrap their columns as well as whole groups.
+    let positions: Vec<_> = columns
+        .iter()
+        .map(|column| {
+            let column = column.min(inner_width);
+            if left > 0.0 && left + column > inner_width {
+                left = 0.0;
+                top += COLUMNS_HEIGHT + ROW_GAP;
+            }
+            let position = (left, top, column);
+            left += column + COLUMN_GAP;
+            position
+        })
+        .collect();
+    let height = top + COLUMNS_HEIGHT;
     ui.push_id((&tab.id, &group.id), |ui| {
-        ui.allocate_ui_with_layout(vec2(width, GROUP_HEIGHT), Layout::top_down(Align::Min), |ui| {
+        ui.allocate_ui_with_layout(vec2(width, height + ROW_GAP + LABEL_HEIGHT), Layout::top_down(Align::Min), |ui| {
             ui.spacing_mut().item_spacing.y = ROW_GAP;
-            let (rect, _) = ui.allocate_exact_size(vec2(width, COLUMNS_HEIGHT), egui::Sense::hover());
-            let mut left = rect.left() + GROUP_PADDING;
+            let (rect, _) = ui.allocate_exact_size(vec2(width, height), egui::Sense::hover());
             for (column, commands) in group.commands.chunks(ROWS).enumerate() {
-                let column_width = columns.get(column).copied().unwrap_or(COLUMN_WIDTH);
-                let rect = egui::Rect::from_min_size(egui::pos2(left, rect.top()), vec2(column_width, COLUMNS_HEIGHT));
-                left += column_width + COLUMN_GAP;
+                let (left, top, column_width) = positions.get(column).copied().unwrap_or((0.0, 0.0, COLUMN_WIDTH));
+                let rect = egui::Rect::from_min_size(rect.min + vec2(GROUP_PADDING + left, top), vec2(column_width, COLUMNS_HEIGHT));
                 ui.scope_builder(egui::UiBuilder::new().max_rect(rect).layout(Layout::top_down(Align::Min)), |ui| {
                     ui.set_min_size(vec2(column_width, COLUMNS_HEIGHT));
                     for id in commands {
