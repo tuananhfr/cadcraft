@@ -20,6 +20,7 @@ struct State {
 
 pub(super) enum Action {
     Rescan,
+    Profile,
     Edit(Box<ScanRequest>),
     Pick(String),
     Publish,
@@ -95,6 +96,9 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
             ui.separator();
             ui.heading(crate::tl!("Publish"));
             ui.horizontal_wrapped(|ui| {
+                if ui.button(crate::tl!("Profile…")).clicked() {
+                    action = Some(Action::Profile);
+                }
                 ui.radio_value(&mut state.split, false, crate::tl!("Merged PDF"));
                 ui.radio_value(&mut state.split, true, crate::tl!("One PDF per sheet"));
                 let reason = publish_reason(&plan, state.split);
@@ -132,6 +136,9 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
             Ok(_) => state.error = None,
             Err(error) => state.error = Some(error),
         },
+        Some(Action::Profile) => {
+            let _ = app.run("ui.ubplot.profile", Value::Null);
+        }
         Some(Action::Pick(key)) => super::pick_window(app, ctx, key),
         Some(Action::Approve(params)) => match app.run("ubplot.approve", params) {
             Ok(_) => state.error = None,

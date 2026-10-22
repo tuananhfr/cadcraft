@@ -15,6 +15,7 @@ const RECENT_CLEAR: &str = "ui.recent.clear";
 
 /// UI-only commands: (id, label, menu path, shortcut).
 pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
+    ("ui.ubplot.profile", "Profile…", &[], None),
     ("ui.fullscreen", "Full Screen", &["View", "Full Screen"], None),
     ("ui.focusmode", "Focus Mode", &["View", "Focus Mode"], None),
     ("cleanscreenon", "Clean Screen On", &[], None),

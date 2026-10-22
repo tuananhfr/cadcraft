@@ -1988,3 +1988,23 @@ ribbon	Check	Перевірка
 	Always	Завжди
 	{name} was not loaded	Файл {name} не завантажено
 	Enter name of LISP file to load	Введіть ім’я файлу LISP для завантаження
+	Print Profile	Профіль друку
+	Profile…	Профіль…
+	Edit level	Рівень редагування
+	From level	З рівня
+	Platform	Платформа
+	Project	Проєкт
+	Sheet Set	Комплект аркушів
+	Drawing	Креслення
+	Device	Пристрій
+	Printer	Принтер
+	Paper	Папір
+	Sheet order	Порядок аркушів
+	Frame templates	Шаблони рамок
+	Naming	Іменування
+	Output mode	Режим виведення
+	Pages per file	Сторінок у файлі
+	PDF layers	Шари PDF
+	Text as geometry	Текст як геометрія
+	Lineweights	Товщини ліній
+	Retry limit	Ліміт повторів

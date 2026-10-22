@@ -7,6 +7,8 @@ Status describes desktop; commands requiring `xref` are unsupported on web.
 
 UI-only focus/fullscreen/safe-mode ids: `ui.fullscreen`, `ui.focusmode`, `cleanscreenon`, `cleanscreenoff`, `ui.workspace.safemode` (registered in `ui-egui::menus::UI_COMMANDS`).
 
+UI-only print profile dialog: `ui.ubplot.profile` (registered in `ui-egui::menus::UI_COMMANDS`).
+
 UI-only recovery status: `ui.recovery.status` (registered in `ui-egui::menus::UI_COMMANDS`).
 
 | stable_id | namespaced_id | category | contexts | status | risk | aliases |
@@ -412,6 +414,7 @@ UI-only recovery status: `ui.recovery.status` (registered in `ui-egui::menus::UI
 | `ubplot.approve` | `cad.other.ubplot.approve` | Other | model, paper | available | edit |  |
 | `ubplot.folder` | `cad.other.ubplot.folder` | Other | model, paper | available | file |  |
 | `ubplot.jobs` | `cad.other.ubplot.jobs` | Other | model, paper | available | file |  |
+| `ubplot.profile` | `cad.other.ubplot.profile` | Other | model, paper | available | file |  |
 | `ubplot.publish` | `cad.other.ubplot.publish` | Other | model, paper | available | file |  |
 | `ubplot.report` | `cad.other.ubplot.report` | Other | model, paper | available | file |  |
 | `ubplot.scan` | `cad.other.ubplot.scan` | Other | model, paper | available | read |  |

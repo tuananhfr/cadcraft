@@ -17,7 +17,17 @@ const COMMAND: &str = "ubplot.publish";
 const MAX_PAGES: usize = cadcraft_doc::MAX_PLOT_PAGES;
 
 pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
-    crate::sheetplan::plan::validate_request_value(params).map_err(|error| bad(COMMAND, error))?;
+    let (resolved, effective) = super::profile::resolve_params(s, params, COMMAND)?;
+    let params = &resolved;
+    let profile_id = super::profile::profile_id(s)?;
+    let pages_per_file = params
+        .get("pagesPerFile")
+        .and_then(Value::as_u64)
+        .and_then(|pages| usize::try_from(pages).ok())
+        .filter(|pages| (1..=MAX_PAGES).contains(pages))
+        .ok_or_else(|| bad(COMMAND, "pages_per_file is outside the PDF page limits"))?;
+    let naming = params.get("naming").and_then(Value::as_str).ok_or_else(|| bad(COMMAND, "naming must be a string"))?;
+    crate::sheetplan::profile::naming_tokens(naming).map_err(|error| bad(COMMAND, error))?;
     let output = text(params, "output")?.unwrap_or("merged");
     if !matches!(output, "merged" | "split") {
         return Err(bad(COMMAND, "output must be merged or split"));
@@ -39,6 +49,7 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     if let Some(last) = s.ubplot.last.as_ref().filter(|last| last.doc_uid == uid) {
         plan.audit = merge_audit(&last.plan.audit, &plan.audit).map_err(|error| bad(COMMAND, error))?;
     }
+    super::profile::apply_plan(s.doc()?, &mut plan, params, &effective, COMMAND)?;
     validate_issue_approvals(&plan).map_err(|error| bad(COMMAND, error))?;
     let previous = plan.clone();
     let device = plan.device.as_deref().and_then(crate::cmd::plotters::find_device);
@@ -70,8 +81,8 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
             total.checked_add(sheet.split.as_ref().filter(|split| split.approved).map_or(1, |split| split.pieces.len()))
         })
         .ok_or_else(|| bad(COMMAND, "page count overflow"))?;
-    if output == "merged" && page_count > MAX_PAGES {
-        return Err(bad(COMMAND, format!("at most {MAX_PAGES} pages fit in merged output; publish it in parts (split)")));
+    if page_count > crate::sheetplan::queue::MAX_JOB_SHEETS {
+        return Err(bad(COMMAND, "output exceeds supported page limits"));
     }
     #[cfg(target_arch = "wasm32")]
     if output == "split" && plan.sheets.len() > 20 {
@@ -82,13 +93,50 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     }
     refresh_status(&mut plan);
     let names = split_names(&plan.sheets);
-    let base = Path::new(path.unwrap_or("Drawing.pdf"));
-    let destinations: Vec<PathBuf> = if output == "merged" {
-        vec![base.to_path_buf()]
+    let suggested = if naming == "{stem}" {
+        "Drawing.pdf".into()
     } else {
-        let stem = base.file_stem().and_then(|name| name.to_str()).unwrap_or("Drawing");
-        names.iter().map(|name| base.with_file_name(format!("{stem}-{name}.pdf"))).collect()
+        let title = &s.state()?.title;
+        let stem = Path::new(title).file_stem().and_then(|stem| stem.to_str()).unwrap_or("Drawing");
+        format!("{stem}.pdf")
     };
+    let base = Path::new(path.unwrap_or(&suggested));
+    let mut groups: Vec<std::ops::Range<usize>> = Vec::new();
+    let mut group_pages = 0_usize;
+    for (index, sheet) in plan.sheets.iter().enumerate() {
+        let count = sheet.split.as_ref().filter(|split| split.approved).map_or(1, |split| split.pieces.len());
+        if count > pages_per_file {
+            return Err(bad(COMMAND, "a sheet exceeds pages_per_file; increase the page limit"));
+        }
+        if output == "split" || groups.is_empty() || group_pages.saturating_add(count) > pages_per_file {
+            groups.push(index..index + 1);
+            group_pages = count;
+        } else if let Some(group) = groups.last_mut() {
+            group.end = index + 1;
+            group_pages += count;
+        }
+    }
+    let mut destinations = Vec::with_capacity(groups.len());
+    let mut used_names = BTreeSet::new();
+    let stem = base.file_stem().and_then(|name| name.to_str()).unwrap_or("Drawing");
+    for (index, group) in groups.iter().enumerate() {
+        let sheet = plan.sheets.get(group.start).ok_or_else(|| bad(COMMAND, "missing output sheet"))?;
+        let destination = if naming != "{stem}" {
+            let name = crate::sheetplan::profile::output_name(naming, stem, sheet, index + 1).map_err(|error| bad(COMMAND, error))?;
+            base.with_file_name(name)
+        } else if output == "merged" && groups.len() == 1 {
+            base.to_path_buf()
+        } else if output == "merged" {
+            base.with_file_name(format!("{stem}-{:03}.pdf", index + 1))
+        } else {
+            let name = names.get(index).ok_or_else(|| bad(COMMAND, "missing output name"))?;
+            base.with_file_name(format!("{stem}-{name}.pdf"))
+        };
+        if !used_names.insert(destination.to_string_lossy().to_lowercase()) {
+            return Err(bad(COMMAND, "output file names collide; include {part}, {order} or {sheet_id} in naming"));
+        }
+        destinations.push(destination);
+    }
     #[cfg(not(target_arch = "wasm32"))]
     if path.is_some()
         && let Some(source) = s.state()?.path.as_deref()
@@ -115,23 +163,28 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     let plot = io().and_then(|hooks| hooks.plot).ok_or_else(|| bad(COMMAND, "PDF plotting is not available in this build"))?;
     let mut files = Vec::new();
     if output == "merged" {
-        let rendered = plan.sheets.iter().map(|sheet| sheet_pages(s, sheet)).collect::<std::result::Result<Vec<_>, _>>().and_then(|pages| {
-            plot(s.doc().map_err(|error| error.to_string())?, &Space::Model, &options(pages.into_iter().flatten().collect(), title))
-        });
-        let result = rendered.and_then(|bytes| finish(&destinations, 0, path.is_some(), &plan.job_id, &plan.sheets, &bytes));
-        match result {
-            Ok(file) => {
-                files.push(file);
-                for sheet in &mut plan.sheets {
-                    sheet.status = SheetStatus::Done;
+        for (index, group) in groups.iter().enumerate() {
+            let sheets = plan.sheets.get(group.clone()).ok_or_else(|| bad(COMMAND, "missing output group"))?;
+            let rendered = sheets.iter().map(|sheet| sheet_pages(s, sheet)).collect::<std::result::Result<Vec<_>, _>>().and_then(|pages| {
+                plot(s.doc().map_err(|error| error.to_string())?, &Space::Model, &options(pages.into_iter().flatten().collect(), title))
+            });
+            let result = rendered.and_then(|bytes| finish(&destinations, index, path.is_some(), &plan.job_id, sheets, &bytes));
+            match result {
+                Ok(file) => {
+                    files.push(file);
+                    if let Some(sheets) = plan.sheets.get_mut(group.clone()) {
+                        for sheet in sheets {
+                            sheet.status = SheetStatus::Done;
+                        }
+                    }
                 }
-            }
-            Err(error) => {
-                for sheet in &mut plan.sheets {
-                    failed(sheet, &error);
+                Err(error) => {
+                    for sheet in plan.sheets.iter_mut().filter(|sheet| sheet.status != SheetStatus::Done) {
+                        failed(sheet, &error);
+                    }
+                    remember(s, &plan, supplied)?;
+                    return Err(bad(COMMAND, format!("{error}; plan={}", serialize(&plan)?)));
                 }
-                remember(s, &plan, supplied)?;
-                return Err(bad(COMMAND, format!("{error}; plan={}", serialize(&plan)?)));
             }
         }
     } else {
@@ -171,7 +224,16 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
         })
         .collect();
     remember(s, &plan, supplied)?;
-    Ok(json!({"plan": plan, "files": files, "failed": failed}))
+    let manifest_files: Vec<_> = files
+        .iter()
+        .map(|file| {
+            json!({
+                "name": file.get("name"), "sheets": file.get("sheets"), "bytes": file.get("bytes"), "sha256": file.get("sha256")
+            })
+        })
+        .collect();
+    Ok(json!({"plan": plan, "files": files, "failed": failed,
+        "manifest": {"profile_id": profile_id, "profile_version": effective.version, "files": manifest_files}}))
 }
 
 fn text<'a>(params: &'a Value, key: &str) -> Result<Option<&'a str>> {

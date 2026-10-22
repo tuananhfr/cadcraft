@@ -298,7 +298,7 @@ fn parse_scale(text: &str, unit_mm: f64) -> Result<PlotScale, String> {
     PlotScale::from_real_ratio(text, unit_mm).ok_or_else(|| "scale must be fit or a finite positive ratio".into())
 }
 
-fn resolve_sheet_paper(d: &Drawing, sheet: &mut Sheet, selected: Option<&str>, unit_mm: f64) -> Result<(), String> {
+pub(crate) fn resolve_sheet_paper(d: &Drawing, sheet: &mut Sheet, selected: Option<&str>, unit_mm: f64) -> Result<(), String> {
     let [existing_w, existing_h] = sheet.paper_mm;
     let existing = || {
         sheet

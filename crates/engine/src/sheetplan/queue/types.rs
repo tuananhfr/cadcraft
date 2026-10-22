@@ -66,6 +66,8 @@ pub struct PrintJob {
     pub profile_id: Option<String>,
     #[serde(default)]
     pub profile_version: Option<String>,
+    #[serde(default)]
+    pub naming: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -180,6 +182,7 @@ impl PrintJob {
             printer: None,
             profile_id: None,
             profile_version: None,
+            naming: None,
         })
     }
 }
