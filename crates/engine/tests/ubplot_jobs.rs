@@ -304,7 +304,7 @@ fn synchronous_publish_retains_legacy_result() {
     let mut s = session(frames_drawing(1));
     scan(&mut s);
     let result = s.execute("ubplot.publish", &json!({"background": false})).unwrap();
-    assert_eq!(result.as_object().unwrap().keys().cloned().collect::<Vec<_>>(), ["failed", "files", "plan"]);
+    assert_eq!(result.as_object().unwrap().keys().cloned().collect::<Vec<_>>(), ["failed", "files", "manifest", "plan"]);
     assert!(result["files"][0]["data"].is_string());
     assert!(s.take_queued_job().is_none());
     assert!(s.job_store_mut().is_none());

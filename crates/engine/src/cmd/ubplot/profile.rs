@@ -247,10 +247,12 @@ pub(super) fn resolve_params(s: &mut Session, params: &Value, command: &str) -> 
     crate::sheetplan::plan::validate_request_value(params).map_err(|error| bad(command, error))?;
     let eff = s.effective_print_profile();
     let settings = serde_json::to_value(&eff.settings).map_err(|error| bad(command, error.to_string()))?;
-    if let Some(value) = params.get("plan") {
+    if let Some(value) = params.get("plan").filter(|value| !value.is_null()) {
         let plan = crate::sheetplan::parse_plan(value).map_err(|error| bad(command, error))?;
         check_plan(s.doc()?, &plan, &eff, command)?;
     }
+    let scan_mode = params.get("mode").and_then(Value::as_str).filter(|_| command == "ubplot.scan");
+    let (rescan, plan_scan) = (scan_mode == Some("last"), scan_mode == Some("plan"));
     let mut result = params.clone();
     let plan_device = params.get("plan").and_then(|plan| plan.get("device")).filter(|value| !value.is_null()).cloned().or_else(|| {
         if command != "ubplot.publish" || params.get("plan").is_some() {
@@ -280,7 +282,15 @@ pub(super) fn resolve_params(s: &mut Session, params: &Value, command: &str) -> 
                 refuse_change(&eff, &format!("/{field}"), command)?;
             }
         }
-        let value = aliases.iter().find_map(|alias| fields.get(*alias)).unwrap_or(default).clone();
+        // A `last` rescan keeps its stored request and a plan scan keeps the plan's device; Platform paper/scale defaults
+        // would override what the scan detects, so only a level above Platform seeds them.
+        let keeps_request = matches!(field, "device" | "paper" | "plot_scale") && rescan || field == "device" && plan_scan;
+        let detected =
+            matches!(field, "paper" | "plot_scale") && eff.origin.get(&format!("/{field}")).is_none_or(|level| *level == ProfileLevel::Platform);
+        let seeded = !keeps_request && !detected;
+        let Some(value) = aliases.iter().find_map(|alias| fields.get(*alias)).cloned().or_else(|| seeded.then(|| default.clone())) else {
+            continue;
+        };
         if let Some(alias) = aliases.first()
             && !value.is_null()
         {
