@@ -7,6 +7,14 @@ use serde_json::{Value, json};
 
 use crate::CadApp;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyPlatform {
+    Desktop,
+    Web,
+}
+
+pub const CURRENT: KeyPlatform = if cfg!(target_arch = "wasm32") { KeyPlatform::Web } else { KeyPlatform::Desktop };
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KeyCombo {
     pub ctrl: bool,
@@ -59,6 +67,10 @@ pub fn keyboard_shortcut(k: &KeyCombo) -> KeyboardShortcut {
 
 /// Commas preserve the original table's alternative keys for REDO and ISOPLANE.
 pub fn defaults() -> BTreeMap<String, String> {
+    defaults_for(CURRENT)
+}
+
+pub fn defaults_for(platform: KeyPlatform) -> BTreeMap<String, String> {
     [
         ("pickstyle", "Ctrl+Shift+A"),
         ("redo", "Ctrl+Shift+Z, Ctrl+Y"),
@@ -89,15 +101,46 @@ pub fn defaults() -> BTreeMap<String, String> {
         ("dynmode", "F12"),
     ]
     .into_iter()
+    .filter(|(_, keys)| platform == KeyPlatform::Desktop || !is_browser_reserved(keys))
     .map(|(id, key)| (id.to_string(), key.to_string()))
     .collect()
 }
 
 pub const RESERVED: &[&str] = &["Escape", "Ctrl+Q"];
 
+/// Keys the browser acts on before the page sees them (reload, new tab, address bar, help, devtools).
+pub const BROWSER_RESERVED: &[&str] = &[
+    "F1",
+    "F3",
+    "F5",
+    "F6",
+    "F7",
+    "F10",
+    "F11",
+    "F12",
+    "Ctrl+N",
+    "Ctrl+1",
+    "Ctrl+2",
+    "Ctrl+3",
+    "Ctrl+4",
+    "Ctrl+5",
+    "Ctrl+6",
+    "Ctrl+7",
+    "Ctrl+8",
+    "Ctrl+9",
+    "Ctrl+E",
+    "Ctrl+L",
+    "Ctrl+T",
+    "Ctrl+W",
+    "Ctrl+R",
+    "Shift+F10",
+    "Ctrl+Shift+C",
+];
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BindError {
     Reserved,
+    BrowserReserved,
     Conflict { other: String },
     Unparsable,
 }
@@ -106,6 +149,7 @@ impl std::fmt::Display for BindError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Reserved => f.write_str(crate::tl!("Reserved key")),
+            Self::BrowserReserved => f.write_str(crate::tl!("The browser uses this key")),
             Self::Conflict { other } => f.write_str(&crate::tf!("Already used by {other}", other = other)),
             Self::Unparsable => f.write_str(crate::tl!("Not a key combination")),
         }
@@ -114,6 +158,18 @@ impl std::fmt::Display for BindError {
 
 fn combos(keys: &str) -> impl Iterator<Item = KeyCombo> + '_ {
     keys.split(',').filter_map(|key| parse(key.trim()))
+}
+
+pub fn is_browser_reserved(key: &str) -> bool {
+    combos(key).any(|key| is_browser_reserved_combo(&key))
+}
+
+fn is_browser_reserved_combo(key: &KeyCombo) -> bool {
+    BROWSER_RESERVED.iter().filter_map(|s| parse(s)).any(|reserved| reserved == *key)
+}
+
+pub fn menu_shortcut_label(platform: KeyPlatform, label: &str) -> Option<String> {
+    if platform == KeyPlatform::Web && is_browser_reserved(label) { None } else { Some(label.to_string()) }
 }
 
 fn is_reserved(key: &KeyCombo) -> bool {
@@ -131,9 +187,16 @@ pub(crate) fn remove_reserved(map: &mut BTreeMap<String, String>) {
 }
 
 pub fn bind(map: &mut BTreeMap<String, String>, command: &str, key: &str, replace: bool) -> Result<(), BindError> {
+    bind_for(CURRENT, map, command, key, replace)
+}
+
+pub fn bind_for(platform: KeyPlatform, map: &mut BTreeMap<String, String>, command: &str, key: &str, replace: bool) -> Result<(), BindError> {
     let key = parse(key).ok_or(BindError::Unparsable)?;
     if is_reserved(&key) {
         return Err(BindError::Reserved);
+    }
+    if platform == KeyPlatform::Web && is_browser_reserved_combo(&key) {
+        return Err(BindError::BrowserReserved);
     }
     if !key.ctrl
         && !key.shift
@@ -166,9 +229,16 @@ pub fn bind(map: &mut BTreeMap<String, String>, command: &str, key: &str, replac
 }
 
 pub fn active(app: &CadApp) -> BTreeMap<String, String> {
-    let mut map = defaults();
+    active_for(CURRENT, app)
+}
+
+pub fn active_for(platform: KeyPlatform, app: &CadApp) -> BTreeMap<String, String> {
+    let mut map = defaults_for(platform);
     map.extend(app.ws.effective.layout.shortcuts.clone());
     remove_reserved(&mut map);
+    if platform == KeyPlatform::Web {
+        map.retain(|_, keys| !is_browser_reserved(keys));
+    }
     map
 }
 
