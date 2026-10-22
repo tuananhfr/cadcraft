@@ -459,10 +459,8 @@ fn customize_lists_show_at_least_five_rows_at_normal_and_comfortable_density() {
         }
         h.get_by_label("Aliases").click();
         h.run_steps(4);
-        let aliases: std::collections::BTreeSet<_> = cadcraft_engine::command_specs()
-            .iter()
-            .flat_map(|spec| spec.aliases.iter().map(|alias| alias.to_ascii_uppercase()))
-            .collect();
+        let aliases: std::collections::BTreeSet<_> =
+            cadcraft_engine::command_specs().iter().flat_map(|spec| spec.aliases.iter().map(|alias| alias.to_ascii_uppercase())).collect();
         for alias in aliases.iter().take(5) {
             assert_row_visible(&h, &h.get_by_role_and_label(egui::accesskit::Role::Button, alias));
         }

@@ -68,12 +68,7 @@ fn edit(ui: &mut egui::Ui, text: &mut String, label: &str) -> egui::Response {
             .hint_text(label)
             .char_limit(1024)
             .desired_width(ui.available_width().min(240.0))
-            .event_filter(egui::EventFilter {
-                horizontal_arrows: true,
-                vertical_arrows: true,
-                escape: true,
-                ..Default::default()
-            }),
+            .event_filter(egui::EventFilter { horizontal_arrows: true, vertical_arrows: true, escape: true, ..Default::default() }),
     );
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, label));
     response
@@ -87,7 +82,12 @@ fn row(ui: &mut egui::Ui, selected: bool, label: &str) -> bool {
     response.clicked()
 }
 
-fn list<R>(ui: &mut egui::Ui, id_salt: impl std::hash::Hash, height: Option<f32>, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> R {
+fn list<R>(
+    ui: &mut egui::Ui,
+    id_salt: impl std::hash::Hash + std::fmt::Debug,
+    height: Option<f32>,
+    add_contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> R {
     if let Some(height) = height {
         egui::ScrollArea::vertical()
             .id_salt(id_salt)
@@ -142,18 +142,16 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
             state.list_height = (body - row * 6.0).max(row * 5.0);
             // An inner list consumes scroll-to requests before the page can reveal it on short screens.
             state.scroll_ribbon_page = body < row * 11.0;
-            egui::ScrollArea::vertical()
-                .id_salt("customize_page")
-                .auto_shrink([false, false])
-                .min_scrolled_height(body)
-                .max_height(body)
-                .show(ui, |ui| match state.page {
+            egui::ScrollArea::vertical().id_salt("customize_page").auto_shrink([false, false]).min_scrolled_height(body).max_height(body).show(
+                ui,
+                |ui| match state.page {
                     0 => ribbon_tab::show(app, ui, &mut state),
                     1 => toolbars_tab::show(app, ui, &mut state),
                     2 => keyboard_tab::show(app, ui, &mut state),
                     3 => quick_access_tab::show(app, ui, &mut state),
                     _ => alias_tab::show(app, ui, &mut state),
-                });
+                },
+            );
             if let Some(error) = &state.error {
                 ui.colored_label(crate::theme::Tokens::get().warn, error);
             }
