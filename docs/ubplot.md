@@ -3,7 +3,8 @@
 `ubplot.scan` builds an ordered SheetPlan without opening a dialog. `ubplot.templates`
 lists or imports frame detection templates. `ubplot.publish` renders the plan into a
 merged PDF or one PDF per sheet. These commands are available through JSON, scripts,
-CLI and control/MCP callers. Interactive picking and the review dialog are separate work.
+CLI and control/MCP callers. Interactive UBPLOT opens picking and a review dialog;
+programmatic calls never open dialogs.
 
 ```json
 {"command":"ubplot.scan","params":{"mode":"block","handles":["A21","A34"]}}
@@ -20,6 +21,7 @@ Scan parameters:
 - `overrides`: settings keyed by `sheet_id@order`, with `paper`, `scale`, `window`, `sheetId`.
 - `exclude`: explicit sheet keys to exclude, reported as `SHEET_EXCLUDED`.
 - `revisions`: optional sheet-id-to-revision register, for example `{"KT-01": "C"}`.
+- `device`: optional device name from PLOTTERMANAGER; UBPLOT still publishes PDF.
 - `plan`: a SheetPlan for `mode: "plan"`. Scan resolves flat block references into outlines.
 
 `last` reuses the last scan request for the current drawing and rescans after edits.
@@ -31,6 +33,11 @@ use the same conversion. Frame-derived ratios retain the INSERT scale and get a
 `scale_label` of `1:(INSERT scale × millimetres per drawing unit)`, rounded to six
 significant digits. Unitless (`INSUNITS=0`) and unknown codes assume millimetres and
 add one plan-level INFO issue, `UNITS_ASSUMED`.
+
+PLOT and EXPORTPDF keep their legacy paper-units-per-drawing-unit scale unless
+`scaleMode: "real"` is supplied. With an explicit scale and no `fit`, PDF and PNG
+preserve the scale; `fit: true` explicitly requests fitting. UBPLOT always publishes
+Ratio sheets with `fit: false`, so a paper mismatch never silently changes the ratio.
 
 Paper choices are strings; the same grammar applies to per-sheet overrides:
 
@@ -114,7 +121,9 @@ Approve warnings before publishing:
 array of `{sheetKey, code}` items and `by`. It returns the updated SheetPlan and
 stores it as `last`. Sheet keys are `sheet_id@order`; plan-level issues use `"*"`.
 Only WARN is approvable. BLOCK, INFO, PASS, unknown sheets/codes or an invalid `by`
-reject the whole request without changing the plan. Device splits are approved explicitly through the optional `split` array.
+reject the whole request without changing the plan. Device splits are approved
+explicitly through the optional `split` array; resolving the size problem removes
+`DEVICE_LIMIT_EXCEEDED` without approving a BLOCK issue.
 `by` must be `"user"` or `"agent:<name>"` with a non-empty name, and 1–64 characters
 in total. A call accepts at most 10,000 items; a plan holds at most 100,000 audit entries.
 Repeated items are deduplicated within a call; multiple issues with the same key/code
@@ -127,7 +136,8 @@ hexadecimal characters of SHA-256 over `code + "|" + sheet_key + "|" + message`.
 using `last` preserves unchanged approvals and audit history; a changed message
 expires approval and keeps the old record. Explicit `mode: "plan"` scans use the
 supplied approval flags and retain both the session and supplied audit histories.
-Native hosts install a Unix millisecond clock; web uses the browser clock. Without a clock hook, audit timestamps are zero.
+Native hosts install a Unix millisecond clock; web uses the browser clock. Without
+a clock hook, audit timestamps are zero.
 
 Publish parameters:
 
@@ -147,8 +157,10 @@ Block and window pages use their exact rectangle outlines, including rotation an
 mirroring. Blocks print in their owning model or layout space. Paper size and landscape
 come from each sheet. Ratio sheets print at their stored scale; only Fit sheets are
 fitted. Each merged page keeps its own MediaBox, so A1, A3 and long sheets can share a
-PDF without shrinking. Margins are zero for PDF/custom paper, use device margins when
-available, and use the selected margin on all four edges for rolls.
+PDF without shrinking. Rolls use the selected margin on all four edges. Other pages
+default to zero margins; a matching non-PDF device paper from the sheet's owning
+layout supplies its margins. The scan `device` controls size preflight; it does not
+supply margins for model-space blocks or windows.
 
 A merged plan containing any blocked sheet is rejected before writing, listing the
 blocked sheet keys. Split output renders other sheets and reports every blocked sheet
@@ -174,15 +186,21 @@ may block repeated downloads; use merged output for larger sets. Without a path,
 platforms return base64 PDF data. No command opens a save dialog programmatically.
 
 Limits: 10,000 scan frames/windows/layouts; 200,000 entity leaves per INSERT; nested
-blocks at most 16 levels; 256 pages per merged PDF. Scan accepts paper edges up to
-15000 mm; the PDF writer still limits edges to 5080 mm until the separate B4 writer
-upgrade. Publishing a larger scanned sheet currently reports `RENDER_FAILED`.
-Registry import is limited to 256 KiB, 500 templates, and 64 names per template.
+blocks at most 16 levels. Each PDF accepts at most 1000 pages and 512 MiB, with paper
+edges up to 15000 mm (15 m). The page cap includes approved split pieces. The writer
+collects glyphs in a separate pass and releases each page display list after writing it.
+Edges over 5080 mm (14400 points) use `/UserUnit = ceil(longest_edge_pt / 14400)`;
+MediaBox and content are divided by that unit, preserving physical size, with catalog
+version PDF 1.6. Oversized paper is rejected. Jobs over the merged page or byte cap
+report an error suggesting publication in parts; they do not silently omit pages.
+PNG retains its pixel cap. Registry import is limited to 256 KiB, 500 templates, and
+64 names per template.
 
 Issue codes:
 
 | Severity | Codes |
 | --- | --- |
+| PASS | No issues. |
 | BLOCK | `FRAME_AMBIGUOUS`, `FRAME_NOT_FOUND`, `FRAME_MINSERT`, `PAPER_TOO_SMALL`, `PAPER_TOO_LARGE`, `SCALE_PAPER_MISMATCH`, `RENDER_FAILED`, `XREF_MISSING`, `XREF_SCAN_LIMIT`, `DEVICE_LIMIT_EXCEEDED` |
 | WARN | `FRAME_DUPLICATE`, `FRAME_OVERLAP`, `FRAME_NESTED`, `FRAME_MIRRORED`, `FRAME_NONUNIFORM`, `XREF_UNLOADED`, `FONT_FALLBACK`, `FONT_MISSING`, `SHEET_ID_DUPLICATE`, `REVISION_OLD`, `TEMPLATE_SUPERSEDED`, `DEVICE_LIMIT_NEAR`, `DEVICE_UNAVAILABLE` |
 | INFO | `PAPER_CUSTOM`, `SCALE_NOT_SET`, `UNITS_ASSUMED`, `HANDLE_DUPLICATE`, `SHEET_EXCLUDED`, `SOURCE_HASH_WEAK`, `XREF_MISSING_OUTSIDE`, `FONT_MAPPED`, `REVISION_NEWER`, `PLOT_STYLE`, `FILE_RENAMED` |
@@ -192,6 +210,14 @@ Publish validates approval flags before rendering or writing. A flagged BLOCK re
 A flagged WARN without matching audit returns `APPROVAL_WITHOUT_AUDIT`. Remaining
 unapproved WARNs return `WARN_NOT_APPROVED: sheet_key:code, ...`, including plan-level
 warnings under `*`. There is no bypass flag; both merged and split output require approval.
+
+The review dialog shows WARN/BLOCK exceptions by default, grouped by code and severity.
+`Show all sheets` includes clean and INFO-only sheets. WARN groups offer `Approve all`
+with an audit confirmation modal; approved rows have a locked `Approved` checkbox.
+BLOCK groups offer window/paper fixes or exclusion, with no approval control.
+The summary shows PASS/INFO/WARN/BLOCK sheet counts. Publish is disabled while WARNs
+remain unapproved, or while merged output contains a BLOCK, with a reason tooltip.
+Desktop device-size exceptions offer the split controls described below.
 
 Command errors include `PLAN_STALE` (drawing changed since scan), `PLAN_INVALID`
 (invalid or unresolved plan), and `OUTPUT_IS_SOURCE` (output would overwrite the source).
@@ -219,14 +245,16 @@ scale, device limits and overlap. Only an approved split with matching audit is
 published; changed inputs require approval again. Unchanged rescans retain approval
 and the append-only audit. Layouts without an outline cannot be split; choose PDF.
 Each piece is an exact borderless PDF crop, preserving its geometry without inherited
-roll margins clipping the overlap. The page cap includes all resulting pieces. With `output: "split"`, each original
-sheet produces one PDF containing all its approved pieces.
+roll margins clipping the overlap. No pieces are published before explicit approval.
+With `output: "split"`, each original sheet produces one PDF containing all its approved
+pieces; this output mode alone does not approve or create a device split.
 
 Split PDF pages show 0.25 mm dashed seam lines at their overlap edges and two
 10 mm end ticks. JSON PDF `pages` items accept `seams: [left,bottom,right,top]`
 and optional `seamOverlapMm` (20 mm by default). Pages without seams retain their
 previous bytes.
 
+UBPLOT on the web publishes PDF only; device-limit splitting is a desktop workflow.
 An unknown or removed device produces WARN `DEVICE_UNAVAILABLE` and falls back to
 PDF after warning approval. Web contexts treat every device except `CADCraft PDF`
 as unavailable and produce no device BLOCK or split proposal. Publishing rechecks
