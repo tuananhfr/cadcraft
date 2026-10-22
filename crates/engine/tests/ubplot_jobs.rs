@@ -247,7 +247,7 @@ fn jobs_cancel_remove_and_status() {
     assert_eq!(status["total"], 2);
     assert_eq!(status["done"], 0);
     s.execute("ubplot.jobs", &json!({"action": "cancel", "jobId": id})).unwrap();
-    assert_eq!(s.take_cancel_requests(), [id.clone()]);
+    assert_eq!(s.take_cancel_requests(), std::slice::from_ref(&id));
     assert!(s.take_cancel_requests().is_empty());
     assert!(s.take_queued_job().is_none());
     let manifest = s.execute("ubplot.jobs", &json!({"action": "manifest", "jobId": id})).unwrap();
