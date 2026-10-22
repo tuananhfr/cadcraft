@@ -120,9 +120,12 @@ fn reset(app: &mut CadApp) -> Result<Value, String> {
         app.ws.user.theme = base.theme;
         app.ws.user.locale = base.locale;
     }
-    if below != app.ws.user.layout {
-        app.ws.history.record(app.ws.local_layout());
+    let local = app.ws.local_layout();
+    if below != local {
+        app.ws.history.record(local);
         app.ws.user.layout = below;
+        // The dock tree and panel geometry live on the device layer, which would otherwise override the preset.
+        app.ws.device.layout_patch = Value::Object(serde_json::Map::new());
     }
     app.ws.rebuild();
     app.apply_workspace();
