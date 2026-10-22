@@ -13,6 +13,7 @@ pub mod merge;
 pub mod migrate;
 pub mod picker;
 pub mod presets;
+pub mod save_state;
 pub mod schema;
 pub mod screen;
 pub mod startup;
@@ -33,7 +34,7 @@ use merge::{Effective, Layer, Level, apply_patch_locked, diff_patch, effective};
 use presets::{PRESET_IDS, SAFE_PRESET, preset};
 use schema::{SCHEMA_VERSION, WorkspaceLayout, WorkspaceProfile};
 use startup::{FALLBACK_MESSAGE, Fallback, NOT_KEPT_MESSAGE, POLICY_MESSAGE};
-use store::{ProfileSet, ProfileStore};
+use store::{Commit, Durability, ProfileSet, ProfileStore, TAB_CONFLICT_MESSAGE, expired_snapshots};
 
 pub const WORKSPACE_FILE: FileKind = FileKind { label: "Workspace (JSON)", extensions: &["json"] };
 
@@ -132,6 +133,10 @@ pub struct WsState {
     unkept_damage: Option<Vec<u8>>,
     unkept_backup: Option<String>,
     pub suspended: bool,
+    /// The store accepted the last commit but has not reported it durable yet.
+    writing: bool,
+    /// The user changed the workspace since it was loaded.
+    edited: bool,
     failed_commits: u32,
     now: f64,
     drag_before: Option<WorkspaceLayout>,
@@ -173,6 +178,8 @@ impl Default for WsState {
             unkept_damage: None,
             unkept_backup: None,
             suspended: false,
+            writing: false,
+            edited: false,
             failed_commits: 0,
             now: 0.0,
             drag_before: None,
@@ -230,6 +237,7 @@ impl WsState {
         }
         self.autosave.changed(self.now);
         self.status = SaveStatus::Unsaved;
+        self.edited = true;
     }
 }
 
@@ -460,13 +468,21 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
     if app.ui.dialog.as_deref() != Some(picker::PICKER_DIALOG) {
         app.ws.first_run_picker_open = false;
     }
+    if app.ws.writing {
+        let durability = app.ws.store.as_mut().map_or(Durability::Committed, |store| store.durability());
+        if durability == Durability::Pending {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        } else {
+            let _ = app.settle_commit(durability, true);
+        }
+    }
     // The debounce does not store while the picker waits, so a layout settling under it is not written as a choice.
     let storing = !app.ws.first_run_picker_open && !app.ws.suspended;
     if !down && storing && app.ws.autosave.due(time) {
         let _ = app.commit_workspace_now();
     }
     if storing && app.ws.autosave.pending() {
-        let wait = std::time::Duration::try_from_secs_f64(app.ws.autosave.wait_secs()).unwrap_or(std::time::Duration::from_millis(750));
+        let wait = std::time::Duration::try_from_secs_f64(app.ws.autosave.wait_secs()).unwrap_or(std::time::Duration::from_millis(600));
         ctx.request_repaint_after(wait);
     }
 }
@@ -505,6 +521,8 @@ impl CadApp {
             _ => None,
         };
         self.ws.failed_commits = 0;
+        self.ws.writing = false;
+        self.ws.edited = false;
         let mut notices: Vec<String> = Vec::new();
         if let Some(Fallback::RestoredSnapshot { revision, .. }) = &restored.fallback {
             notices.push(if kept {
@@ -609,14 +627,55 @@ impl CadApp {
         let raw = self.ws.store.as_ref().and_then(|store| store.read_current());
         let stored = raw.as_deref().and_then(startup::stored_revision).unwrap_or(0);
         if stored > self.ws.known_revision || self.ws.status == SaveStatus::TabConflict {
-            self.ws.status = SaveStatus::TabConflict;
-            self.ws.autosave.clear();
-            if interactive {
-                self.ui.dialog = Some(tab_conflict::DIALOG.into());
-            }
-            return Err("Workspace changed in another tab".into());
+            return Err(self.enter_tab_conflict(interactive));
         }
         Ok(())
+    }
+
+    /// Stops autosave until the user resolves the conflict; returns the error to report.
+    fn enter_tab_conflict(&mut self, interactive: bool) -> String {
+        self.ws.status = SaveStatus::TabConflict;
+        self.ws.writing = false;
+        self.ws.autosave.clear();
+        if interactive {
+            self.ui.dialog = Some(tab_conflict::DIALOG.into());
+        }
+        TAB_CONFLICT_MESSAGE.into()
+    }
+
+    /// Arms the next attempt after a commit that did not reach storage; returns the error to report.
+    fn commit_failed(&mut self, error: String) -> String {
+        // Storage that is full or blocked now may not be later: try again, less and less often.
+        let delay = (RETRY_SECS * 2f64.powi(self.ws.failed_commits.min(4) as i32)).min(MAX_RETRY_SECS);
+        self.ws.failed_commits = self.ws.failed_commits.saturating_add(1);
+        self.ws.writing = false;
+        self.ws.autosave.retry(self.ws.now, delay);
+        self.ws.status = SaveStatus::Failed(error.clone());
+        self.set_status(format!("Could not save workspace: {error}"));
+        error
+    }
+
+    /// Acts on what the store reports for the commit it accepted last.
+    fn settle_commit(&mut self, durability: Durability, interactive: bool) -> Result<(), String> {
+        match durability {
+            Durability::Committed => {
+                self.ws.writing = false;
+                // An edit made while the write was pending is still unsaved.
+                if !self.ws.autosave.pending() {
+                    self.ws.status = SaveStatus::SavedLocally;
+                }
+                self.ws.failed_commits = 0;
+                self.sync_now();
+                Ok(())
+            }
+            Durability::Pending => {
+                self.ws.writing = true;
+                self.ws.status = SaveStatus::Unsaved;
+                Ok(())
+            }
+            Durability::Failed(error) => Err(self.commit_failed(error)),
+            Durability::Conflict { .. } => Err(self.enter_tab_conflict(interactive)),
+        }
     }
 
     /// Stores the workspace now: next revision, a snapshot of it, then the current set.
@@ -629,17 +688,22 @@ impl CadApp {
             return Err(commands::ROLLBACK_MESSAGE.into());
         }
         observe(self, true);
-        // localStorage cannot check and write atomically; IndexedDB transactions will close this race.
-        self.check_workspace_revision(interactive)?;
+        if self.ws.status == SaveStatus::TabConflict {
+            return Err(self.enter_tab_conflict(interactive));
+        }
         let policy = self.ws.policy();
+        let expected = self.ws.known_revision;
         let Some(store) = self.ws.store.as_mut() else { return Err("No workspace storage is attached".into()) };
-        let newest = store.snapshots().into_iter().max().unwrap_or(0);
+        let mut revisions = store.snapshots();
+        let newest = revisions.iter().copied().max().unwrap_or(0);
         let mut user = self.ws.user.clone();
-        user.revision = newest.max(user.revision).max(self.ws.known_revision).saturating_add(1);
+        user.revision = newest.max(user.revision).max(expected).saturating_add(1);
         user.updated_at = rfc3339(crate::now_ms());
         if user.created_at.is_empty() {
             user.created_at = user.updated_at.clone();
         }
+        revisions.push(user.revision);
+        let prune = expired_snapshots(&revisions);
         let mut profiles = self.ws.profiles.clone();
         if let Some(saved) = profiles.iter_mut().find(|profile| profile.profile_id == self.ws.active) {
             *saved = user.clone();
@@ -666,30 +730,24 @@ impl CadApp {
                 store.keep_backup("1.0.0", raw)?;
                 *unkept_backup = None;
             }
-            store.push_snapshot(user.revision, &json)?;
-            store.write_current(&json)
+            store.write_commit(Commit { expected, revision: user.revision, json: &json, prune })
         });
-        match written {
-            Ok(()) => {
-                self.ws.known_revision = user.revision;
-                self.ws.user = user;
-                self.ws.profiles = set.profiles;
-                self.ws.status = SaveStatus::SavedLocally;
-                self.ws.autosave.clear();
-                self.ws.failed_commits = 0;
-                self.sync_now();
-                Ok(())
-            }
+        let durability = match written {
+            Ok(()) => store.durability(),
             Err(error) => {
-                // Storage that is full or blocked now may not be later: try again, less and less often.
-                let delay = (RETRY_SECS * 2f64.powi(self.ws.failed_commits.min(4) as i32)).min(MAX_RETRY_SECS);
-                self.ws.failed_commits = self.ws.failed_commits.saturating_add(1);
-                self.ws.autosave.retry(self.ws.now, delay);
-                self.ws.status = SaveStatus::Failed(error.clone());
-                self.set_status(format!("Could not save workspace: {error}"));
-                Err(error)
+                // The store refuses a commit over a newer one; another tab wrote it.
+                let stored = store.read_current().as_deref().and_then(startup::stored_revision).unwrap_or(0);
+                return Err(if stored > expected { self.enter_tab_conflict(interactive) } else { self.commit_failed(error) });
             }
+        };
+        if !matches!(durability, Durability::Conflict { .. }) {
+            // Accepted, even if not durable yet: the store now holds this revision.
+            self.ws.known_revision = user.revision;
+            self.ws.user = user;
+            self.ws.profiles = set.profiles;
+            self.ws.autosave.clear();
         }
+        self.settle_commit(durability, interactive)
     }
 
     /// Saved state for `ui.workspace.status`.
@@ -719,6 +777,8 @@ impl CadApp {
             "base_id": ws.user.base_id,
             "revision": ws.user.revision,
             "pending": ws.autosave.pending(),
+            "layout_save": save_state::LayoutSave::from_ws(ws).as_str(),
+            "drawing_save": save_state::DrawingSave::from_app(self).as_str(),
             "persisted": ws.store.is_some(),
             "fallback": fallback,
             "restored_revision": restored_revision,

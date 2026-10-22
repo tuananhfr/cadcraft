@@ -743,11 +743,11 @@ fn status_bar_shows_save_state() {
     let mut harness = shell(first_run_app(true));
     harness.state_mut().run("ui.cmdline.lines", json!({"lines": 7})).unwrap();
     harness.run_steps(2);
-    harness.get_by_label("Saving…");
+    harness.get_by_label("Layout changed");
     harness.state_mut().commit_workspace_now().unwrap();
     harness.run_steps(3);
-    harness.get_by_label("Saved locally");
-    assert!(harness.query_by_label("Saving…").is_none());
+    harness.get_by_label("Layout saved");
+    assert!(harness.query_by_label("Layout changed").is_none());
 
     let mut failing = first_run_app(true);
     failing.ws.store = Some(Box::new(MemoryStore { fail_writes: true, ..Default::default() }));
@@ -755,7 +755,7 @@ fn status_bar_shows_save_state() {
     harness.state_mut().run("ui.cmdline.lines", json!({"lines": 7})).unwrap();
     let _ = harness.state_mut().commit_workspace_now();
     harness.run_steps(3);
-    harness.get_by_label("Not saved");
+    harness.get_by_label("Layout not saved");
 }
 
 #[test]
@@ -763,7 +763,7 @@ fn status_bar_without_storage_shows_no_save_state() {
     let mut app = CadApp::new(Session::new(), Services::default());
     app.skip_first_run_picker = true;
     let harness = shell(app);
-    for label in ["Saved locally", "Saving…", "Not saved"] {
+    for label in ["Layout saved", "Layout changed", "Saving layout…", "Layout not saved"] {
         assert!(harness.query_by_label(label).is_none(), "{label}");
     }
 }

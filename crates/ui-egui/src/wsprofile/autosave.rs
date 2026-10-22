@@ -12,7 +12,7 @@ pub struct Autosave {
 
 impl Default for Autosave {
     fn default() -> Self {
-        Self { debounce_secs: 0.75, changed_at: None, immediate: false, retry_secs: None }
+        Self { debounce_secs: 0.6, changed_at: None, immediate: false, retry_secs: None }
     }
 }
 

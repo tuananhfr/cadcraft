@@ -15,6 +15,27 @@ pub const KEEP_SNAPSHOTS: usize = 20;
 /// Snapshot revision that holds a profile set startup could not read. Revisions the app commits
 /// start at 1, and pruning never removes this one, so later commits cannot erase the evidence.
 pub const CORRUPT_SNAPSHOT: u64 = 0;
+pub const TAB_CONFLICT_MESSAGE: &str = "Workspace changed in another tab";
+
+/// How far the last commit a store accepted has got.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Durability {
+    Committed,
+    Pending,
+    Failed(String),
+    Conflict { stored: u64 },
+}
+
+/// One commit: the snapshot under `revision` and the current set, both `json`.
+#[derive(Clone, Debug)]
+pub struct Commit<'a> {
+    /// The stored revision the writer last read or wrote.
+    pub expected: u64,
+    pub revision: u64,
+    pub json: &'a str,
+    /// Snapshots the commit makes obsolete.
+    pub prune: Vec<u64>,
+}
 
 /// Everything committed at once, so Save As profiles and the active choice never disagree.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -53,6 +74,21 @@ pub trait ProfileStore {
     fn write_current(&mut self, json: &str) -> Result<(), String>;
     /// Keeps a copy under `revision`; keeps the newest [`KEEP_SNAPSHOTS`] plus [`CORRUPT_SNAPSHOT`].
     fn push_snapshot(&mut self, revision: u64, json: &str) -> Result<(), String>;
+    /// Writes snapshot and current together, unless the stored revision is newer than `expected`.
+    /// The snapshot goes first, so a torn write leaves the old current; `push_snapshot` already
+    /// prunes, so only transactional stores need `prune`.
+    fn write_commit(&mut self, c: Commit<'_>) -> Result<(), String> {
+        let stored = self.read_current().as_deref().and_then(super::startup::stored_revision).unwrap_or(0);
+        if stored > c.expected {
+            return Err(TAB_CONFLICT_MESSAGE.into());
+        }
+        self.push_snapshot(c.revision, c.json)?;
+        self.write_current(c.json)
+    }
+    /// Whether the last accepted commit is durable yet; a store that writes before returning always is.
+    fn durability(&mut self) -> Durability {
+        Durability::Committed
+    }
     /// Stored revisions, ascending.
     fn snapshots(&self) -> Vec<u64>;
     fn read_snapshot(&self, revision: u64) -> Option<String>;
