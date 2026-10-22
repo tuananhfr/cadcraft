@@ -219,9 +219,14 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
     }
     let r = match id {
         "ui.language" => {
+            if params.get("lang").and_then(Value::as_str) == Some("qps") {
+                app.pseudo_locale = true;
+                return Some(Ok(json!({"interfaceLanguage": "qps", "shown": "qps"})));
+            }
             let Some(preference) = params.get("lang").and_then(Value::as_str).and_then(crate::i18n::Preference::parse) else {
                 return Some(Err(format!("language must be {}", crate::i18n::Preference::codes())));
             };
+            app.pseudo_locale = false;
             app.ui.interface_language = preference;
             let shown = app.language();
             if shown != preference.resolve(&app.system_languages) {

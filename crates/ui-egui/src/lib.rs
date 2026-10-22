@@ -231,6 +231,8 @@ impl Services {
 
 pub struct CadApp {
     pub system_languages: Vec<String>,
+    /// Debug locale is session-only so serializing preferences cannot persist it.
+    pub(crate) pseudo_locale: bool,
     /// Whether the operating system shows animations, as the host reads it; `None` when the OS
     /// states nothing or the host cannot ask ([`animation`]).
     pub system_animations: Option<bool>,
@@ -297,6 +299,7 @@ impl CadApp {
     pub fn new(session: Session, services: Services) -> Self {
         CadApp {
             system_languages: Vec::new(),
+            pseudo_locale: false,
             system_animations: None,
             session,
             ui: UiState::default(),
@@ -340,6 +343,9 @@ impl CadApp {
     /// The interface language shown: the chosen one, or English when this computer has no font
     /// for it (Chinese or Korean without a suitable font would be boxes).
     pub fn language(&self) -> &'static str {
+        if self.pseudo_locale {
+            return "qps";
+        }
         let l = self.ui.interface_language.resolve(&self.system_languages);
         if theme::can_show(l) { l } else { "en" }
     }

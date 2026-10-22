@@ -259,6 +259,7 @@ fn run_json(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         app.ui.animations = a;
     }
     if let Some(l) = ui.language {
+        app.pseudo_locale = false;
         app.ui.interface_language = l;
     }
     if let Some(f) = ui.save_format {
