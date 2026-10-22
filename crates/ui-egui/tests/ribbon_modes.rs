@@ -189,6 +189,21 @@ fn inside(screen: Rect, rect: Rect) {
     assert!(rect.is_positive() && screen.expand(0.5).contains_rect(rect), "{rect:?} outside {screen:?}");
 }
 
+fn unique_labels(tab: &cadcraft_ui_egui::wsprofile::schema::RibbonTab, label: impl Fn(&str) -> String) -> Vec<String> {
+    let mut labels: Vec<String> = Vec::new();
+    for id in tab.groups.iter().flat_map(|group| &group.commands) {
+        let label = label(id);
+        if !labels.contains(&label) {
+            labels.push(label);
+        }
+    }
+    labels
+}
+
+fn button_nth<'h>(h: &'h Harness<'_, CadApp>, label: &'h str, nth: usize) -> egui_kittest::Node<'h> {
+    h.query_all_by_role_and_label(egui::accesskit::Role::Button, label).nth(nth).unwrap_or_else(|| panic!("no button {label} #{nth}"))
+}
+
 fn command_label(id: &str) -> String {
     let label = cadcraft_engine::find_command(id)
         .map(|spec| spec.label)
@@ -215,11 +230,13 @@ fn tabs_only_flyout_reaches_every_command_at_200_percent_tc11() {
             h.run_steps(4);
             assert!(popup_open(&h), "{language}: {}", tab.id);
             assert_eq!(h.state().canvas.rect.unwrap(), before, "flyout must not move the canvas");
-            for id in tab.groups.iter().flat_map(|group| &group.commands) {
-                let label = cadcraft_ui_egui::i18n::with_language(h.state().language(), || command_label(id));
-                h.get_by_role_and_label(egui::accesskit::Role::Button, &label).scroll_to_me();
-                h.run_steps(3);
-                inside(h.ctx.content_rect(), h.get_by_role_and_label(egui::accesskit::Role::Button, &label).rect());
+            for label in unique_labels(&tab, |id| cadcraft_ui_egui::i18n::with_language(h.state().language(), || command_label(id))) {
+                // Several commands can share a label (Modify "Copy" and Clipboard "Copy"); each must be reachable.
+                for nth in 0..h.query_all_by_role_and_label(egui::accesskit::Role::Button, &label).count().max(1) {
+                    button_nth(&h, &label, nth).scroll_to_me();
+                    h.run_steps(3);
+                    inside(h.ctx.content_rect(), button_nth(&h, &label, nth).rect());
+                }
                 let popup = h.ctx.read_response(Id::new("cc_ribbon_flyout")).unwrap();
                 inside(h.ctx.content_rect(), popup.rect);
                 assert_eq!(popup.layer_id.order, egui::Order::Foreground);
@@ -279,17 +296,19 @@ fn compact_mode_shows_icon_buttons_with_tooltips() {
         h.run_steps(3);
         let row = egui::containers::panel::PanelState::load(&h.ctx, Id::new("cc_ribbon")).unwrap().outer_rect;
         assert!(row.height() <= cadcraft_ui_egui::ribbon::render::COMPACT_HEIGHT + 1.0);
-        for id in tab.groups.iter().flat_map(|group| &group.commands) {
-            let label = command_label(id);
-            h.get_by_role_and_label(egui::accesskit::Role::Button, &label).scroll_to_me();
-            h.run_steps(3);
-            let item = h.get_by_role_and_label(egui::accesskit::Role::Button, &label);
-            assert!(item.rect().width() <= 25.0, "{id} uses a square icon button");
-            item.hover();
-            h.run_steps(6);
-            assert!(h.query_all_by_label(&label).count() >= 2, "{id} has a labelled tooltip");
-            h.hover_at(egui::pos2(1000.0, 650.0));
-            h.run_steps(3);
+        for label in unique_labels(&tab, command_label) {
+            let count = h.query_all_by_role_and_label(egui::accesskit::Role::Button, &label).count().max(1);
+            for nth in 0..count {
+                button_nth(&h, &label, nth).scroll_to_me();
+                h.run_steps(3);
+                let item = button_nth(&h, &label, nth);
+                assert!(item.rect().width() <= 25.0, "{label} uses a square icon button");
+                item.hover();
+                h.run_steps(6);
+                assert!(h.query_all_by_label(&label).count() > count, "{label} has a labelled tooltip");
+                h.hover_at(egui::pos2(1000.0, 650.0));
+                h.run_steps(3);
+            }
         }
     }
 }
