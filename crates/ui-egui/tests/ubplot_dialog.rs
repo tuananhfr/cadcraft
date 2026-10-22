@@ -785,3 +785,50 @@ fn bulk_modal_does_not_approve_changed_warning() {
     assert!(plan.audit.is_empty());
     assert!(!plan.sheets[0].issues.iter().find(|issue| issue.code == codes::FRAME_OVERLAP).unwrap().approved_by_user);
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn republishing_interrupted_plan_reports_resume_or_discard_without_queuing() {
+    use cadcraft_engine::sheetplan::queue::{DirJobStore, JobStatus, PublishManifest};
+    use cadcraft_ui_egui::ubplot::worker::JobPump;
+
+    let _guard = test_lock();
+    cadcraft_engine::cmd::file::set_budget_plot(|drawing, space, options, cancel, max_prims| {
+        cadcraft_io::pdf::plot_with_budget(drawing, space, options, Some(cancel), Some(max_prims)).map_err(|error| error.to_string())
+    });
+    cadcraft_engine::cmd::file::set_merge_pdf(|parts, labels, title| {
+        cadcraft_io::pdf_merge::merge_own(parts, labels, title).map_err(|error| error.to_string())
+    });
+    for status in [JobStatus::Queued, JobStatus::Running] {
+        let (mut app, frames) = app(&[false]);
+        review(&mut app, &frames);
+        approve_warnings(&mut app);
+        let path = temporary_pdf();
+        let root = path.with_extension("jobs");
+        app.session.set_job_store(Box::new(DirJobStore::new(root.clone())));
+        let result = app.run("ubplot.publish", json!({"output": "merged", "path": path, "background": true})).unwrap();
+        let id = result["jobId"].as_str().unwrap().to_string();
+        assert_eq!(app.session.take_queued_job().unwrap().job_id, id);
+        let store = app.session.job_store_mut().unwrap();
+        let mut manifest = PublishManifest::from_json(&store.read_manifest(&id).unwrap().unwrap()).unwrap();
+        manifest.status = status;
+        store.commit(&id, &[], &manifest.to_json()).unwrap();
+        app.job_pump = JobPump::new(root.clone());
+        let picked = path.clone();
+        app.services.pick_save = Some(Box::new(move |_| Some(picked.to_string_lossy().into_owned())));
+        let mut h = harness(app);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").click();
+        h.run_steps(3);
+        let message = format!("Print job {id} already exists; use Resume or Discard in Plot Jobs");
+        assert!(h.state().session.log.iter().any(|line| line == &message));
+        assert!(!h.state().session.log.iter().any(|line| line == &format!("Print job {id} queued")));
+        assert!(h.state().job_pump.interrupted.contains(&id));
+        assert!(!h.state().job_pump.busy());
+        assert!(h.state_mut().session.take_queued_job().is_none());
+        let stored = h.state_mut().session.job_store_mut().unwrap().read_manifest(&id).unwrap().unwrap();
+        assert_eq!(PublishManifest::from_json(&stored).unwrap().status, status);
+        assert!(!path.exists());
+        drop(h);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}

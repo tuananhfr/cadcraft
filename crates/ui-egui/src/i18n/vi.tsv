@@ -1960,14 +1960,18 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	Print output is unavailable	Không tìm thấy kết quả in
 	Unknown print job action	Thao tác tác vụ in không xác định
 	No print jobs	Chưa có tác vụ in
+	Type UBPLOT.JOBS to focus job actions; use Tab and Enter	Gõ UBPLOT.JOBS để chọn thao tác tác vụ; dùng Tab và Enter
 	Print job {jobId}	Tác vụ in {jobId}
 	Print job {jobId} queued	Đã xếp tác vụ in {jobId} vào hàng đợi
 	Print job {jobId} was interrupted	Tác vụ in {jobId} đã bị gián đoạn
 	Print job {jobId}: {status}	Tác vụ in {jobId}: {status}
+	Print job {jobId} already exists; use Resume or Discard in Plot Jobs	Tác vụ in {jobId} đã tồn tại; chọn Tiếp tục hoặc Bỏ thay đổi trong Tác vụ in
+	Print job {jobId} discarded	Đã bỏ tác vụ in {jobId}
 	{done}/{total} sheets	{done}/{total} tờ bản vẽ
 	Current sheet: {sheet}	Tờ bản vẽ hiện tại: {sheet}
 	Queued	Đang chờ
 	Running	Đang chạy
+	Interrupted	Bị gián đoạn
 	Cancelled	Đã hủy
 	Done	Xong
 	Failed	Thất bại

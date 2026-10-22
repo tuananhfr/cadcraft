@@ -19,6 +19,7 @@ use cadcraft_engine::sheetplan::{FrameRegistry, Sheet, SheetStatus};
 use cadcraft_ui_egui::ubplot::worker::{JobPump, JobWorker, WorkerEvent};
 use cadcraft_ui_egui::{CadApp, Services};
 use egui::accesskit::Role;
+use egui::{Event, Key, Modifiers};
 use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::json;
@@ -217,6 +218,8 @@ fn startup_offers_resume_for_unfinished_job() {
     assert_eq!(manifest(&dir.jobs(), &id).status, JobStatus::Running);
     let panel = h.get_by_role_and_label(Role::Window, "Plot Jobs");
     assert!(panel.query_by_label(&format!("Print job {id} was interrupted")).is_some());
+    assert!(panel.query_by_label("Interrupted").is_some());
+    assert!(panel.query_by_label("Running").is_none());
     assert!(!panel.get_by_label("Resume").accesskit_node().is_disabled());
     panel.get_by_label("Resume").click();
     h.run_steps(2);
@@ -481,5 +484,154 @@ fn drawing_job_still_uses_the_open_drawing_snapshot() {
         assert_eq!(*renderer.drawing_hashes.lock().unwrap(), [hash.clone(), hash]);
         assert_eq!(manifest(&dir.jobs(), &id).sheets.len(), 2);
         assert!(h.state().job_pump.errors.is_empty());
+    }
+}
+
+fn type_jobs_command(h: &mut Harness<'_, CadApp>) {
+    h.event(Event::Text("UBPLOT.JOBS".into()));
+    h.key_press(Key::Enter);
+    h.run_steps(3);
+    assert!(h.state().job_pump.open);
+    assert!(h.state().cmd.buffer.is_empty());
+    assert!(!h.state().session.log.iter().any(|line| line.contains("parameters must be an object")));
+}
+
+#[test]
+fn jobs_command_reaches_resume_and_discard_with_tab_and_enter() {
+    let dir = TempDir::new();
+    let renderer = Arc::new(TestRenderer::default());
+    let mut previous = app(2, &dir, renderer.clone());
+    let id = enqueue(&mut previous, &dir, "keyboard-resume");
+    interrupt(&mut previous, &dir, &id);
+    drop(previous);
+    let mut h = harness(app(2, &dir, renderer.clone()));
+    h.run_steps(3);
+    type_jobs_command(&mut h);
+    let panel = h.get_by_role_and_label(Role::Window, "Plot Jobs");
+    assert!(panel.get_by_label("Resume").is_focused());
+    h.key_press(Key::Tab);
+    h.run_steps(2);
+    assert!(h.get_by_role_and_label(Role::Window, "Plot Jobs").get_by_label("Discard").is_focused());
+    h.key_press_modifiers(Modifiers::SHIFT, Key::Tab);
+    h.run_steps(2);
+    assert!(h.get_by_role_and_label(Role::Window, "Plot Jobs").get_by_label("Resume").is_focused());
+    h.key_press(Key::Enter);
+    h.run_steps(2);
+    drive_until(&mut h, |app| app.job_pump.manifests.get(&id).is_some_and(|manifest| manifest.status == JobStatus::Done));
+    assert_eq!(renderer.calls.lock().unwrap().len(), 2);
+}
+
+#[test]
+fn jobs_command_cancels_with_enter() {
+    let dir = TempDir::new();
+    let renderer = Arc::new(TestRenderer::default());
+    renderer.hold.store(true, Ordering::Relaxed);
+    let mut app = app(2, &dir, renderer.clone());
+    let id = enqueue(&mut app, &dir, "keyboard-cancel");
+    let mut h = harness(app);
+    drive_until(&mut h, |_| !renderer.calls.lock().unwrap().is_empty());
+    type_jobs_command(&mut h);
+    assert!(h.get_by_role_and_label(Role::Window, "Plot Jobs").get_by_label("Cancel").is_focused());
+    h.key_press(Key::Enter);
+    h.run_steps(2);
+    renderer.hold.store(false, Ordering::Relaxed);
+    drive_until(&mut h, |app| app.job_pump.manifests.get(&id).is_some_and(|manifest| manifest.status == JobStatus::Cancelled));
+    assert_eq!(manifest(&dir.jobs(), &id).status, JobStatus::Cancelled);
+}
+
+#[test]
+fn jobs_command_discards_with_tab_and_enter() {
+    let dir = TempDir::new();
+    let renderer = Arc::new(TestRenderer::default());
+    let mut previous = app(1, &dir, renderer.clone());
+    let id = enqueue(&mut previous, &dir, "keyboard-discard");
+    interrupt(&mut previous, &dir, &id);
+    drop(previous);
+    let mut h = harness(app(1, &dir, renderer.clone()));
+    h.run_steps(3);
+    type_jobs_command(&mut h);
+    h.key_press(Key::Tab);
+    h.run_steps(2);
+    assert!(h.get_by_role_and_label(Role::Window, "Plot Jobs").get_by_label("Discard").is_focused());
+    h.key_press(Key::Enter);
+    h.run_steps(3);
+    assert!(DirJobStore::new(dir.jobs()).read_manifest(&id).unwrap().is_none());
+    assert!(renderer.calls.lock().unwrap().is_empty());
+    assert_eq!(h.state().status.as_ref().unwrap().0, format!("Print job {id} discarded"));
+}
+
+#[test]
+fn jobs_json_calls_keep_validation_and_do_not_open_panel() {
+    let dir = TempDir::new();
+    let mut app = app(1, &dir, Arc::new(TestRenderer::default()));
+    assert!(app.run("ubplot.jobs", json!(null)).is_err());
+    assert_eq!(app.run("ubplot.jobs", json!({"action": "list"})).unwrap(), json!([]));
+    assert!(app.cmdline("UBPLOT.JOBS {\"action\":\"list\"}").is_none());
+    assert!(!app.job_pump.open);
+}
+
+#[test]
+fn resume_replaces_interruption_status_through_completion() {
+    let dir = TempDir::new();
+    let renderer = Arc::new(TestRenderer::default());
+    renderer.hold.store(true, Ordering::Relaxed);
+    let mut previous = app(2, &dir, renderer.clone());
+    let id = enqueue(&mut previous, &dir, "status-resume");
+    interrupt(&mut previous, &dir, &id);
+    drop(previous);
+    let mut h = harness(app(2, &dir, renderer.clone()));
+    h.run_steps(3);
+    assert_eq!(h.state().status.as_ref().unwrap().0, format!("Print job {id} was interrupted"));
+    h.get_by_role_and_label(Role::Window, "Plot Jobs").get_by_label("Resume").click();
+    h.run_steps(3);
+    assert_eq!(h.state().status.as_ref().unwrap().0, format!("Print job {id}: Running"));
+    renderer.hold.store(false, Ordering::Relaxed);
+    drive_until(&mut h, |app| app.job_pump.manifests.get(&id).is_some_and(|manifest| manifest.status == JobStatus::Done));
+    assert_eq!(h.state().status.as_ref().unwrap().0, format!("Print job {id}: Done"));
+}
+
+#[test]
+fn jobs_panel_defaults_clear_of_viewcube_and_remembers_moves() {
+    for size in [egui::vec2(1366.0, 768.0), egui::vec2(1920.0, 1080.0)] {
+        let dir = TempDir::new();
+        let renderer = Arc::new(TestRenderer::default());
+        let mut previous = app(1, &dir, renderer.clone());
+        let id = enqueue(&mut previous, &dir, "position");
+        interrupt(&mut previous, &dir, &id);
+        drop(previous);
+        let mut h = Harness::builder().with_size(size).build_ui_state(
+            |ui, app: &mut CadApp| {
+                app.logic(&ui.ctx().clone());
+                app.ui(ui);
+            },
+            app(1, &dir, renderer),
+        );
+        h.run_steps(5);
+        let cube = cadcraft_ui_egui::viewcube::Layout::new(h.state().canvas.rect.unwrap());
+        let window = h.get_by_role_and_label(Role::Window, "Plot Jobs").rect();
+        assert!(!window.intersects(cube.bounds));
+        assert!(!window.intersects(cube.home));
+        assert!(!window.intersects(cube.pill));
+        let from = egui::pos2(window.center().x, window.top() + 12.0);
+        let to = from + egui::vec2(64.0, 64.0);
+        h.hover_at(from);
+        h.run_steps(2);
+        h.drag_at(from);
+        h.run_steps(2);
+        h.hover_at(from.lerp(to, 0.5));
+        h.run_steps(2);
+        h.hover_at(to);
+        h.run_steps(2);
+        h.drop_at(to);
+        h.run_steps(3);
+        let moved = h.get_by_role_and_label(Role::Window, "Plot Jobs").rect();
+        assert!(moved.min.distance(window.min) > 20.0);
+        h.state_mut().job_pump.open = false;
+        h.run_steps(2);
+        h.state_mut().run("ui.ubplot.jobs", json!(null)).unwrap();
+        h.run_steps(3);
+        let reopened = h.get_by_role_and_label(Role::Window, "Plot Jobs").rect();
+        assert!((reopened.left() - moved.left()).abs() < 2.0);
+        assert!((reopened.top() - moved.top()).abs() < 2.0);
     }
 }

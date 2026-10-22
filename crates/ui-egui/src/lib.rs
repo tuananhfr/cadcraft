@@ -430,6 +430,10 @@ impl CadApp {
                 }
                 return None;
             }
+            if jobs_command && text.split_whitespace().count() == 1 {
+                self.start("ui.ubplot.jobs");
+                return None;
+            }
             if !first.is_empty()
                 && !json_form
                 && let Some(result) = menus::run_ui_command(self, &first.to_ascii_lowercase(), &Value::Null)

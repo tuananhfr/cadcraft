@@ -1,4 +1,35 @@
-use cadcraft_engine::sheetplan::queue::{Progress, PublishManifest};
+use std::collections::{BTreeMap, BTreeSet};
+
+use cadcraft_engine::sheetplan::queue::{JobStatus, Progress, PublishManifest};
+
+pub(crate) fn status_label(status: JobStatus, interrupted: bool) -> &'static str {
+    if interrupted {
+        return crate::tl!("Interrupted");
+    }
+    match status {
+        JobStatus::Queued => crate::tl!("Queued"),
+        JobStatus::Running => crate::tl!("Running"),
+        JobStatus::Cancelled => crate::tl!("Cancelled"),
+        JobStatus::Done => crate::tl!("Done"),
+        JobStatus::Failed => crate::tl!("Failed"),
+    }
+}
+
+fn job_notice(interrupted: &BTreeSet<String>, manifests: &BTreeMap<String, PublishManifest>, previous: &mut Option<String>) -> Option<String> {
+    let current = interrupted.first();
+    if previous.as_ref() == current {
+        return None;
+    }
+    let old = std::mem::replace(previous, current.cloned());
+    if let Some(id) = current {
+        return Some(crate::tf!("Print job {jobId} was interrupted", jobId = id));
+    }
+    let id = old?;
+    Some(match manifests.get(&id) {
+        Some(manifest) => crate::tf!("Print job {jobId}: {status}", jobId = id, status = status_label(manifest.status, false)),
+        None => crate::tf!("Print job {jobId} discarded", jobId = id),
+    })
+}
 
 // The host interface passes the final manifest by value.
 #[allow(clippy::large_enum_variant)]
@@ -42,7 +73,7 @@ mod desktop {
         SheetRenderer, SnapshotLoader, SourceLoader, StepOutcome, is_folder_job,
     };
 
-    use super::{Progress, PublishManifest, WorkerEvent};
+    use super::{Progress, PublishManifest, WorkerEvent, job_notice, status_label};
 
     pub(super) fn now() -> u64 {
         SystemTime::now().duration_since(UNIX_EPOCH).ok().and_then(|elapsed| u64::try_from(elapsed.as_millis()).ok()).unwrap_or(0)
@@ -141,11 +172,12 @@ mod desktop {
         pending: VecDeque<Pending>,
         active: Option<(String, JobWorker)>,
         pub open: bool,
+        pub focus_requested: bool,
         pub manifests: BTreeMap<String, PublishManifest>,
         pub interrupted: BTreeSet<String>,
         pub errors: BTreeMap<String, String>,
         pub progress: Option<(String, Progress)>,
-        notice: bool,
+        notice: Option<String>,
     }
 
     impl Default for JobPump {
@@ -157,11 +189,12 @@ mod desktop {
                 pending: VecDeque::new(),
                 active: None,
                 open: false,
+                focus_requested: false,
                 manifests: BTreeMap::new(),
                 interrupted: BTreeSet::new(),
                 errors: BTreeMap::new(),
                 progress: None,
-                notice: false,
+                notice: None,
             }
         }
     }
@@ -187,8 +220,7 @@ mod desktop {
                     }
                 }
             }
-            pump.notice = !pump.interrupted.is_empty();
-            pump.open = pump.notice;
+            pump.open = !pump.interrupted.is_empty();
             pump
         }
 
@@ -288,11 +320,7 @@ mod desktop {
 
         fn advance(&mut self, session: &mut cadcraft_engine::Session, ctx: &egui::Context) -> Option<String> {
             self.root.as_ref()?;
-            let notice = if std::mem::take(&mut self.notice) {
-                self.interrupted.first().map(|id| crate::tf!("Print job {jobId} was interrupted", jobId = id))
-            } else {
-                None
-            };
+            let mut notice = None;
             for _ in 0..MAX_JOB_SHEETS {
                 let Some(job) = session.take_queued_job() else { break };
                 let id = job.job_id.clone();
@@ -341,10 +369,12 @@ mod desktop {
                     match event {
                         WorkerEvent::Progress(progress) => self.progress = Some((id.clone(), progress)),
                         WorkerEvent::Finished(manifest) => {
-                            let status = status_label(manifest.status);
+                            let status = status_label(manifest.status, false);
                             self.manifests.insert(id.clone(), manifest);
                             self.errors.remove(id);
-                            session.echo(crate::tf!("Print job {jobId}: {status}", jobId = id, status = status));
+                            let message = crate::tf!("Print job {jobId}: {status}", jobId = id, status = status);
+                            session.echo(message.clone());
+                            notice = Some(message);
                             terminal = true;
                         }
                         WorkerEvent::Failed(error) => {
@@ -388,7 +418,7 @@ mod desktop {
             if self.busy() {
                 ctx.request_repaint_after(Duration::from_millis(16));
             }
-            notice
+            job_notice(&self.interrupted, &self.manifests, &mut self.notice).or(notice)
         }
     }
 
@@ -410,16 +440,6 @@ mod desktop {
         Ok(manifest)
     }
 
-    pub(crate) fn status_label(status: JobStatus) -> &'static str {
-        match status {
-            JobStatus::Queued => crate::tl!("Queued"),
-            JobStatus::Running => crate::tl!("Running"),
-            JobStatus::Cancelled => crate::tl!("Cancelled"),
-            JobStatus::Done => crate::tl!("Done"),
-            JobStatus::Failed => crate::tl!("Failed"),
-        }
-    }
-
     pub(crate) fn tick(app: &mut crate::CadApp, ctx: &egui::Context) {
         crate::i18n::with_language(app.language(), || {
             if let Some(notice) = app.job_pump.advance(&mut app.session, ctx) {
@@ -428,9 +448,6 @@ mod desktop {
         });
     }
 }
-
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) use desktop::status_label;
 
 mod frame {
     use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -445,7 +462,7 @@ mod frame {
     };
     use cadcraft_engine::sheetplan::{Severity, parse_plan};
 
-    use super::{Progress, PublishManifest};
+    use super::{Progress, PublishManifest, job_notice, status_label};
 
     struct Pending {
         job: PrintJob,
@@ -461,11 +478,12 @@ mod frame {
         pending: VecDeque<Pending>,
         active: Option<(JobRunner, SnapshotLoader)>,
         pub open: bool,
+        pub focus_requested: bool,
         pub manifests: BTreeMap<String, PublishManifest>,
         pub interrupted: BTreeSet<String>,
         pub errors: BTreeMap<String, String>,
         pub progress: Option<(String, Progress)>,
-        notice: bool,
+        notice: Option<String>,
     }
 
     impl Default for FrameJobPump {
@@ -479,11 +497,12 @@ mod frame {
                 pending: VecDeque::new(),
                 active: None,
                 open: false,
+                focus_requested: false,
                 manifests: BTreeMap::new(),
                 interrupted: BTreeSet::new(),
                 errors: BTreeMap::new(),
                 progress: None,
-                notice: false,
+                notice: None,
             }
         }
     }
@@ -510,8 +529,7 @@ mod frame {
                     }
                 }
             }
-            pump.notice = !pump.interrupted.is_empty();
-            pump.open = pump.notice;
+            pump.open = !pump.interrupted.is_empty();
             pump
         }
 
@@ -616,11 +634,7 @@ mod frame {
                 return None;
             }
             self.last_frame = Some(frame);
-            let notice = if std::mem::take(&mut self.notice) {
-                self.interrupted.first().map(|id| crate::tf!("Print job {jobId} was interrupted", jobId = id))
-            } else {
-                None
-            };
+            let mut notice = None;
             for _ in 0..MAX_JOB_SHEETS {
                 let Some(job) = session.take_queued_job() else { break };
                 let id = job.job_id.clone();
@@ -679,7 +693,9 @@ mod frame {
                     Ok(Ok(StepOutcome::Worked)) => {}
                     Ok(Ok(StepOutcome::Finished(_))) => {
                         terminal = true;
-                        session.echo(crate::tf!("Print job {jobId}: {status}", jobId = id, status = status_label(runner.manifest().status)));
+                        let message = crate::tf!("Print job {jobId}: {status}", jobId = id, status = status_label(runner.manifest().status, false));
+                        session.echo(message.clone());
+                        notice = Some(message);
                     }
                     Ok(Err(error)) => {
                         self.fail(&id, error);
@@ -706,7 +722,7 @@ mod frame {
             if self.busy() {
                 ctx.request_repaint();
             }
-            notice
+            job_notice(&self.interrupted, &self.manifests, &mut self.notice).or(notice)
         }
     }
 
@@ -727,17 +743,4 @@ mod frame {
         let hash = cadcraft_engine::cmd::ubplot::source_hash(session).map_err(|error| error.to_string())?;
         Ok(SnapshotLoader(Arc::new(session.doc().map_err(|error| error.to_string())?.clone()), hash))
     }
-
-    pub(crate) fn status_label(status: JobStatus) -> &'static str {
-        match status {
-            JobStatus::Queued => crate::tl!("Queued"),
-            JobStatus::Running => crate::tl!("Running"),
-            JobStatus::Cancelled => crate::tl!("Cancelled"),
-            JobStatus::Done => crate::tl!("Done"),
-            JobStatus::Failed => crate::tl!("Failed"),
-        }
-    }
 }
-
-#[cfg(target_arch = "wasm32")]
-pub(crate) use frame::status_label;
