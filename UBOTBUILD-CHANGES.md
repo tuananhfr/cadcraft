@@ -92,6 +92,25 @@ CLI checks, builds or visual QA were run for this documentation task.
 | Web release build and visual QA: 1366×768, 1920×1080, 200% zoom | Pending — lead |
 | Desktop smoke: approved three-piece split and PDF inspection | Pending — lead |
 
+## V3.1 chrome, focus, keys
+
+2026-10-23 · GĐ3 source changes; native/wasm gates, desktop smoke and browser visual QA
+remain pending. Evidence and remaining checks are in `docs/workspace/acceptance.md`.
+
+- Ribbon modes/flyout (desktop/web): Expanded, Compact, TabsOnly and Hidden, height fallback and a bounded scrolling flyout; `crates/ui-egui/src/ribbon/render.rs` and `src/wsprofile/schema.rs`.
+- Tab overflow and menus (desktop/web): `»` keeps overflow tabs reachable; context controls hide/show tabs, select modes, open Customize and reset only the ribbon; `crates/ui-egui/src/ribbon/render.rs` and `src/ribbon/mod.rs`.
+- Ribbon ordering and toolbar conversion (desktop/web): Customize supports drag or Alt+Up/Down command ordering; dropping a toolbar creates a group, hides its source and supports layout undo; `crates/ui-egui/src/customize/ribbon_tab.rs` and `src/toolbars/drag.rs`.
+- Quick Access (desktop/web): pin/unpin from toolbars and Tool Sets, drag or Alt+Left/Right ordering, persisted title/above/below placement independent of menu visibility; `crates/ui-egui/src/quick_access.rs`.
+- Fullscreen (desktop/web): desktop uses native viewport requests with Ctrl+Shift+F; web needs a click and Fullscreen API permission, falls back to focus on refusal and reports Unsupported for programmatic calls; `crates/ui-egui/src/fullscreen.rs` and `apps/cadcraft-web/src/fullscreen.rs`.
+- Focus mode (desktop/web): temporary hidden chrome with a floating/hidden command line, Escape priority and exact layout restoration; desktop Ctrl+0, web menu/button entry; `crates/ui-egui/src/focus.rs`.
+- Density/contrast (desktop/web): Compact, Normal and Comfortable metrics, ≥32-point sampled Comfortable controls and light/dark text/focus contrast assertions; `crates/ui-egui/src/theme.rs` and `src/wsprofile/schema.rs`.
+- Web key table: Properties Ctrl+Shift+1, Command Line Ctrl+Shift+9 and Help Shift+F1, with browser-reserved defaults/profile bindings filtered; desktop keeps its bindings plus the focus/fullscreen entries; `crates/ui-egui/src/shortcuts.rs`.
+- Alias editor (desktop/web): ASCII validation, conflict confirmation, keyboard entry, reset and JSON import/export; `crates/ui-egui/src/customize/alias_tab.rs`.
+- Block context and replacement (desktop/web): INSERT-only context with the same commands for U-BOT; `blockreplace` preserves transforms, matches attributes by tag and rejects xrefs/locked layers; `crates/ui-egui/src/ribbon/contextual.rs` and `crates/engine/src/cmd/blocks/replace.rs`.
+- Blocks/History panels (desktop/web): dockable block insertion and command replay, saved placement and legacy Blocks ID; F2 retains command-line history expansion; `crates/ui-egui/src/docking.rs`, `src/dialogs.rs` and `src/cmdline.rs`.
+- CAD Manager/Minimal presets (desktop/web): local management layout and TabsOnly canvas layout; SIMPLE stays the safe fallback, with no company authorization service; `crates/ui-egui/src/wsprofile/presets.rs` and `src/wsprofile/presets/{CAD_MANAGER,MINIMAL}.json`.
+- Screen remap (desktop/web): proportional dock/floating geometry with split/panel clamps on resize/scale changes; desktop floats remain inside one main window, browser owns web monitor placement; `crates/ui-egui/src/wsprofile/apply.rs` and `src/dock_clamp.rs`.
+
 ## V3.1 GĐ4: local persistence v3
 
 2026-10-23 · Source inventory; native/wasm gates and browser crash/quota QA remain pending.
