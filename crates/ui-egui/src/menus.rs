@@ -62,6 +62,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.toolbar.dock", "Dock Toolbar", &[], None),
     ("ui.toolbar.float", "Float Toolbar", &[], None),
     ("ui.toolbar.move", "Move Toolbar", &[], None),
+    ("ui.toolbar.to_ribbon", "Convert Toolbar to Ribbon Group", &[], None),
     ("ui.workspace.select", "Select Workspace", &[], None),
     ("ui.workspace.reset", "Reset Workspace", &[], None),
     ("ui.workspace.saveas", "Save Workspace As...", &[], None),

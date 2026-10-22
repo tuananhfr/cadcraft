@@ -28,9 +28,18 @@ pub enum DragPhase {
 #[derive(Clone, Debug, PartialEq)]
 pub enum DropTarget {
     /// `order` counts the bars of the row, hidden ones included.
-    Edge { dock: Dock, row: u32, order: u32 },
+    Edge {
+        dock: Dock,
+        row: u32,
+        order: u32,
+    },
     /// Top left corner as fractions of the window's content area.
-    Float { pos_ratio: [f32; 2] },
+    Float {
+        pos_ratio: [f32; 2],
+    },
+    Ribbon {
+        tab: String,
+    },
 }
 
 /// Starts dragging `bar`; a bar the company policy holds stays where it is.
@@ -109,7 +118,7 @@ fn snapped_target(toolbars: &[ToolbarState], id: &str, target: &DropTarget, froz
             let (_, slot, _) = edge_plan(toolbars, id, *dock, *row, *order, frozen);
             DropTarget::Edge { dock: *dock, row: *row, order: u32::try_from(slot).unwrap_or(u32::MAX) }
         }
-        DropTarget::Float { .. } => target.clone(),
+        DropTarget::Float { .. } | DropTarget::Ribbon { .. } => target.clone(),
     }
 }
 
@@ -118,6 +127,7 @@ fn snapped_target(toolbars: &[ToolbarState], id: &str, target: &DropTarget, froz
 pub fn apply_drop(toolbars: &mut [ToolbarState], id: &str, target: &DropTarget, frozen: &[String]) -> Result<(), String> {
     let at = toolbars.iter().position(|bar| bar.id == id).ok_or_else(|| format!("Unknown toolbar: {}", id.chars().take(64).collect::<String>()))?;
     match target {
+        DropTarget::Ribbon { .. } => return Err(crate::tl!("Use ui.toolbar.to_ribbon to convert a toolbar").to_string()),
         DropTarget::Float { pos_ratio } => {
             let Some(bar) = toolbars.get_mut(at) else { return Ok(()) };
             bar.dock = Dock::Floating;
@@ -194,6 +204,12 @@ fn edge_target(dock: Dock, pointer: Pos2, moving: &str, toolbars: &[ToolbarState
 
 /// Where dropping with the pointer at `pointer` would put the bar `moving`.
 pub(super) fn target_at(pointer: Pos2, grab: Vec2, moving: &str, toolbars: &[ToolbarState], geometry: &Geometry, content: Rect) -> DropTarget {
+    if let Some((rect, active)) = &geometry.ribbon
+        && rect.contains(pointer)
+    {
+        let tab = geometry.ribbon_tabs.iter().find(|(rect, _)| rect.contains(pointer)).map_or(active, |(_, tab)| tab);
+        return DropTarget::Ribbon { tab: tab.clone() };
+    }
     let center = geometry.center;
     let nearest = if center.is_positive() {
         [
@@ -224,6 +240,11 @@ fn paint_preview(ctx: &egui::Context, target: &DropTarget, moving: &str, toolbar
     let stroke = Stroke::new(2.0, t.accent);
     let height = render::bar_height(crate::theme::density(ctx));
     match target {
+        DropTarget::Ribbon { tab } => {
+            if let Some((rect, _)) = geometry.ribbon_tabs.iter().find(|(_, id)| id == tab).or(geometry.ribbon.as_ref()) {
+                painter.rect_stroke(*rect, 3.0, stroke, StrokeKind::Inside);
+            }
+        }
         DropTarget::Float { pos_ratio } => {
             let size = render::drawn_size(geometry, moving, crate::theme::density(ctx));
             let min = pos2(content.left() + pos_ratio[0] * content.width(), content.top() + pos_ratio[1] * content.height());
@@ -276,6 +297,13 @@ fn paint_preview(ctx: &egui::Context, target: &DropTarget, moving: &str, toolbar
 }
 
 fn commit(app: &mut CadApp, id: &str, target: &DropTarget) {
+    if let DropTarget::Ribbon { tab } = target {
+        match app.run("ui.toolbar.to_ribbon", serde_json::json!({"toolbar": id, "tab": tab})) {
+            Ok(_) => app.ws.autosave.interaction_ended(),
+            Err(error) => app.set_status(error),
+        }
+        return;
+    }
     let frozen = frozen_orders(app);
     match crate::wsprofile::edit_toolbars(app, |toolbars| apply_drop(toolbars, id, target, &frozen)) {
         Ok(true) => app.ws.autosave.interaction_ended(),

@@ -86,7 +86,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         RibbonMode::TabsOnly => metrics.tab_height,
         RibbonMode::Hidden => 6.0,
     };
-    egui::Panel::top("cc_ribbon").exact_size(height).frame(egui::Frame::NONE.fill(Tokens::get().chrome)).show(ui, |ui| {
+    let panel = egui::Panel::top("cc_ribbon").exact_size(height).frame(egui::Frame::NONE.fill(Tokens::get().chrome)).show(ui, |ui| {
         if mode == RibbonMode::Hidden {
             ui.ctx().data_mut(|data| data.remove::<Vec<Id>>(Id::new("cc_ribbon_menu_stops")));
             return;
@@ -211,6 +211,18 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         }
         ribbon_context_menu(ui, app, &background, None);
     });
+    if mode != RibbonMode::Hidden && !active.is_empty() {
+        let responses: Vec<(usize, Id)> = ui.ctx().data(|data| data.get_temp(Id::new("cc_ribbon_tab_responses"))).unwrap_or_default();
+        let targets = responses
+            .iter()
+            .filter_map(|(index, id)| {
+                let tab = tabs.get(*index)?;
+                let response = ui.ctx().read_response(*id)?;
+                Some((response.rect, tab.id.clone()))
+            })
+            .collect();
+        crate::toolbars::render::ribbon_drop_zone(ui.ctx(), app, panel.response.rect, &active, targets);
+    }
     ui.ctx().data_mut(|data| data.insert_temp(state_id, active));
 }
 

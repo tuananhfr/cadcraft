@@ -62,13 +62,24 @@ pub(super) struct Geometry {
     pub edges: [Rect; 4],
     pub rows: Vec<RowRect>,
     pub bars: Vec<BarRect>,
+    pub ribbon: Option<(Rect, String)>,
+    pub ribbon_tabs: Vec<(Rect, String)>,
     /// Every keyboard stop of a bar with the bar it belongs to, for the key that opens its menu.
     pub stops: Vec<(Id, Id)>,
 }
 
 impl Default for Geometry {
     fn default() -> Self {
-        Self { pass: 0, center: Rect::NOTHING, edges: [Rect::NOTHING; 4], rows: Vec::new(), bars: Vec::new(), stops: Vec::new() }
+        Self {
+            pass: 0,
+            center: Rect::NOTHING,
+            edges: [Rect::NOTHING; 4],
+            rows: Vec::new(),
+            bars: Vec::new(),
+            ribbon: None,
+            ribbon_tabs: Vec::new(),
+            stops: Vec::new(),
+        }
     }
 }
 
@@ -91,6 +102,26 @@ fn building(ctx: &egui::Context, add: impl FnOnce(&mut Geometry)) {
         }
         add(slot);
     });
+}
+
+pub(crate) fn ribbon_drop_zone(ctx: &egui::Context, app: &CadApp, rect: Rect, active: &str, tabs: Vec<(Rect, String)>) {
+    building(ctx, |geometry| {
+        geometry.ribbon = Some((rect, active.to_string()));
+        geometry.ribbon_tabs = tabs;
+    });
+    if matches!(app.ws.toolbar_drag, drag::DragPhase::Dragging { .. }) {
+        let t = Tokens::get();
+        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, Id::new("cc_toolbar_preview")));
+        painter.rect_filled(rect, 3.0, t.accent.gamma_multiply(0.15));
+        painter.rect_stroke(rect, 3.0, Stroke::new(1.0, t.accent), StrokeKind::Inside);
+        painter.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            crate::tl!("Drop to add as a ribbon group"),
+            egui::TextStyle::Button.resolve(&ctx.style()),
+            t.text,
+        );
+    }
 }
 
 /// Keeps this frame's geometry for the frames that follow (keyboard routing, the next drag step).

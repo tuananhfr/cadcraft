@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 
 use crate::CadApp;
-use crate::wsprofile::schema::{RibbonGroup, RibbonMode, RibbonTab};
+use crate::wsprofile::schema::{RibbonGroup, RibbonMode, RibbonTab, WorkspaceLayout};
 
 pub mod contextual;
 pub mod render;
@@ -95,7 +95,61 @@ fn fresh_id<'a>(ids: impl Iterator<Item = &'a str>) -> String {
     (1..=501).map(|number| format!("custom_{number}")).find(|id| !ids.contains(id.as_str())).unwrap_or_else(|| "custom".into())
 }
 
+/// Conversion keeps toolbar data available for layout undo and for showing the bar again.
+pub fn convert_toolbar_to_group(layout: &mut WorkspaceLayout, toolbar: &str, tab: &str) -> Result<String, String> {
+    if layout.ribbon.effective_mode() == RibbonMode::Hidden {
+        return Err(crate::tl!("Show the ribbon before adding a toolbar group").to_string());
+    }
+    let bar = layout.toolbars.iter_mut().find(|bar| bar.id == toolbar).ok_or_else(|| crate::tl!("Toolbar was not found").to_string())?;
+    if bar.locked {
+        return Err(crate::tl!("The toolbar is locked; unlock it first").to_string());
+    }
+    let tab = layout
+        .ribbon
+        .tabs
+        .iter_mut()
+        .find(|held| held.id == tab && held.visible)
+        .ok_or_else(|| crate::tl!("Ribbon tab was not found").to_string())?;
+    if tab.groups.len() >= crate::wsprofile::validate::MAX_ARRAY || bar.commands.len() > crate::wsprofile::validate::MAX_ARRAY {
+        return Err(crate::tl!("Too many ribbon groups or toolbar commands").to_string());
+    }
+    let id = fresh_id(tab.groups.iter().map(|group| group.id.as_str()));
+    let commands = bar.commands.iter().filter(|id| crate::toolbars::resolve(id).known).cloned().collect();
+    tab.groups.push(RibbonGroup { id: id.clone(), label: bar.label.clone(), commands });
+    bar.visible = false;
+    Ok(id)
+}
+
+fn toolbar_to_ribbon(app: &mut CadApp, params: &Value) -> Result<Value, String> {
+    let toolbar = text(params, "toolbar")?;
+    let tab = text(params, "tab")?;
+    let skipped: Vec<_> = app
+        .ws
+        .user
+        .layout
+        .toolbars
+        .iter()
+        .find(|bar| bar.id == toolbar.as_ref())
+        .into_iter()
+        .flat_map(|bar| bar.commands.iter().take(crate::wsprofile::validate::MAX_ARRAY))
+        .filter(|id| !crate::toolbars::resolve(id).known)
+        .cloned()
+        .collect();
+    let mut created = String::new();
+    let changed = crate::wsprofile::edit_layout(app, |layout| {
+        created = convert_toolbar_to_group(layout, toolbar.as_ref(), tab.as_ref())?;
+        Ok(())
+    })?;
+    if !skipped.is_empty() {
+        app.set_status(crate::tf!("Skipped unknown toolbar commands: {commands}", commands = skipped.join(", ")));
+    }
+    Ok(json!({"changed": changed, "id": created, "skipped": skipped}))
+}
+
 pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<Result<Value, String>> {
+    if command == "ui.toolbar.to_ribbon" {
+        return Some(toolbar_to_ribbon(app, params));
+    }
     if !matches!(
         command,
         "ui.ribbon.tab.add"

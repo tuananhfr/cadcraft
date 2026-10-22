@@ -1885,3 +1885,11 @@
 	Interface density	Щільність інтерфейсу
 	Comfortable	Зручна
 	density must be compact, normal or comfortable	density має бути compact, normal або comfortable
+	Convert Toolbar to Ribbon Group	Перетворити панель інструментів на групу стрічки
+	Show the ribbon before adding a toolbar group	Покажіть стрічку перед додаванням групи панелі інструментів
+	Toolbar was not found	Панель інструментів не знайдено
+	The toolbar is locked; unlock it first	Панель інструментів заблоковано; спочатку розблокуйте її
+	Too many ribbon groups or toolbar commands	Забагато груп стрічки або команд панелі інструментів
+	Skipped unknown toolbar commands: {commands}	Пропущено невідомі команди панелі інструментів: {commands}
+	Drop to add as a ribbon group	Відпустіть, щоб додати як групу стрічки
+	Use ui.toolbar.to_ribbon to convert a toolbar	Використайте ui.toolbar.to_ribbon для перетворення панелі інструментів
