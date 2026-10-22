@@ -4,6 +4,7 @@
 
 pub mod apply;
 pub mod autosave;
+pub mod canonical;
 pub mod commands;
 pub mod conflict;
 pub mod history;

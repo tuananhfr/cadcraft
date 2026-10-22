@@ -3,6 +3,7 @@
 
 use serde_json::{Map, Value};
 
+use super::canonical::{CHECKSUM_KEY, ChecksumCheck, verify_checksum, with_checksum};
 use super::merge::{Layer, Level, diff_patch, effective, try_apply_patch};
 use super::migrate::{MigrateError, migrate};
 use super::presets::{SAFE_PRESET, preset, preset_json};
@@ -139,7 +140,11 @@ pub fn parse_set_with(raw: &str, policy: &[Layer]) -> Result<ProfileSet, Fallbac
         return Err(Fallback::Corrupt(format!("the stored workspace is larger than {MAX_SET_BYTES} bytes")));
     }
     let value: Value = serde_json::from_str(raw).map_err(|error| Fallback::Corrupt(error.to_string()))?;
+    if matches!(verify_checksum(&value), ChecksumCheck::Mismatch { .. }) {
+        return Err(Fallback::Corrupt("checksum mismatch".into()));
+    }
     let Value::Object(mut root) = value else { return Err(Fallback::Corrupt("the stored workspace is not a JSON object".into())) };
+    root.remove(CHECKSUM_KEY);
     let is_set = ["active", "profiles", "user"].iter().any(|key| root.contains_key(*key));
     if !is_set {
         let user = load_profile(Value::Object(root), policy)?;
@@ -225,7 +230,7 @@ pub(crate) fn set_text(set: &ProfileSet, policy: &[Layer]) -> Result<String, Str
     }
     let profiles = set.profiles.iter().map(|profile| stored_profile(profile, policy)).collect::<Result<Vec<_>, _>>()?;
     fields.insert("profiles".into(), Value::Array(profiles));
-    serde_json::to_string(&value).map_err(|error| error.to_string())
+    serde_json::to_string(&with_checksum(value)).map_err(|error| error.to_string())
 }
 
 /// Refuses a profile that startup would not read back.

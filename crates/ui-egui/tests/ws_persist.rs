@@ -6,6 +6,7 @@ use cadcraft_ui_egui::docking::Panel;
 use cadcraft_ui_egui::i18n::Preference;
 use cadcraft_ui_egui::theme::ThemePref;
 use cadcraft_ui_egui::wsprofile::SaveStatus;
+use cadcraft_ui_egui::wsprofile::canonical::with_checksum;
 use cadcraft_ui_egui::wsprofile::merge::Level;
 use cadcraft_ui_egui::wsprofile::presets::{PRESET_IDS, preset};
 use cadcraft_ui_egui::wsprofile::schema::{Dock, OwnerType, ProfileStatus, WorkspaceProfile};
@@ -275,7 +276,8 @@ fn newer_major_still_falls_back_to_simple() {
     let shared = three_committed_revisions();
     let mut newer: Value = serde_json::from_str(&shared.read_current().unwrap()).unwrap();
     newer["schema_version"] = json!("2.0.0");
-    let damaged = newer.to_string();
+    // A genuine newer writer signs its set; an unsigned edit would read as corruption instead.
+    let damaged = with_checksum(newer).to_string();
     shared.0.borrow_mut().current = Some(damaged.clone());
     let app = reattach(&shared);
     assert_eq!(app.ws.fallback, Some(Fallback::NewerMajor("2.0.0".into())));
