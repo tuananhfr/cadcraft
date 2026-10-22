@@ -5,6 +5,8 @@
 # Empty context = ordinary label; @plural = one|few|many forms with {n}.
 # Keep command IDs, keywords, technology/product names and user data unchanged.
 # External References palette (#525).
+	Output	Виведення
+	Quick Plot	Швидкий друк
 	Quick Plot...	Швидкий друк...
 	Plot frames by [Block/Window/Layout/Last] <Block>:	Друкувати рамки за [Block/Window/Layout/Last] <Block>:
 	Select frame blocks	Виберіть блоки рамок
