@@ -151,7 +151,7 @@ fn permissions_follow_risk_and_category_has_a_fallback() {
 #[test]
 fn listed_ids_exist_in_registry() {
     // Not engine commands yet; the lists keep them so the risk class is right once they land.
-    const NOT_YET: &[&str] = &["load", "vbarun"];
+    const NOT_YET: &[&str] = &["load", "vbarun", "ubplot", "ubplot.publish"];
     let ids: BTreeSet<&str> = command_registry().iter().map(|m| m.stable_id).collect();
     for (table, list) in
         [("EDIT_IDS", EDIT_IDS), ("FILE_IDS", FILE_IDS), ("EXECUTE_IDS", EXECUTE_IDS), ("LISP_IDS", LISP_IDS), ("XREF_IDS", XREF_IDS)]

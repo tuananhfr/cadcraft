@@ -400,6 +400,8 @@ Status describes desktop; commands requiring `xref` are unsupported on web.
 | `transparencydisplay` | `cad.other.transparencydisplay` | Other | model, paper | available | read |  |
 | `trim` | `cad.modify.trim` | Modify | model, paper | available | edit | tr |
 | `u` | `cad.edit.u` | Edit | model, paper | available | edit |  |
+| `ubplot.scan` | `cad.other.ubplot.scan` | Other | model, paper | available | read |  |
+| `ubplot.templates` | `cad.other.ubplot.templates` | Other | model, paper | available | read |  |
 | `undo` | `cad.other.undo` | Other | model, paper | available | edit |  |
 | `ungroup` | `cad.tools.ungroup` | Tools | model, paper | available | edit |  |
 | `union` | `cad.modify.union` | Modify | model, paper | available | edit | uni |
