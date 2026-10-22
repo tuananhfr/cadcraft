@@ -346,10 +346,10 @@ pub(crate) fn sync_aliases(app: &mut CadApp, before: &[(String, String)]) -> Res
     let result = edit_layout(app, |layout| {
         for alias in before.keys().chain(after.keys()) {
             if before.get(alias) != after.get(alias) {
+                let key = layout.aliases.keys().find(|held| held.eq_ignore_ascii_case(alias)).cloned().unwrap_or_else(|| alias.clone());
+                layout.aliases.retain(|held, _| !held.eq_ignore_ascii_case(alias));
                 if let Some(command) = after.get(alias) {
-                    layout.aliases.insert(alias.clone(), command.clone());
-                } else {
-                    layout.aliases.remove(alias);
+                    layout.aliases.insert(key, command.clone());
                 }
             }
         }
