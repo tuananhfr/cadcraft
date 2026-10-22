@@ -896,6 +896,38 @@ fn plot_params(st: &PlotState, preview_dpi: Option<f64>) -> Value {
     p
 }
 
+fn pagesetup_params(st: &PlotState) -> Value {
+    let page = &st.page;
+    let mut p = json!({
+        "layout": st.target,
+        "device": page.device,
+        "landscape": page.landscape,
+        "margins": page.margins_mm,
+        "lineweights": page.lineweights,
+        "plotTransparency": page.plot_transparency,
+        "displayPlotStyles": page.show_plot_styles,
+        "center": page.center,
+        "scaleToFit": page.scale_to_fit,
+    });
+    if let Some(o) = p.as_object_mut() {
+        let known_paper = cadcraft_render::paper_size(&page.paper).is_some()
+            || cadcraft_engine::cmd::plotters::find_device(&page.device).is_some_and(|dev| dev.paper(&page.paper).is_some());
+        if known_paper {
+            o.insert("paper".into(), json!(page.paper));
+        } else {
+            o.insert("width".into(), json!(page.width_mm));
+            o.insert("height".into(), json!(page.height_mm));
+        }
+        if !page.plot_style_table.is_empty() {
+            o.insert("plotStyleTable".into(), json!(page.plot_style_table));
+        }
+        if !page.scale_to_fit {
+            o.insert("scale".into(), json!(page.scale));
+        }
+    }
+    p
+}
+
 /// The Plot dialog: what to plot, on which paper and at what scale; OK asks where to save the PDF
 /// (where the host has a file dialog) and runs `plot` with those settings.
 fn plot(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Action {
@@ -984,18 +1016,7 @@ fn plot(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Action {
         ui.separator();
         ui.horizontal(|ui| {
             if !model && ui.button("Apply to Layout").on_hover_text("Save these settings in the layout's page setup").clicked() {
-                let page = &st.page;
-                action = Some((
-                    "pagesetup",
-                    json!({
-                        "layout": st.target,
-                        "paper": page.paper,
-                        "landscape": page.landscape,
-                        "scaleToFit": page.scale_to_fit,
-                        "lineweights": page.lineweights,
-                        "plotTransparency": page.plot_transparency,
-                    }),
-                ));
+                action = Some(("pagesetup", pagesetup_params(&st)));
             }
             preview = ui.button("Preview").on_hover_text("The sheet as these settings plot it").clicked();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1181,6 +1202,61 @@ mod plot_dialog_tests {
         assert_eq!((p["device"].as_str(), p["paper"].as_str()), (Some("None"), Some(a3)));
         apply_page_change(&mut st.page, "plotStyleTable", &json!("None"));
         assert!(plot_params(&st, None).get("plotStyleTable").is_none());
+    }
+
+    #[test]
+    fn apply_to_layout_keeps_device_paper_and_plot_style() {
+        let mut st = state("Layout1");
+        assert!(cadcraft_engine::cmd::plotters::device_names().iter().any(|name| name == "CADCraft PDF"));
+        st.page.device = "CADCraft PDF".into();
+        let a1 = cadcraft_render::paper_size("A1").unwrap();
+        st.page.paper = a1.name.into();
+        st.page.width_mm = a1.width_mm;
+        st.page.height_mm = a1.height_mm;
+        st.page.plot_style_table = "monochrome.ctb".into();
+        st.page.margins_mm = [5.0; 4];
+        st.page.scale_to_fit = false;
+        st.page.scale = 0.01;
+        st.page.landscape = false;
+        st.page.lineweights = false;
+        st.page.plot_transparency = true;
+        st.page.show_plot_styles = true;
+        st.page.center = true;
+        st.center = false;
+        let params = pagesetup_params(&st);
+        assert_eq!(params["paper"], json!(st.page.paper));
+        assert!(params.get("width").is_none() && params.get("height").is_none());
+        assert!(params.get("plotArea").is_none());
+        let mut s = Session::new();
+        s.execute("pagesetup", &params).unwrap();
+        let report = s.execute("pagesetup", &json!({ "layout": "Layout1" })).unwrap();
+        let page: cadcraft_doc::PageSetup = serde_json::from_value(report["page"].clone()).unwrap();
+        assert_eq!(page, st.page);
+    }
+
+    #[test]
+    fn apply_to_layout_custom_size_round_trips() {
+        let mut st = state("Layout1");
+        st.page.device = "CADCraft PDF".into();
+        st.page.paper = "User (841.00 x 2400.00 MM)".into();
+        st.page.width_mm = 841.0;
+        st.page.height_mm = 2400.0;
+        st.page.margins_mm = [2.0, 3.0, 4.0, 5.0];
+        st.page.scale_to_fit = true;
+        let params = pagesetup_params(&st);
+        assert_eq!(params["width"], json!(841.0));
+        assert_eq!(params["height"], json!(2400.0));
+        assert!(params.get("paper").is_none());
+        assert!(params.get("scale").is_none());
+        assert!(params.get("plotStyleTable").is_none());
+        assert!(params.get("plotArea").is_none());
+        let mut s = Session::new();
+        s.execute("pagesetup", &params).unwrap();
+        let report = s.execute("pagesetup", &json!({ "layout": "Layout1" })).unwrap();
+        let page: cadcraft_doc::PageSetup = serde_json::from_value(report["page"].clone()).unwrap();
+        assert_eq!(page.width_mm, 841.0);
+        assert_eq!(page.height_mm, 2400.0);
+        assert_eq!(page, st.page);
     }
 
     #[test]
