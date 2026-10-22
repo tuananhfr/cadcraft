@@ -214,7 +214,7 @@ fn sheet_pages(s: &Session, sheet: &Sheet) -> std::result::Result<Vec<Value>, St
         };
         let object = value.as_object_mut().ok_or_else(|| "page must be an object".to_string())?;
         // Each piece is an exact crop; inherited roll margins would clip its seam-area geometry.
-        object.insert("margins".into(), json!([0.0; 4]));
+        object.insert("margins".into(), json!([0.0, 0.0, 0.0, 0.0]));
         object.insert("seams".into(), json!(seams));
         object.insert("seamOverlapMm".into(), json!(split.overlap_mm));
         pages.push(value);
