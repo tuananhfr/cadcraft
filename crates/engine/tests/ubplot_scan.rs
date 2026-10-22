@@ -312,7 +312,7 @@ fn templates_import_list_reset() {
     assert_eq!(merged["templates"][0]["blockNames"], json!(["FRAME-A3"]));
     assert_eq!(merged["templates"][1]["id"], "generic");
     let plan = typed(&scan(&mut s, json!({"mode": "block", "handles": handles})));
-    assert_eq!(plan.sheets[0].frame_template_id.as_deref(), Some("synthetic"));
+    assert_eq!(plan.sheets[0].frame_template_id.as_deref(), Some("synthetic@1"));
     assert!(s.execute("ubplot.templates", &json!({"action": "import", "text": "broken"})).is_err());
     assert_eq!(s.execute("ubplot.templates", &json!({"action": "list"})).unwrap(), merged);
     assert!(s.execute("ubplot.templates", &json!({"action": "other"})).is_err());

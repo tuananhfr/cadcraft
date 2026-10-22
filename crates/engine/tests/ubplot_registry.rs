@@ -16,7 +16,7 @@ fn import(value: Value) -> FrameRegistry {
 #[test]
 fn builtin_has_only_generic_without_lpc_assumptions() {
     let builtin = FrameRegistry::builtin();
-    assert_eq!(builtin.schema_version, "1.0");
+    assert_eq!(builtin.schema_version, "2");
     assert_eq!(builtin.templates.len(), 1);
     let generic = &builtin.templates[0];
     assert_eq!(generic.id, "generic");
@@ -49,7 +49,6 @@ fn import_adds_and_find_prefers_specific() {
     ]);
     specific["attributes"] = json!({"sheet_id": ["NUMBER"], "revision": ["ISSUE"], "title": ["NAME"]});
     specific["media_mm"] = json!([[297, 420]]);
-    specific["superseded_by"] = json!("office-v2");
     let mut exact = template();
     exact["id"] = json!("exact");
     exact["block_names"] = json!(["Exact-Name", "BẢN VẼ", "MID*LITERAL", "KHUNG-A1"]);
@@ -59,7 +58,7 @@ fn import_adds_and_find_prefers_specific() {
     assert_eq!(office.attributes.revision, ["ISSUE"]);
     assert_eq!(office.attributes.title, ["NAME"]);
     assert_eq!(office.media_mm, [[297.0, 420.0]]);
-    assert_eq!(office.superseded_by.as_deref(), Some("office-v2"));
+    assert_eq!(office.superseded_by, None);
     assert_eq!(office.geometry[0], GeometryRule::LayerRect { layer: "FRAME".into() });
     assert_eq!(office.geometry[1], GeometryRule::LocalRect { min: [-10.0, -20.0], max: [410.0, 277.0] });
     assert_eq!(imported.templates[1].attributes, AttributeTags::default());
@@ -110,7 +109,7 @@ fn import_adds_and_find_prefers_specific() {
 
 #[test]
 fn import_rejects_hostile() {
-    const MAX_BYTES: usize = 256 * 1024;
+    const MAX_BYTES: usize = 2 * 1024 * 1024;
     let valid = registry(vec![template()]).to_string();
     let mut padded = valid.clone();
     padded.push_str(&" ".repeat(MAX_BYTES - padded.len()));
@@ -119,14 +118,14 @@ fn import_rejects_hostile() {
     padded.push(' ');
     let mut cases = vec![padded, "{".into(), "null".into(), "[]".into(), "".into()];
 
-    let templates: Vec<Value> = (0..500)
+    let templates: Vec<Value> = (0..1000)
         .map(|index| {
             let mut value = template();
             value["id"] = json!(format!("office-{index}"));
             value
         })
         .collect();
-    assert_eq!(import(registry(templates.clone())).templates.len(), 500);
+    assert_eq!(import(registry(templates.clone())).templates.len(), 1000);
     let mut too_many = templates;
     too_many.push(template());
     cases.push(registry(too_many).to_string());
