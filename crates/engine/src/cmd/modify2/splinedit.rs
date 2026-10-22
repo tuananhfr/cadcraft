@@ -7,6 +7,7 @@
 //! directly and drop the fit data, as the curve no longer follows it.
 
 use super::*;
+use crate::prompt::PromptArg;
 
 /// The spline after a JSON SPLINEDIT option (`option` plus that option's parameters).
 pub(super) fn run_splinedit(s: &mut Session, p: &Value) -> Result<Value> {
@@ -541,7 +542,8 @@ impl Interactive for SplineditM {
             }
             Sub::VertexWeight => {
                 let w = sp.weights.get(self.mark).copied().unwrap_or(1.0);
-                Prompt::new(format!("Enter new weight (current = {w:.4})"), Accept::NUMBER).kw(&marker).default("N")
+                let args = vec![("weight", PromptArg::Text(format!("{w:.4}")))];
+                Prompt::tf("Enter new weight (current = {weight})", args, Accept::NUMBER).kw(&marker).default("N")
             }
             Sub::SelectPoint => Prompt::new(if self.back == Sub::FitMove { "Specify fit point" } else { "Specify control point" }, Accept::POINT),
         }

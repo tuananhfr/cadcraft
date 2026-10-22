@@ -16,6 +16,7 @@ use super::helpers::line;
 use super::machines::number;
 use super::modify::transform_entities;
 use crate::grips::{GripAction, GripMode, grip_action, grip_actions, mode_matrix};
+use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Running, Session, Step};
 
 /// At most this many grips are hot at once (input-derived: a cap on the work per edit).
@@ -359,7 +360,8 @@ impl Interactive for GripEdit {
                     GripAction::Radius => ("Specify radius", Accept::POINT_OR_NUMBER),
                     GripAction::RemoveVertex | GripAction::ToLine => ("", Accept::POINT),
                 };
-                Prompt::new(format!("{} {msg}", a.title()), accept).kw(&["eXit"]).base(base)
+                let args = vec![("title", PromptArg::Text(a.title().to_string())), ("message", PromptArg::Key(msg))];
+                Prompt::tf("{title} {message}", args, accept).kw(&["eXit"]).base(base)
             }
             Ask::Mode => {
                 let (msg, accept, kw): (&str, Accept, &[&str]) = match self.mode {

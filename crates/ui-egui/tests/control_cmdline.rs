@@ -59,6 +59,6 @@ fn accepted_input_has_no_error_and_reports_the_prompt() {
 #[test]
 fn open_without_a_path_is_refused_before_the_engine() {
     let mut app = app();
-    assert_eq!(call(&mut app, "app.open", json!({})), json!({"ok": false, "error": "missing path"}));
-    assert_eq!(call(&mut app, "app.open", json!({"path": 3})), json!({"ok": false, "error": "missing path"}));
+    assert_eq!(call(&mut app, "app.open", json!({})), json!({"ok": false, "error": "missing path", "outcome": "validation_error"}));
+    assert_eq!(call(&mut app, "app.open", json!({"path": 3})), json!({"ok": false, "error": "missing path", "outcome": "validation_error"}));
 }

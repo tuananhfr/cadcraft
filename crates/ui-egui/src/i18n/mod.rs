@@ -283,6 +283,28 @@ pub fn format(source: &str, values: &[(&str, String)]) -> String {
     result
 }
 
+pub fn prompt_message(prompt: &cadcraft_engine::Prompt) -> String {
+    use cadcraft_engine::prompt::PromptArg;
+
+    match &prompt.template {
+        Some(template) => {
+            let values: Vec<_> = template
+                .args
+                .iter()
+                .map(|(name, arg)| {
+                    let value = match arg {
+                        PromptArg::Text(text) => text.clone(),
+                        PromptArg::Key(key) => t(key).to_string(),
+                    };
+                    (*name, value)
+                })
+                .collect();
+            format(template.source, &values)
+        }
+        None => t(&prompt.message).to_string(),
+    }
+}
+
 /// Ukrainian integer plurals: one (1, 21), few (2–4, 22–24), many (0, 5–20, 25…).
 pub fn plural_uk(n: u64) -> usize {
     match (n % 10, n % 100) {

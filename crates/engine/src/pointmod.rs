@@ -12,7 +12,7 @@
 use cadcraft_doc::{Drawing, Space};
 use cadcraft_geom::Vec2;
 
-use crate::prompt::{Accept, Input, Prompt};
+use crate::prompt::{Accept, Input, Prompt, PromptArg};
 use crate::snap::{SnapHit, mode};
 use crate::{Result, Session};
 
@@ -157,14 +157,20 @@ impl Session {
             Frame::From { base: Some(b) } => Prompt::new("<Offset>", point).base(b),
             Frame::Mid { first: None } => Prompt::new("First point of mid", point),
             Frame::Mid { first: Some(f) } => Prompt::new("Second point of mid", point).base(f),
-            Frame::Filter { keep, first: None } => Prompt::new(format!("{} of", keep.name()), point).base_opt(p.base),
-            Frame::Filter { keep, first: Some(_) } => Prompt::new(format!("(need {})", keep.need()), point).base_opt(p.base),
+            Frame::Filter { keep, first: None } => Prompt::tf("{axes} of", vec![("axes", PromptArg::Text(keep.name()))], point).base_opt(p.base),
+            Frame::Filter { keep, first: Some(_) } => {
+                let args = vec![("axes", PromptArg::Text(keep.need()))];
+                Prompt::tf("(need {axes})", args, point).base_opt(p.base)
+            }
             Frame::TempTrack => Prompt::new("Specify temporary OTRACK point", point),
             Frame::Track { last: None } => Prompt::new("First tracking point", point),
             Frame::Track { last: Some(l) } => Prompt::new("Next point (Press ENTER to end tracking)", point).base(l),
             Frame::Angle { .. } | Frame::Snap { mode: 0 } => p,
             // "Endpoint of:", keeping the base and deferral PER/TAN need.
-            Frame::Snap { mode } => Prompt { message: format!("{} of", snap_name(mode)), keywords: Vec::new(), default: None, ..p },
+            Frame::Snap { mode } => {
+                let snap = Prompt::tf("{snap} of", vec![("snap", PromptArg::Key(snap_name(mode)))], p.accept);
+                Prompt { message: snap.message, template: snap.template, keywords: Vec::new(), default: None, ..p }
+            }
         })
     }
 

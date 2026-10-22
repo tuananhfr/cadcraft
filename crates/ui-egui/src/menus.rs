@@ -237,15 +237,17 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
             let picked = app.services.pick_open.as_ref().and_then(|f| f());
             if let Some(p) = picked {
                 app.open_path(&p);
+                Ok(Value::Null)
+            } else {
+                Ok(json!({"cancelled": true}))
             }
-            Ok(Value::Null)
         }
         // Pick a template (.dwt or .dxf) and start a new drawing from it.
         "ui.newtemplate" => {
             if let Some(p) = app.services.pick_open.as_ref().and_then(|f| f()) {
                 return Some(app.session.execute("new", &json!({ "template": p })).map_err(|e| e.to_string()));
             }
-            Ok(Value::Null)
+            Ok(json!({"cancelled": true}))
         }
         // RECOVER from the menu or typed: pick the file. Without a picker the engine asks for the
         // file name on the command line.
@@ -253,8 +255,10 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
             if let Some(p) = app.services.pick_open.as_ref().and_then(|f| f()) {
                 let r = app.run("recover", json!({ "path": p }));
                 app.opened(r);
+                Ok(Value::Null)
+            } else {
+                Ok(json!({"cancelled": true}))
             }
-            Ok(Value::Null)
         }
         "ui.saveas" | "saveas" if no_path => {
             let title = app.session.state().map(|s| s.title.clone()).ok();
@@ -262,7 +266,7 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
             if let Some(p) = app.services.pick_save.as_ref().and_then(|f| f(&name)) {
                 return Some(app.session.execute("saveas", &saveas_params(&app.ui, &app.session, &p)).map_err(|e| e.to_string()));
             }
-            Ok(Value::Null)
+            Ok(json!({"cancelled": true}))
         }
         "qsave" if no_path && app.session.state().is_ok_and(|s| s.path.is_none()) => return run_ui_command(app, "ui.saveas", &Value::Null),
         // EXPORTPDF from the menu or typed: ask where to save the PDF (PLOT and PRINT open the Plot
@@ -272,7 +276,9 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
             let pick = app.services.pick_save.as_ref()?;
             let title = app.session.state().map(|s| s.title.clone()).unwrap_or_default();
             let stem = std::path::Path::new(&title).file_stem().map(|s| s.to_string_lossy().to_string()).filter(|s| !s.is_empty());
-            let Some(path) = pick(&format!("{}.pdf", stem.unwrap_or_else(|| "Drawing".into()))) else { return Some(Ok(Value::Null)) };
+            let Some(path) = pick(&format!("{}.pdf", stem.unwrap_or_else(|| "Drawing".into()))) else {
+                return Some(Ok(json!({"cancelled": true})));
+            };
             let r = app.session.execute("exportpdf", &json!({ "path": path })).map_err(|e| e.to_string());
             app.session.echo(match &r {
                 Ok(_) => format!("Plotted to {path}"),

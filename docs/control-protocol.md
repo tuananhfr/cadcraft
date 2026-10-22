@@ -12,6 +12,24 @@ Start the desktop app with `--control PORT` (or `CADCRAFT_CONTROL_PORT=PORT`). I
 Errors come back as `{"id": …, "ok": false, "error": "message"}`. An unknown method's error points
 to `control.methods`, which lists the methods the server answers.
 
+In the running app, replies to `engine.execute` (including its `command` alias), `drawing.inspect`
+(including `document.inspect`), `app.open` and `app.save` also carry a top-level `outcome`.
+The existing `ok`, `result` and `error` fields keep their meanings; errors stay in English.
+For example: ``{"id": 2, "ok": false, "error": "unknown command `nope`", "outcome": "unsupported"}``.
+
+| Outcome | Meaning |
+|---|---|
+| `success` | The command completed successfully. |
+| `cancelled` | A picker was cancelled; the result contains `{"cancelled": true}`. |
+| `unsupported` | The command is unknown or unavailable on this target. |
+| `permission_denied` | Reserved for deferred tenant permissions; currently never returned. |
+| `validation_error` | Invalid parameters, a disabled command, no active document, or a UI command error. |
+| `engine_error` | An engine failure or an internal error caught by the engine guard. |
+
+Commands unavailable on the current target are refused before execution with
+`"{id} is only available in the desktop app"`. `open`, `saveas` and `qsave` retain their
+programmatic behavior; explicit picker commands such as `ui.open` can report `cancelled`.
+
 A line that is not a JSON object with a string `method` (an HTTP request, text that isn't JSON,
 bytes that aren't UTF-8) gets one error reply and the server closes the connection; nothing sent
 after it runs. Blank lines are skipped.

@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 
 use super::helpers::{line, lwpoly, v3};
 use super::*;
+use crate::prompt::PromptArg;
 use crate::{Accept, Input, Interactive, Prompt, Result, Session, Step};
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -198,7 +199,7 @@ impl Interactive for ToleranceM {
             0 => Prompt::new("Enter geometric characteristic", VALUE).kw(SYMBOL_KW).default("Position"),
             1 => Prompt::new("Enter first tolerance value", VALUE).default("none"),
             2 => Prompt::new("Enter second tolerance value", VALUE).default("none"),
-            n @ 3..=5 => Prompt::new(format!("Enter datum reference {}", n - 2), VALUE).default("none"),
+            n @ 3..=5 => Prompt::tf("Enter datum reference {number}", vec![("number", PromptArg::Text((n - 2).to_string()))], VALUE).default("none"),
             _ => Prompt::new("Enter tolerance location", Accept::POINT),
         }
     }

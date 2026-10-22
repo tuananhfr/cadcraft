@@ -26,11 +26,53 @@ impl Accept {
     pub const SELECT: Accept = Accept { point: true, number: false, text: false, select: true, enter: true };
 }
 
+/// User data stays verbatim; fixed English phrases can be translated at display time.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PromptArg {
+    Text(String),
+    Key(&'static str),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PromptTemplate {
+    pub source: &'static str,
+    pub args: Vec<(&'static str, PromptArg)>,
+}
+
+/// Substitute once so placeholders inside user data remain untouched.
+pub fn fill(source: &str, args: &[(&'static str, PromptArg)]) -> String {
+    let mut result = String::with_capacity(source.len());
+    let mut rest = source;
+    while let Some((before, tail)) = rest.split_once('{') {
+        result.push_str(before);
+        let Some((key, after)) = tail.split_once('}') else {
+            result.push('{');
+            rest = tail;
+            break;
+        };
+        if let Some((_, value)) = args.iter().find(|(name, _)| *name == key) {
+            result.push_str(match value {
+                PromptArg::Text(text) => text,
+                PromptArg::Key(text) => text,
+            });
+        } else {
+            result.push('{');
+            result.push_str(key);
+            result.push('}');
+        }
+        rest = after;
+    }
+    result.push_str(rest);
+    result
+}
+
 /// A prompt shown on the command line.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Prompt {
     pub message: String,
+    #[serde(skip)]
+    pub template: Option<PromptTemplate>,
     /// Keyword options, written with their shortcut letters capitalised (e.g. "Undo", "Close").
     pub keywords: Vec<String>,
     pub default: Option<String>,
@@ -80,6 +122,9 @@ pub enum Picker {
 impl Prompt {
     pub fn new(message: impl Into<String>, accept: Accept) -> Self {
         Prompt { message: message.into(), accept, ..Default::default() }
+    }
+    pub fn tf(source: &'static str, args: Vec<(&'static str, PromptArg)>, accept: Accept) -> Self {
+        Prompt { message: fill(source, &args), template: Some(PromptTemplate { source, args }), accept, ..Default::default() }
     }
     /// The grip being stretched (the `grip` field).
     pub fn grip(mut self, g: (Handle, usize)) -> Self {
