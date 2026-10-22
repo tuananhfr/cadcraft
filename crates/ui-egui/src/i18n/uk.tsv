@@ -1851,3 +1851,7 @@
 	A3	A3
 	A4	A4
 	A5	A5
+	Roll Back Workspace to 1.0.0	Відкотити робочий простір до 1.0.0
+	Restored the 1.0.0 workspace. Changes are not saved until restart.	Відновлено робочий простір 1.0.0. Зміни не зберігатимуться до перезапуску.
+	Saving suspended	Збереження призупинено
+	No 1.0.0 workspace backup is available	Резервна копія робочого простору 1.0.0 відсутня

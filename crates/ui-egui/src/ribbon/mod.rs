@@ -121,7 +121,7 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
                     "ui.ribbon.tab.rename" => tab.label = text(params, "label")?.into(),
                     "ui.ribbon.group.add" => {
                         let id = fresh_id(tab.groups.iter().map(|group| group.id.as_str()));
-                        tab.groups.push(RibbonGroup { id: id.clone(), label: text(params, "label")?.into(), commands: Vec::new() });
+                        tab.groups.push(RibbonGroup { id: id.clone(), label: text(params, "label")?.into(), ..RibbonGroup::default() });
                         created = Some(id);
                     }
                     _ => {

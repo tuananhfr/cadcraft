@@ -194,10 +194,10 @@ fn corrupt_store_falls_back_ux15() {
     assert!(!standard_toolbar_visible(&current_set(&app).user.unwrap()));
 
     let mut newer = preset("SIMPLE").unwrap();
-    newer.schema_version = "2.0.0".into();
+    newer.schema_version = 4;
     let newer = serde_json::to_string(&json!({"active": "SIMPLE", "user": newer})).unwrap();
     let app = attached(MemoryStore { current: Some(newer), ..MemoryStore::default() });
-    assert!(matches!(app.ws.fallback, Some(Fallback::NewerMajor(ref version)) if version == "2.0.0"), "{:?}", app.ws.fallback);
+    assert!(matches!(app.ws.fallback, Some(Fallback::NewerMajor(ref version)) if version == "4"), "{:?}", app.ws.fallback);
 
     let invalid = json!({"active": "SIMPLE", "user": {"schema_version": "1.0.0", "name": "x".repeat(2000)}}).to_string();
     let shared = Shared::new(MemoryStore { current: Some(invalid.clone()), ..MemoryStore::default() });
@@ -275,12 +275,12 @@ fn newer_major_still_falls_back_to_simple() {
     let _aliases = alias_lock();
     let shared = three_committed_revisions();
     let mut newer: Value = serde_json::from_str(&shared.read_current().unwrap()).unwrap();
-    newer["schema_version"] = json!("2.0.0");
+    newer["schemaVersion"] = json!(4);
     // A genuine newer writer signs its set; an unsigned edit would read as corruption instead.
     let damaged = with_checksum(newer).to_string();
     shared.0.borrow_mut().current = Some(damaged.clone());
     let app = reattach(&shared);
-    assert_eq!(app.ws.fallback, Some(Fallback::NewerMajor("2.0.0".into())));
+    assert_eq!(app.ws.fallback, Some(Fallback::NewerMajor("4".into())));
     assert_eq!(app.ws.user.base_id.as_deref(), Some("SIMPLE"));
     assert_eq!(app.ws.effective.layout, preset("SIMPLE").unwrap().layout);
     assert_eq!(shared.damaged(), vec![damaged.into_bytes()]);
@@ -770,6 +770,13 @@ struct SnapshotsRefused {
 }
 
 impl ProfileStore for SnapshotsRefused {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        self.inner.keep_backup(version, raw)
+    }
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.inner.read_backup(version)
+    }
+
     fn read_current(&self) -> Option<String> {
         self.inner.read_current()
     }
@@ -876,6 +883,13 @@ impl Shared {
 }
 
 impl ProfileStore for Shared {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        self.0.borrow_mut().keep_backup(version, raw)
+    }
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.0.borrow().read_backup(version)
+    }
+
     fn take_external_change(&mut self) -> bool {
         self.1.replace(false)
     }
@@ -945,6 +959,13 @@ impl Flaky {
 }
 
 impl ProfileStore for Flaky {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        self.inner.keep_backup(version, raw)
+    }
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.inner.read_backup(version)
+    }
+
     fn read_current(&self) -> Option<String> {
         self.inner.read_current()
     }
@@ -1119,6 +1140,13 @@ struct RefuseOutgoingOnce {
 }
 
 impl ProfileStore for RefuseOutgoingOnce {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        self.inner.keep_backup(version, raw)
+    }
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.inner.read_backup(version)
+    }
+
     fn read_current(&self) -> Option<String> {
         self.inner.read_current()
     }

@@ -14,6 +14,7 @@ use super::{LOCKED_MESSAGE, SaveStatus, WORKSPACE_FILE, observe, rfc3339, startu
 use crate::CadApp;
 
 pub(super) const MAX_NAME: usize = 100;
+pub const ROLLBACK_MESSAGE: &str = "Restored the 1.0.0 workspace. Changes are not saved until restart.";
 
 pub fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
     let result = match id {
@@ -23,6 +24,7 @@ pub fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value,
         "ui.workspace.export" => export(app, params),
         "ui.workspace.import" => import(app, params),
         "ui.workspace.restore" => restore_revision(app, params),
+        "ui.workspace.rollback" => rollback(app),
         "ui.workspace.status" => Ok(app.workspace_status()),
         "ui.workspace.set" => set_value(app, params),
         "ui.workspace.resolve" => resolve(app, params),
@@ -50,6 +52,32 @@ fn save_outgoing(app: &mut CadApp) -> Result<(), String> {
         app.commit_workspace(false)?;
     }
     Ok(())
+}
+
+fn rollback(app: &mut CadApp) -> Result<Value, String> {
+    let policy = app.ws.policy();
+    let store = app.ws.store.as_mut().ok_or("No workspace storage is attached")?;
+    let raw = store.read_backup("1.0.0").ok_or(crate::tl!("No 1.0.0 workspace backup is available"))?;
+    let set = startup::parse_set_with(&raw, &policy).map_err(|fallback| startup::describe(&fallback))?;
+    store.write_current(&raw)?;
+    app.ws.suspended = true;
+    app.ws.unkept_backup = None;
+    app.ws.autosave.clear();
+    app.ws.status = SaveStatus::Unsaved;
+    app.ws.device = set.device.unwrap_or_default();
+    app.ws.user = set
+        .user
+        .or_else(|| set.profiles.iter().find(|profile| profile.profile_id == set.active).cloned())
+        .unwrap_or_else(|| startup::fresh_user(&set.active, &policy));
+    app.ws.active = set.active;
+    app.ws.profiles = set.profiles;
+    app.ws.set_extra = set.extra;
+    app.ws.history.clear();
+    app.ws.rebuild();
+    app.apply_workspace();
+    app.ws.message = Some(ROLLBACK_MESSAGE.into());
+    app.set_status(crate::tl!("Restored the 1.0.0 workspace. Changes are not saved until restart."));
+    Ok(json!({"restored": "1.0.0"}))
 }
 
 fn issues_text(issues: &[Issue]) -> String {
@@ -187,6 +215,7 @@ fn export_text(app: &CadApp) -> Result<(String, Vec<String>), String> {
     let profile = WorkspaceProfile { etag: None, tenant_id: None, owner_id: None, ..app.ws.user.clone() };
     let value = serde_json::to_value(&profile).map_err(|error| error.to_string())?;
     let (value, ignored) = portable_profile(value);
+    let value = super::wire::to_wire(&value);
     let text = serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?;
     validate(&text, Mode::Import).map_err(|issues| format!("This workspace cannot be exported: {}", issues_text(&issues)))?;
     Ok((text, ignored))
@@ -236,10 +265,12 @@ fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         (None, None) => return Err("text or path is required".into()),
     };
     let value = validate(&text, Mode::Import).map_err(|issues| format!("This workspace cannot be imported: {}", issues_text(&issues)))?;
-    let (value, ignored) = portable_profile(value);
+    let (value, mut ignored) = portable_profile(value);
+    let (value, normalized_ignored) = portable_profile(super::wire::from_wire(&value));
+    ignored.extend(normalized_ignored);
     let migrated = migrate(value).map_err(|error| format!("This workspace cannot be imported: {error}"))?;
     let mut profile: WorkspaceProfile =
-        serde_json::from_value(migrated.value).map_err(|error| format!("This workspace cannot be imported: {error}"))?;
+        serde_json::from_value(portable_profile(migrated.value).0).map_err(|error| format!("This workspace cannot be imported: {error}"))?;
     if let Some(tree) = &mut profile.layout.dock_tree {
         strip_nulls(tree);
     }

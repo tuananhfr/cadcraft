@@ -53,7 +53,7 @@ fn set_without_checksum_still_reads() {
     assert_eq!(set.active, "SIMPLE");
     assert_eq!(user.profile_id, "user.aged-1y");
     assert_eq!(user.revision, 4);
-    assert_eq!(user.schema_version, "1.0.0");
+    assert_eq!(user.schema_version, 3);
     assert!(parse_set(include_str!("fixtures/workspace/aged-1y.json")).is_ok());
     assert!(parse_set(include_str!("fixtures/workspace/legacy-v1.json")).is_ok());
 }
@@ -96,8 +96,8 @@ fn commit_writes_valid_checksums_for_current_and_snapshot() {
         let raw = store.read_current().unwrap();
         let value: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(verify_checksum(&value), ChecksumCheck::Valid);
-        assert!(value.get("schemaVersion").is_none());
-        assert_eq!(value["schema_version"], json!("1.0.0"));
+        assert!(value.get("schema_version").is_none());
+        assert_eq!(value["schemaVersion"], json!(3));
         let set = parse_set(&raw).unwrap();
         assert!(!set.extra.contains_key(CHECKSUM_KEY));
         assert_eq!(store.read_snapshot(set.user.unwrap().revision), Some(raw));
@@ -128,4 +128,155 @@ fn checksum_damage_restores_the_last_valid_snapshot() {
 fn oversized_set_is_rejected_before_checksum_verification() {
     let value = json!({"checksum": "invalid", "padding": "x".repeat(MAX_SET_BYTES)});
     assert!(matches!(parse_set(&value.to_string()), Err(Fallback::Corrupt(reason)) if reason.contains("larger than")));
+}
+
+#[test]
+fn gd3_fields_survive_v1_to_v3_and_back() {
+    use cadcraft_ui_egui::wsprofile::migrate::migrate;
+    use cadcraft_ui_egui::wsprofile::wire::{from_wire, to_wire};
+    let old = json!({"schema_version": "1.0.0", "layout": {
+        "ribbon": {"mode": "tabs_only"}, "quick_access_position": "below", "density": "comfortable"
+    }});
+    let migrated = migrate(old).unwrap().value;
+    let wire = to_wire(&migrated);
+    assert_eq!(wire["schemaVersion"], 3);
+    assert_eq!(wire["layout"]["ribbon"]["ribbonMode"], "tabs_only");
+    assert_eq!(wire["layout"]["quickAccessPosition"], "below");
+    assert_eq!(wire["layout"]["density"], "comfortable");
+    assert_eq!(from_wire(&wire), migrated);
+
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
+    app.attach_profile_store(Box::new(MemoryStore { current: Some(wire.to_string()), ..Default::default() }));
+    app.run("ui.toggle.toolbar", json!({"on": false})).unwrap();
+    app.commit_workspace_now().unwrap();
+    let raw = app.ws.store.as_ref().unwrap().read_current().unwrap();
+    let saved = parse_set(&raw).unwrap().user.unwrap();
+    let layout = serde_json::to_value(saved.layout).unwrap();
+    assert_eq!(layout["ribbon"]["mode"], "tabs_only");
+    assert_eq!(layout["quick_access_position"], "below");
+    assert_eq!(layout["density"], "comfortable");
+}
+
+#[test]
+fn v3_set_is_camel_case_with_version_3() {
+    use cadcraft_ui_egui::wsprofile::wire::is_wire;
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
+    app.attach_profile_store(Box::new(MemoryStore::default()));
+    app.run("ui.workspace.set", json!({"pointer": "/command_line/lines", "value": 5})).unwrap();
+    app.run("ui.workspace.set", json!({"scope": "device", "pointer": "/command_line/height_ratio", "value": 0.3})).unwrap();
+    app.run("ui.workspace.saveas", json!({"name": "Wire fixture"})).unwrap();
+    let raw = app.ws.store.as_ref().unwrap().read_current().unwrap();
+    let wire: Value = serde_json::from_str(&raw).unwrap();
+    assert!(is_wire(&wire));
+    assert_eq!(wire["schemaVersion"], 3);
+    assert!(wire["profiles"][0]["profileId"].is_string());
+    assert_eq!(wire["profiles"][0]["scope"], "user");
+    assert_eq!(wire["user"]["layoutPatch"]["commandLine"]["lines"], 5);
+    assert!(wire["deviceGeometry"]["layoutPatch"]["commandLine"]["heightRatio"].is_number());
+    assert!(wire["deviceGeometry"]["uiScale"].is_number());
+    assert_eq!(verify_checksum(&wire), ChecksumCheck::Valid);
+    fn assert_fields(value: &Value) {
+        match value {
+            Value::Object(fields) => {
+                for (key, child) in fields {
+                    assert!(!key.contains('_'), "unexpected field {key}");
+                    if !matches!(key.as_str(), "shortcuts" | "aliases" | "items" | "dockTree") {
+                        assert_fields(child);
+                    }
+                }
+            }
+            Value::Array(items) => {
+                for item in items {
+                    assert_fields(item);
+                }
+            }
+            _ => {}
+        }
+    }
+    assert_fields(&wire);
+}
+
+#[test]
+fn wire_round_trip_is_lossless_for_every_fixture() {
+    use cadcraft_ui_egui::wsprofile::migrate::migrate;
+    use cadcraft_ui_egui::wsprofile::wire::{from_wire, to_wire};
+    for raw in [
+        include_str!("fixtures/workspace/legacy-v1.json"),
+        include_str!("fixtures/workspace/aged-1y.json"),
+        include_str!("fixtures/workspace/aged-3y.json"),
+        include_str!("fixtures/workspace/aged-5y.json"),
+        include_str!("fixtures/workspace/aged-10y.json"),
+        include_str!("fixtures/workspace/future-1.3.0.json"),
+    ] {
+        let original: Value = serde_json::from_str(raw).unwrap();
+        if original.get("ui_scale").is_none() {
+            assert_eq!(from_wire(&to_wire(&original)), original);
+        }
+        let value = migrate(original).unwrap().value;
+        assert_eq!(from_wire(&to_wire(&value)), value);
+    }
+    let value = json!({"schema_version": 3, "futureThing": {"command_line": 1}, "Weird_Key": {"profile_id": "x"}, "layout": {
+        "shortcuts": {"command_line": "Ctrl+Shift+S"}, "aliases": {"Weird_Key": "line"},
+        "status_bar": {"items": {"height_ratio": true}}, "dock_tree": {"x_ratio": {"tab_group": "mode"}},
+        "panels": [{"id": "p", "mode": "auto_hide", "futureThing": {"command_line": 7}}]
+    }});
+    assert_eq!(from_wire(&to_wire(&value)), value);
+    assert_eq!(to_wire(&value)["layout"]["panels"][0]["mode"], "auto_hide");
+    assert_eq!(to_wire(&value)["layout"]["dockTree"], value["layout"]["dock_tree"]);
+    assert!(to_wire(&json!({"schema_version": 3, "ui_scale": 1.5})).get("uiScale").is_none());
+}
+
+#[test]
+fn policy_accepts_both_spellings() {
+    use cadcraft_ui_egui::wsprofile::startup::{policy_layers, policy_problem};
+    let wire = json!({"layers": [{"level": "company", "patch": {"commandLine": {"lines": 5}}, "locks": ["/commandLine/lines"]}]}).to_string();
+    let snake = json!({"layers": [{"level": "company", "patch": {"command_line": {"lines": 5}}, "locks": ["/command_line/lines"]}]}).to_string();
+    assert_eq!(policy_layers(&wire), policy_layers(&snake));
+    assert_eq!(policy_problem(&wire), None);
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
+    app.attach_profile_store(Box::new(MemoryStore { policy: Some(wire), ..Default::default() }));
+    assert_eq!(app.ws.effective.layout.command_line.lines, 5);
+    assert!(app.run("ui.workspace.set", json!({"pointer": "/command_line/lines", "value": 6})).is_err());
+}
+
+#[test]
+fn schema_versions_accept_numbers_and_legacy_strings() {
+    use cadcraft_ui_egui::wsprofile::schema::WorkspaceProfile;
+    for (version, major) in [(json!(3), 3), (json!("3"), 3), (json!("1.0.0"), 1), (json!("1.2.0"), 1)] {
+        let profile: WorkspaceProfile = serde_json::from_value(json!({"schema_version": version.clone()})).unwrap();
+        let set: ProfileSet = serde_json::from_value(json!({"schema_version": version})).unwrap();
+        assert_eq!(profile.schema_version, major);
+        assert_eq!(set.schema_version, major);
+    }
+}
+
+#[test]
+fn unknown_nested_fields_survive_loading_and_saving() {
+    let input = json!({"schemaVersion": 3, "user": {"schemaVersion": 3, "scope": "user", "layout": {
+        "ribbon": {"futureThing": {"command_line": 7}},
+        "commandLine": {"Weird_Key": {"height_ratio": 9}},
+        "panels": [{"id": "properties", "futureThing": ["kept"]}],
+        "view": {"futureThing": "kept"}
+    }}, "Weird_Key": {"schema_version": "verbatim"}, "deviceGeometry": {
+        "futureThing": {"command_line": 7}, "screen": {"Weird_Key": "kept"}
+    }});
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
+    app.attach_profile_store(Box::new(MemoryStore { current: Some(input.to_string()), ..Default::default() }));
+    app.run("ui.toggle.toolbar", json!({"on": false})).unwrap();
+    app.commit_workspace_now().unwrap();
+    let saved = parse_set(&app.ws.store.as_ref().unwrap().read_current().unwrap()).unwrap();
+    let profile = serde_json::to_value(saved.user.unwrap()).unwrap();
+    assert_eq!(profile["layout"]["ribbon"]["futureThing"], input["user"]["layout"]["ribbon"]["futureThing"]);
+    assert_eq!(profile["layout"]["command_line"]["Weird_Key"], input["user"]["layout"]["commandLine"]["Weird_Key"]);
+    let panel = profile["layout"]["panels"].as_array().unwrap().iter().find(|panel| panel["id"] == "properties").unwrap();
+    assert_eq!(panel["futureThing"], json!(["kept"]));
+    assert_eq!(profile["layout"]["view"]["futureThing"], "kept");
+    assert_eq!(saved.extra.get("Weird_Key"), input.get("Weird_Key"));
+    let device = saved.device.unwrap();
+    assert_eq!(device.extra.get("futureThing"), input["deviceGeometry"].get("futureThing"));
+    assert_eq!(device.screen.unwrap().extra.get("Weird_Key"), Some(&json!("kept")));
 }

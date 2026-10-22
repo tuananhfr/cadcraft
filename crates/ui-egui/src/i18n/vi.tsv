@@ -1853,3 +1853,7 @@ ribbon	Take-off	Bóc khối lượng
 ribbon	Utilities	Tiện ích
 ribbon	Visibility	Hiện/ẩn
 ribbon	Walls and Openings	Tường và lỗ mở
+	Roll Back Workspace to 1.0.0	Khôi phục workspace 1.0.0
+	Restored the 1.0.0 workspace. Changes are not saved until restart.	Đã khôi phục workspace 1.0.0. Thay đổi sẽ không được lưu cho tới khi khởi động lại.
+	Saving suspended	Đã tạm dừng lưu
+	No 1.0.0 workspace backup is available	Không có bản sao lưu workspace 1.0.0

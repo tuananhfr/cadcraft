@@ -49,15 +49,15 @@ fn strings_at<'a>(value: &'a Value, pointer: &str) -> Vec<&'a str> {
 fn legacy_v1_becomes_user_layer_over_simple() {
     let input = json_of(LEGACY_V1);
     let migrated = migrate(input.clone()).unwrap();
-    assert_eq!(migrated.steps, vec!["legacy_v1"]);
+    assert_eq!(migrated.steps, vec!["legacy_v1", "device_layer"]);
     assert_eq!(migrated.backup, Some(input.clone()));
-    assert_eq!(migrated.value, from_legacy_v1(&input));
+    assert_eq!(migrated.value, migrate(from_legacy_v1(&input)).unwrap().value);
 
     let profile = profile_of(&migrated.value);
     assert_eq!(profile.schema_version, SCHEMA_VERSION);
     assert_eq!(profile.owner_type, OwnerType::User);
     assert_eq!(profile.base_id.as_deref(), Some("SIMPLE"));
-    assert_eq!(profile.layout.dock_tree.as_ref(), input.pointer("/workspace/docking"));
+    assert_eq!(migrated.value.pointer("/device/layout_patch/dock_tree"), input.pointer("/workspace/docking"));
 
     let simple = preset("SIMPLE").unwrap();
     let standard = profile.layout.toolbars.iter().find(|toolbar| toolbar.id == "standard").unwrap();
@@ -144,8 +144,9 @@ fn aged_profiles_load_without_loss() {
     assert_eq!(one_year.pointer("/layout/shortcuts/oldline"), Some(&json!("L")));
     assert_eq!(one_year.pointer("/layout/aliases/ln"), Some(&json!("oldline")));
 
-    let three_years = json_of(AGED_3Y);
+    let mut three_years = json_of(AGED_3Y);
     let migrated = migrate(three_years.clone()).unwrap();
+    three_years["schema_version"] = json!(3);
     assert!(contains(&migrated.value, &three_years));
     let profile = profile_of(&migrated.value);
     assert_eq!(profile.layout.toolsets.tab, "Drafting");
@@ -165,12 +166,12 @@ fn aged_profiles_load_without_loss() {
 fn future_minor_keeps_unknown_fields() {
     let input = json_of(FUTURE_MINOR);
     let migrated = migrate(input.clone()).unwrap();
-    assert_eq!(migrated.value, input);
-    assert!(migrated.steps.is_empty());
-    assert!(migrated.backup.is_none());
+    assert_eq!(migrated.value["schema_version"], 3);
+    assert_eq!(migrated.steps, ["device_layer"]);
+    assert_eq!(migrated.backup, Some(input.clone()));
 
     let profile = profile_of(&migrated.value);
-    assert_eq!(profile.schema_version, "1.3.0");
+    assert_eq!(profile.schema_version, 3);
     assert_eq!(profile.extra.get("future_field"), input.get("future_field"));
     assert_eq!(profile.layout.extra.get("smart_dock"), input.pointer("/layout/smart_dock"));
     let round_trip = serde_json::to_value(&profile).unwrap();
@@ -181,8 +182,8 @@ fn future_minor_keeps_unknown_fields() {
 #[test]
 fn future_major_is_refused() {
     let mut input = json_of(FUTURE_MINOR);
-    input["schema_version"] = json!("2.0.0");
-    assert!(matches!(migrate(input.clone()), Err(MigrateError::NewerMajor(version)) if version == "2.0.0"));
+    input["schema_version"] = json!("4.0.0");
+    assert!(matches!(migrate(input.clone()), Err(MigrateError::NewerMajor(version)) if version == "4.0.0"));
     input["schema_version"] = json!("10.4.1");
     assert!(matches!(migrate(input), Err(MigrateError::NewerMajor(version)) if version == "10.4.1"));
     assert_eq!(SAFE_PRESET, "SIMPLE");
@@ -198,13 +199,13 @@ fn corrupt_fixtures_error_not_panic() {
 
     for hostile in [
         json!({}),
-        json!({"schema_version": 1}),
         json!({"schema_version": "one"}),
         json!({"schema_version": "1.0"}),
         json!({"schema_version": "1.0.0.0"}),
         json!({"schema_version": "-1.0.0"}),
         json!({"schema_version": "99999999999999999999.0.0"}),
         json!({"schema_version": "0.9.0"}),
+        json!({"schema_version": 2}),
         json!({"version": 1}),
         json!({"version": 1, "workspace": []}),
         json!({"version": 2, "workspace": {}}),
@@ -264,7 +265,7 @@ fn upgrade_two_versions_then_rollback_ux09() {
 
 #[test]
 fn real_registry_and_changelog_agree_with_schema_version() {
-    assert_eq!(CHANGELOG.last().map(|entry| entry.0), Some(SCHEMA_VERSION));
+    assert_eq!(CHANGELOG.last().map(|entry| entry.0.parse::<u32>()), Some(Ok(SCHEMA_VERSION)));
     for step in STEPS {
         assert!(CHANGELOG.iter().any(|entry| entry.0 == step.to), "{} has no changelog line", step.to);
     }
@@ -272,7 +273,7 @@ fn real_registry_and_changelog_agree_with_schema_version() {
 }
 
 #[test]
-fn spec_style_profile_with_root_level_layout_keys_migrates_unchanged() {
+fn spec_style_profile_with_root_level_layout_keys_migrates_to_device_layer() {
     let input = json!({
         "schema_version": "1.0.0",
         "profile_id": "uuid",
@@ -283,7 +284,134 @@ fn spec_style_profile_with_root_level_layout_keys_migrates_unchanged() {
         "shortcuts": {"line": "L"}
     });
     let migrated = migrate(input.clone()).unwrap();
-    assert_eq!(migrated.value, input);
-    assert!(migrated.steps.is_empty());
+    assert_eq!(migrated.value["schema_version"], 3);
+    assert_eq!(migrated.steps, ["device_layer"]);
+    assert_eq!(migrated.value.pointer("/device/layout_patch/command_line/height_ratio"), Some(&json!(0.15)));
     assert_eq!(profile_of(&migrated.value).layout.shortcuts.get("line").map(String::as_str), Some("L"));
+}
+
+fn app_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn app_with_v1(raw: &str) -> cadcraft_ui_egui::CadApp {
+    use cadcraft_ui_egui::wsprofile::store::MemoryStore;
+    let mut app = cadcraft_ui_egui::CadApp::new(cadcraft_engine::Session::new(), Default::default());
+    app.skip_first_run_picker = true;
+    app.attach_profile_store(Box::new(MemoryStore { current: Some(raw.into()), ..Default::default() }));
+    app
+}
+
+#[test]
+fn aged_fixtures_migrate_to_v3_and_keep_the_original() {
+    let _lock = app_lock();
+    for (_, raw) in VALID_FIXTURES {
+        let app = app_with_v1(raw);
+        assert!(app.ws.fallback.is_none(), "{:?}", app.ws.fallback);
+        let store = app.ws.store.as_ref().unwrap();
+        let current: Value = serde_json::from_str(&store.read_current().unwrap()).unwrap();
+        assert_eq!(current["schemaVersion"], 3);
+        assert_eq!(store.read_backup("1.0.0").as_deref(), Some(raw));
+        assert!(current["user"].get("uiScale").is_none());
+    }
+    let app = app_with_v1(AGED_5Y);
+    assert_eq!(app.ws.device.ui_scale, 1.25);
+    assert!(app.ws.device.layout_patch.get("panels").is_some());
+}
+
+#[test]
+fn rollback_restores_the_v1_original() {
+    let _lock = app_lock();
+    use cadcraft_ui_egui::wsprofile::commands::ROLLBACK_MESSAGE;
+    use cadcraft_ui_egui::wsprofile::startup::parse_set;
+    let mut app = app_with_v1(AGED_5Y);
+    assert_eq!(app.run("ui.workspace.rollback", json!({})).unwrap(), json!({"restored": "1.0.0"}));
+    assert!(app.ws.suspended);
+    assert_eq!(app.workspace_status()["status"], "suspended");
+    assert_eq!(app.ws.message.as_deref(), Some(ROLLBACK_MESSAGE));
+    app.run("ui.toggle.toolbar", json!({"on": false})).unwrap();
+    assert!(app.commit_workspace_now().is_err());
+    let snapshots = app.ws.store.as_ref().unwrap().snapshots();
+    let ctx = egui::Context::default();
+    let mut frame = ctx.run_ui(egui::RawInput { time: Some(120.0), ..Default::default() }, |ui| app.logic(ui.ctx()));
+    frame.textures_delta.clear();
+    assert_eq!(app.ws.store.as_ref().unwrap().snapshots(), snapshots);
+    let raw = app.ws.store.as_ref().unwrap().read_current().unwrap();
+    assert_eq!(raw, AGED_5Y);
+    assert!(parse_set(&raw).is_ok());
+    let old_reader = migrate_with(serde_json::from_str(&raw).unwrap(), &[]).unwrap();
+    assert_eq!(old_reader.value["schema_version"], "1.0.0");
+    assert!(old_reader.steps.is_empty());
+    assert!(!app.ws.needs_flush());
+}
+
+#[test]
+fn newer_major_than_3_is_refused() {
+    use cadcraft_ui_egui::wsprofile::startup::{Fallback, parse_set};
+    use cadcraft_ui_egui::wsprofile::wire::from_wire;
+    let wire = json!({"schemaVersion": 4});
+    assert!(matches!(migrate(from_wire(&wire)), Err(MigrateError::NewerMajor(version)) if version == "4"));
+    assert!(matches!(parse_set(&wire.to_string()), Err(Fallback::NewerMajor(version)) if version == "4"));
+}
+
+#[test]
+fn backup_failure_never_commits_the_migrated_set() {
+    let _lock = app_lock();
+    use cadcraft_ui_egui::wsprofile::{SaveStatus, store::MemoryStore};
+    let mut app = cadcraft_ui_egui::CadApp::new(cadcraft_engine::Session::new(), Default::default());
+    app.skip_first_run_picker = true;
+    app.attach_profile_store(Box::new(MemoryStore { current: Some(AGED_5Y.into()), fail_writes: true, ..Default::default() }));
+    assert!(app.ws.fallback.is_none());
+    assert!(matches!(app.ws.status, SaveStatus::Failed(_)));
+    let store = app.ws.store.as_ref().unwrap();
+    assert_eq!(store.read_current().as_deref(), Some(AGED_5Y));
+    assert!(store.snapshots().is_empty());
+    assert_eq!(store.read_backup("1.0.0"), None);
+}
+
+#[test]
+fn rollback_without_a_backup_changes_nothing() {
+    let _lock = app_lock();
+    use cadcraft_ui_egui::wsprofile::store::MemoryStore;
+    let mut app = cadcraft_ui_egui::CadApp::new(cadcraft_engine::Session::new(), Default::default());
+    app.attach_profile_store(Box::new(MemoryStore::default()));
+    assert!(app.run("ui.workspace.rollback", json!({})).is_err());
+    assert!(!app.ws.suspended);
+    assert_eq!(app.ws.store.as_ref().unwrap().read_current(), None);
+}
+
+struct BackupUnsupported(cadcraft_ui_egui::wsprofile::store::MemoryStore);
+
+impl cadcraft_ui_egui::wsprofile::store::ProfileStore for BackupUnsupported {
+    fn read_current(&self) -> Option<String> {
+        self.0.current.clone()
+    }
+    fn write_current(&mut self, raw: &str) -> Result<(), String> {
+        self.0.current = Some(raw.into());
+        Ok(())
+    }
+    fn push_snapshot(&mut self, revision: u64, raw: &str) -> Result<(), String> {
+        self.0.snapshot_map.insert(revision, raw.into());
+        Ok(())
+    }
+    fn snapshots(&self) -> Vec<u64> {
+        self.0.snapshot_map.keys().copied().collect()
+    }
+    fn read_snapshot(&self, revision: u64) -> Option<String> {
+        self.0.snapshot_map.get(&revision).cloned()
+    }
+}
+
+#[test]
+fn storage_without_backup_support_cannot_replace_v1() {
+    let _lock = app_lock();
+    use cadcraft_ui_egui::wsprofile::{SaveStatus, store::MemoryStore};
+    let mut app = cadcraft_ui_egui::CadApp::new(cadcraft_engine::Session::new(), Default::default());
+    app.attach_profile_store(Box::new(BackupUnsupported(MemoryStore { current: Some(AGED_5Y.into()), ..Default::default() })));
+    assert!(matches!(app.ws.status, SaveStatus::Failed(ref error) if error == "this storage keeps no backup"));
+    assert!(app.commit_workspace_now().is_err());
+    let store = app.ws.store.as_ref().unwrap();
+    assert_eq!(store.read_current().as_deref(), Some(AGED_5Y));
+    assert!(store.snapshots().is_empty());
 }
