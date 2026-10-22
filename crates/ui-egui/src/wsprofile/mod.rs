@@ -133,6 +133,7 @@ pub struct WsState {
     unkept_damage: Option<Vec<u8>>,
     unkept_backup: Option<String>,
     pub suspended: bool,
+    pub safe_mode: bool,
     /// The store accepted the last commit but has not reported it durable yet.
     writing: bool,
     /// The user changed the workspace since it was loaded.
@@ -178,6 +179,7 @@ impl Default for WsState {
             unkept_damage: None,
             unkept_backup: None,
             suspended: false,
+            safe_mode: false,
             writing: false,
             edited: false,
             failed_commits: 0,
@@ -228,11 +230,11 @@ impl WsState {
 
     /// Whether a change is not stored yet; a host checks this before it exits.
     pub fn needs_flush(&self) -> bool {
-        !self.suspended && (self.autosave.pending() || matches!(self.status, SaveStatus::Failed(_) | SaveStatus::TabConflict))
+        !self.safe_mode && !self.suspended && (self.autosave.pending() || matches!(self.status, SaveStatus::Failed(_) | SaveStatus::TabConflict))
     }
 
     fn mark_changed(&mut self) {
-        if self.suspended || self.status == SaveStatus::TabConflict {
+        if self.safe_mode || self.suspended || self.status == SaveStatus::TabConflict {
             return;
         }
         self.autosave.changed(self.now);
@@ -456,7 +458,7 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
         }
     }
     app.ws.released = released;
-    let external = app.ws.store.as_mut().is_some_and(|store| store.take_external_change());
+    let external = !app.ws.safe_mode && app.ws.store.as_mut().is_some_and(|store| store.take_external_change());
     if external
         && !app.ws.suspended
         && !app.ws.needs_flush()
@@ -468,7 +470,7 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
     if app.ui.dialog.as_deref() != Some(picker::PICKER_DIALOG) {
         app.ws.first_run_picker_open = false;
     }
-    if app.ws.writing {
+    if !app.ws.safe_mode && app.ws.writing {
         let durability = app.ws.store.as_mut().map_or(Durability::Committed, |store| store.durability());
         if durability == Durability::Pending {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
@@ -477,7 +479,7 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
         }
     }
     // The debounce does not store while the picker waits, so a layout settling under it is not written as a choice.
-    let storing = !app.ws.first_run_picker_open && !app.ws.suspended;
+    let storing = !app.ws.safe_mode && !app.ws.first_run_picker_open && !app.ws.suspended;
     if !down && storing && app.ws.autosave.due(time) {
         let _ = app.commit_workspace_now();
     }
@@ -506,8 +508,38 @@ pub fn rfc3339(unix_ms: f64) -> String {
 }
 
 impl CadApp {
+    /// Keeps storage unopened so a damaged workspace cannot affect the recovery session.
+    pub fn attach_profile_store_safe(&mut self, store: Box<dyn ProfileStore>) {
+        let policy = self.ws.policy();
+        let user = startup::fresh_user(SAFE_PRESET, &policy);
+        let device = DeviceState::default();
+        let layers = startup::layers_for(&user, &policy, &device);
+        self.ws = WsState {
+            user,
+            device,
+            effective: effective(&layers),
+            layers,
+            store: Some(store),
+            sync: std::mem::take(&mut self.ws.sync),
+            safe_mode: true,
+            suspended: self.ws.suspended,
+            area: self.ws.area,
+            now: self.ws.now,
+            ..WsState::default()
+        };
+        if matches!(self.ui.dialog.as_deref(), Some(picker::PICKER_DIALOG | tab_conflict::DIALOG)) {
+            self.ui.dialog = None;
+        }
+        self.apply_workspace();
+        let message = save_state::LayoutSave::SafeMode.label();
+        self.ws.message = Some(message.clone());
+        self.set_status(message);
+    }
+
     /// Takes over profile storage: restores the stored workspace (or SIMPLE) and shows it.
     pub fn attach_profile_store(&mut self, mut store: Box<dyn ProfileStore>) {
+        self.ws.safe_mode = false;
+        self.ws.message = None;
         let raw = store.read_current();
         let revision = raw.as_deref().and_then(startup::stored_revision).unwrap_or(0);
         let (restored, unkept) = startup::open(store.as_mut());
@@ -538,6 +570,9 @@ impl CadApp {
             });
         } else if damaged {
             notices.push(if kept { FALLBACK_MESSAGE.into() } else { NOT_KEPT_MESSAGE.into() });
+        }
+        if damaged || matches!(restored.fallback, Some(Fallback::RestoredSnapshot { .. })) {
+            notices.push(crate::tl!("Restart in safe mode: add ?safe to the address / --safe-mode").into());
         }
         if let Some(problem) = store.read_policy().and_then(|raw| startup::policy_problem(&raw)) {
             log::warn!("workspace: policy: {problem}");
@@ -605,6 +640,9 @@ impl CadApp {
     }
 
     pub(super) fn adopt_stored_workspace(&mut self) -> Result<(), String> {
+        if self.ws.safe_mode {
+            return Err("safe mode".into());
+        }
         if self.ws.suspended {
             return Err(commands::ROLLBACK_MESSAGE.into());
         }
@@ -624,6 +662,9 @@ impl CadApp {
     }
 
     pub(super) fn check_workspace_revision(&mut self, interactive: bool) -> Result<(), String> {
+        if self.ws.safe_mode {
+            return Ok(());
+        }
         let raw = self.ws.store.as_ref().and_then(|store| store.read_current());
         let stored = raw.as_deref().and_then(startup::stored_revision).unwrap_or(0);
         if stored > self.ws.known_revision || self.ws.status == SaveStatus::TabConflict {
@@ -684,6 +725,9 @@ impl CadApp {
     }
 
     pub(super) fn commit_workspace(&mut self, interactive: bool) -> Result<(), String> {
+        if self.ws.safe_mode {
+            return Err("safe mode".into());
+        }
         if self.ws.suspended {
             return Err(commands::ROLLBACK_MESSAGE.into());
         }
@@ -768,9 +812,17 @@ impl CadApp {
             SaveStatus::Failed(error) => Some(error.clone()),
             _ => None,
         };
+        let label = if ws.safe_mode {
+            save_state::LayoutSave::SafeMode.label()
+        } else if ws.suspended {
+            "Saving suspended".into()
+        } else {
+            ws.status.label().into()
+        };
         json!({
-            "status": if ws.suspended { "suspended" } else { ws.status.as_str() },
-            "label": if ws.suspended { "Saving suspended" } else { ws.status.label() },
+            "status": if ws.safe_mode { "safe_mode" } else if ws.suspended { "suspended" } else { ws.status.as_str() },
+            "label": label,
+            "safe_mode": ws.safe_mode,
             "error": error,
             "message": ws.message,
             "active": ws.active,
@@ -784,7 +836,7 @@ impl CadApp {
             "restored_revision": restored_revision,
             "undo": ws.history.undo_len(),
             "redo": ws.history.redo_len(),
-            "snapshots": ws.store.as_ref().map(|store| store.snapshots()).unwrap_or_default(),
+            "snapshots": if ws.safe_mode { Vec::new() } else { ws.store.as_ref().map(|store| store.snapshots()).unwrap_or_default() },
             "workspaces": ws.choices().iter().map(|choice| json!({"id": choice.id, "name": choice.name, "preset": choice.preset})).collect::<Vec<_>>(),
             "unknown_commands": ws.report.unknown_commands,
             "unknown_panels": ws.report.unknown_panels,

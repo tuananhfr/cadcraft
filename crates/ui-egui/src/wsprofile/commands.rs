@@ -25,6 +25,7 @@ pub fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value,
         "ui.workspace.import" => import(app, params),
         "ui.workspace.restore" => restore_revision(app, params),
         "ui.workspace.rollback" => rollback(app),
+        "ui.workspace.safemode" => safe_mode(app, params),
         "ui.workspace.status" => Ok(app.workspace_status()),
         "ui.workspace.set" => set_value(app, params),
         "ui.workspace.resolve" => resolve(app, params),
@@ -54,7 +55,27 @@ fn save_outgoing(app: &mut CadApp) -> Result<(), String> {
     Ok(())
 }
 
+fn safe_mode(app: &mut CadApp, params: &Value) -> Result<Value, String> {
+    let on = if params.is_null() { !app.ws.safe_mode } else { params.get("on").and_then(Value::as_bool).ok_or("on must be a boolean")? };
+    if on != app.ws.safe_mode {
+        let store = app.ws.store.take().ok_or("No workspace storage is attached")?;
+        if on {
+            app.attach_profile_store_safe(store);
+        } else {
+            app.attach_profile_store(store);
+            let message = crate::tl!("Safe mode ended. Changes made in safe mode were discarded; the stored workspace was restored.");
+            let notice = app.ws.message.as_ref().map_or_else(|| message.to_string(), |notice| format!("{message} {notice}"));
+            app.ws.message = Some(notice.clone());
+            app.set_status(notice);
+        }
+    }
+    Ok(json!({"safe_mode": app.ws.safe_mode}))
+}
+
 fn rollback(app: &mut CadApp) -> Result<Value, String> {
+    if app.ws.safe_mode {
+        return Err("safe mode".into());
+    }
     let policy = app.ws.policy();
     let store = app.ws.store.as_mut().ok_or("No workspace storage is attached")?;
     let raw = store.read_backup("1.0.0").ok_or(crate::tl!("No 1.0.0 workspace backup is available"))?;
@@ -99,7 +120,7 @@ fn select(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     let ids = || app.ws.choices().iter().map(|choice| choice.id.clone()).collect::<Vec<_>>().join(", ");
     let Some(id) = params.get("id").and_then(Value::as_str).map(str::trim) else { return Err(format!("id is required: {}", ids())) };
     if id == app.ws.active {
-        let choosing = app.ws.store.as_ref().is_some_and(|store| store.read_current().is_none());
+        let choosing = !app.ws.safe_mode && app.ws.store.as_ref().is_some_and(|store| store.read_current().is_none());
         app.ws.first_run = false;
         app.ws.first_run_picker_open = false;
         if app.ui.dialog.as_deref() == Some(super::picker::PICKER_DIALOG) {
@@ -309,6 +330,9 @@ fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
 }
 
 fn restore_revision(app: &mut CadApp, params: &Value) -> Result<Value, String> {
+    if app.ws.safe_mode {
+        return Err("safe mode".into());
+    }
     let revision = params.get("revision").and_then(Value::as_u64).ok_or("revision is required")?;
     let raw =
         app.ws.store.as_ref().and_then(|store| store.read_snapshot(revision)).ok_or_else(|| format!("No saved workspace revision {revision}"))?;
@@ -410,6 +434,9 @@ fn set_value(app: &mut CadApp, params: &Value) -> Result<Value, String> {
 }
 
 fn resolve(app: &mut CadApp, params: &Value) -> Result<Value, String> {
+    if app.ws.safe_mode {
+        return Err("safe mode".into());
+    }
     let keep = params.get("keep").and_then(Value::as_str).ok_or("keep must be mine or theirs")?;
     if !matches!(keep, "mine" | "theirs") {
         return Err("keep must be mine or theirs".into());

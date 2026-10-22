@@ -1952,3 +1952,6 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	Safe mode	Chế độ an toàn
 	Saving drawing…	Đang lưu bản vẽ…
 	Drawing autosaved	Bản vẽ đã tự lưu
+	Safe Mode	Chế độ an toàn
+	Restart in safe mode: add ?safe to the address / --safe-mode	Khởi động lại ở chế độ an toàn: thêm ?safe vào địa chỉ / --safe-mode
+	Safe mode ended. Changes made in safe mode were discarded; the stored workspace was restored.	Đã thoát chế độ an toàn. Các thay đổi trong chế độ an toàn đã bị bỏ; không gian làm việc đã lưu được khôi phục.

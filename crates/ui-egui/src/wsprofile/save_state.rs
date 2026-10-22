@@ -27,6 +27,9 @@ pub enum LayoutSave {
 
 impl LayoutSave {
     pub fn from_ws(ws: &WsState) -> Self {
+        if ws.safe_mode {
+            return Self::SafeMode;
+        }
         if ws.suspended {
             return Self::Suspended;
         }
