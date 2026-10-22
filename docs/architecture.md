@@ -25,7 +25,7 @@ About 57,000 lines of Rust in 12 library crates, 3 apps and `xtask` (counted 202
 | L5 | `ui-egui` | 9,849 | The swappable egui front end: GPU canvas (`gpu.rs`, wgpu), menus and shortcuts (`menus.rs`), command line, palettes, Layer Properties Manager and other dialogs, ViewCube, icons drawn in code, themes, the interface string catalog (`i18n/`, English, Ukrainian and German), JSON control channel (`control.rs`) |
 | L5 | `mcp` | 559 | MCP server (JSON-RPC 2.0 over stdio) on a headless session or bridged to a running app |
 | app | `cadcraft` | 1,102 | Desktop app (eframe/wgpu; DirectX 12 by default on Windows) |
-| app | `cadcraft-cli` | 823 | `info`, `convert`, `run` (scripts), `commands`, `sample`, `mcp` |
+| app | `cadcraft-cli` | 823 | `info`, `convert`, `run` (scripts), `ubplot` (batch PDF with resume), `commands`, `sample`, `mcp` |
 | app | `cadcraft-web` | 88 | WASM build of the same UI (no DWG) |
 | tool | `xtask` | 1,064 | `ci`, `layers`, `assets`, `wasm`, `parity`, `version`, `stats`, icon generation |
 
@@ -78,7 +78,8 @@ name. Detail and gaps: [file-format-parity.md](file-format-parity.md).
 - **CLI:** `cadcraft-cli run --script … --export out.png` for headless batch work. A reader that
   closes stdout early (`… | head`) drops the rest of the output but keeps the work — later
   commands, `--save`, `--export` — and the exit status still reports failures; another stdout
-  write error is reported and makes it 1.
+  write error is reported and makes it 1. `cadcraft-cli ubplot` publishes queued PDF jobs
+  synchronously with manifests and persisted resume state; see [UBPLOT CLI](ubplot.md#headless-cli).
 
 ## Safety
 

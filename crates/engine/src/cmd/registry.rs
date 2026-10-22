@@ -87,6 +87,7 @@ pub const FILE_IDS: &[&str] = &[
     "pdfbook",
     "ubplot",
     "ubplot.publish",
+    "ubplot.folder",
     "ubplot.jobs",
     "xref",
     "-xref",

@@ -1,3 +1,5 @@
+#[cfg(not(target_arch = "wasm32"))]
+pub mod folder;
 pub mod render;
 pub mod runner;
 pub mod store;
@@ -5,6 +7,8 @@ pub mod store;
 pub mod store_fs;
 pub mod types;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub use folder::{FolderLoader, FolderScan, scan_folder};
 #[cfg(not(target_arch = "wasm32"))]
 pub use render::Watchdog;
 pub use render::{PdfSheetRenderer, RenderFailure, SheetBudget, SheetRenderer};

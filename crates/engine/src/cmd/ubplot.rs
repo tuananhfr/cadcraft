@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::file::io;
-use super::{CommandSpec, has_doc};
+use super::{CommandSpec, always, has_doc};
 use crate::sheetplan::approval::{MAX_APPROVALS, approve_with_splits, carry_over, merge_audit};
 use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::ids::sha256_hex;
@@ -62,9 +62,14 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{plan?: SheetPlan (default: the last plan), approvals?: [{sheetKey, code}], split?: [{sheetKey, overlapMm?}], by: user|agent:<name>} → SheetPlan; WARN approvals and explicit device splits are atomic")
             .noundo()
             .enabled(has_doc),
+        CommandSpec::new("ubplot.folder", "Publish Plot Frames", jobs::run_folder)
+            .params("{folder, out, recursive?: true, maxDepth?: 16, maxFiles?: 1000, mode?: merged|split, pagesPerFile?: 256, layouts?: false, background?: false} → {manifest, skipped_files} or {jobId, status, skipped_files}; desktop only")
+            .noundo()
+            .enabled(always),
         CommandSpec::new("ubplot.jobs", "Plot Jobs", jobs::run_jobs)
             .params("{action: list|status|manifest|resume|cancel|remove, jobId?} → job summaries, {manifest}, or action result; resume runs synchronously")
-            .noundo(),
+            .noundo()
+            .enabled(always),
         CommandSpec::new("ubplot.publish", "Publish Plot Frames", jobs::run_publish)
             .params("{plan?: SheetPlan (default: the last plan), output?: merged|split (merged), path?: file (merged) or file whose stem names split files, title?, background?: false} → {plan, files: [{path?|name, sheets: [sheet_key], bytes, sha256, data?}], failed: [{sheetKey, issues}]}; background:true accepts mode?, pagesPerFile?, retryLimit? and returns {jobId, status: QUEUED}")
             .noundo()

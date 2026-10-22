@@ -96,7 +96,11 @@ fn groups(job: &PrintJob, sheets: &[(usize, usize)]) -> Result<Vec<FileGroup>, S
             || result.last().is_none_or(|group| group.pages.saturating_add(count) > job.output.pages_per_file);
         if new_group {
             let name = if job.output.mode == OutputMode::PerSheet {
-                format!("{}-{:04}-{}.pdf", job.output.stem, sheet.order, safe_sheet_id(&sheet.sheet_id))
+                if job.sources.len() > 1 {
+                    format!("{}-s{source:05}-{:04}-{}.pdf", job.output.stem, sheet.order, safe_sheet_id(&sheet.sheet_id))
+                } else {
+                    format!("{}-{:04}-{}.pdf", job.output.stem, sheet.order, safe_sheet_id(&sheet.sheet_id))
+                }
             } else {
                 String::new()
             };

@@ -310,3 +310,39 @@ An unknown or removed device produces WARN `DEVICE_UNAVAILABLE` and falls back t
 PDF after warning approval. Web contexts treat every device except `CADCraft PDF`
 as unavailable and produce no device BLOCK or split proposal. Publishing rechecks
 capabilities so a removed device cannot silently use an old split or another printer.
+
+## Headless CLI
+
+```text
+cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--templates FILE] [--layouts]
+cadcraft-cli ubplot FILE.(dwg|dxf) --out OUT.pdf [--mode merged|per-sheet] [--pages-per-file N] [--jobs-dir DIR] [--templates FILE]
+```
+
+The CLI uses the engine's folder scan rule: select model-space frames matching a
+registered non-generic template. `--layouts` also includes paper-space layouts in
+folder mode. Each run loads `frame-templates.json` from the desktop settings
+folder; a missing settings folder or registry file uses the built-in registry.
+`CADCRAFT_CONFIG_DIR` overrides the settings root.
+
+`--templates FILE` replaces that registry for this run only, without changing
+settings. Both syntaxes accept it. The file must be UTF-8 registry JSON accepted
+by the strict registry parser (at most 2 MiB); invalid, oversized or unreadable
+files exit 2 with the filename before scanning or creating outputs/jobs.
+A registry containing only the built-in generic template selects no model-space
+frames; register the frame block names or use folder mode with `--layouts`.
+
+`merged` is the default. `per-sheet` selects the engine's `split` mode. Folder output
+uses the stem `plot`; single-file output uses the stem and directory of `OUT.pdf`.
+Merged jobs split into numbered files when `--pages-per-file` is exceeded. The page
+limit is 1–256 (default 256), `--max-files` is 1–5000 (default 1000), and
+`--max-depth` is 0–32 (default 16). The last two options and `--layouts` require
+folder mode. Paths can contain spaces; quote them in the shell.
+
+`--jobs-dir` defaults to `.ubplot-jobs` inside the output directory (the parent of
+`OUT.pdf` in single-file mode). Repeat the same command to resume the persisted job.
+Completed outputs retain their checksums and modification times. Jobs store their
+source hashes, plans and progress; pending sheets reread and verify source files.
+
+Stdout contains the manifest JSON only. Exit status is 0 for `DONE`, 1 for failed
+or cancelled jobs and operational errors, and 2 for invalid arguments. Diagnostics
+go to stderr. Arguments are validated before source loading or filesystem writes.
