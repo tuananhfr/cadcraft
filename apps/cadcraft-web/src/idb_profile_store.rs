@@ -887,7 +887,9 @@ mod tests {
         let mut mirror = Mirror::default();
         assert!(mirror.needs_migration());
         mirror = migrate_from_local_storage(&kv).expect("migration");
-        assert_eq!(mirror.current, Some(json(3)));
+        // Migration re-signs the current set in the schema this build writes.
+        let converted = set_text(&parse_set(&json(3)).expect("parse"), &[]).expect("convert");
+        assert_eq!(mirror.current, Some(converted));
         assert_eq!(mirror.snapshots.len(), 2);
         assert_eq!(mirror.damaged.get(&4), Some(&b"broken".to_vec()));
         assert_eq!(mirror.meta.get(BACKUP), Some(&"original v1".into()));
