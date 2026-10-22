@@ -180,3 +180,419 @@ menu	Help	Trợ giúp
 	Zoom Realtime	Thu phóng thời gian thực
 	Zoom Window	Thu phóng theo cửa sổ
 
+# Batch 9b: remaining menus and commands without a menu.
+	2 Points	2 điểm
+	3 Points	3 điểm
+	3D Mouse Navigation	Điều hướng bằng chuột 3D
+	3D Mouse...	Chuột 3D...
+	3D Operations	Thao tác 3D
+	3D Polyline	Đa tuyến 3D
+	About UbotCAD	Giới thiệu UbotCAD
+	Add Current Scale	Thêm tỉ lệ hiện hành
+	Add Favorite	Thêm mục yêu thích
+	Add Leader	Thêm đường ghi chú
+	Add Ribbon Group	Thêm nhóm Ribbon
+	Add Ribbon Tab	Thêm thẻ Ribbon
+	Add to Quick Access	Thêm vào Truy cập nhanh
+	Add to Ribbon	Thêm vào Ribbon
+	Add to Working Set	Thêm vào tập làm việc
+	Add/Delete Scales...	Thêm/Xóa tỉ lệ...
+	Align	Căn chỉnh
+	Align Multileaders	Căn chỉnh đường ghi chú nhiều nhánh
+	Align Text	Căn chỉnh chữ
+	Aligned	Song song
+	All Annotation Objects	Tất cả đối tượng chú thích
+	Angle	Góc
+	Angular	Góc
+	Annotation Visibility	Hiển thị chú thích
+	Annotative Object Scale	Tỉ lệ đối tượng chú thích
+	Annotative Update	Cập nhật chú thích theo tỉ lệ
+	Arc	Cung tròn
+	Arc Length	Chiều dài cung
+	Area	Diện tích
+	Arrange Panel	Sắp xếp bảng
+	Array	Mảng
+	Assign Shortcut	Gán phím tắt
+	Attach	Đính kèm
+	Attribute	Thuộc tính khối
+	Attribute Display	Hiển thị thuộc tính khối
+	Auto-hide	Tự ẩn
+	AutoConstrain	Tự động ràng buộc
+	Axis, End	Trục, Điểm cuối
+	Base	Điểm gốc
+	Baseline	Từ đường chuẩn
+	Bind...	Gộp vào bản vẽ...
+	Blend	Nối chuyển tiếp
+	Block	Khối
+	Block Attribute Manager...	Trình quản lý thuộc tính khối...
+	Block Editor	Trình sửa khối
+	Blocks	Khối
+	Boundary...	Đường biên...
+	Break	Ngắt
+	Break At Point	Ngắt tại điểm
+	Bring Above Objects	Đưa lên trên đối tượng
+	Bring Annotations to Front	Đưa chú thích lên trước
+	Bring to Front	Đưa lên trước
+	Calibrate 3D Mouse	Hiệu chuẩn chuột 3D
+	Center	Tâm
+	Center Line	Đường tâm
+	Center Mark	Dấu tâm
+	Center, Diameter	Tâm, Đường kính
+	Center, Radius	Tâm, Bán kính
+	Center, Start, Angle	Tâm, Điểm đầu, Góc
+	Center, Start, End	Tâm, Điểm đầu, Điểm cuối
+	Center, Start, Length	Tâm, Điểm đầu, Chiều dài
+	Chamfer	Vát góc
+	Change Space	Chuyển không gian
+	Circle	Đường tròn
+	Clear Command History	Xóa lịch sử lệnh
+	Clip	Xén
+	Clip Viewport	Xén khung nhìn
+	Close Array Editing	Đóng trình sửa mảng
+	Close Block Editor	Đóng trình sửa khối
+	Close Comparison	Đóng so sánh
+	Coincident	Trùng điểm
+	Collect	Thu gom
+	Collect Multileaders	Thu gom đường ghi chú nhiều nhánh
+	Collinear	Thẳng hàng
+	Command Aliases	Lệnh tắt
+	Command History	Lịch sử lệnh
+	Command Line	Dòng lệnh
+	Command Line History Lines	Số dòng lịch sử dòng lệnh
+	Command Reference	Tra cứu lệnh
+	Compare Drawings...	So sánh bản vẽ...
+	Concentric	Đồng tâm
+	Constraint Bars	Thanh ràng buộc
+	Constraint Settings	Cài đặt ràng buộc
+	Construction Line	Đường dựng
+	Continue	Nối tiếp
+	Control Vertices	Đỉnh điều khiển
+	Copy Layout	Sao chép bố cục in
+	Copy Nested Objects	Sao chép đối tượng lồng
+	Count	Đếm
+	Count List	Danh sách đếm
+	Count Table	Bảng đếm
+	Create Block	Tạo khối
+	Customize Workspace...	Tùy biến không gian làm việc...
+	Data Extraction...	Trích xuất dữ liệu...
+	Default Save Version	Phiên bản lưu mặc định
+	Define Attributes...	Định nghĩa thuộc tính khối...
+	Degrees of Freedom	Bậc tự do
+	Delete Column	Xóa cột
+	Delete Constraints	Xóa ràng buộc
+	Delete Current Scale	Xóa tỉ lệ hiện hành
+	Delete Dimension Style	Xóa kiểu kích thước
+	Delete Duplicate Objects	Xóa đối tượng trùng lặp
+	Delete Layer	Xóa lớp
+	Delete Layer State	Xóa trạng thái lớp
+	Delete Layout	Xóa bố cục in
+	Delete Row	Xóa hàng
+	Delete Text Style	Xóa kiểu chữ
+	Deselect All	Bỏ chọn tất cả
+	Diameter	Đường kính
+	Dimension	Kích thước
+	Dimension Break	Ngắt đường kích thước
+	Dimension Edit	Sửa kích thước
+	Dimension Objects Only	Chỉ đối tượng kích thước
+	Dimension Space	Khoảng cách kích thước
+	Dimension Style Override	Ghi đè kiểu kích thước
+	Dimension Text Edit	Sửa chữ kích thước
+	Dimensional Constraint	Ràng buộc kích thước
+	Dimensional Constraints	Ràng buộc kích thước
+	Disassociate Dimensions	Bỏ liên kết kích thước
+	Distance	Khoảng cách
+	Divide	Chia đều
+	Dock Toolbar	Gắn thanh công cụ vào cạnh
+	Donut	Hình vành khuyên
+	Drafting Settings...	Cài đặt vẽ...
+	Drag Dynamic Grip	Kéo điểm nắm động
+	Draw	Vẽ
+	Draw Order	Thứ tự vẽ
+	Drawing as bytes	Bản vẽ dưới dạng byte
+	Dynamic Block Data	Dữ liệu khối động
+	Dynamic Block Grips	Điểm nắm khối động
+	Dynamic Block Reference	Tham chiếu khối động
+	Dynamic Dimensions	Kích thước động
+	Dynamic Input	Nhập động
+	Edit Array	Sửa mảng
+	Edit Multileader	Sửa đường ghi chú nhiều nhánh
+	Edit Reference In-Place	Sửa tham chiếu tại chỗ
+	Edit Table Cell	Sửa ô bảng
+	Edit Text...	Sửa chữ...
+	Ellipse	Elip
+	Elliptical Arc	Cung elip
+	End Object Isolation	Kết thúc cô lập đối tượng
+	Equal	Bằng nhau
+	Erase	Xóa
+	Evaluate LISP	Thực thi LISP
+	Explode	Phá khối
+	Export Table	Xuất bảng
+	Export Workspace...	Xuất không gian làm việc...
+	Extend	Kéo dài
+	External Reference	Tham chiếu ngoài
+	External References	Tham chiếu ngoài
+	File Tab	Thẻ tệp
+	Fillet	Bo góc
+	Fit Points	Điểm nội suy
+	Fix	Cố định
+	Flatten Objects	Đưa đối tượng về mặt phẳng
+	Float Toolbar	Thả nổi thanh công cụ
+	Fonts	Phông chữ
+	Fonts...	Phông chữ...
+	Freehand	Vẽ tự do
+	Geometric Constraint	Ràng buộc hình học
+	Geometric Constraints	Ràng buộc hình học
+	Get Variable	Lấy biến
+	Get View	Lấy khung nhìn
+	Global	Toàn cục
+	Gradient...	Tô chuyển màu...
+	Grid Display	Hiển thị lưới
+	Grip Edit	Sửa bằng điểm nắm
+	Grip Mirror	Đối xứng bằng điểm nắm
+	Grip Option	Tùy chọn điểm nắm
+	Grip Rotate	Xoay bằng điểm nắm
+	Grip Scale	Đổi tỉ lệ bằng điểm nắm
+	Grip Stretch	Kéo giãn bằng điểm nắm
+	Group	Nhóm
+	Group Edit	Sửa nhóm
+	Group Options	Tùy chọn nhóm
+	Group Selection	Chọn nhóm
+	Hatch Edit	Sửa mặt cắt
+	Hatch Patterns	Mẫu mặt cắt
+	Hatch Pick	Chọn vùng tô mặt cắt
+	Hatch...	Tô mặt cắt...
+	Helix	Đường xoắn ốc
+	Help	Trợ giúp
+	Hide All	Ẩn tất cả
+	Hide All Constraint Bars	Ẩn tất cả thanh ràng buộc
+	Hide All Dynamic Dimensions	Ẩn tất cả kích thước động
+	Hide Objects	Ẩn đối tượng
+	Hide Palettes	Ẩn bảng công cụ
+	Hide Toolbar	Ẩn thanh công cụ
+	Home	Vị trí gốc
+	Horizontal	Ngang
+	ID Point	Tọa độ điểm
+	Import Workspace...	Nhập không gian làm việc...
+	In-window Menu Bar	Thanh menu trong cửa sổ
+	Infer Constraints	Suy ra ràng buộc
+	Inquiry	Tra cứu
+	Insert Column	Chèn cột
+	Insert Row	Chèn hàng
+	Insert Table Formula	Chèn công thức bảng
+	Inspect Constraints	Kiểm tra ràng buộc
+	Inspect Drawing	Kiểm tra bản vẽ
+	Inspection	Kiểm tra
+	Intersect	Giao
+	Isolate	Cô lập
+	Isolate Objects	Cô lập đối tượng
+	Isometric Drafting	Vẽ đẳng trục
+	Isometric Plane	Mặt phẳng đẳng trục
+	Jogged	Gấp khúc
+	Jogged Linear	Thẳng gấp khúc
+	Join	Nối
+	LISP	LISP
+	Layer Properties Manager	Trình quản lý thuộc tính lớp
+	Layers Palette	Bảng lớp bản vẽ
+	Leader	Đường ghi chú
+	Leaders Only	Chỉ đường ghi chú
+	Lengthen	Đổi chiều dài
+	Line	Đường thẳng
+	Linear	Thẳng
+	Linetype	Kiểu đường
+	Linetype Scale	Tỉ lệ kiểu đường
+	List	Liệt kê
+	List Blocks	Liệt kê khối
+	List Dimension Styles	Liệt kê kiểu kích thước
+	List Groups	Liệt kê nhóm
+	List Layer States	Liệt kê trạng thái lớp
+	List Layouts	Liệt kê bố cục in
+	List System Variables	Liệt kê biến hệ thống
+	List Text Styles	Liệt kê kiểu chữ
+	Load Application...	Nạp ứng dụng...
+	Lock Toolbar	Khóa thanh công cụ
+	Make Object's Layer Current	Đặt lớp của đối tượng làm hiện hành
+	Make...	Tạo...
+	Match Properties	Sao chép thuộc tính
+	Measure	Đo
+	Measure Geometry	Đo hình học
+	Merge Cells	Gộp ô
+	Minimize Ribbon	Thu gọn Ribbon
+	Mirror	Đối xứng
+	Model Space (in viewport)	Không gian mô hình (trong khung nhìn)
+	Modify	Hiệu chỉnh
+	Move	Di chuyển
+	Move Quick Access Item	Di chuyển mục Truy cập nhanh
+	Move Ribbon Group	Di chuyển nhóm Ribbon
+	Move Ribbon Tab	Di chuyển thẻ Ribbon
+	Move Toolbar	Di chuyển thanh công cụ
+	Multileader	Đường ghi chú nhiều nhánh
+	Multiline	Đường đa nét
+	Multiline Text	Chữ nhiều dòng
+	Multiline Text...	Chữ nhiều dòng...
+	Multiline...	Đường đa nét...
+	Multiple Point	Nhiều điểm
+	New Layer	Lớp mới
+	Next Change	Thay đổi tiếp theo
+	Object Snap	Truy bắt điểm
+	Object Snap Tracking	Truy bắt theo điểm
+	Oblique	Xiên
+	Offset	Dời song song
+	Open Sample Drawing	Mở bản vẽ mẫu
+	Open Xref	Mở tham chiếu ngoài
+	Options...	Tùy chọn...
+	Orbit	Xoay quanh
+	Ordinate	Tọa độ
+	Ortho Mode	Chế độ trực giao
+	Override	Ghi đè
+	Palettes	Bảng công cụ
+	Paper Space	Không gian giấy
+	Parallel	Song song
+	Parameters Manager	Trình quản lý tham số
+	Parametric	Tham số
+	Path Array	Mảng theo đường dẫn
+	Perpendicular	Vuông góc
+	Pin panel	Ghim bảng
+	Plot Window	In theo cửa sổ
+	Plotter Manager	Trình quản lý thiết bị in
+	Point	Điểm
+	Polar Array	Mảng tròn
+	Polar Tracking	Truy bắt cực
+	Polygon	Đa giác
+	Polygonal	Đa giác
+	Polyline	Đa tuyến
+	Previous Change	Thay đổi trước
+	Properties Inspector	Bảng thuộc tính
+	Purge	Dọn dẹp
+	Query Entities	Truy vấn thực thể
+	Query Texts	Truy vấn chữ
+	Quick	Nhanh
+	Quick Dimension	Ghi kích thước nhanh
+	Quick Properties	Thuộc tính nhanh
+	Quick Select Properties	Thuộc tính chọn nhanh
+	QuickCalc	QuickCalc
+	QuickCalc Pick	Chọn điểm cho QuickCalc
+	Quit UbotCAD	Thoát UbotCAD
+	Radius	Bán kính
+	Ray	Tia
+	Reassociate Dimensions	Liên kết lại kích thước
+	Recalculate Table Formulas	Tính lại công thức bảng
+	Rectangle	Hình chữ nhật
+	Rectangular	Chữ nhật
+	Rectangular Array	Mảng chữ nhật
+	Redo Layout Change	Làm lại thay đổi bố cục
+	Reference Manager	Trình quản lý tham chiếu
+	Region	Miền
+	Region/Mass Properties	Thuộc tính miền/khối lượng
+	Reinitialize	Khởi tạo lại
+	Remove Favorite	Bỏ mục yêu thích
+	Remove Leader	Bỏ đường ghi chú
+	Remove Ribbon Group	Bỏ nhóm Ribbon
+	Remove Ribbon Tab	Bỏ thẻ Ribbon
+	Remove Shortcut	Bỏ phím tắt
+	Remove from Quick Access	Bỏ khỏi Truy cập nhanh
+	Remove from Ribbon	Bỏ khỏi Ribbon
+	Rename Dimension Style	Đổi tên kiểu kích thước
+	Rename Layer State	Đổi tên trạng thái lớp
+	Rename Layout	Đổi tên bố cục in
+	Rename Ribbon Group	Đổi tên nhóm Ribbon
+	Rename Ribbon Tab	Đổi tên thẻ Ribbon
+	Rename Text Style	Đổi tên kiểu chữ
+	Reset Palettes	Đặt lại bảng công cụ
+	Reset Panel Layout	Đặt lại bố cục bảng
+	Reset Workspace	Đặt lại không gian làm việc
+	Resolve Workspace Conflict	Giải quyết xung đột không gian làm việc
+	Restore Layer State	Khôi phục trạng thái lớp
+	Restore Workspace Revision	Khôi phục phiên bản không gian làm việc
+	Reverse	Đảo chiều
+	Revision Cloud	Đám mây sửa đổi
+	Rotate	Xoay
+	Run Script...	Chạy tập lệnh...
+	Save Block	Lưu khối
+	Save Block As	Lưu khối thành
+	Save Reference Edits	Lưu sửa đổi tham chiếu
+	Save Workspace As...	Lưu không gian làm việc thành...
+	Scale	Tỉ lệ
+	Select	Chọn
+	Select Objects	Chọn đối tượng
+	Select Similar	Chọn tương tự
+	Select Workspace	Chọn không gian làm việc
+	Selection Cycling	Chuyển vòng lựa chọn
+	Send Hatches to Back	Đưa mặt cắt ra sau
+	Send Under Objects	Đưa xuống dưới đối tượng
+	Send to Back	Đưa ra sau
+	Set Current Dimension Style	Đặt kiểu kích thước hiện hành
+	Set Current Text Style	Đặt kiểu chữ hiện hành
+	Set Current Viewport	Đặt khung nhìn hiện hành
+	Set Dynamic Property	Đặt thuộc tính động
+	Set Layer Properties	Đặt thuộc tính lớp
+	Set Properties	Đặt thuộc tính
+	Set Table Cell	Đặt nội dung ô bảng
+	Set Table Cell Style	Đặt kiểu ô bảng
+	Set Variable	Đặt biến
+	Set View	Đặt khung nhìn
+	Set Workspace Value	Đặt giá trị không gian làm việc
+	Share	Chia sẻ
+	Show All	Hiện tất cả
+	Show All Constraint Bars	Hiện tất cả thanh ràng buộc
+	Show All Dynamic Dimensions	Hiện tất cả kích thước động
+	Show Auto-hide Panel	Hiện bảng tự ẩn
+	Show Toolbar	Hiện thanh công cụ
+	Show/Hide Lineweight	Hiện/Ẩn độ dày nét
+	Show/Hide Transparency	Hiện/Ẩn độ trong suốt
+	Single Line Text	Chữ một dòng
+	Single Point	Một điểm
+	Single...	Đơn lẻ...
+	Smooth	Trơn
+	Snap Mode	Chế độ bước nhảy
+	Solid Editing	Hiệu chỉnh khối đặc
+	Spline	Đường spline
+	Start	Bắt đầu
+	Start, Center, Angle	Điểm đầu, Tâm, Góc
+	Start, Center, End	Điểm đầu, Tâm, Điểm cuối
+	Start, Center, Length	Điểm đầu, Tâm, Chiều dài
+	Start, End, Angle	Điểm đầu, Điểm cuối, Góc
+	Start, End, Direction	Điểm đầu, Điểm cuối, Hướng
+	Start, End, Radius	Điểm đầu, Điểm cuối, Bán kính
+	Status	Trạng thái
+	Status Bar	Thanh trạng thái
+	Stretch	Kéo giãn
+	Subtract	Trừ
+	Switch Drawing	Chuyển bản vẽ
+	Switch Layout	Chuyển bố cục in
+	Symmetric	Đối xứng
+	Synchronize Attributes	Đồng bộ thuộc tính khối
+	Synchronize Multiple-scale Positions	Đồng bộ vị trí ở nhiều tỉ lệ
+	Table Breaks	Ngắt bảng
+	Table Cell Style	Kiểu ô bảng
+	Table...	Bảng...
+	Tan, Tan, Radius	Tiếp tuyến, Tiếp tuyến, Bán kính
+	Tan, Tan, Tan	Tiếp tuyến, Tiếp tuyến, Tiếp tuyến
+	Tangent	Tiếp tuyến
+	Text	Chữ
+	Text Objects Only	Chỉ đối tượng chữ
+	Thaw All Layers	Rã băng tất cả lớp
+	Time	Thời gian
+	Tolerance...	Dung sai...
+	Tool Bar	Thanh công cụ
+	Tool Sets	Bộ công cụ
+	Tools	Công cụ
+	Trim	Cắt xén
+	Turn All Layers On	Bật tất cả lớp
+	UbotCAD Help	Trợ giúp UbotCAD
+	Undo Layout Change	Hoàn tác thay đổi bố cục
+	Ungroup	Bỏ nhóm
+	Union	Hợp
+	Unlock Toolbar	Mở khóa thanh công cụ
+	Unmerge Cells	Tách ô
+	Update	Cập nhật
+	Update Data Links	Cập nhật liên kết dữ liệu
+	Vertical	Dọc
+	Viewport	Khung nhìn
+	Viewport Layer Freeze	Đóng băng lớp trong khung nhìn
+	Viewport Properties	Thuộc tính khung nhìn
+	Wipeout	Che nền
+	Working Set	Tập làm việc
+	Workspace Save Status	Trạng thái lưu không gian làm việc
+	Write Block	Ghi khối ra tệp
+	Xref and Block In-place Editing	Sửa tham chiếu ngoài và khối tại chỗ
+

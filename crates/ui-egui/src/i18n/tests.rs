@@ -118,6 +118,13 @@ const VI_DONE: &[Section] = &[
     Section::Menus("View"),
     Section::Menus("Insert"),
     Section::Menus("Format"),
+    Section::Menus("Tools"),
+    Section::Menus("Draw"),
+    Section::Menus("Dimension"),
+    Section::Menus("Modify"),
+    Section::Menus("Window"),
+    Section::Menus("Help"),
+    Section::Menus(""),
 ];
 
 const MARKED_UI_SOURCES: &[(&str, &str)] = &[
