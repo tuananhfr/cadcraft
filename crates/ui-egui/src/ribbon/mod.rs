@@ -115,7 +115,7 @@ pub fn convert_toolbar_to_group(layout: &mut WorkspaceLayout, toolbar: &str, tab
     }
     let id = fresh_id(tab.groups.iter().map(|group| group.id.as_str()));
     let commands = bar.commands.iter().filter(|id| crate::toolbars::is_known(id)).cloned().collect();
-    tab.groups.push(RibbonGroup { id: id.clone(), label: bar.label.clone(), commands });
+    tab.groups.push(RibbonGroup { id: id.clone(), label: bar.label.clone(), commands, ..RibbonGroup::default() });
     bar.visible = false;
     Ok(id)
 }

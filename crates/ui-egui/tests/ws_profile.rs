@@ -677,6 +677,8 @@ fn picker_escape_selects_simple() {
 #[test]
 fn picker_closed_with_its_button_selects_simple() {
     let mut harness = shell(first_run_app(false));
+    // The eleven-row picker keeps growing for a few frames; click its close button once it has settled.
+    harness.run_steps(6);
     harness.get_by_label("Close window").click();
     harness.run_steps(4);
     assert_eq!(harness.state().ui.dialog, None);

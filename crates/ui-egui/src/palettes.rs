@@ -360,11 +360,11 @@ pub fn right_palettes(app: &mut CadApp, ui: &mut egui::Ui) {
 pub(crate) fn layers_section(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
     section_header(ui, "Layers");
-    // Layer tools row.
+    // Wraps so every layer tool stays reachable in a narrow palette (683-point screens, compact density).
     let mut cmd = None;
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.add_space(8.0);
-        ui.spacing_mut().item_spacing = vec2(3.0, 0.0);
+        ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
         for (icon, c, tip) in [
             (Icon::LayerProps, "ui.dialog.layers", "Layer Properties"),
             (Icon::MakeCurrent, "laymcur", "Make Object's Layer Current"),

@@ -53,7 +53,7 @@ fn selecting_a_block_shows_the_block_tab() {
     harness.state_mut().session.set_selection(vec![handle]);
     harness.run_steps(3);
     assert_eq!(active_contexts(&harness.state().session), ["block"]);
-    let block_button = harness.get_by_role_and_label(Role::Button, "Block");
+    let block_button = harness.get_by_role_and_label(Role::Tab, "Block");
     assert!(!block_button.accesskit_node().is_disabled());
     let block_tab_id = block_button.accesskit_node().locate().0;
     assert_eq!(harness.ctx.data(|data| data.get_temp::<String>(Id::new("cc_ribbon_active"))).as_deref(), Some("ctx_block"));
@@ -67,14 +67,14 @@ fn selecting_a_block_shows_the_block_tab() {
     harness.run_steps(3);
     assert!(active_contexts(&harness.state().session).is_empty());
     assert!(!ribbon::visible_tabs(harness.state()).iter().any(|tab| tab.id == "ctx_block"));
-    assert!(harness.query_all_by_role_and_label(Role::Button, "Block").all(|node| node.accesskit_node().locate().0 != block_tab_id));
+    assert!(harness.query_all_by_role_and_label(Role::Tab, "Block").all(|node| node.accesskit_node().locate().0 != block_tab_id));
     harness.state_mut().session.set_selection(vec![handle]);
     harness.run_steps(3);
     assert_eq!(harness.ctx.data(|data| data.get_temp::<String>(Id::new("cc_ribbon_active"))).as_deref(), Some("ctx_block"));
     harness.state_mut().session.set_selection(Vec::new());
     harness.run_steps(3);
     assert!(active_contexts(&harness.state().session).is_empty());
-    assert!(harness.query_all_by_role_and_label(Role::Button, "Block").all(|node| node.accesskit_node().locate().0 != block_tab_id));
+    assert!(harness.query_all_by_role_and_label(Role::Tab, "Block").all(|node| node.accesskit_node().locate().0 != block_tab_id));
 }
 
 #[test]
