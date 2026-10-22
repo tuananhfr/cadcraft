@@ -1797,3 +1797,9 @@
 	Added font {font}	Додано шрифт {font}
 	Removed font {font}	Вилучено шрифт {font}
 	{layout} · {paper}	{layout} · {paper}
+
+# Batch 11: command palette.
+	Command Palette...	Палітра команд...
+	This command is not available on this platform.	Ця команда недоступна на цій платформі.
+	No matching commands.	Відповідних команд немає.
+	Commands	Команди

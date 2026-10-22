@@ -108,6 +108,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.dialog.parameters", "Parameters Manager", &["Window", "Parameters Manager"], None),
     ("ui.dialog.dsettings", "Drafting Settings...", &[], None),
     ("ui.dialog.about", "About UbotCAD", &["Help", "About UbotCAD"], None),
+    ("ui.palette", "Command Palette...", &["Help", "Command Palette..."], None),
     ("ui.dialog.commands", "Command Reference", &["Help", "UbotCAD Help"], Some("F1")),
     ("ui.toggle.history", "Command History", &["Window", "Command History"], Some("F2")),
     ("ui.cmdline.lines", "Command Line History Lines", &[], None),
@@ -150,6 +151,9 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
         return Some(result);
     }
     if let Some(result) = crate::quick_access::route(app, id, params) {
+        return Some(result);
+    }
+    if let Some(result) = crate::palette::route(app, id, params) {
         return Some(result);
     }
     if let Some(result) = crate::customize::route(app, id, params) {

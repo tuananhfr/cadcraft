@@ -1755,3 +1755,9 @@ menu	Help	Trợ giúp
 	{mode}Select objects	{mode}Chọn đối tượng
 	{mode}Specify next point	{mode}Chỉ định điểm tiếp theo
 	{snap} of	{snap} của
+
+# Batch 11: command palette.
+	Command Palette...	Bảng tìm lệnh...
+	This command is not available on this platform.	Lệnh này không khả dụng trên nền tảng này.
+	No matching commands.	Không có lệnh phù hợp.
+	Commands	Lệnh

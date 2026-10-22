@@ -14,6 +14,7 @@ pub fn show(app: &mut CadApp, ctx: &egui::Context) {
     let Some(d) = app.ui.dialog.clone() else { return };
     let mut open = true;
     match d.as_str() {
+        crate::palette::DIALOG => crate::palette::dialog(app, ctx, &mut open),
         crate::customize::DIALOG => crate::customize::dialog(app, ctx, &mut open),
         "spacemouse" => crate::spacemouse::dialog(app, ctx, &mut open),
         "language" => language(app, ctx, &mut open),
@@ -353,22 +354,26 @@ fn commands(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                 ui.text_edit_singleline(&mut filter);
             });
             ui.data_mut(|d| d.insert_temp(id, filter.clone()));
-            let f = filter.to_lowercase();
+            if ui.button(crate::tl!("Command Palette...")).clicked() {
+                let _ = app.run("ui.palette", json!({"query": filter}));
+            }
+            let index = crate::palette::index::SearchIndex::build(app.language(), &crate::shortcuts::active(app));
+            let hits = index.search(&filter, &app.session.recent_commands(8), &app.ws.effective.layout.favorites, 50);
+            let entries: Vec<_> =
+                if filter.trim().is_empty() { index.entries().collect() } else { hits.iter().filter_map(|hit| index.entry(hit)).collect() };
             egui::ScrollArea::vertical().show(ui, |ui| {
                 egui::Grid::new("cmdref").striped(true).num_columns(3).show(ui, |ui| {
-                    for c in cadcraft_engine::command_specs() {
-                        if !f.is_empty()
-                            && !c.id.contains(&f)
-                            && !c.label.to_ascii_lowercase().contains(&f)
-                            && !crate::i18n::t(c.label).to_lowercase().contains(&f)
-                        {
-                            continue;
+                    for entry in entries {
+                        let available = entry.status == cadcraft_engine::cmd::registry::CommandStatus::Available;
+                        let response = ui.add_enabled(available, egui::Link::new(entry.id.to_ascii_uppercase()));
+                        if response.clicked() {
+                            start = Some(entry.id);
                         }
-                        if ui.link(c.id.to_ascii_uppercase()).clicked() {
-                            start = Some(c.id);
+                        ui.label(crate::i18n::t(entry.label_en));
+                        ui.label(RichText::new(entry.aliases.join(", ").to_ascii_uppercase()).small());
+                        if !available {
+                            response.on_disabled_hover_text(crate::palette::unavailable_reason());
                         }
-                        ui.label(crate::i18n::t(c.label));
-                        ui.label(RichText::new(if c.aliases.is_empty() { String::new() } else { c.aliases.join(", ").to_ascii_uppercase() }).small());
                         ui.end_row();
                     }
                 });
@@ -377,7 +382,7 @@ fn commands(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     );
     if let Some(c) = start {
         app.ui.dialog = None;
-        app.start(c);
+        crate::menus::activate(app, c);
     }
 }
 

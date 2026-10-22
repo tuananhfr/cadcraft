@@ -20,7 +20,6 @@ pub struct State {
     toolbar: String,
     command: String,
     query: String,
-    command_filter: Option<String>,
     commands: Vec<(&'static str, &'static str)>,
     label: String,
     key: String,
@@ -149,25 +148,20 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     app.customize = state;
 }
 
-fn commands(_app: &CadApp, ui: &mut egui::Ui, state: &mut State) {
+fn commands(app: &CadApp, ui: &mut egui::Ui, state: &mut State) {
     edit(ui, &mut state.query, crate::tl!("Find command"));
-    if state.command_filter.as_deref() != Some(state.query.as_str()) {
-        let query = state.query.to_lowercase();
-        state.commands = cadcraft_engine::cmd::registry::command_registry()
+    let index = crate::palette::index::SearchIndex::build(app.language(), &crate::shortcuts::active(app));
+    state.commands = if state.query.trim().is_empty() {
+        let mut entries: Vec<_> = index.entries().map(|entry| (entry.id, entry.label_en)).collect();
+        entries.sort_by_key(|(id, _)| *id);
+        entries
+    } else {
+        index
+            .search(&state.query, &app.session.recent_commands(8), &app.ws.effective.layout.favorites, 50)
             .iter()
-            .map(|command| (command.stable_id, command.label))
-            .chain(
-                crate::menus::UI_COMMANDS
-                    .iter()
-                    .filter(|command| !command.1.is_empty() && !crate::menus::command_hidden(command.0))
-                    .map(|command| (command.0, command.1)),
-            )
-            .filter(|(id, label)| id.contains(&query) || label.to_lowercase().contains(&query))
-            .collect();
-        state.commands.sort_by_key(|(id, _)| *id);
-        state.commands.dedup_by_key(|(id, _)| *id);
-        state.command_filter = Some(state.query.clone());
-    }
+            .filter_map(|hit| index.entry(hit).map(|entry| (entry.id, entry.label_en)))
+            .collect()
+    };
     if state.command.is_empty()
         && let Some((id, _)) = state.commands.first()
     {

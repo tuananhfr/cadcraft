@@ -136,6 +136,7 @@ const VI_DONE: &[Section] = &[
     Section::Literals("palettes/quickcalc.rs"),
     Section::Literals("palettes/patterns.rs"),
     Section::Literals("dialogs.rs"),
+    Section::Literals("palette/mod.rs"),
     Section::Literals("managers.rs"),
     Section::Literals("managers/battman.rs"),
     Section::Literals("autosave.rs"),
@@ -181,6 +182,7 @@ const MARKED_UI_SOURCES: &[(&str, &str)] = &[
     ("palettes/quickcalc.rs", include_str!("../palettes/quickcalc.rs")),
     ("palettes/patterns.rs", include_str!("../palettes/patterns.rs")),
     ("dialogs.rs", include_str!("../dialogs.rs")),
+    ("palette/mod.rs", include_str!("../palette/mod.rs")),
     ("managers.rs", include_str!("../managers.rs")),
     ("managers/battman.rs", include_str!("../managers/battman.rs")),
     ("autosave.rs", include_str!("../autosave.rs")),
@@ -422,6 +424,7 @@ const WIDGET_LITERAL_FILES: &[(&str, &str)] = &[
     ("fontmgr.rs", include_str!("../fontmgr.rs")),
     ("viewcube.rs", include_str!("../viewcube.rs")),
     ("dialogs.rs", include_str!("../dialogs.rs")),
+    ("palette/mod.rs", include_str!("../palette/mod.rs")),
 ];
 
 fn widget_text_argument(arguments: &str, wanted: usize) -> Option<&str> {
