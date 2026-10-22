@@ -10,7 +10,7 @@ use cadcraft_engine::cmd::plotters::{PlotterStore, find_device, set_plotter_stor
 use cadcraft_engine::sheetplan::ids::sheet_key;
 use cadcraft_engine::sheetplan::split::propose_split;
 use cadcraft_engine::sheetplan::{FrameRegistry, PreflightContext, Severity, SheetPlan, SheetSource, SheetStatus, codes, preflight};
-use serde_json::{Value, json};
+use serde_json::json;
 use support::pdf_probe::pages;
 
 fn setup() -> Session {
@@ -30,7 +30,10 @@ fn setup() -> Session {
             s.execute("plottermanager", &json!({"action": "set", "name": "A1 Plotter", "removePaper": paper["name"]})).unwrap();
         }
     });
-    Session::new()
+    let mut s = Session::new();
+    // Fixtures are in millimetres; the default drawing is in inches, which UBPLOT now scales physically.
+    s.doc_mut().unwrap().header.set_i64("INSUNITS", 4);
+    s
 }
 
 fn scan(s: &mut Session, width: f64, height: f64, device: &str) -> SheetPlan {
@@ -66,7 +69,7 @@ fn near_device_limit_warns() {
     let mut s = setup();
     let plan = scan(&mut s, 594.0, 800.0, "A1 Plotter");
     assert!(plan.sheets[0].issues.iter().any(|issue| issue.code == codes::DEVICE_LIMIT_NEAR && issue.severity == Severity::Warn));
-    assert_eq!(plan.sheets[0].status, SheetStatus::NeedsPreview);
+    assert_eq!(plan.sheets[0].status, SheetStatus::NeedsPreview, "{:?}", plan.sheets[0].issues);
     assert!(plan.sheets[0].split.is_none());
 }
 
@@ -76,7 +79,7 @@ fn over_device_limit_blocks_with_split_proposal() {
     let plan = scan(&mut s, 594.0, 2400.0, "A1 Plotter");
     assert!(plan.sheets[0].issues.iter().any(|issue| issue.code == codes::DEVICE_LIMIT_EXCEEDED && issue.severity == Severity::Block));
     assert_eq!(plan.sheets[0].status, SheetStatus::Blocked);
-    let split = plan.sheets[0].split.as_ref().unwrap();
+    let split = plan.sheets[0].split.as_ref().unwrap_or_else(|| panic!("no split: {:?}", plan.sheets[0].issues));
     assert_eq!(split.pieces.len(), 3);
     assert_eq!(split.overlap_mm, 20.0);
     assert!(!split.approved);
@@ -152,7 +155,7 @@ fn missing_device_falls_back_to_pdf_with_warn() {
     let plan = scan(&mut s, 594.0, 2400.0, "Nope");
     let sheet = &plan.sheets[0];
     assert!(sheet.issues.iter().any(|issue| issue.code == codes::DEVICE_UNAVAILABLE && issue.severity == Severity::Warn));
-    assert!(!sheet.issues.iter().any(|issue| issue.severity == Severity::Block));
+    assert!(!sheet.issues.iter().any(|issue| issue.severity == Severity::Block), "{:?}", sheet.issues);
     assert!(sheet.split.is_none());
     assert!(s.execute("ubplot.publish", &json!({})).is_err());
     s.execute("ubplot.approve", &json!({"approvals": [{"sheetKey": sheet_key(sheet), "code": codes::DEVICE_UNAVAILABLE}], "by": "user"})).unwrap();
@@ -260,7 +263,7 @@ fn removed_device_requires_pdf_fallback_approval() {
 fn builtin_pdf_accepts_long_sheets() {
     let mut s = setup();
     let plan = scan(&mut s, 594.0, 2400.0, "CADCraft PDF");
-    assert!(!plan.sheets[0].issues.iter().any(|issue| issue.severity >= Severity::Warn));
+    assert!(!plan.sheets[0].issues.iter().any(|issue| issue.severity >= Severity::Warn), "{:?} {:?}", plan.sheets[0].issues, plan.sheets[0].paper_mm);
     assert!(plan.sheets[0].split.is_none());
     assert_eq!(pages(&published_bytes(&mut s)).len(), 1);
 }
