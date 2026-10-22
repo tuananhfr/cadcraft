@@ -180,9 +180,13 @@ fn command_rows(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State, group: &
             let payload = RibbonDrag { tab: state.tab.clone(), group: state.group.clone(), index };
             let id = ui.make_persistent_id(("ribbon_command", index));
             let (zone, dropped) = ui.dnd_drop_zone::<RibbonDrag, _>(egui::Frame::NONE, |ui| {
-                ui.dnd_drag_source(id, payload, |ui| {
+                ui.push_id(id, |ui| {
                     let resolved = crate::toolbars::resolve(command);
-                    let response = ui.add(egui::Button::selectable(state.ribbon_index == Some(index), crate::i18n::t(&resolved.label)));
+                    // A separate drag-source overlay would swallow clicks needed to select the row.
+                    let response = ui
+                        .add(egui::Button::selectable(state.ribbon_index == Some(index), crate::i18n::t(&resolved.label)))
+                        .interact(egui::Sense::drag());
+                    response.dnd_set_drag_payload(payload);
                     if focus == Some(index) {
                         response.request_focus();
                         ui.memory_mut(|memory| memory.move_focus(egui::FocusDirection::None));

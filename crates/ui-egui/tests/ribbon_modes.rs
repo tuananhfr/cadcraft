@@ -200,8 +200,27 @@ fn unique_labels(tab: &cadcraft_ui_egui::wsprofile::schema::RibbonTab, label: im
     labels
 }
 
+fn ribbon_buttons<'h>(h: &'h Harness<'_, CadApp>, label: &'h str) -> impl Iterator<Item = egui_kittest::Node<'h>> + 'h {
+    let popup = popup_open(h);
+    let ribbon = egui::containers::panel::PanelState::load(&h.ctx, Id::new("cc_ribbon")).unwrap().outer_rect;
+    h.query_all_by_role_and_label(egui::accesskit::Role::Button, label).filter(move |node| {
+        if !popup {
+            return ribbon.y_range().contains(node.rect().center().y);
+        }
+        // Docked palettes can overlap the popup and share labels; use ancestry rather than screen position.
+        let mut ancestor = Some(*node);
+        while let Some(node) = ancestor {
+            if node.accesskit_node().locate().0 == Id::new("cc_ribbon_flyout").accesskit_id() {
+                return true;
+            }
+            ancestor = node.parent();
+        }
+        false
+    })
+}
+
 fn button_nth<'h>(h: &'h Harness<'_, CadApp>, label: &'h str, nth: usize) -> egui_kittest::Node<'h> {
-    h.query_all_by_role_and_label(egui::accesskit::Role::Button, label).nth(nth).unwrap_or_else(|| panic!("no button {label} #{nth}"))
+    ribbon_buttons(h, label).nth(nth).unwrap_or_else(|| panic!("no ribbon button {label} #{nth}"))
 }
 
 // Dock panel tabs are Role::Tab too and can share a ribbon tab's label ("Layers").
@@ -235,7 +254,7 @@ fn tabs_only_flyout_reaches_every_command_at_200_percent_tc11() {
             assert_eq!(h.state().canvas.rect.unwrap(), before, "flyout must not move the canvas");
             for label in unique_labels(&tab, |id| cadcraft_ui_egui::i18n::with_language(h.state().language(), || command_label(id))) {
                 // Several commands can share a label (Modify "Copy" and Clipboard "Copy"); each must be reachable.
-                for nth in 0..h.query_all_by_role_and_label(egui::accesskit::Role::Button, &label).count().max(1) {
+                for nth in 0..ribbon_buttons(&h, &label).count().max(1) {
                     button_nth(&h, &label, nth).scroll_to_me();
                     h.run_steps(3);
                     inside(h.ctx.content_rect(), button_nth(&h, &label, nth).rect());
@@ -251,6 +270,42 @@ fn tabs_only_flyout_reaches_every_command_at_200_percent_tc11() {
         assert_eq!(h.state().ws.user.layout, layout);
         assert!(!h.state().session.state().unwrap().is_dirty());
     }
+}
+
+#[test]
+fn tabs_only_flyout_wraps_a_wide_custom_group_at_200_percent() {
+    let _guard = test_lock();
+    let mut app = familiar("tabs_only");
+    let tab = app.run("ui.ribbon.tab.add", json!({"label": "Flyout wrapping"})).unwrap()["id"].as_str().unwrap().to_string();
+    let group = app.run("ui.ribbon.group.add", json!({"tab": tab, "label": "Commands"})).unwrap()["id"].as_str().unwrap().to_string();
+    let ids: Vec<_> = cadcraft_ui_egui::menus::UI_COMMANDS
+        .iter()
+        .filter(|entry| entry.0.starts_with("ui.") && cadcraft_ui_egui::toolbars::resolve(entry.0).icon.is_none())
+        .take(36)
+        .map(|entry| entry.0)
+        .collect();
+    assert_eq!(ids.len(), 36);
+    for id in &ids {
+        app.run("ui.ribbon.button.add", json!({"tab": tab, "group": group, "id": id})).unwrap();
+    }
+    let mut h = scaled_harness(app, 2.0);
+    let canvas = h.state().canvas.rect.unwrap();
+    let layout = h.state().ws.user.layout.clone();
+    select_ribbon_tab(&mut h, "Flyout wrapping");
+    assert!(popup_open(&h));
+    let first = button_nth(&h, &command_label(ids[0]), 0).rect();
+    let last = button_nth(&h, &command_label(ids[ids.len() - 1]), 0).rect();
+    assert!(last.top() - first.top() > 80.0, "wide groups wrap into additional rows");
+    for id in ids {
+        let label = command_label(id);
+        button_nth(&h, &label, 0).scroll_to_me();
+        h.run_steps(3);
+        inside(h.ctx.content_rect(), button_nth(&h, &label, 0).rect());
+        inside(h.ctx.content_rect(), h.ctx.read_response(Id::new("cc_ribbon_flyout")).unwrap().rect);
+    }
+    assert_eq!(h.state().canvas.rect.unwrap(), canvas);
+    assert_eq!(h.state().ws.user.layout, layout);
+    assert!(!h.state().session.state().unwrap().is_dirty());
 }
 
 #[test]
@@ -300,15 +355,17 @@ fn compact_mode_shows_icon_buttons_with_tooltips() {
         let row = egui::containers::panel::PanelState::load(&h.ctx, Id::new("cc_ribbon")).unwrap().outer_rect;
         assert!(row.height() <= cadcraft_ui_egui::ribbon::render::COMPACT_HEIGHT + 1.0);
         for label in unique_labels(&tab, command_label) {
-            let count = h.query_all_by_role_and_label(egui::accesskit::Role::Button, &label).count().max(1);
+            let count = ribbon_buttons(&h, &label).count().max(1);
             for nth in 0..count {
                 button_nth(&h, &label, nth).scroll_to_me();
                 h.run_steps(3);
                 let item = button_nth(&h, &label, nth);
                 assert!(item.rect().width() <= 25.0, "{label} uses a square icon button");
+                assert!((item.rect().width() - item.rect().height()).abs() <= 0.5, "{label} uses a square icon button");
+                let before_hover = h.query_all_by_label(&label).count();
                 item.hover();
                 h.run_steps(6);
-                assert!(h.query_all_by_label(&label).count() > count, "{label} has a labelled tooltip");
+                assert!(h.query_all_by_label(&label).count() > before_hover, "{label} has a labelled tooltip");
                 h.hover_at(egui::pos2(1000.0, 650.0));
                 h.run_steps(3);
             }
@@ -365,11 +422,11 @@ fn flyout_is_keyboard_operable() {
     h.run_steps(3);
     assert!(popup_open(&h));
     assert!(h.query_by_role_and_label(egui::accesskit::Role::Button, &command_label("wblock")).is_some());
-    // At 200 % the flyout covers the canvas centre, and a click inside the flyout keeps it open.
-    let canvas = h.state().canvas.rect.unwrap();
+    // Wrapped groups can cover the canvas at 200 %, so use the screen margin above the flyout.
+    let screen = h.ctx.content_rect();
     let flyout = h.ctx.read_response(Id::new("cc_ribbon_flyout")).unwrap().rect;
-    let pos = egui::pos2(canvas.center().x, (flyout.bottom() + canvas.bottom()) / 2.0);
-    assert!(canvas.contains(pos) && !flyout.contains(pos), "{pos:?} must be on the canvas outside {flyout:?}");
+    let pos = screen.min + vec2(1.0, 1.0);
+    assert!(screen.contains(pos) && !flyout.contains(pos), "{pos:?} must be on screen outside {flyout:?}");
     h.hover_at(pos);
     for pressed in [true, false] {
         h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
