@@ -199,7 +199,7 @@ fn parse(v: &Value) -> Result<SheetPlan, String> {
     Ok(SheetPlan { schema_version: header.schema_version, job_id: header.job_id, source_hash: header.source_hash, sheets, issues: header.issues })
 }
 
-fn validate_input_size(v: &Value) -> Result<(), String> {
+pub(crate) fn validate_input_size(v: &Value) -> Result<(), String> {
     const MAX_DEPTH: usize = 64;
     const MAX_VALUES: usize = MAX_SCAN_FRAMES * 256;
     const MAX_TEXT_BYTES: usize = 64 * 1024 * 1024;

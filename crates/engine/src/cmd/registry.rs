@@ -48,6 +48,8 @@ pub const FILE_IDS: &[&str] = &[
     "plot",
     "publish",
     "pdfbook",
+    "ubplot",
+    "ubplot.publish",
     "xref",
     "-xref",
     "xattach",

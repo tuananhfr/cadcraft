@@ -668,6 +668,7 @@ pub struct Session {
     pub clipboard_source: Option<cmd::clipboard::ClipSource>,
     /// The window last picked with PLOTWINDOW (the Plot dialog's "Window <").
     pub plot_window: Option<cadcraft_geom::Bounds2>,
+    pub ubplot: cmd::ubplot::UbplotState,
     /// AutoLISP: each drawing's symbols and the routine running ([`lisp`]).
     lisp: lisp::LispState,
     /// How the last LISP run ended (its value or error message).
@@ -719,6 +720,7 @@ impl Session {
             last_used: LastUsed::default(),
             clipboard_source: None,
             plot_window: None,
+            ubplot: cmd::ubplot::UbplotState::default(),
             lisp: lisp::LispState::default(),
             lisp_last: None,
             hatch_picks: None,

@@ -391,6 +391,8 @@ tolerance
 transparencydisplay
 trim
 u
+ubplot.scan
+ubplot.templates
 undo
 ungroup
 union
