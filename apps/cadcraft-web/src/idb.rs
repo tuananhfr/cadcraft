@@ -295,6 +295,36 @@ impl IdbStore {
         })
     }
 
+    pub fn put_drawing(&self, name: &str, bytes: &[u8], metadata: &[u8]) -> Pending {
+        self.write(&["autosave", "autosave_index"], |transaction| {
+            put(&transaction.object_store("autosave").map_err(js_error)?, name, bytes)?;
+            put(&transaction.object_store("autosave_index").map_err(js_error)?, name, metadata)
+        })
+    }
+
+    pub fn delete_drawing(&self, name: &str) -> Pending {
+        self.write(&["autosave", "autosave_index"], |transaction| {
+            for store in ["autosave", "autosave_index"] {
+                transaction.object_store(store).map_err(js_error)?.delete(&JsValue::from_str(name)).map_err(js_error)?;
+            }
+            Ok(())
+        })
+    }
+
+    pub async fn read_bounded(&self, store: &str, key: &str, max_bytes: usize) -> Result<Vec<u8>, IdbError> {
+        let transaction = self.db.transaction_with_str(store).map_err(js_error)?;
+        let request = transaction.object_store(store).map_err(js_error)?.get(&JsValue::from_str(key)).map_err(js_error)?;
+        let value = request_future(&request).await?;
+        if value.is_null() || value.is_undefined() {
+            return Err(IdbError::Unavailable("autosave not found".into()));
+        }
+        let bytes = value.dyn_into::<Uint8Array>().map_err(js_error)?;
+        if bytes.length() as usize > max_bytes {
+            return Err(IdbError::Unavailable("autosave exceeds its byte limit".into()));
+        }
+        Ok(bytes.to_vec())
+    }
+
     pub fn delete(&self, store: &str, key: &str) -> Pending {
         self.write(&[store], |transaction| {
             transaction.object_store(store).map_err(js_error)?.delete(&JsValue::from_str(key)).map_err(js_error)?;

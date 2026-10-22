@@ -74,6 +74,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.workspace.restore", "Restore Workspace Revision", &[], None),
     ("ui.workspace.rollback", "Roll Back Workspace to 1.0.0", &[], None),
     ("ui.workspace.status", "Workspace Save Status", &[], None),
+    ("ui.recovery.status", "Recovery Status", &[], None),
     ("ui.workspace.set", "Set Workspace Value", &[], None),
     ("ui.workspace.resolve", "Resolve Workspace Conflict", &[], None),
     ("ui.open", "Open...", &[], Some("Cmd+O")),

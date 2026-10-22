@@ -1954,3 +1954,9 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	Drawing autosaved	Bản vẽ đã tự lưu
 	Browser storage is full	Bộ nhớ trình duyệt đã đầy
 	Saving in limited browser storage	Đang lưu vào bộ nhớ trình duyệt hạn chế
+	Recovery Status	Trạng thái khôi phục
+	Drawing too large to autosave in the browser	Bản vẽ quá lớn để tự lưu trong trình duyệt
+	Could not autosave the drawing	Không thể tự lưu bản vẽ
+	Could not recover the drawing	Không thể khôi phục bản vẽ
+	Drawing autosave queue is full	Hàng đợi tự lưu bản vẽ đã đầy
+	Could not autosave the drawing: {error}	Không thể tự lưu bản vẽ: {error}

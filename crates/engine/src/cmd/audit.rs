@@ -100,14 +100,23 @@ fn run_recover(s: &mut Session, p: &Value) -> Result<Value> {
         }
         (None, None) => return Err(bad("recover", "`path` or `data` (base64) is required")),
     };
-    let hooks = file::io().ok_or_else(|| bad("recover", "file formats are not available in this build"))?;
-    let d = (hooks.read)(&bytes, &name).map_err(|e| bad("recover", format!("{name} can't be read: {e}")))?;
-    let title = match str_param(p, "title") {
-        Some(t) => t.to_string(),
-        None => std::path::Path::new(&name).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| name.clone()),
-    };
     let copy = bool_or(p, "copy", false);
-    let i = s.open_drawing(d, &title, if copy { None } else { path });
+    let result = recover_bytes(s, &bytes, &name, str_param(p, "title"), copy)?;
+    if !copy {
+        s.state_mut()?.path = path;
+    }
+    Ok(result)
+}
+
+/// Byte recovery lets asynchronous hosts use the same repair and unsaved-copy semantics.
+pub fn recover_bytes(s: &mut Session, bytes: &[u8], name: &str, title: Option<&str>, copy: bool) -> Result<Value> {
+    let hooks = file::io().ok_or_else(|| bad("recover", "file formats are not available in this build"))?;
+    let d = (hooks.read)(bytes, name).map_err(|e| bad("recover", format!("{name} can't be read: {e}")))?;
+    let title = match title {
+        Some(t) => t.to_string(),
+        None => std::path::Path::new(name).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| name.to_string()),
+    };
+    let i = s.open_drawing(d, &title, None);
     let st = s.state_mut()?;
     let report = crate::audit::fix(Arc::make_mut(&mut st.doc));
     if report.issues.is_empty() {
@@ -200,5 +209,43 @@ impl Interactive for Recover {
             }
             _ => Ok(Step::Continue),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recover_bytes_matches_recover_data() {
+        file::set_io(file::IoHooks {
+            read: |bytes, name| cadcraft_io::read(bytes, name).map_err(|e| e.to_string()),
+            write: |doc, name| cadcraft_io::write(doc, name).map_err(|e| e.to_string()),
+            plot: None,
+        });
+        let mut source = Session::new();
+        source.execute("line", &json!({"points": [[0, 0], [10, 0]]})).unwrap();
+        let bytes = cadcraft_io::write(source.doc().unwrap(), "drawing.dxf").unwrap();
+        let mut direct = Session::empty();
+        let mut command = Session::empty();
+        let a = recover_bytes(&mut direct, &bytes, "Drawing.dxf", Some("Recovered"), true);
+        let b = command.execute("recover", &json!({"data": file::base64_encode(&bytes), "name": "Drawing.dxf", "title": "Recovered", "copy": true}));
+        let (a, b) = match (a, b) {
+            (Ok(a), Ok(b)) => (a, b),
+            (Err(a), Err(b)) => {
+                assert_eq!(a.to_string(), b.to_string());
+                return;
+            }
+            other => panic!("byte and data recovery disagreed: {other:?}"),
+        };
+        for key in ["index", "errors", "fixed", "issues", "message"] {
+            assert_eq!(a.get(key), b.get(key));
+        }
+        let a = direct.state().unwrap();
+        let b = command.state().unwrap();
+        assert_eq!(a.title, b.title);
+        assert_eq!(a.path, b.path);
+        assert!(a.is_dirty() && b.is_dirty());
+        assert_eq!(cadcraft_io::write(&a.doc, "copy.dxf").unwrap(), cadcraft_io::write(&b.doc, "copy.dxf").unwrap());
     }
 }

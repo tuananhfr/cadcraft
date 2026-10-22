@@ -7,6 +7,8 @@ Status describes desktop; commands requiring `xref` are unsupported on web.
 
 UI-only focus/fullscreen ids: `ui.fullscreen`, `ui.focusmode`, `cleanscreenon`, `cleanscreenoff` (registered in `ui-egui::menus::UI_COMMANDS`).
 
+UI-only recovery status: `ui.recovery.status` (registered in `ui-egui::menus::UI_COMMANDS`).
+
 | stable_id | namespaced_id | category | contexts | status | risk | aliases |
 | --- | --- | --- | --- | --- | --- | --- |
 | `-attedit` | `cad.modify.-attedit` | Modify | model, paper | available | edit | -ate, atte |

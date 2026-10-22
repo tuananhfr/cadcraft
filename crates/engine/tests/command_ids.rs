@@ -41,6 +41,7 @@ fn render_doc(reg: &[CommandMeta]) -> String {
          Engine commands only; UI-only ids are added by `ui-egui`. An id listed here never disappears: it is renamed through `RENAMED` or it stays.\n\n\
          Status describes desktop; commands requiring `xref` are unsupported on web.\n\n\
          UI-only focus/fullscreen ids: `ui.fullscreen`, `ui.focusmode`, `cleanscreenon`, `cleanscreenoff` (registered in `ui-egui::menus::UI_COMMANDS`).\n\n\
+         UI-only recovery status: `ui.recovery.status` (registered in `ui-egui::menus::UI_COMMANDS`).\n\n\
          | stable_id | namespaced_id | category | contexts | status | risk | aliases |\n| --- | --- | --- | --- | --- | --- | --- |\n",
     );
     for m in rows {

@@ -636,8 +636,15 @@ mod browser {
         }
     }
 
-    pub async fn open() -> Result<IdbProfileStore<IdbBackend>, IdbError> {
-        let (idb, mut mirror) = crate::idb::with_timeout(async {
+    pub struct Opened {
+        pub profile: IdbProfileStore<IdbBackend>,
+        pub autosave: crate::drawing_autosave::IdbAutosaveSink,
+        pub leftovers: Vec<cadcraft_engine::autosave::Recoverable>,
+        pub instance: String,
+    }
+
+    pub async fn open() -> Result<Opened, IdbError> {
+        let (idb, mut mirror, index, beats) = crate::idb::with_timeout(async {
             let idb = crate::idb::IdbStore::open().await?;
             let mut mirror = Mirror::default();
             for name in ["workspace", "snapshots", "damaged", "meta"] {
@@ -649,7 +656,9 @@ mod browser {
                 }
                 mirror.preload(name, records);
             }
-            Ok((idb, mirror))
+            let index = idb.preload("autosave_index", MAX_PRELOAD_RECORDS).await?;
+            let beats = idb.preload("instances", MAX_PRELOAD_RECORDS).await?;
+            Ok((idb, mirror, index, beats))
         })
         .await?;
         if mirror.needs_migration()
@@ -680,7 +689,12 @@ mod browser {
             }
         }
         let persisted = crate::idb::request_persistence().await;
-        Ok(IdbProfileStore::new(mirror, IdbBackend::new(idb), js_sys::Date::now, persisted))
+        let now = js_sys::Date::now();
+        let instance = crate::drawing_autosave::web_instance_id((js_sys::Math::random() * f64::from(u32::MAX)) as u32, now);
+        let leftovers = crate::drawing_autosave::leftovers(&index, &beats, &instance, now);
+        let autosave = crate::drawing_autosave::IdbAutosaveSink::new(idb.clone(), instance.clone(), js_sys::Date::now);
+        let profile = IdbProfileStore::new(mirror, IdbBackend::new(idb), js_sys::Date::now, persisted);
+        Ok(Opened { profile, autosave, leftovers, instance })
     }
 }
 
