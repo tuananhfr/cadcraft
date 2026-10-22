@@ -711,15 +711,19 @@ pub fn activate(app: &mut CadApp, id: &str) {
 pub fn shortcuts(app: &mut CadApp, ctx: &egui::Context) {
     crate::clipboard::mirror(app, ctx);
     crate::toolbars::claim_menu_key(ctx);
-    if ctx.egui_wants_keyboard_input() || app.closing.is_some() {
+    let customize = app.ui.dialog.as_deref() == Some(crate::customize::DIALOG);
+    // Customize keeps focus on its page buttons, so only a focused text field there owns the undo keys.
+    let focused = ctx.egui_wants_keyboard_input();
+    if (focused && (!customize || ctx.text_edit_focused())) || app.closing.is_some() {
         return;
     }
     let fire = crate::shortcuts::pressed(app, ctx);
     for id in &fire {
         // Customize edits the layout, so its undo keys must not reach the drawing behind it.
-        let id = match (app.ui.dialog.as_deref() == Some(crate::customize::DIALOG), id.as_str()) {
+        let id = match (customize, id.as_str()) {
             (true, "u") => "ui.layout.undo",
             (true, "redo") => "ui.layout.redo",
+            _ if focused => continue,
             _ => id.as_str(),
         };
         // ISOPLANE (F5, Ctrl+E) switches the plane without cancelling the active command.
