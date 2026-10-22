@@ -1,4 +1,5 @@
 mod interactive;
+mod jobs;
 pub(crate) mod publish;
 
 use std::sync::OnceLock;
@@ -56,8 +57,11 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{plan?: SheetPlan (default: the last plan), approvals?: [{sheetKey, code}], split?: [{sheetKey, overlapMm?}], by: user|agent:<name>} → SheetPlan; WARN approvals and explicit device splits are atomic")
             .noundo()
             .enabled(has_doc),
-        CommandSpec::new("ubplot.publish", "Publish Plot Frames", publish::run_publish)
-            .params("{plan?: SheetPlan (default: the last plan), output?: merged|split (merged), path?: file (merged) or file whose stem names split files, title?} → {plan, files: [{path?|name, sheets: [sheet_key], bytes, sha256, data?}], failed: [{sheetKey, issues}]}")
+        CommandSpec::new("ubplot.jobs", "Plot Jobs", jobs::run_jobs)
+            .params("{action: list|status|manifest|resume|cancel|remove, jobId?} → job summaries, {manifest}, or action result; resume runs synchronously")
+            .noundo(),
+        CommandSpec::new("ubplot.publish", "Publish Plot Frames", jobs::run_publish)
+            .params("{plan?: SheetPlan (default: the last plan), output?: merged|split (merged), path?: file (merged) or file whose stem names split files, title?, background?: false} → {plan, files: [{path?|name, sheets: [sheet_key], bytes, sha256, data?}], failed: [{sheetKey, issues}]}; background:true accepts mode?, pagesPerFile?, retryLimit? and returns {jobId, status: QUEUED}")
             .noundo()
             .enabled(has_doc),
         CommandSpec::new("ubplot.scan", "Scan Plot Frames", run_scan)

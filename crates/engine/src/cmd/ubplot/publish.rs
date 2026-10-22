@@ -384,7 +384,7 @@ fn store(path: &Path, _job_id: &str, bytes: &[u8]) -> std::result::Result<(), St
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn check_source(output: &Path, source: &str) -> Result<()> {
+pub(super) fn check_source(output: &Path, source: &str) -> Result<()> {
     fn normalize(path: &Path) -> std::io::Result<PathBuf> {
         use std::path::Component;
         let absolute = if path.is_absolute() { path.to_path_buf() } else { std::env::current_dir()?.join(path) };
