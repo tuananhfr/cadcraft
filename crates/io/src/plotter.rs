@@ -23,6 +23,12 @@ pub const MAX_PNG_PIXELS: f64 = 40.0e6;
 /// layout).
 pub fn plot(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>> {
     pdf::validate_plot_offset_json(opts)?;
+    let raster_or_svg = opts.get("output").and_then(Value::as_str).is_some_and(|s| s.eq_ignore_ascii_case("png") || s.eq_ignore_ascii_case("svg"));
+    let has_frame = |v: &Value| v.get("frame").is_some() || v.get("outline").is_some();
+    let framed_pages = opts.get("pages").and_then(Value::as_array).is_some_and(|pages| pages.iter().take(pdf::MAX_PAGES + 1).any(has_frame));
+    if raster_or_svg && (has_frame(opts) || framed_pages) {
+        return Err(IoError::Format("rotated frames plot to PDF only".into()));
+    }
     if matches!(space, Space::Model)
         && opts.get("output").and_then(Value::as_str).is_some_and(|output| output.eq_ignore_ascii_case("svg"))
         && opts.get("center").and_then(Value::as_bool) == Some(false)

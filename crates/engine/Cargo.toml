@@ -28,3 +28,4 @@ rstar = { version = "0.12", default-features = false }
 [dev-dependencies]
 # Real DXF files for the external reference tests (io is a lower layer).
 cadcraft-io = { workspace = true }
+tiny-skia = { workspace = true }
