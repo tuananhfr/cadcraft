@@ -11,7 +11,7 @@ use cadcraft_ui_egui::wsprofile::merge::Level;
 use cadcraft_ui_egui::wsprofile::presets::{PRESET_IDS, preset};
 use cadcraft_ui_egui::wsprofile::schema::{Dock, OwnerType, ProfileStatus, WorkspaceProfile};
 use cadcraft_ui_egui::wsprofile::startup::{FALLBACK_MESSAGE, Fallback, RESTORED_MESSAGE, parse_set};
-use cadcraft_ui_egui::wsprofile::store::{CORRUPT_SNAPSHOT, MAX_USER_PROFILES, MemoryStore, ProfileSet, ProfileStore};
+use cadcraft_ui_egui::wsprofile::store::{CORRUPT_SNAPSHOT, Commit, Durability, MAX_USER_PROFILES, MemoryStore, ProfileSet, ProfileStore};
 use cadcraft_ui_egui::wsprofile::validate::{Mode, validate};
 use cadcraft_ui_egui::{CadApp, Services};
 use craft_ui::docking::Node;
@@ -915,6 +915,30 @@ impl ProfileStore for Shared {
     fn keep_damaged(&mut self, raw: &[u8]) -> Result<String, String> {
         self.0.borrow_mut().keep_damaged(raw)
     }
+}
+
+#[test]
+fn write_commit_default_refuses_older_expected() {
+    let set = |revision: u64| format!(r#"{{"active":"SIMPLE","user":{{"revision":{revision}}}}}"#);
+    let shared = Shared::new(MemoryStore::default());
+    let mut store = shared.clone();
+    let first = set(1);
+    store.write_commit(Commit { expected: 0, revision: 1, json: &first, prune: Vec::new() }).unwrap();
+    assert_eq!(store.durability(), Durability::Committed);
+    assert_eq!(shared.0.borrow().current.as_deref(), Some(first.as_str()));
+    assert_eq!(store.snapshots(), vec![1]);
+
+    // A writer that last saw revision 0 must not replace revision 1.
+    let stale = set(2);
+    let error = store.write_commit(Commit { expected: 0, revision: 2, json: &stale, prune: Vec::new() }).unwrap_err();
+    assert!(error.contains("changed in another tab"), "{error}");
+    assert_eq!(shared.0.borrow().current.as_deref(), Some(first.as_str()), "current is untouched");
+    assert_eq!(store.snapshots(), vec![1], "no snapshot is written either");
+
+    store.write_commit(Commit { expected: 1, revision: 2, json: &stale, prune: Vec::new() }).unwrap();
+    assert_eq!(shared.0.borrow().current.as_deref(), Some(stale.as_str()));
+    assert_eq!(store.snapshots(), vec![1, 2]);
+    assert_eq!(store.read_snapshot(2).as_deref(), Some(stale.as_str()));
 }
 
 #[test]

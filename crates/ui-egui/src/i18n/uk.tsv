@@ -1855,3 +1855,19 @@
 	Restored the 1.0.0 workspace. Changes are not saved until restart.	Відновлено робочий простір 1.0.0. Зміни не зберігатимуться до перезапуску.
 	Saving suspended	Збереження призупинено
 	No 1.0.0 workspace backup is available	Резервна копія робочого простору 1.0.0 відсутня
+	Layout saved on this device (not synced)	Компонування збережено на цьому пристрої (не синхронізовано)
+	Layout changed	Компонування змінено
+	Saving layout…	Збереження компонування…
+	Could not save layout; retrying	Не вдалося зберегти компонування; повторна спроба
+	Layout restored from revision {n}	Компонування відновлено з ревізії {n}
+	Safe mode: layout changes are not saved	Безпечний режим: зміни компонування не зберігаються
+	Drawing saved	Креслення збережено
+	Drawing downloaded	Креслення завантажено
+	Drawing has unsaved changes	Креслення має незбережені зміни
+	Drawing autosaved in this browser {time}	Креслення автоматично збережено в цьому браузері {time}
+	Layout saved	Компонування збережено
+	Layout not saved	Компонування не збережено
+	Layout restored	Компонування відновлено
+	Safe mode	Безпечний режим
+	Saving drawing…	Збереження креслення…
+	Drawing autosaved	Креслення автозбережено

@@ -46,6 +46,11 @@ fn dispatch_command(app: &mut CadApp, id: &str, params: Value) -> Dispatched {
     let result = if id.starts_with("ui.") { Err(EngineError::UnknownCommand(id.to_string())) } else { app.session.execute(id, &params) };
     let outcome = classify(&result);
     let result = result.map_err(|error| error.to_string());
+    if matches!(command, "qsave" | "saveas")
+        && let Ok(saved) = &result
+    {
+        app.record_drawing_save(saved);
+    }
     if let Err(error) = wsprofile::sync_aliases(app, &aliases) {
         return Dispatched { outcome: Outcome::ValidationError, result: Err(error) };
     }

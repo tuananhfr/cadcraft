@@ -1857,3 +1857,19 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	Restored the 1.0.0 workspace. Changes are not saved until restart.	Đã khôi phục workspace 1.0.0. Thay đổi sẽ không được lưu cho tới khi khởi động lại.
 	Saving suspended	Đã tạm dừng lưu
 	No 1.0.0 workspace backup is available	Không có bản sao lưu workspace 1.0.0
+	Layout saved on this device (not synced)	Bố cục đã lưu trên máy này (chưa đồng bộ)
+	Layout changed	Bố cục có thay đổi
+	Saving layout…	Đang lưu bố cục…
+	Could not save layout; retrying	Không lưu được bố cục; đang thử lại
+	Layout restored from revision {n}	Bố cục khôi phục từ bản {n}
+	Safe mode: layout changes are not saved	Chế độ an toàn: thay đổi bố cục không được lưu
+	Drawing saved	Bản vẽ đã lưu
+	Drawing downloaded	Đã tải bản vẽ xuống
+	Drawing has unsaved changes	Bản vẽ chưa lưu
+	Drawing autosaved in this browser {time}	Bản vẽ tự lưu trong trình duyệt lúc {time}
+	Layout saved	Đã lưu bố cục
+	Layout not saved	Chưa lưu bố cục
+	Layout restored	Đã khôi phục bố cục
+	Safe mode	Chế độ an toàn
+	Saving drawing…	Đang lưu bản vẽ…
+	Drawing autosaved	Bản vẽ đã tự lưu

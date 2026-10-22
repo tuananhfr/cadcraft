@@ -116,7 +116,7 @@ fn every_preset_round_trips_through_a_patch_from_simple() {
 #[test]
 fn debounce_and_drag_end() {
     let mut autosave = Autosave::default();
-    assert_eq!(autosave.debounce_secs, 0.75);
+    assert_eq!(autosave.debounce_secs, 0.6);
     assert!(!autosave.due(0.0), "nothing changed, nothing to save");
     autosave.changed(0.0);
     assert!(!autosave.due(0.5));
