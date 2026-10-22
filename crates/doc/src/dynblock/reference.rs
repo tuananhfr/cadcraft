@@ -7,7 +7,7 @@
 //! `ACAD_ENHANCEDBLOCKDATA` dictionary holds one XRECORD per parameter, keyed by its graph id, with
 //! the value in block coordinates. A reference to the dynamic block itself has the block's values.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use cadcraft_geom::Vec3;
 use serde::Serialize;
@@ -131,6 +131,49 @@ pub fn reference(d: &Drawing, insert: Handle) -> Option<Reference> {
         }
     }
     Some(Reference { definition, values })
+}
+
+/// The definition name behind a reference, including anonymous blocks linked by BTAG.
+pub fn effective_name(d: &Drawing, insert: Handle) -> Option<String> {
+    let EntityKind::Insert(ins) = &d.entity(insert)?.kind else { return None };
+    if let Some(r) = reference(d, insert) {
+        return Some(r.definition);
+    }
+    if let Some(extra) = d.foreign.records.get(&("BLOCK_RECORD".to_string(), ins.block.trim().to_ascii_uppercase())) {
+        let mut btag = false;
+        for t in extra.xdata.iter().take(MAX_VALUES) {
+            if t.code == 1001 {
+                btag = t.value.eq_ignore_ascii_case("AcDbBlockRepBTag");
+            } else if btag && t.code == 1005 {
+                let target = Handle::parse_hex(t.value.trim()).and_then(|h| d.foreign.targets.get(&h));
+                let block = target.filter(|(kind, _)| kind == "BLOCK_RECORD").and_then(|(_, name)| d.block(name));
+                if let Some(block) = block {
+                    return Some(block.name.clone());
+                }
+            }
+        }
+    }
+    Some(ins.block.clone())
+}
+
+/// Definition object handles hidden by the reference's current visibility states, sorted.
+pub fn hidden_objects(d: &Drawing, insert: Handle) -> Vec<Handle> {
+    let Some(r) = reference(d, insert) else { return Vec::new() };
+    let Some(m) = dynamic_block(d, &r.definition) else { return Vec::new() };
+    let properties = custom_properties(d, insert).map(|(_, ps)| ps).unwrap_or_default();
+    let mut hidden = BTreeSet::new();
+    for p in &m.parameters {
+        let ParameterKind::Visibility { label, controlled, states, .. } = &p.kind else { continue };
+        let state = match properties.iter().find(|p| p.name.eq_ignore_ascii_case(label)) {
+            Some(property) => states.iter().find(|s| s.name.eq_ignore_ascii_case(&property.value)),
+            None => states.first(),
+        };
+        if let Some(state) = state {
+            let visible: BTreeSet<Handle> = state.visible.iter().copied().collect();
+            hidden.extend(controlled.iter().copied().filter(|h| !visible.contains(h)));
+        }
+    }
+    hidden.into_iter().collect()
 }
 
 /// A number as the drawing shows lengths (LUPREC decimals).
