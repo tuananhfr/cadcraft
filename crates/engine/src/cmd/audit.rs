@@ -100,14 +100,23 @@ fn run_recover(s: &mut Session, p: &Value) -> Result<Value> {
         }
         (None, None) => return Err(bad("recover", "`path` or `data` (base64) is required")),
     };
-    let hooks = file::io().ok_or_else(|| bad("recover", "file formats are not available in this build"))?;
-    let d = (hooks.read)(&bytes, &name).map_err(|e| bad("recover", format!("{name} can't be read: {e}")))?;
-    let title = match str_param(p, "title") {
-        Some(t) => t.to_string(),
-        None => std::path::Path::new(&name).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| name.clone()),
-    };
     let copy = bool_or(p, "copy", false);
-    let i = s.open_drawing(d, &title, if copy { None } else { path });
+    let result = recover_bytes(s, &bytes, &name, str_param(p, "title"), copy)?;
+    if !copy {
+        s.state_mut()?.path = path;
+    }
+    Ok(result)
+}
+
+/// Byte recovery lets asynchronous hosts use the same repair and unsaved-copy semantics.
+pub fn recover_bytes(s: &mut Session, bytes: &[u8], name: &str, title: Option<&str>, copy: bool) -> Result<Value> {
+    let hooks = file::io().ok_or_else(|| bad("recover", "file formats are not available in this build"))?;
+    let d = (hooks.read)(bytes, name).map_err(|e| bad("recover", format!("{name} can't be read: {e}")))?;
+    let title = match title {
+        Some(t) => t.to_string(),
+        None => std::path::Path::new(name).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| name.to_string()),
+    };
+    let i = s.open_drawing(d, &title, None);
     let st = s.state_mut()?;
     let report = crate::audit::fix(Arc::make_mut(&mut st.doc));
     if report.issues.is_empty() {

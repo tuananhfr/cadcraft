@@ -31,6 +31,25 @@ pub fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value,
         "ui.workspace.rollback" => rollback(app),
         "ui.workspace.safemode" => safe_mode(app, params),
         "ui.workspace.status" => Ok(app.workspace_status()),
+        "ui.recovery.status" => {
+            let source = if super::save_state::LayoutSave::from_ws(&app.ws) == super::save_state::LayoutSave::SafeMode {
+                "safe_mode"
+            } else {
+                match &app.ws.fallback {
+                    Some(startup::Fallback::RestoredSnapshot { .. }) => "snapshot",
+                    Some(_) => "default",
+                    None if app.ws.store.is_none() => "default",
+                    None => "current",
+                }
+            };
+            let drawings: Vec<_> = app
+                .recovery
+                .items
+                .iter()
+                .map(|item| json!({"name": item.path, "drawing": item.drawing, "modified": item.modified, "bytes": item.bytes}))
+                .collect();
+            Ok(json!({"drawings": drawings, "workspace": {"source": source, "revision": app.ws.user.revision}}))
+        }
         "ui.workspace.set" => set_value(app, params),
         "ui.workspace.resolve" => resolve(app, params),
         "ui.layout.undo" => step_history(app, true),

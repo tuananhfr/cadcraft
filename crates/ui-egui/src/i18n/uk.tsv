@@ -1960,3 +1960,11 @@
 	Ignored device settings	Пропущені налаштування пристрою
 	Warnings	Попередження
 	{count} more items	Ще {count} пунктів
+	Browser storage is full	Сховище браузера заповнене
+	Saving in limited browser storage	Збереження в обмеженому сховищі браузера
+	Recovery Status	Стан відновлення
+	Drawing too large to autosave in the browser	Креслення завелике для автозбереження у браузері
+	Could not autosave the drawing	Не вдалося автоматично зберегти креслення
+	Could not recover the drawing	Не вдалося відновити креслення
+	Drawing autosave queue is full	Черга автозбереження креслень заповнена
+	Could not autosave the drawing: {error}	Не вдалося автоматично зберегти креслення: {error}

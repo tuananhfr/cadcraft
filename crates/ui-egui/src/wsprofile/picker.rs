@@ -309,7 +309,11 @@ pub fn status(app: &CadApp, ui: &mut egui::Ui, right: f32, cy: f32) -> f32 {
     }
     let drawing = DrawingSave::from_app(app);
     if drawing != DrawingSave::Clean {
-        edge = paint_state(ui, "drawing_save_state", edge, cy, &drawing.short(), &drawing.label(), false);
+        if let Some(error) = app.drawing_autosave_error() {
+            edge = paint_state(ui, "drawing_save_state", edge, cy, error, error, true);
+        } else {
+            edge = paint_state(ui, "drawing_save_state", edge, cy, &drawing.short(), &drawing.label(), false);
+        }
     }
     if edge < right { edge - 8.0 } else { right }
 }

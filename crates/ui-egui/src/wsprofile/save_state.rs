@@ -117,7 +117,6 @@ pub enum DrawingSave {
     Saved,
     Downloaded,
     Dirty,
-    // Browser autosave of drawings is not wired yet, so nothing enters these two.
     SavingLocal,
     AutosavedLocal { at_ms: f64 },
 }
@@ -125,7 +124,7 @@ pub enum DrawingSave {
 impl DrawingSave {
     pub fn from_app(app: &CadApp) -> Self {
         if app.has_unsaved_drawings() {
-            return Self::Dirty;
+            return app.browser_drawing_save().unwrap_or(Self::Dirty);
         }
         let Ok(state) = app.session.state() else { return Self::Clean };
         if app.ui.downloaded.contains(&state.uid) {

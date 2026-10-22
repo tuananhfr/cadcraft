@@ -752,6 +752,7 @@ dependencies = [
  "cadcraft-ui-egui",
  "eframe",
  "egui",
+ "js-sys",
  "log",
  "serde_json",
  "wasm-bindgen",
