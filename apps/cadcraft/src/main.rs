@@ -388,6 +388,10 @@ fn main() -> eframe::Result {
         Box::new(move |cc| {
             let mut app = CadApp::new(Session::empty(), services());
             app.system_languages = std::env::var("CADCRAFT_LOCALE").map(|s| vec![s]).unwrap_or_else(|_| sys_locale::get_locales().collect());
+            if let Some(store) = cadcraft_engine::sheetplan::queue::DirJobStore::settings_default() {
+                app.job_pump = cadcraft_ui_egui::ubplot::worker::JobPump::new(store.root().to_path_buf());
+                app.session.set_job_store(Box::new(store));
+            }
             // The user profile (Options): drafting settings, selection sizes, drawing-area colours.
             if let Some(profile) = cc.storage.and_then(|s| s.get_string(cadcraft_ui_egui::options::PROFILE_KEY)) {
                 app.load_profile(&profile);

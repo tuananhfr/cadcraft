@@ -1,7 +1,9 @@
 mod dialog;
 mod exceptions;
+pub mod jobs_panel;
 pub(crate) mod overlay;
 mod split;
+pub mod worker;
 
 use cadcraft_engine::sheetplan::{ScanRequest, ids::sheet_key};
 use serde_json::{Value, json};
@@ -21,6 +23,9 @@ struct WindowPick {
 const PICKING: &str = "ubplot_picking_window";
 
 pub(crate) fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
+    if let Some(result) = jobs_panel::route(app, id, params) {
+        return Some(result);
+    }
     if !matches!(id, "ubplot" | "ubp") || !params.is_null() {
         return None;
     }

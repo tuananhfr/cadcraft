@@ -1902,6 +1902,32 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	REVISION_OLD	Phiên bản sửa đổi cũ
 	TEMPLATE_SUPERSEDED	Mẫu đã được thay thế
 	Approve Plot Warnings	Duyệt cảnh báo in
+	Background printing is only available in the desktop app	In nền chỉ có trên ứng dụng máy tính
+	Background printing is not available in this build	Bản dựng này chưa hỗ trợ in nền
+	Print worker stopped unexpectedly	Tiến trình in đã dừng đột ngột
+	Print job is already queued or running	Tác vụ in đã nằm trong hàng đợi hoặc đang chạy
+	Print job queue is full	Hàng đợi in đã đầy
+	Stored print job is missing	Không tìm thấy tác vụ in đã lưu
+	Stored print job exceeds supported limits	Tác vụ in đã lưu vượt giới hạn hỗ trợ
+	Stored print job does not match its id	Tác vụ in đã lưu không khớp mã tác vụ
+	Print job is already complete	Tác vụ in đã hoàn tất
+	Print job id is required	Cần có mã tác vụ in
+	Print output is unavailable	Không tìm thấy kết quả in
+	Unknown print job action	Thao tác tác vụ in không xác định
+	No print jobs	Chưa có tác vụ in
+	Print job {jobId}	Tác vụ in {jobId}
+	Print job {jobId} queued	Đã xếp tác vụ in {jobId} vào hàng đợi
+	Print job {jobId} was interrupted	Tác vụ in {jobId} đã bị gián đoạn
+	Print job {jobId}: {status}	Tác vụ in {jobId}: {status}
+	{done}/{total} sheets	{done}/{total} tờ bản vẽ
+	Current sheet: {sheet}	Tờ bản vẽ hiện tại: {sheet}
+	Queued	Đang chờ
+	Running	Đang chạy
+	Cancelled	Đã hủy
+	Done	Xong
+	Failed	Thất bại
+	Resume	Tiếp tục
+	Open folder	Mở thư mục
 	Planned	Dự kiến
 	Double-click to repeat command	Nhấp đúp để lặp lại lệnh
 	Aliases	Lệnh tắt

@@ -217,6 +217,19 @@ fn publish_button_writes_file_via_pick_save() {
     review(&mut app, &frames);
     approve_warnings(&mut app);
     let path = temporary_pdf();
+    #[cfg(not(target_arch = "wasm32"))]
+    let jobs_root = path.with_extension("jobs");
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        cadcraft_engine::cmd::file::set_budget_plot(|drawing, space, options, cancel, max_prims| {
+            cadcraft_io::pdf::plot_with_budget(drawing, space, options, Some(cancel), Some(max_prims)).map_err(|error| error.to_string())
+        });
+        cadcraft_engine::cmd::file::set_merge_pdf(|parts, labels, title| {
+            cadcraft_io::pdf_merge::merge_own(parts, labels, title).map_err(|error| error.to_string())
+        });
+        app.session.set_job_store(Box::new(cadcraft_engine::sheetplan::queue::DirJobStore::new(jobs_root.clone())));
+        app.job_pump = cadcraft_ui_egui::ubplot::worker::JobPump::new(jobs_root.clone());
+    }
     let picked = path.clone();
     let suggestions = Rc::new(RefCell::new(Vec::new()));
     let asked = suggestions.clone();
@@ -228,10 +241,74 @@ fn publish_button_writes_file_via_pick_save() {
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").click();
     h.run_steps(3);
     assert_eq!(*suggestions.borrow(), ["Quick Plot fixture.pdf"]);
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        while h.state().job_pump.busy() {
+            assert!(std::time::Instant::now() < deadline);
+            h.run_steps(1);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        assert!(h.state().job_pump.open);
+        assert!(h.state().job_pump.manifests.values().any(|manifest| manifest.status == cadcraft_engine::sheetplan::queue::JobStatus::Done));
+        assert!(h.state().session.log.iter().any(|line| line.starts_with("Print job ") && line.ends_with(" queued")));
+        std::fs::remove_dir_all(jobs_root).unwrap();
+    }
     assert_eq!(probe_page_count(&path), 2);
     assert!(h.state().ui.dialog.is_none());
+    #[cfg(target_arch = "wasm32")]
     assert!(h.state().session.log.iter().any(|line| line == "Published 1 file(s)"));
     std::fs::remove_file(path).unwrap();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn desktop_dialog_publishes_vietnamese_and_spaced_picked_path_to_done() {
+    use cadcraft_engine::sheetplan::queue::{DirJobStore, JobStatus, JobStore, PublishManifest};
+
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false, false]);
+    review(&mut app, &frames);
+    approve_warnings(&mut app);
+    let root = temporary_pdf().with_extension("unicode");
+    std::fs::create_dir(&root).unwrap();
+    let path = root.join("Bản vẽ KT 01.pdf");
+    let jobs_root = root.join("jobs");
+    cadcraft_engine::cmd::file::set_budget_plot(|drawing, space, options, cancel, max_prims| {
+        cadcraft_io::pdf::plot_with_budget(drawing, space, options, Some(cancel), Some(max_prims)).map_err(|error| error.to_string())
+    });
+    cadcraft_engine::cmd::file::set_merge_pdf(|parts, labels, title| {
+        cadcraft_io::pdf_merge::merge_own(parts, labels, title).map_err(|error| error.to_string())
+    });
+    app.session.set_job_store(Box::new(DirJobStore::new(jobs_root.clone())));
+    app.job_pump = cadcraft_ui_egui::ubplot::worker::JobPump::new(jobs_root.clone());
+    let picked = path.clone();
+    app.services.pick_save = Some(Box::new(move |_| Some(picked.to_string_lossy().into_owned())));
+    let mut h = harness(app);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").click();
+    h.run_steps(3);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while h.state().job_pump.busy() {
+        assert!(std::time::Instant::now() < deadline);
+        h.run_steps(1);
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    assert!(h.state().job_pump.errors.is_empty());
+    assert_eq!(h.state().job_pump.manifests.len(), 1);
+    let manifest = h.state().job_pump.manifests.values().next().unwrap();
+    assert_eq!(manifest.status, JobStatus::Done);
+    assert_eq!(manifest.files.len(), 1);
+    assert_eq!(manifest.files[0].name, "Bản vẽ KT 01.pdf");
+    assert_eq!(manifest.files[0].delivered_to, path.to_str().unwrap());
+    assert_eq!(manifest.files[0].sha256, cadcraft_engine::hash::sha256_hex(&std::fs::read(&path).unwrap()));
+    let store = DirJobStore::new(jobs_root);
+    let persisted = PublishManifest::from_json(&store.read_manifest(&manifest.job_id).unwrap().unwrap()).unwrap();
+    assert_eq!(&persisted, manifest);
+    assert_eq!(probe_page_count(&path), 2);
+    assert!(h.state().job_pump.open);
+    assert!(h.state().ui.dialog.is_none());
+    assert!(h.state().session.log.iter().any(|line| line.starts_with("Print job ") && line.ends_with(" queued")));
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -381,7 +458,10 @@ fn split_publish_keeps_failed_sheets_visible() {
     assert!(h.query_by_label("Failed sheets").is_some());
     assert!(h.query_by_label("S-001@1").is_some());
     assert!(h.query_by_label("S-002@2").is_some());
+    #[cfg(target_arch = "wasm32")]
     assert!(h.state().session.log.iter().any(|line| line == "Published 0 file(s)"));
+    #[cfg(not(target_arch = "wasm32"))]
+    assert!(h.state().session.log.iter().any(|line| line.contains("PLAN_HAS_BLOCKED")));
 }
 
 fn approve_warnings(app: &mut CadApp) {

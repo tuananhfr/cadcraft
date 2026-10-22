@@ -3,6 +3,11 @@ use std::collections::BTreeMap;
 use super::types::{MAX_JOB_SHEETS, MAX_MANIFEST_BYTES, PrintJob};
 
 pub trait JobStore {
+    /// Async hosts return false until all submitted transactions are durable.
+    fn poll(&mut self) -> Result<bool, String> {
+        Ok(true)
+    }
+
     fn list_jobs(&self) -> Vec<String>;
     fn read_manifest(&self, job_id: &str) -> Result<Option<String>, String>;
     /// Artifacts precede the manifest so a committed manifest never names missing data.
@@ -29,6 +34,33 @@ pub struct MemoryJobStore {
 
 pub fn artifact_name(order: u32, source_index: u32) -> String {
     format!("s{source_index:05}-{order:04}.pdf")
+}
+
+/// Validate a delivered basename without changing the user's Unicode spelling.
+pub fn validate_output_file_name(name: &str) -> Result<(), String> {
+    let reason = if name.is_empty() {
+        Some("name is empty")
+    } else if name.len() > 255 {
+        Some("name exceeds 255 UTF-8 bytes")
+    } else if name.split(['/', '\\']).any(|component| component == "..") {
+        Some("parent directory components are forbidden")
+    } else if name.contains(['/', '\\']) {
+        Some("path separators are forbidden")
+    } else if name.chars().any(char::is_control) {
+        Some("control characters are forbidden")
+    } else if name.ends_with([' ', '.']) {
+        Some("name ends in a space or dot")
+    } else if name.contains(['<', '>', ':', '"', '|', '?', '*']) {
+        Some("Windows-forbidden characters are forbidden")
+    } else {
+        let stem = name.split('.').next().unwrap_or("").trim_end_matches(' ').to_ascii_uppercase();
+        let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+            || ["COM", "LPT"]
+                .iter()
+                .any(|prefix| stem.strip_prefix(prefix).is_some_and(|suffix| matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")));
+        if reserved { Some("Windows reserved stem") } else { None }
+    };
+    if let Some(reason) = reason { Err(format!("invalid output file name: {reason}")) } else { Ok(()) }
 }
 
 pub(crate) fn validate_name(name: &str) -> Result<(), String> {
@@ -118,7 +150,7 @@ impl JobStore for MemoryJobStore {
 
     fn deliver(&mut self, job: &PrintJob, file_name: &str, bytes: &[u8]) -> Result<String, String> {
         validate_name(&job.job_id)?;
-        validate_name(file_name)?;
+        validate_output_file_name(file_name)?;
         validate_bytes(bytes)?;
         self.check_write(0)?;
         self.deliveries.insert(file_name.into(), bytes.into());

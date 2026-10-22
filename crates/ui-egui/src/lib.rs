@@ -252,6 +252,7 @@ pub struct CadApp {
     /// The interface's own preferences from the Options dialog ([`options`]).
     pub options: options::UiOptions,
     pub services: Services,
+    pub job_pump: ubplot::worker::JobPump,
     pub fullscreen: fullscreen::State,
     pub focus: focus::State,
     pub(crate) command_context: egui::Context,
@@ -321,6 +322,7 @@ impl CadApp {
             ui: UiState::default(),
             options: options::UiOptions::default(),
             services,
+            job_pump: ubplot::worker::JobPump::default(),
             fullscreen: fullscreen::State::default(),
             focus: focus::State::default(),
             command_context: egui::Context::default(),
@@ -411,10 +413,17 @@ impl CadApp {
             let first = text.split_whitespace().next().unwrap_or("");
             // `cmd {json}` is a programmatic call: the engine runs it with those parameters.
             let json_form = text.trim_start().get(first.len()..).is_some_and(|rest| rest.trim_start().starts_with('{'));
-            if json_form && menus::is_ui_command(&first.to_ascii_lowercase()) {
+            let jobs_command = cadcraft_engine::cmd::registry::resolve_command(first) == Some("ubplot.jobs");
+            if json_form && (menus::is_ui_command(&first.to_ascii_lowercase()) || jobs_command) {
                 let result = serde_json::from_str::<Value>(text.trim_start().get(first.len()..).unwrap_or(""))
                     .map_err(|error| error.to_string())
                     .and_then(|params| self.run(&first.to_ascii_lowercase(), params));
+                if jobs_command
+                    && let Ok(value) = &result
+                    && !value.is_null()
+                {
+                    self.session.echo(value.to_string());
+                }
                 if let Err(error) = result {
                     self.session.echo(error.clone());
                     return Some(error);
@@ -683,6 +692,7 @@ impl CadApp {
         self.gpu_fault_tick(ctx);
         managers::plot_window_resume(self, ctx);
         ubplot::resume(self, ctx);
+        ubplot::worker::tick(self, ctx);
         hatchdlg::resume(self);
         self.autosave_tick(ctx);
         wsprofile::apply::sync_scale(self, ctx);
@@ -785,6 +795,7 @@ impl CadApp {
         }
         focus::exit_button(ui.ctx(), self);
         dialogs::show(self, ui.ctx());
+        ubplot::jobs_panel::show(self, ui.ctx());
         wsprofile::conflict::show_conflict_dialog(ui.ctx(), self);
         palettes::patterns::prompt_picker(self, ui.ctx());
         closing::prompt(self, ui.ctx());

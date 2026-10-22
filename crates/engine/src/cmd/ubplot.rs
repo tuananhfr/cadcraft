@@ -251,7 +251,7 @@ fn run_approve(s: &mut Session, params: &Value) -> Result<Value> {
     Ok(result)
 }
 
-pub(crate) fn source_hash(s: &mut Session) -> Result<String> {
+pub fn source_hash(s: &mut Session) -> Result<String> {
     let state = s.state()?;
     let (uid, revision) = (state.uid, state.revision);
     if let Some((cached_uid, cached_revision, hash)) = &s.ubplot.hash_cache
