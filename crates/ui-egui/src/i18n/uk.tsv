@@ -1949,3 +1949,11 @@
 	Safe mode	Безпечний режим
 	Saving drawing…	Збереження креслення…
 	Drawing autosaved	Креслення автозбережено
+ribbon	Block	Блок
+ribbon	Edit	Редагування
+ribbon	Count	Підрахунок
+ribbon	Replace	Замінити
+ribbon	Check	Перевірка
+	Replace Block	Замінити блок
+	Select block references to replace	Виберіть посилання на блоки для заміни
+	Enter replacement block name	Введіть назву блока для заміни

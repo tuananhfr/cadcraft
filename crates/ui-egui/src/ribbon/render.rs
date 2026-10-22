@@ -38,6 +38,14 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
     let tabs = super::visible_tabs(app);
     let state_id = Id::new("cc_ribbon_active");
     let mut active: String = ui.ctx().data(|data| data.get_temp(state_id)).unwrap_or_default();
+    let context_id = Id::new("cc_ribbon_context");
+    let previous_context: String = ui.ctx().data(|data| data.get_temp(context_id)).unwrap_or_default();
+    let context = tabs.iter().find(|tab| tab.contextual.is_some()).map(|tab| tab.id.clone()).unwrap_or_default();
+    // A new context exposes its tools without overriding a later manual tab choice.
+    if !context.is_empty() && context != previous_context {
+        active = context.clone();
+    }
+    ui.ctx().data_mut(|data| data.insert_temp(context_id, context));
     if !tabs.iter().any(|tab| tab.id == active) {
         active = tabs.first().map(|tab| tab.id.clone()).unwrap_or_default();
     }

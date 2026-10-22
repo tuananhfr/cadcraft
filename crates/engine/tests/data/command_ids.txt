@@ -50,6 +50,7 @@ bclose
 bedit
 blend
 block
+blockreplace
 blocks.dynamic
 blocks.list
 blocks.reference

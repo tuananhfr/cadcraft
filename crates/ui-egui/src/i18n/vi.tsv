@@ -1952,3 +1952,11 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	Safe mode	Chế độ an toàn
 	Saving drawing…	Đang lưu bản vẽ…
 	Drawing autosaved	Bản vẽ đã tự lưu
+ribbon	Block	Khối
+ribbon	Edit	Sửa
+ribbon	Count	Đếm
+ribbon	Replace	Thay thế
+ribbon	Check	Kiểm tra
+	Replace Block	Thay thế khối
+	Select block references to replace	Chọn các tham chiếu khối cần thay thế
+	Enter replacement block name	Nhập tên khối thay thế

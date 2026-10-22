@@ -61,6 +61,7 @@ UI-only focus/fullscreen ids: `ui.fullscreen`, `ui.focusmode`, `cleanscreenon`, 
 | `bedit` | `cad.tools.bedit` | Tools | model, paper | available | read | be, -bedit |
 | `blend` | `cad.modify.blend` | Modify | model, paper | available | edit | blendcurves |
 | `block` | `cad.draw.block` | Draw | model, paper | available | edit | b, bmake |
+| `blockreplace` | `cad.modify.blockreplace` | Modify | model, paper | available | edit |  |
 | `blocks.dynamic` | `cad.other.blocks.dynamic` | Other | model, paper | available | read |  |
 | `blocks.list` | `cad.other.blocks.list` | Other | model, paper | available | read |  |
 | `blocks.reference` | `cad.other.blocks.reference` | Other | model, paper | available | read |  |

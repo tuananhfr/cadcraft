@@ -8,6 +8,9 @@ pub fn active_contexts(session: &Session) -> Vec<&'static str> {
     if state.selection.is_empty() {
         return Vec::new();
     }
+    if state.selection.iter().all(|handle| state.doc.entity(*handle).is_some_and(|entity| matches!(entity.kind, EntityKind::Insert(_)))) {
+        return vec!["block"];
+    }
     for (context, dimension) in [("dimension", true), ("hatch", false)] {
         if state.selection.iter().all(|handle| {
             state.doc.entity(*handle).is_some_and(|entity| {

@@ -293,6 +293,35 @@
               "commands": ["ubplot", "plot", "publish", "pdfbook", "preview"]
             }
           ]
+        },
+        {
+          "id": "ctx_block",
+          "label": "Block",
+          "order": 103,
+          "visible": true,
+          "contextual": "block",
+          "groups": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "commands": ["bedit", "refedit", "explode", "attsync", "battman"]
+            },
+            {
+              "id": "count",
+              "label": "Count",
+              "commands": ["count", "countlist"]
+            },
+            {
+              "id": "replace",
+              "label": "Replace",
+              "commands": ["blockreplace"]
+            },
+            {
+              "id": "check",
+              "label": "Check",
+              "commands": ["list", "selectsimilar", "audit"]
+            }
+          ]
         }
       ]
     },
