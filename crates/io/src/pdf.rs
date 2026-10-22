@@ -272,6 +272,15 @@ pub fn plot(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>> {
                     Space::Paper(layout.name.clone())
                 } else if pg.get("window").is_some() {
                     Space::Model
+                } else if let Some(raw) = pg.get("space") {
+                    // Mixed-space frame plans must crop each outline in its owning space.
+                    let name = raw.as_str().ok_or_else(|| IoError::Format("page space must be a space name".into()))?;
+                    if name.eq_ignore_ascii_case("Model") {
+                        Space::Model
+                    } else {
+                        let layout = d.layout(name).ok_or_else(|| IoError::Format(format!("no layout `{name}`")))?;
+                        Space::Paper(layout.name.clone())
+                    }
                 } else {
                     space.clone()
                 };

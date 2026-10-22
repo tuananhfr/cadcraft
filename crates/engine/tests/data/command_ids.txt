@@ -391,6 +391,7 @@ tolerance
 transparencydisplay
 trim
 u
+ubplot.publish
 ubplot.scan
 ubplot.templates
 undo

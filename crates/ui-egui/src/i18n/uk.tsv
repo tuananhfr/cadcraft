@@ -5,6 +5,7 @@
 # Empty context = ordinary label; @plural = one|few|many forms with {n}.
 # Keep command IDs, keywords, technology/product names and user data unchanged.
 # External References palette (#525).
+	Publish Plot Frames	Опублікувати аркуші рамок
 	Scan Plot Frames	Сканувати рамки для друку
 	Plot Frame Templates	Шаблони рамок для друку
 	Apply	Застосувати
