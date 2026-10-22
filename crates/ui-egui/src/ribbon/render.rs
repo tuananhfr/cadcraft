@@ -67,6 +67,11 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         egui::Popup::close_id(ui.ctx(), popup_id);
     }
     let tabs = super::visible_tabs(app);
+    // A workspace without ribbon tabs (Simple) has nothing to restore, so it keeps no hidden strip.
+    if mode == RibbonMode::Hidden && tabs.is_empty() {
+        ui.ctx().data_mut(|data| data.remove::<Vec<Id>>(Id::new("cc_ribbon_menu_stops")));
+        return;
+    }
     let state_id = Id::new("cc_ribbon_active");
     let mut active: String = ui.ctx().data(|data| data.get_temp(state_id)).unwrap_or_default();
     if !tabs.iter().any(|tab| tab.id == active) {

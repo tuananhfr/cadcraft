@@ -52,7 +52,8 @@ fn title_left(left: f32, width: f32, text_w: f32) -> f32 {
 /// Title row (with the integrated macOS title bar), then the tool bars docked to the top edge.
 pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
-    let ribbon_hidden = app.ws.effective.layout.ribbon.effective_mode() == crate::wsprofile::schema::RibbonMode::Hidden;
+    let ribbon_hidden = app.ws.effective.layout.ribbon.effective_mode() == crate::wsprofile::schema::RibbonMode::Hidden
+        && !crate::ribbon::visible_tabs(app).is_empty();
     let qat_in_title = quick_access_row(app) == QuickAccessRow::TitleBar && !app.ws.effective.layout.quick_access.is_empty();
     if app.integrated_titlebar || ribbon_hidden || qat_in_title {
         egui::Panel::top("cc_title_toolbar").exact_size(MAC_TITLE_BAR).show_separator_line(false).frame(egui::Frame::NONE.fill(t.chrome)).show(

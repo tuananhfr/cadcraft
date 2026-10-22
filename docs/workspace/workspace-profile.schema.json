@@ -39,6 +39,7 @@
         "dock_tree": { "type": ["object", "null"], "description": "craft-ui dock layout, opaque outside the code that applies it." },
         "command_line": { "$ref": "#/$defs/commandLine" },
         "quick_access": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/commandId" } },
+        "quick_access_position": { "enum": ["title_bar", "above_ribbon", "below_ribbon"], "default": "title_bar", "description": "Where the Quick Access toolbar sits. title_bar falls back to its own row above the ribbon while the menu bar is in the window." },
         "status_bar": { "$ref": "#/$defs/statusBar" },
         "shortcuts": {
           "type": "object",

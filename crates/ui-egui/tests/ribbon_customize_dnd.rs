@@ -74,15 +74,40 @@ fn commands(app: &CadApp, group: &str) -> Vec<String> {
         .clone()
 }
 
-fn focus_command(h: &mut Harness<'_, CadApp>, command: &str) {
+fn on_command<R>(h: &Harness<'_, CadApp>, command: &str, action: impl FnOnce(&egui_kittest::Node<'_>) -> R) -> R {
+    if h.state().ui.dialog.is_none() {
+        // The ribbon shows the engine's label ("Hatch..."), the dialog the tool's ("Hatch").
+        let label = cadcraft_engine::find_command(command).map_or_else(|| toolbars::resolve(command).label, |spec| spec.label.to_string());
+        let label = cadcraft_ui_egui::i18n::t(&label).to_string();
+        return action(&h.query_all_by_label(&label).next().unwrap());
+    }
+    // The tab list above has a "Hatch" row too; command rows follow their heading.
+    let heading = h.get_by_label("Ribbon commands").rect().bottom();
     let label = toolbars::resolve(command).label;
-    h.query_all_by_label(&label).next().unwrap().focus();
+    action(&h.query_all_by_label(&label).find(|node| node.rect().top() >= heading).unwrap())
+}
+
+fn focus_command(h: &mut Harness<'_, CadApp>, command: &str) {
+    on_command(h, command, |node| node.focus());
     h.run_steps(5);
 }
 
 fn command_rect(h: &Harness<'_, CadApp>, command: &str) -> egui::Rect {
-    let label = toolbars::resolve(command).label;
-    h.query_all_by_label(&label).next().unwrap().rect()
+    on_command(h, command, |node| node.rect())
+}
+
+// The Ribbon page is taller than the dialog, so only the first few command rows are on screen.
+fn scroll_dialog_to_end(h: &mut Harness<'_, CadApp>) {
+    h.hover_at(h.get_by_label("Minimize ribbon").rect().center());
+    h.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: vec2(0.0, -2000.0),
+        phase: egui::TouchPhase::Move,
+        modifiers: Modifiers::NONE,
+    });
+    h.run_steps(1);
+    h.remove_cursor();
+    h.run_steps(4);
 }
 
 fn begin_drag(h: &mut Harness<'_, CadApp>, from: Pos2, to: Pos2) {
@@ -99,6 +124,7 @@ fn begin_drag(h: &mut Harness<'_, CadApp>, from: Pos2, to: Pos2) {
 
 fn drag_command(h: &mut Harness<'_, CadApp>, from: usize, to: usize) {
     let before = commands(h.state(), "draw");
+    scroll_dialog_to_end(h);
     focus_command(h, &before[to]);
     let source = command_rect(h, &before[from]).center();
     let target = command_rect(h, &before[to]);
