@@ -202,6 +202,9 @@ fn panel_folder_controls_use_sandbox_commands() {
     harness.get_by_label("Allowed folders…").click();
     harness.run_steps(3);
     assert!(harness.query_by_label("No allowed folders").is_some());
+    // Text events only reach a TextEdit that egui has already focused.
+    harness.get_by_role_and_label(egui::accesskit::Role::TextInput, "Folder path").focus();
+    harness.run_steps(2);
     harness.get_by_role_and_label(egui::accesskit::Role::TextInput, "Folder path").type_text(&root.to_string_lossy());
     harness.run_steps(3);
     harness.get_by_label("Add").click();
