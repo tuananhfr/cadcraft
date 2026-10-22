@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use super::helpers::v3;
 use super::machines::{SelOutcome, SelectPhase, number};
 use super::*;
+use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
 
 mod attedit;
@@ -440,7 +441,10 @@ impl Interactive for BlockM {
     fn prompt(&self, _s: &Session) -> Prompt {
         match (&self.name, self.base) {
             (None, _) => match &self.existing {
-                Some(n) => Prompt::new(format!("Block \"{n}\" already exists. Redefine it?"), super::curves::KW).kw(&["Yes", "No"]).default("N"),
+                Some(n) => {
+                    let args = vec![("name", PromptArg::Text(n.clone()))];
+                    Prompt::tf("Block \"{name}\" already exists. Redefine it?", args, super::curves::KW).kw(&["Yes", "No"]).default("N")
+                }
                 None => Prompt::new("Enter block name", Accept::TEXT).kw(&["?"]),
             },
             (Some(_), None) => Prompt::new("Specify insertion base point", Accept::POINT).kw(&["Annotative"]),
@@ -634,7 +638,8 @@ impl Interactive for InsertM {
             }
             InsStage::Redefine => {
                 let name = self.file.as_ref().map(|f| f.name.clone()).unwrap_or_default();
-                Prompt::new(format!("Block \"{name}\" already exists. Redefine it?"), super::curves::KW).kw(&["Yes", "No"]).default("N")
+                let args = vec![("name", PromptArg::Text(name))];
+                Prompt::tf("Block \"{name}\" already exists. Redefine it?", args, super::curves::KW).kw(&["Yes", "No"]).default("N")
             }
             InsStage::Point => Prompt::new("Specify insertion point", Accept::POINT).kw(&["Basepoint", "Scale", "Rotate"]),
             InsStage::BasePoint => Prompt::new("Specify base point", Accept::POINT),

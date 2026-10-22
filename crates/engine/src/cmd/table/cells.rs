@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use super::formula::{self, cell_name, parse_cell_name};
 use super::{MAX_COLS, MAX_ROWS, edit, usize_param};
 use crate::cmd::{CommandSpec, bad, bool_or, str_param};
+use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
 
 const CELLSTYLE_PARAMS: &str = "{style? (table style; default current), name (cell style: Title, Header, Data or your own), textStyle?, textHeight?, \
@@ -447,7 +448,7 @@ impl Interactive for TableEditM {
                     .and_then(|e| if let EntityKind::Table(t) = &e.kind { t.cells.get(r).and_then(|row| row.get(c)).cloned() } else { None })
                     .map(|c| c.formula.unwrap_or(c.text))
                     .unwrap_or_default();
-                let p = Prompt::new(format!("Enter text for cell {} (=formula)", cell_name(r, c)), Accept::TEXT);
+                let p = Prompt::tf("Enter text for cell {cell} (=formula)", vec![("cell", PromptArg::Text(cell_name(r, c)))], Accept::TEXT);
                 if cur.is_empty() { p } else { p.default(cur) }
             }
         }
@@ -651,7 +652,10 @@ impl Interactive for CellStyleM {
     }
     fn prompt(&self, _s: &Session) -> Prompt {
         match (&self.cell, self.option) {
-            (None, _) => Prompt::new(format!("Enter cell style name of table style {}", self.style), Accept::TEXT).default(CellStyle::DATA),
+            (None, _) => {
+                let args = vec![("style", PromptArg::Text(self.style.clone()))];
+                Prompt::tf("Enter cell style name of table style {style}", args, Accept::TEXT).default(CellStyle::DATA)
+            }
             (Some(_), None) => Prompt::new("Enter an option", Accept::TEXT).kw(OPTIONS).default("eXit"),
             (Some(_), Some(o)) => {
                 let msg = match o {

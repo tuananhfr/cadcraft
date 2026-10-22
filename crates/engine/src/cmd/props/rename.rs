@@ -6,6 +6,7 @@ use cadcraft_doc::{Drawing, EntityKind, EntityStore, Handle};
 use serde_json::json;
 
 use super::super::bad;
+use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
 
 fn valid_name(n: &str) -> bool {
@@ -194,8 +195,8 @@ impl Interactive for RenameM {
                 let kws: Vec<&str> = TYPES.iter().map(|(k, _, _)| *k).collect();
                 Prompt::new("Enter object type to rename", KW).kw(&kws)
             }
-            Stage::Old(t) => Prompt::new(format!("Enter old {} name", noun(t)), NAME),
-            Stage::New(t, _) => Prompt::new(format!("Enter new {} name", noun(t)), NAME),
+            Stage::Old(t) => Prompt::tf("Enter old {kind} name", vec![("kind", PromptArg::Key(noun(t)))], NAME),
+            Stage::New(t, _) => Prompt::tf("Enter new {kind} name", vec![("kind", PromptArg::Key(noun(t)))], NAME),
         }
     }
     fn input(&mut self, s: &mut Session, i: Input) -> Result<Step> {

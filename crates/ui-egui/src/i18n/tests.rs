@@ -139,6 +139,11 @@ const MARKED_UI_SOURCES: &[(&str, &str)] = &[
     ("palettes/quickcalc.rs", include_str!("../palettes/quickcalc.rs")),
     ("palettes/patterns.rs", include_str!("../palettes/patterns.rs")),
     ("dialogs.rs", include_str!("../dialogs.rs")),
+    ("managers.rs", include_str!("../managers.rs")),
+    ("managers/battman.rs", include_str!("../managers/battman.rs")),
+    ("autosave.rs", include_str!("../autosave.rs")),
+    ("fontmgr.rs", include_str!("../fontmgr.rs")),
+    ("viewcube.rs", include_str!("../viewcube.rs")),
     ("hatchdlg.rs", include_str!("../hatchdlg.rs")),
     ("mtext_editor.rs", include_str!("../mtext_editor.rs")),
     ("layers.rs", include_str!("../layers.rs")),
@@ -241,6 +246,18 @@ fn section_sources(section: Section) -> BTreeSet<String> {
                     }
                 }
             }
+            if file == "dialogs.rs" {
+                // Unit choices and shared style titles use dynamic translation to retain their source values.
+                sources.extend(
+                    crate::dialogs::LENGTH_TYPES
+                        .iter()
+                        .chain(&crate::dialogs::ANGLE_TYPES)
+                        .map(|(_, label)| *label)
+                        .chain(crate::dialogs::INSERTION_UNITS)
+                        .chain(["Text Style", "Table Style", "Multileader Style"])
+                        .map(str::to_string),
+                );
+            }
         }
         Section::Prompts => {}
         Section::Ribbon => {
@@ -266,6 +283,138 @@ fn missing_commands_menus_tools_and_snap_labels(language: &str) -> Vec<String> {
         sources.extend(section_sources(section));
     }
     sources.into_iter().filter(|s| !catalog.contains_key(&("", s.as_str()))).collect()
+}
+
+const WIDGET_LITERAL_FILES: &[(&str, &str)] = &[
+    ("managers.rs", include_str!("../managers.rs")),
+    ("managers/battman.rs", include_str!("../managers/battman.rs")),
+    ("autosave.rs", include_str!("../autosave.rs")),
+    ("fontmgr.rs", include_str!("../fontmgr.rs")),
+    ("viewcube.rs", include_str!("../viewcube.rs")),
+    ("dialogs.rs", include_str!("../dialogs.rs")),
+];
+
+fn widget_text_argument(arguments: &str, wanted: usize) -> Option<&str> {
+    let (mut start, mut argument, mut depth) = (0, 0, 0usize);
+    let (mut quoted, mut escape) = (false, false);
+    for (i, c) in arguments.char_indices() {
+        if quoted {
+            if escape {
+                escape = false;
+            } else if c == '\\' {
+                escape = true;
+            } else if c == '"' {
+                quoted = false;
+            }
+            continue;
+        }
+        match c {
+            '"' => quoted = true,
+            '(' | '[' | '{' => depth += 1,
+            ')' if depth == 0 => return (argument == wanted).then(|| arguments[start..i].trim()),
+            ')' | ']' | '}' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                if argument == wanted {
+                    return Some(arguments[start..i].trim());
+                }
+                argument += 1;
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn unmarked_widget_literals(source: &str) -> Vec<(usize, String)> {
+    let mut missing = Vec::new();
+    for (pattern, argument) in [
+        (".label(", 0),
+        (".button(", 0),
+        ("Button::new(", 0),
+        ("Window::new(", 0),
+        (".heading(", 0),
+        (".on_hover_text(", 0),
+        (".small_button(", 0),
+        (".collapsing(", 0),
+        ("RichText::new(", 0),
+        (".hint_text(", 0),
+        ("selectable_label(", 1),
+        ("checkbox(", 1),
+        ("radio(", 1),
+        ("radio_value(", 1),
+        ("radio_value(", 2),
+    ] {
+        for (offset, _) in source.match_indices(pattern) {
+            let line_start = source[..offset].rfind('\n').map_or(0, |i| i + 1);
+            if source[line_start..offset].trim_start().starts_with("//") {
+                continue;
+            }
+            let Some(text) = widget_text_argument(&source[offset + pattern.len()..], argument) else { continue };
+            if !text.starts_with('"') || !text.as_bytes().get(1).is_some_and(u8::is_ascii_uppercase) {
+                continue;
+            }
+            let Some(Ok(label)) = serde_json::Deserializer::from_str(text).into_iter::<String>().next() else { continue };
+            // Axes, product names, CAD tokens and font/file names are data rather than UI prose.
+            if ["X", "Y", "B", "UbotCAD", "OK", "ByLayer", "ByBlock", "WCS", cadcraft_fonts::BUILTIN_FONT].contains(&label.as_str())
+                || [".ttf", ".otf", ".ttc", ".shx", ".dxf", ".dwg", ".lin", ".ctb", ".stb", ".pc3"]
+                    .iter()
+                    .any(|ext| label.to_ascii_lowercase().ends_with(ext))
+            {
+                continue;
+            }
+            missing.push((source[..offset].bytes().filter(|b| *b == b'\n').count() + 1, label));
+        }
+    }
+    missing.sort();
+    missing.dedup();
+    missing
+}
+
+#[test]
+fn widget_literals_are_marked() {
+    let mut missing = Vec::new();
+    for (file, source) in WIDGET_LITERAL_FILES {
+        missing.extend(unmarked_widget_literals(source).into_iter().map(|(line, text)| format!("{file}:{line}: {text}")));
+    }
+    assert!(missing.is_empty(), "unmarked widget literals:\n{}", missing.join("\n"));
+}
+
+#[test]
+fn widget_literal_scanner_checks_nested_arguments_and_exemptions() {
+    let source = r#"
+        ui.label("Label"); ui.button("Button"); Button::new("Enabled"); Window::new("Window");
+        ui.heading("Heading"); ui.on_hover_text("Tooltip"); ui.small_button("Small");
+        ui.collapsing("Details", |_| {}); RichText::new("Rich"); edit.hint_text("Hint");
+        ui.selectable_label(matches!(value, (1, 2)), "Choice");
+        ui.checkbox(&mut enabled, "Checkbox"); ui.radio(value == (1, 2), "Radio");
+        ui.radio_value(&mut value, (1, 2), "Radio value");
+        ui.label("X"); ui.label("Y"); ui.label("B"); ui.label("UbotCAD"); ui.button("OK");
+        ui.label("ByLayer"); ui.label("ByBlock"); ui.label("WCS"); ui.label("Example.shx");
+        ui.label(crate::tl!("Translated")); ui.label(crate::tf!("Count {count}", count = 2));
+        // ui.label("Comment");
+    "#;
+    let labels: BTreeSet<_> = unmarked_widget_literals(source).into_iter().map(|(_, label)| label).collect();
+    let expected: BTreeSet<_> = [
+        "Label",
+        "Button",
+        "Enabled",
+        "Window",
+        "Heading",
+        "Tooltip",
+        "Small",
+        "Details",
+        "Rich",
+        "Hint",
+        "Choice",
+        "Checkbox",
+        "Radio",
+        "Radio value",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect();
+    assert_eq!(labels, expected);
 }
 
 #[test]
@@ -1326,4 +1475,31 @@ fn vietnamese_catalog_follows_the_glossary() {
     }) {
         assert_eq!(catalog.get(&(*context, *key)), Some(value), "missing U-F ribbon row: {key}");
     }
+}
+
+#[test]
+fn formatted_prompt_translates_template_and_keeps_user_text() {
+    use cadcraft_engine::prompt::{Accept, Prompt, PromptArg};
+
+    with_language("uk", || {
+        let p = Prompt::tf("Enter value for {tag}", vec![("tag", PromptArg::Text("ROOM".into()))], Accept::TEXT);
+        assert_ne!(tr("uk", "Enter value for {tag}"), "Enter value for {tag}");
+        assert_eq!(prompt_message(&p), tr("uk", "Enter value for {tag}").replace("{tag}", "ROOM"));
+
+        let p = Prompt::tf(
+            "{title} {message}",
+            vec![("title", PromptArg::Text("** STRETCH **".into())), ("message", PromptArg::Key("Specify stretch point"))],
+            Accept::POINT,
+        );
+        assert_ne!(tr("uk", "Specify stretch point"), "Specify stretch point");
+        assert_eq!(prompt_message(&p), format!("** STRETCH ** {}", tr("uk", "Specify stretch point")));
+
+        let p = Prompt::tf(
+            "{title} {message}",
+            vec![("title", PromptArg::Text("{message} Вітальня".into())), ("message", PromptArg::Key("Specify stretch point"))],
+            Accept::POINT,
+        );
+        assert_eq!(prompt_message(&p), format!("{{message}} Вітальня {}", tr("uk", "Specify stretch point")));
+        assert_eq!(prompt_message(&Prompt::new("Select objects", Accept::SELECT)), tr("uk", "Select objects"));
+    });
 }
