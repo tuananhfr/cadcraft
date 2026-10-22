@@ -280,10 +280,6 @@ pub fn keyboard(app: &mut CadApp, ctx: &egui::Context) {
                 app.cmd.note_typing();
                 continue;
             }
-            egui::Event::Ime(egui::ImeEvent::Disabled) => {
-                app.cmd.ime_composing = false;
-                continue;
-            }
             _ => {}
         }
         // capture_tab turns Tab into text before egui can move focus away from the canvas.
