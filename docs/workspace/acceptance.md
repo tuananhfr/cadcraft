@@ -183,7 +183,7 @@ Present means present in source, not runtime acceptance or approval.
 | JSON Schema | `workspace-profile.schema.json` | Lead validation log. |
 | DB migrations | None | Backend schema/database implementation; client JSON migrators are not DB migrations. |
 | UX prototype | Runnable Rust ribbon/toolbars/picker/Customize source | Separate approved UX/Figma prototype and stakeholder review. |
-| Mapping command IDs | `command-ids.md`, registry metadata and stable-ID tests | Lead gate log. |
+| Mapping command IDs (X6) | [Engine IDs](command-ids.md), [all UI-only IDs](ui-command-ids.md), registry metadata and stable-ID tests; `ui_command_ids::ui_command_ids_doc_is_current` guards the UI inventory. | Lead gate log. |
 | Import/export sample | Inline spec sample in `ws_persist.rs`; preset JSON and export round-trip tests | Standalone portable exported sample/checksum from accepted build. |
 | Test fixtures | `crates/ui-egui/tests/fixtures/workspace/` (aged, corrupt, future profiles) | Lead execution evidence. |
 | Unit/integration/E2E logs | Test source inventory above | Lead unit/integration logs and browser E2E logs; none generated here. |
