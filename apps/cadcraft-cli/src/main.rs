@@ -4,8 +4,8 @@
 //! cadcraft-cli info FILE.dxf                       summary as JSON
 //! cadcraft-cli convert IN.dxf OUT.(dxf|svg|png) [--window x0,y0,x1,y1 | --view extents|current]
 //! cadcraft-cli run [FILE|--sample|--metric] [--script TEXT|--script-file F.scr] [--cmd 'id {json}']... [--save OUT] [--export OUT.png] [--window ... | --view ...]
-//! cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--layouts]
-//! cadcraft-cli ubplot FILE.(dwg|dxf) --out OUT.pdf [--mode merged|per-sheet] [--pages-per-file N] [--jobs-dir DIR]
+//! cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--templates FILE] [--layouts]
+//! cadcraft-cli ubplot FILE.(dwg|dxf) --out OUT.pdf [--mode merged|per-sheet] [--pages-per-file N] [--jobs-dir DIR] [--templates FILE]
 //! cadcraft-cli commands [FILTER]                   command catalog (JSON)
 //! cadcraft-cli mcp [--connect HOST:PORT [--lazy] [--launch]]  MCP server on stdio (headless or bridged to the app)
 //! cadcraft-cli perf [N]                            timing table on a synthetic N-entity drawing
@@ -61,8 +61,8 @@ const USAGE: &str = "usage:
   cadcraft-cli info FILE.dxf
   cadcraft-cli convert IN.dxf OUT.(dxf|dwg|svg|png|pdf) [FRAMING]
   cadcraft-cli run [FILE | --sample | --metric] [--script TEXT] [--script-file F.scr] [--cmd 'id {json}']... [--save OUT.dxf] [--export OUT.(png|svg|pdf)] [FRAMING]
-  cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--layouts]
-  cadcraft-cli ubplot FILE.(dwg|dxf) --out OUT.pdf [--mode merged|per-sheet] [--pages-per-file N] [--jobs-dir DIR]
+  cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--templates FILE] [--layouts]
+  cadcraft-cli ubplot FILE.(dwg|dxf) --out OUT.pdf [--mode merged|per-sheet] [--pages-per-file N] [--jobs-dir DIR] [--templates FILE]
   cadcraft-cli commands [FILTER]
   cadcraft-cli mcp [--connect HOST:PORT [--lazy] [--launch]]
   cadcraft-cli perf [N | FILE]
@@ -70,6 +70,7 @@ const USAGE: &str = "usage:
   cadcraft-cli --version
 
 ubplot jobs: --jobs-dir defaults to <OUT directory>/.ubplot-jobs; repeat the same command to resume.
+  --templates FILE overrides saved frame templates for this run only (strict registry JSON, at most 2 MiB).
   stdout is the manifest JSON; exit 0 = DONE, 1 = failed/cancelled, 2 = bad arguments.
 
 image framing (png 2400x1600, svg, pdf; always model space):
@@ -243,6 +244,7 @@ const UBPLOT_OPTIONS: &[OptionSpec] = &[
     OptionSpec { name: "--max-files", takes_value: true },
     OptionSpec { name: "--max-depth", takes_value: true },
     OptionSpec { name: "--jobs-dir", takes_value: true },
+    OptionSpec { name: "--templates", takes_value: true },
     OptionSpec { name: "--layouts", takes_value: false },
 ];
 
@@ -258,6 +260,7 @@ struct UbplotOptions {
     max_depth: u32,
     layouts: bool,
     jobs_dir: std::path::PathBuf,
+    templates: Option<String>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -273,6 +276,7 @@ fn parse_ubplot_args(args: &[String]) -> Result<UbplotOptions, String> {
         max_depth: 16,
         layouts: false,
         jobs_dir: std::path::PathBuf::new(),
+        templates: None,
     };
     let mut seen = std::collections::BTreeSet::new();
     let mut it = args.iter();
@@ -303,6 +307,7 @@ fn parse_ubplot_args(args: &[String]) -> Result<UbplotOptions, String> {
             "--folder" => options.folder = Some(value.clone()),
             "--out" => options.out = value.clone(),
             "--jobs-dir" => options.jobs_dir = value.into(),
+            "--templates" => options.templates = Some(value.clone()),
             "--mode" => {
                 options.mode = match value.as_str() {
                     "merged" => "merged",
@@ -345,7 +350,7 @@ fn parse_ubplot_args(args: &[String]) -> Result<UbplotOptions, String> {
     if options.jobs_dir.as_os_str().is_empty() {
         options.jobs_dir = output_dir.join(".ubplot-jobs");
     }
-    for path in options.folder.iter().chain(&options.file).chain(std::iter::once(&options.out)) {
+    for path in options.folder.iter().chain(&options.file).chain(&options.templates).chain(std::iter::once(&options.out)) {
         if path.is_empty() || path.len() > 4096 || path.contains('\0') {
             return Err("ubplot: paths must contain 1 to 4096 bytes without NUL".into());
         }
@@ -357,10 +362,31 @@ fn parse_ubplot_args(args: &[String]) -> Result<UbplotOptions, String> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn run_ubplot(options: UbplotOptions) -> Result<Value, String> {
+fn read_ubplot_templates(path: &str) -> Result<cadcraft_engine::sheetplan::FrameRegistry, String> {
+    use std::io::Read;
+
+    // Match the registry parser's 2 MiB cap before allocating file contents.
+    const MAX_TEMPLATE_BYTES: u64 = 2 * 1024 * 1024;
+    let read = || -> Result<cadcraft_engine::sheetplan::FrameRegistry, String> {
+        let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+        let mut text = String::new();
+        file.take(MAX_TEMPLATE_BYTES + 1).read_to_string(&mut text).map_err(|error| error.to_string())?;
+        if text.len() as u64 > MAX_TEMPLATE_BYTES {
+            return Err("registry import exceeds 2 MiB".into());
+        }
+        cadcraft_engine::sheetplan::FrameRegistry::from_json(&text)
+    };
+    read().map_err(|error| format!("ubplot: --templates {path}: {error}"))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn run_ubplot(options: UbplotOptions, registry: Option<cadcraft_engine::sheetplan::FrameRegistry>) -> Result<Value, String> {
     use cadcraft_engine::sheetplan::queue::{DirJobStore, MAX_MANIFEST_BYTES};
 
     let mut session = Session::empty();
+    if let Some(registry) = registry {
+        session.ubplot.registry = registry;
+    }
     session.set_job_store(Box::new(DirJobStore::new(options.jobs_dir)));
     if let Some(folder) = options.folder {
         return session
@@ -425,7 +451,14 @@ fn ubplot(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let result = run_ubplot(options).and_then(|response| {
+    let registry = match options.templates.as_deref().map(read_ubplot_templates).transpose() {
+        Ok(registry) => registry,
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::from(2);
+        }
+    };
+    let result = run_ubplot(options, registry).and_then(|response| {
         let manifest = response.get("manifest").ok_or("ubplot: queue did not return a manifest")?;
         outln!("{}", serde_json::to_string(manifest).map_err(|error| error.to_string())?);
         if manifest.get("status").and_then(Value::as_str) == Some("DONE") {
@@ -861,14 +894,19 @@ mod ubplot_args_tests {
         assert_eq!(options.folder.as_deref(), Some("drawings"));
         assert_eq!(options.mode, "merged");
         assert_eq!(options.pages_per_file, 256);
+        assert!(options.templates.is_none());
         assert!(options.layouts);
         assert_eq!(options.jobs_dir, std::path::Path::new("published").join(".ubplot-jobs"));
-        let options = parse_ubplot_args(&args(&["drawing.DXF", "--out", "published/set.pdf", "--mode", "per-sheet"])).unwrap();
+        let options =
+            parse_ubplot_args(&args(&["drawing.DXF", "--out", "published/set.pdf", "--mode", "per-sheet", "--templates", "frames.json"])).unwrap();
+        assert_eq!(options.templates.as_deref(), Some("frames.json"));
         assert_eq!(options.file.as_deref(), Some("drawing.DXF"));
         assert_eq!(options.mode, "split");
         assert_eq!(options.jobs_dir, std::path::Path::new("published").join(".ubplot-jobs"));
         let options = parse_ubplot_args(&args(&["drawing.dwg", "--out", "set.pdf", "--jobs-dir", "custom"])).unwrap();
         assert_eq!(options.jobs_dir, std::path::Path::new("custom"));
+        let options = parse_ubplot_args(&args(&["--folder", "drawings", "--out", "published", "--templates", "office frames.json"])).unwrap();
+        assert_eq!(options.templates.as_deref(), Some("office frames.json"));
     }
 
     #[test]
@@ -885,6 +923,10 @@ mod ubplot_args_tests {
             vec!["--mode"],
             vec!["--out", "other"],
             vec!["--jobs-dir", ""],
+            vec!["--templates"],
+            vec!["--templates", ""],
+            vec!["--templates", "one.json", "--templates", "two.json"],
+            vec!["--templates", "bad\0path"],
             vec!["extra.dxf"],
         ] {
             let mut input = args(&["--folder", "drawings", "--out", "published"]);

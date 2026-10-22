@@ -314,15 +314,22 @@ capabilities so a removed device cannot silently use an old split or another pri
 ## Headless CLI
 
 ```text
-cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--layouts]
-cadcraft-cli ubplot FILE.(dwg|dxf) --out OUT.pdf [--mode merged|per-sheet] [--pages-per-file N] [--jobs-dir DIR]
+cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--templates FILE] [--layouts]
+cadcraft-cli ubplot FILE.(dwg|dxf) --out OUT.pdf [--mode merged|per-sheet] [--pages-per-file N] [--jobs-dir DIR] [--templates FILE]
 ```
 
 The CLI uses the engine's folder scan rule: select model-space frames matching a
 registered non-generic template. `--layouts` also includes paper-space layouts in
-folder mode. The current standalone CLI starts with only the generic template and
-has no registry-loading interface, so registered model-space frame selection is
-pending that interface. Layout publishing through `--folder ... --layouts` is available.
+folder mode. Each run loads `frame-templates.json` from the desktop settings
+folder; a missing settings folder or registry file uses the built-in registry.
+`CADCRAFT_CONFIG_DIR` overrides the settings root.
+
+`--templates FILE` replaces that registry for this run only, without changing
+settings. Both syntaxes accept it. The file must be UTF-8 registry JSON accepted
+by the strict registry parser (at most 2 MiB); invalid, oversized or unreadable
+files exit 2 with the filename before scanning or creating outputs/jobs.
+A registry containing only the built-in generic template selects no model-space
+frames; register the frame block names or use folder mode with `--layouts`.
 
 `merged` is the default. `per-sheet` selects the engine's `split` mode. Folder output
 uses the stem `plot`; single-file output uses the stem and directory of `OUT.pdf`.
