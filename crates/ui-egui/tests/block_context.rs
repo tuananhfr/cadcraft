@@ -121,7 +121,7 @@ fn every_block_tab_button_is_a_real_command() {
             ]
         );
         for command in tab.groups.iter().flat_map(|group| &group.commands) {
-            assert!(toolbars::resolve(command).known, "{id}: {command}");
+            assert!(toolbars::is_known(command), "{id}: {command}");
             assert!(cadcraft_engine::find_command(command).is_some(), "{id}: {command}");
             assert_eq!(status_on(command, Target::Desktop), CommandStatus::Available, "{id}: {command}");
         }
