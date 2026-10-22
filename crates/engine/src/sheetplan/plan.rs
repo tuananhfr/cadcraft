@@ -222,11 +222,11 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
     let mut sheets = Vec::with_capacity(plan.sheets.len());
     for mut sheet in plan.sheets {
         let key = sheet_key(&sheet);
-        if req.mode != ScanMode::Window {
-            if let Some(paper) = &req.paper {
-                sheet.paper_mm = paper_dimensions(paper)?;
-                sheet.issues.retain(|i| i.code != codes::PAPER_CUSTOM);
-            }
+        if req.mode != ScanMode::Window
+            && let Some(paper) = &req.paper
+        {
+            sheet.paper_mm = paper_dimensions(paper)?;
+            sheet.issues.retain(|i| i.code != codes::PAPER_CUSTOM);
         }
         if let Some(scale) = &req.scale {
             sheet.plot_scale = parse_scale(scale, unit_mm)?;
