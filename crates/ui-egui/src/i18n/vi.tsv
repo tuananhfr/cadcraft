@@ -1880,3 +1880,7 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	Ribbon commands	Lệnh trên dải băng
 	Ribbon command was not found	Không tìm thấy lệnh trên dải băng
 	Ribbon command is already in the destination group	Lệnh trên dải băng đã có trong nhóm đích
+	Quick Access Position	Vị trí Truy cập nhanh
+	position must be title_bar, above_ribbon or below_ribbon	vị trí phải là title_bar, above_ribbon hoặc below_ribbon
+	Show Below the Ribbon	Hiện bên dưới Ribbon
+	Show Above the Ribbon	Hiện bên trên Ribbon

@@ -295,6 +295,15 @@ impl Default for ViewState {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QuickAccessPosition {
+    #[default]
+    TitleBar,
+    AboveRibbon,
+    BelowRibbon,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WorkspaceLayout {
@@ -305,6 +314,8 @@ pub struct WorkspaceLayout {
     pub dock_tree: Option<Value>,
     pub command_line: CommandLineState,
     pub quick_access: Vec<String>,
+    #[serde(default)]
+    pub quick_access_position: QuickAccessPosition,
     pub status_bar: StatusBarState,
     pub shortcuts: BTreeMap<String, String>,
     pub aliases: BTreeMap<String, String>,
@@ -372,6 +383,7 @@ impl Default for WorkspaceLayout {
             dock_tree: None,
             command_line: CommandLineState::default(),
             quick_access: Vec::new(),
+            quick_access_position: QuickAccessPosition::default(),
             status_bar: StatusBarState::default(),
             shortcuts: BTreeMap::new(),
             aliases: BTreeMap::new(),

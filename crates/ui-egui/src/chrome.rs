@@ -5,6 +5,7 @@ use serde_json::json;
 
 use crate::CadApp;
 use crate::icons::{self, Icon};
+use crate::quick_access::{QuickAccessRow, quick_access_row};
 use crate::theme::Tokens;
 use crate::wsprofile::schema::Dock;
 
@@ -13,8 +14,18 @@ pub mod annoscale;
 pub(crate) const FILE_TABS_HEIGHT: f32 = 26.0;
 pub(crate) const STATUS_BAR_HEIGHT: f32 = 26.0;
 
-pub(crate) fn quick_access(app: &mut CadApp, ui: &mut egui::Ui) {
-    crate::quick_access::show(app, ui);
+pub(crate) fn quick_access(app: &mut CadApp, ui: &mut egui::Ui, row: QuickAccessRow) {
+    if quick_access_row(app) != row || app.ws.effective.layout.quick_access.is_empty() {
+        return;
+    }
+    egui::Panel::top("cc_quick_access_row")
+        .exact_size(28.0)
+        .frame(egui::Frame::NONE.fill(Tokens::get().chrome).inner_margin(egui::Margin::symmetric(6, 4)))
+        .show(ui, |ui| {
+            egui::ScrollArea::horizontal().id_salt("cc_quick_access_scroll").show(ui, |ui| {
+                ui.horizontal(|ui| crate::quick_access::show(app, ui));
+            });
+        });
 }
 
 /// Height of the macOS integrated title row (#161). AppKit draws the traffic lights itself,
@@ -42,7 +53,8 @@ fn title_left(left: f32, width: f32, text_w: f32) -> f32 {
 pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
     let ribbon_hidden = app.ws.effective.layout.ribbon.effective_mode() == crate::wsprofile::schema::RibbonMode::Hidden;
-    if app.integrated_titlebar || ribbon_hidden {
+    let qat_in_title = quick_access_row(app) == QuickAccessRow::TitleBar && !app.ws.effective.layout.quick_access.is_empty();
+    if app.integrated_titlebar || ribbon_hidden || qat_in_title {
         egui::Panel::top("cc_title_toolbar").exact_size(MAC_TITLE_BAR).show_separator_line(false).frame(egui::Frame::NONE.fill(t.chrome)).show(
             ui,
             |ui| {
@@ -77,7 +89,7 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
                 }
                 let mut content_left = r.left() + MAC_CONTENT_LEFT;
-                if !app.ui.in_window_menu && !app.ws.effective.layout.quick_access.is_empty() {
+                if qat_in_title {
                     let inner =
                         egui::ScrollArea::horizontal().id_salt("cc_title_quick_access").max_width((title_right - r.left()).max(1.0)).show(ui, |ui| {
                             ui.horizontal(|ui| {

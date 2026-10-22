@@ -248,7 +248,7 @@ fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect,
     }
 
     let mut clicked: Option<String> = None;
-    let mut secondary = false;
+    let mut secondary_command = None;
     let mut cursor = grip_width(bar);
     for (shown, (index, width)) in fit.shown.iter().enumerate() {
         let Some(group) = groups.get(*index) else { continue };
@@ -258,7 +258,9 @@ fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect,
             if command.known {
                 building(ui.ctx(), |geometry| geometry.stops.push((id, owner)));
                 let response = known_button(ui, rect, id, command, mac);
-                secondary |= response.secondary_clicked();
+                if response.secondary_clicked() {
+                    secondary_command = Some(command_id.clone());
+                }
                 if response.clicked() {
                     clicked = Some(command_id.clone());
                 }
@@ -297,13 +299,27 @@ fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect,
                         clicked = Some(command_id.clone());
                         ui.close();
                     }
+                    if command.known {
+                        item.context_menu(|ui| {
+                            let pinned = app.ws.effective.layout.quick_access.iter().any(|id| id == command_id);
+                            if let Some((command, params)) = crate::quick_access::pin_menu(ui, pinned, command_id)
+                                && let Err(error) = app.run(command, params)
+                            {
+                                app.set_status(error);
+                            }
+                        });
+                    }
                 }
             }
         });
         response.on_hover_text(crate::tl!("More toolbar commands"));
     }
-    if secondary {
+    let selected_key = body.id.with("command");
+    if let Some(command_id) = secondary_command {
+        ui.ctx().data_mut(|data| data.insert_temp(selected_key, command_id));
         open = Some(egui::SetOpenCommand::Bool(true));
+    } else if open.is_some() {
+        ui.ctx().data_mut(|data| data.remove::<String>(selected_key));
     }
     menu::context_menu(app, bar, policy_locked, &body, open, by_keyboard);
     if being_dragged {

@@ -1878,3 +1878,7 @@
 	Ribbon commands	Команди стрічки
 	Ribbon command was not found	Команду стрічки не знайдено
 	Ribbon command is already in the destination group	Команда стрічки вже є в цільовій групі
+	Quick Access Position	Розташування швидкого доступу
+	position must be title_bar, above_ribbon or below_ribbon	Розташування має бути title_bar, above_ribbon або below_ribbon
+	Show Below the Ribbon	Показати під стрічкою
+	Show Above the Ribbon	Показати над стрічкою

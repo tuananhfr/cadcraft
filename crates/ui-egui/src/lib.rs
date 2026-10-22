@@ -698,7 +698,9 @@ impl CadApp {
         if self.ui.in_window_menu {
             menus::menu_bar(self, ui);
         }
+        chrome::quick_access(self, ui, quick_access::QuickAccessRow::OwnRowAboveRibbon);
         ribbon::render::show(self, ui);
+        chrome::quick_access(self, ui, quick_access::QuickAccessRow::OwnRowBelowRibbon);
         if self.ui.show_status_bar {
             chrome::status_bar(self, ui);
         }
