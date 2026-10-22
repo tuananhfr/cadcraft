@@ -10,6 +10,28 @@ use cadcraft_engine::sheetplan::{SheetPlan, SheetStatus, codes};
 use serde_json::{Value, json};
 use support::frames::{frame_block, place};
 
+fn approve_warnings(s: &mut Session) {
+    let plan = &s.ubplot.last.as_ref().unwrap().plan;
+    let approvals: Vec<_> = plan
+        .sheets
+        .iter()
+        .flat_map(|sheet| {
+            sheet
+                .issues
+                .iter()
+                .filter(|entry| entry.severity == cadcraft_engine::sheetplan::Severity::Warn)
+                .map(|entry| json!({"sheetKey": cadcraft_engine::sheetplan::ids::sheet_key(sheet), "code": entry.code}))
+        })
+        .chain(
+            plan.issues
+                .iter()
+                .filter(|entry| entry.severity == cadcraft_engine::sheetplan::Severity::Warn)
+                .map(|entry| json!({"sheetKey": "*", "code": entry.code})),
+        )
+        .collect();
+    s.execute("ubplot.approve", &json!({"approvals": approvals, "by": "user"})).unwrap();
+}
+
 fn failing_plot(_: &Drawing, _: &Space, options: &Value) -> Result<Vec<u8>, String> {
     for page in options["pages"].as_array().unwrap() {
         let expected = match page["label"].as_str() {
@@ -88,6 +110,7 @@ fn publish_resolves_block_space_per_page() {
     let entity = s.doc_mut().unwrap().remove_entity(paper).unwrap();
     let paper = s.doc_mut().unwrap().add(&Space::Paper("Layout1".into()), entity.common.clone(), entity.kind.clone()).unwrap();
     s.execute("ubplot.scan", &json!({"mode": "block", "handles": [model.hex(), paper.hex()]})).unwrap();
+    approve_warnings(&mut s);
     let result = s.execute("ubplot.publish", &json!({})).unwrap();
     assert_eq!(result["files"].as_array().unwrap().len(), 1);
     assert!(result["failed"].as_array().unwrap().is_empty());

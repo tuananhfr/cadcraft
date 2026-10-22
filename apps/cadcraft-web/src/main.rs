@@ -140,6 +140,10 @@ mod web {
 
     pub fn start() {
         eframe::WebLogger::init(log::LevelFilter::Info).ok();
+        cadcraft_engine::cmd::ubplot::set_clock(|| {
+            let now = web_sys::js_sys::Date::now();
+            if now.is_finite() && now >= 0.0 { now as u64 } else { 0 }
+        });
         cadcraft_engine::cmd::file::set_io(cadcraft_engine::cmd::file::IoHooks {
             read: |b, name| cadcraft_io::read(b, name).map_err(|e| e.to_string()),
             write: |d, name| cadcraft_io::write(d, name).map_err(|e| e.to_string()),

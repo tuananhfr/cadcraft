@@ -58,6 +58,29 @@ pub const PAPER_SIZES: &[PaperSize] = &[
     inch("ARCH E (36.00 x 48.00 Inches)", &["ARCH E"], 36.0, 48.0),
 ];
 
+/// Elongated sheet sizes in millimetres (ISO 5457, portrait).
+pub const ELONGATED_SIZES: &[PaperSize] = &[
+    iso("A3x3", &[], 420.0, 891.0),
+    iso("A3x4", &[], 420.0, 1189.0),
+    iso("A4x3", &[], 297.0, 630.0),
+    iso("A4x4", &[], 297.0, 841.0),
+    iso("A4x5", &[], 297.0, 1051.0),
+    iso("A0x2", &[], 1189.0, 1682.0),
+    iso("A0x3", &[], 1189.0, 2523.0),
+    iso("A1x3", &[], 841.0, 1783.0),
+    iso("A1x4", &[], 841.0, 2378.0),
+    iso("A2x3", &[], 594.0, 1261.0),
+    iso("A2x4", &[], 594.0, 1682.0),
+    iso("A2x5", &[], 594.0, 2102.0),
+    iso("A3x5", &[], 420.0, 1486.0),
+    iso("A3x6", &[], 420.0, 1783.0),
+    iso("A3x7", &[], 420.0, 2080.0),
+    iso("A4x6", &[], 297.0, 1261.0),
+    iso("A4x7", &[], 297.0, 1471.0),
+    iso("A4x8", &[], 297.0, 1682.0),
+    iso("A4x9", &[], 297.0, 1892.0),
+];
+
 impl PaperSize {
     /// Margins (left, bottom, right, top; mm) of the printable area the built-in plot devices
     /// give this size: 5 mm on ISO sheets, a quarter inch on inch sheets.
@@ -73,7 +96,35 @@ pub fn paper_size(name: &str) -> Option<&'static PaperSize> {
     if n.is_empty() {
         return None;
     }
-    PAPER_SIZES.iter().find(|p| norm(p.name) == n || p.aliases.iter().any(|a| norm(a) == n))
+    PAPER_SIZES.iter().chain(ELONGATED_SIZES).find(|p| norm(p.name) == n || p.aliases.iter().any(|a| norm(a) == n))
+}
+
+/// Unitless and unknown DXF INSUNITS codes need an explicit assumption at the plotting boundary.
+pub fn insunits_mm(code: i64) -> Option<f64> {
+    Some(match code {
+        1 => 25.4,
+        2 => 304.8,
+        3 => 1_609_344.0,
+        4 => 1.0,
+        5 => 10.0,
+        6 => 1000.0,
+        7 => 1e6,
+        8 => 2.54e-5,
+        9 => 0.0254,
+        10 => 914.4,
+        11 => 1e-7,
+        12 => 1e-6,
+        13 => 1e-3,
+        14 => 100.0,
+        15 => 1e4,
+        16 => 1e5,
+        17 => 1e12,
+        18 => 1.495978707e14,
+        19 => 9.4607304725808e18,
+        20 => 3.0856776e19,
+        21 => 304.8006096,
+        _ => return None,
+    })
 }
 
 /// Millimetres per paper-space unit for a drawing (1 for metric, 25.4 for imperial).
@@ -125,6 +176,39 @@ pub fn sheet(d: &Drawing, layout: &str) -> Option<Sheet> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn insunits_table() {
+        let expected = [
+            25.4,
+            304.8,
+            1_609_344.0,
+            1.0,
+            10.0,
+            1000.0,
+            1e6,
+            2.54e-5,
+            0.0254,
+            914.4,
+            1e-7,
+            1e-6,
+            1e-3,
+            100.0,
+            1e4,
+            1e5,
+            1e12,
+            1.495978707e14,
+            9.4607304725808e18,
+            3.0856776e19,
+            304.8006096,
+        ];
+        for (code, mm) in (1..=21).zip(expected) {
+            assert_eq!(insunits_mm(code), Some(mm), "INSUNITS={code}");
+        }
+        for code in [i64::MIN, -1, 0, 22, i64::MAX] {
+            assert_eq!(insunits_mm(code), None, "INSUNITS={code}");
+        }
+    }
 
     #[test]
     fn lookup_and_sheet() {

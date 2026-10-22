@@ -6,15 +6,38 @@ use serde_json::Value;
 
 pub const SHEETPLAN_SCHEMA: &str = "1.0";
 pub const MAX_SCAN_FRAMES: usize = 10_000;
+pub const MAX_AUDIT_ENTRIES: usize = 100_000;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct SheetPlan {
     pub schema_version: String,
     pub job_id: String,
     pub source_hash: String,
+    #[serde(default)]
+    pub device: Option<String>,
     pub sheets: Vec<Sheet>,
     #[serde(default)]
     pub issues: Vec<PreflightIssue>,
+    #[serde(default)]
+    pub audit: Vec<AuditEntry>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct AuditEntry {
+    pub at_ms: u64,
+    pub by: String,
+    pub action: String,
+    pub sheet_key: String,
+    pub code: String,
+    pub fingerprint: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct SplitPlan {
+    pub pieces: Vec<[[f64; 2]; 4]>,
+    pub overlap_mm: f64,
+    #[serde(default)]
+    pub approved: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -29,6 +52,12 @@ pub struct Sheet {
     pub paper_mm: [f64; 2],
     pub landscape: bool,
     pub plot_scale: PlotScale,
+    #[serde(default)]
+    pub scale_label: Option<String>,
+    #[serde(default)]
+    pub paper_name: Option<String>,
+    #[serde(default)]
+    pub split: Option<SplitPlan>,
     pub status: SheetStatus,
     #[serde(default)]
     pub issues: Vec<PreflightIssue>,
@@ -68,6 +97,23 @@ impl PlotScale {
         let paper_mm = paper.trim().parse::<f64>().ok()?;
         let drawing_units = drawing.trim().parse::<f64>().ok()?;
         Self::ratio(paper_mm, drawing_units)
+    }
+
+    /// Real-world lengths must be converted independently of the drawing's paper-space convention.
+    pub fn from_real_ratio(text: &str, unit_mm: f64) -> Option<PlotScale> {
+        if !positive_finite(unit_mm) {
+            return None;
+        }
+        match Self::parse(text)? {
+            Self::Fit => Some(Self::Fit),
+            Self::Ratio { paper_mm, drawing_units } => {
+                let drawing_units = drawing_units / unit_mm;
+                if !positive_finite(paper_mm / drawing_units) {
+                    return None;
+                }
+                Self::ratio(paper_mm, drawing_units)
+            }
+        }
     }
 
     fn ratio(paper_mm: f64, drawing_units: f64) -> Option<Self> {
@@ -140,10 +186,14 @@ pub struct PreflightIssue {
 
 #[derive(Deserialize)]
 struct PlanHeader {
+    #[serde(default)]
+    audit: Vec<AuditEntry>,
     schema_version: String,
     job_id: String,
     #[serde(default)]
     source_hash: String,
+    #[serde(default)]
+    device: Option<String>,
     #[serde(default)]
     issues: Vec<PreflightIssue>,
 }
@@ -163,6 +213,12 @@ struct SheetInput {
     #[serde(default)]
     landscape: Option<bool>,
     plot_scale: PlotScale,
+    #[serde(default)]
+    scale_label: Option<String>,
+    #[serde(default)]
+    paper_name: Option<String>,
+    #[serde(default)]
+    split: Option<SplitPlan>,
     status: SheetStatus,
     #[serde(default)]
     issues: Vec<PreflightIssue>,
@@ -178,6 +234,9 @@ fn parse(v: &Value) -> Result<SheetPlan, String> {
     let input = v.get("sheets").and_then(Value::as_array).ok_or_else(|| "sheets must be an array".to_string())?;
     if input.len() > MAX_SCAN_FRAMES {
         return Err(format!("sheet count exceeds {MAX_SCAN_FRAMES}"));
+    }
+    if v.get("audit").and_then(Value::as_array).is_some_and(|audit| audit.len() > MAX_AUDIT_ENTRIES) {
+        return Err(format!("audit count exceeds {MAX_AUDIT_ENTRIES}"));
     }
     validate_input_size(v)?;
     let header = PlanHeader::deserialize(v).map_err(|error| error.to_string())?;
@@ -196,7 +255,15 @@ fn parse(v: &Value) -> Result<SheetPlan, String> {
         }
         previous = Some(sheet.order);
     }
-    Ok(SheetPlan { schema_version: header.schema_version, job_id: header.job_id, source_hash: header.source_hash, sheets, issues: header.issues })
+    Ok(SheetPlan {
+        schema_version: header.schema_version,
+        job_id: header.job_id,
+        source_hash: header.source_hash,
+        device: header.device,
+        sheets,
+        issues: header.issues,
+        audit: header.audit,
+    })
 }
 
 pub(crate) fn validate_input_size(v: &Value) -> Result<(), String> {
@@ -239,7 +306,24 @@ pub(crate) fn validate_input_size(v: &Value) -> Result<(), String> {
 }
 
 fn parse_sheet(v: &Value) -> Result<Sheet, String> {
+    if v.get("split")
+        .and_then(|split| split.get("pieces"))
+        .and_then(Value::as_array)
+        .is_some_and(|pieces| pieces.len() > cadcraft_doc::MAX_PLOT_PAGES)
+    {
+        return Err("split piece count exceeds the page cap".into());
+    }
     let input = SheetInput::deserialize(v).map_err(|error| error.to_string())?;
+    if let Some(split) = &input.split {
+        if !split.overlap_mm.is_finite() || !(0.0..=200.0).contains(&split.overlap_mm) || split.pieces.len() < 2 {
+            return Err("split requires at least two pieces and overlap within 0..=200 mm".into());
+        }
+        for outline in &split.pieces {
+            if super::outline::rect_of(&super::outline::points(outline)).is_none() {
+                return Err("split pieces must be finite rectangles".into());
+            }
+        }
+    }
     if input.order == 0 {
         return Err("sheet order must be at least 1".into());
     }
@@ -283,6 +367,9 @@ fn parse_sheet(v: &Value) -> Result<Sheet, String> {
         paper_mm: input.paper_mm,
         landscape: input.landscape.unwrap_or(width > height),
         plot_scale: input.plot_scale,
+        scale_label: input.scale_label,
+        paper_name: input.paper_name,
+        split: input.split,
         status,
         issues: input.issues,
         attributes: input.attributes,

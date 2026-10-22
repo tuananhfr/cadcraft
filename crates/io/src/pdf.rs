@@ -1,8 +1,8 @@
 //! Vector PDF plotting (PLOT / EXPORTPDF): a minimal PDF writer of our own (pure Rust, no file
 //! access, so it runs on the web too).
 //!
-//! One page per sheet: model-space extents fitted to a sheet, or a layout at 1:1 (or the given
-//! `scale`) on its paper (paper units are millimetres in metric drawings, inches otherwise).
+//! One page per sheet: model-space extents fitted unless a scale is given, or a layout at 1:1
+//! (or the given `scale`). Paper units are millimetres in metric drawings, inches otherwise.
 //! Lines are stroked paths (`m`/`l`/`S`), fills are `f` paths, colours are RGB with colour 7 printing black on white
 //! paper, and line widths come from lineweights when enabled. The page setup's plot style
 //! table (or the `plotStyleTable` option) sets the printed colours, linetypes and lineweights.
@@ -14,7 +14,7 @@
 use std::fmt::Write as _;
 
 use cadcraft_color::Rgb;
-use cadcraft_doc::{Drawing, Handle, PageSetup, Space};
+use cadcraft_doc::{Drawing, Handle, MAX_PAPER_MM, MAX_PDF_BYTES, PageSetup, Space};
 use cadcraft_geom::{Bounds2, Vec2};
 use cadcraft_render::{Kind, Sheet, clip, paper};
 use serde_json::Value;
@@ -25,10 +25,8 @@ mod fonts;
 
 /// PDF points per millimetre.
 const PT_PER_MM: f64 = 72.0 / 25.4;
-/// Largest sheet side we accept, in millimetres (PDF viewers cap pages at 200 inches anyway).
-const MAX_SHEET_MM: f64 = 5080.0;
 /// Most sheets (pages) in one file.
-pub const MAX_PAGES: usize = 256;
+pub const MAX_PAGES: usize = cadcraft_doc::MAX_PLOT_PAGES;
 /// Most PDF layers in one file; objects on further layers print without one.
 const MAX_LAYERS: usize = 4096;
 /// Most link annotations in one file, and the longest link target (bytes).
@@ -87,7 +85,7 @@ pub struct PdfOptions {
     /// Custom paper size in millimetres (portrait width, height).
     pub paper_mm: Option<(f64, f64)>,
     pub landscape: Option<bool>,
-    /// Fit the drawing to the printable area. Default: on for model space, off for layouts (1:1).
+    /// Fit the drawing to the printable area. Default: on for model space/windows without a scale.
     pub fit: Option<bool>,
     /// Plot scale in paper units per drawing unit (when not fitting).
     pub scale: Option<f64>,
@@ -100,13 +98,14 @@ pub struct PdfOptions {
     /// Flate-compress the content stream.
     pub compress: bool,
     pub title: String,
-    /// Model space only: plot this rectangle (drawing units), fitted to the printable area,
-    /// instead of the extents. Ignored for layouts.
+    /// Model space only: plot this rectangle (drawing units) instead of the extents. Ignored for layouts.
     pub window: Option<Bounds2>,
-    /// Rotate the display list into this frame before fitting its local rectangle.
+    /// Rotate the display list into this frame before placing its local rectangle.
     pub frame: Option<PlotFrame>,
     /// Page label, replacing the space name.
     pub label: Option<String>,
+    pub seams: Option<[bool; 4]>,
+    pub seam_overlap_mm: Option<f64>,
     /// Drawing layers become PDF layers (optional content groups). Default on.
     pub layers: bool,
     /// With `layers`: objects on layers that are off are included on PDF layers that start
@@ -122,6 +121,8 @@ pub struct PdfOptions {
     /// Margins (left, bottom, right, top; mm) of the plot device's paper, bounding the printable
     /// area of a model-space plot. `None` keeps the page setup's (none for model space).
     pub margins: Option<[f64; 4]>,
+    /// `margins` also replace a layout's page setup margins (a publish page that names its own).
+    pub page_margins: bool,
     /// Entity hyperlinks read from a drawing file (`PE_URL` extended data) become link
     /// annotations too, after [`PdfOptions::links`]. Default on.
     pub hyperlinks: bool,
@@ -147,11 +148,14 @@ impl Default for PdfOptions {
             window: None,
             frame: None,
             label: None,
+            seams: None,
+            seam_overlap_mm: None,
             layers: true,
             include_off_layers: false,
             links: Vec::new(),
             text_as_geometry: false,
             margins: None,
+            page_margins: false,
             hyperlinks: true,
             plot_transparency: None,
         }
@@ -189,7 +193,13 @@ impl PdfOptions {
             window: window(v.get("window")),
             frame: v.get("outline").and_then(|v| PlotFrame::from_outline(v).ok()),
             label: v.get("label").and_then(Value::as_str).map(str::to_string),
+            seams: v.get("seams").and_then(|value| {
+                let [left, bottom, right, top] = value.as_array()?.as_slice() else { return None };
+                Some([left.as_bool()?, bottom.as_bool()?, right.as_bool()?, top.as_bool()?])
+            }),
+            seam_overlap_mm: num("seamOverlapMm").filter(|value| (0.0..=200.0).contains(value)),
             margins: margins(v.get("margins")),
+            page_margins: false,
             hyperlinks: v.get("hyperlinks").and_then(Value::as_bool).unwrap_or(true),
             plot_transparency: v.get("plotTransparency").and_then(Value::as_bool),
         }
@@ -258,7 +268,7 @@ pub fn plot(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>> {
     if let Some(pages) = opts.get("pages") {
         let list = pages.as_array().ok_or_else(|| IoError::Format("`pages` must be a list of page objects".into()))?;
         if list.len() > MAX_PAGES {
-            return Err(IoError::Format(format!("at most {MAX_PAGES} sheets fit in one PDF")));
+            return Err(IoError::Format(format!("at most {MAX_PAGES} sheets fit in one PDF; publish it in parts (split)")));
         }
         let items = list
             .iter()
@@ -285,17 +295,17 @@ pub fn plot(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>> {
                     space.clone()
                 };
                 let mut po = PdfOptions::from_json(&serde_json::json!({
-                    "paper": pg.get("paper"), "landscape": pg.get("landscape"), "scale": pg.get("scale"),
+                    "paper": pg.get("paper"), "landscape": pg.get("landscape"), "scale": pg.get("scale"), "fit": pg.get("fit"),
                     "width": pg.get("width"), "height": pg.get("height"), "label": pg.get("label"),
+                    "seams": pg.get("seams"), "seamOverlapMm": pg.get("seamOverlapMm"),
                     "plotStyleTable": opts.get("plotStyleTable"), "lineweights": opts.get("lineweights"),
-                    "margins": opts.get("margins"), "text": opts.get("text"),
+                    "margins": pg.get("margins").or_else(|| opts.get("margins")), "text": opts.get("text"),
                 }));
+                po.page_margins = pg.get("margins").is_some();
                 if let Some(raw) = pg.get("outline") {
                     po.frame = Some(PlotFrame::from_outline(raw)?);
-                    po.fit = Some(true);
                 } else if let Some(raw) = pg.get("window") {
                     po.window = Some(window(Some(raw)).ok_or_else(|| IoError::Format("each page needs a `window` with two corners".into()))?);
-                    po.fit = Some(true);
                 }
                 if po.landscape.is_none()
                     && let Some((w, h)) = po.paper_mm
@@ -319,7 +329,7 @@ pub fn plot(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>> {
         Some(v) => {
             let names = v.as_array().ok_or_else(|| IoError::Format("`layouts` must be a list of layout names".into()))?;
             if names.len() > MAX_PAGES {
-                return Err(IoError::Format(format!("at most {MAX_PAGES} sheets fit in one PDF")));
+                return Err(IoError::Format(format!("at most {MAX_PAGES} sheets fit in one PDF; publish it in parts (split)")));
             }
             let spaces = names
                 .iter()
@@ -373,8 +383,8 @@ pub fn page_for(d: &Drawing, space: &Space, o: &PdfOptions) -> Result<PageSetup>
     }
     if let Some((w, h)) = o.paper_mm {
         page.paper = format!("User ({w:.2} x {h:.2} MM)");
-        page.width_mm = w.min(MAX_SHEET_MM);
-        page.height_mm = h.min(MAX_SHEET_MM);
+        page.width_mm = w;
+        page.height_mm = h;
     }
     if let Some(l) = o.landscape {
         page.landscape = l;
@@ -382,12 +392,17 @@ pub fn page_for(d: &Drawing, space: &Space, o: &PdfOptions) -> Result<PageSetup>
     if let Some(t) = &o.plot_style_table {
         page.plot_style_table = t.clone();
     }
-    // The plot device's margins bound a model-space plot (a layout's come with its page setup).
-    if let (Space::Model, Some(m)) = (space, o.margins) {
+    // A layout keeps its page setup margins unless a publish page names its own.
+    if let Some(m) = o.margins
+        && (matches!(space, Space::Model) || o.page_margins)
+    {
         page.margins_mm = m;
     }
-    page.width_mm = page.width_mm.clamp(1.0, MAX_SHEET_MM);
-    page.height_mm = page.height_mm.clamp(1.0, MAX_SHEET_MM);
+    if [page.width_mm, page.height_mm].iter().any(|side| !side.is_finite() || *side <= 0.0 || *side > MAX_PAPER_MM) {
+        return Err(IoError::Format(format!("paper sides must be finite, positive and at most {MAX_PAPER_MM} mm")));
+    }
+    page.width_mm = page.width_mm.max(1.0);
+    page.height_mm = page.height_mm.max(1.0);
     Ok(page)
 }
 
@@ -435,7 +450,7 @@ pub fn pdf_items(d: &Drawing, items: &[(Space, PdfOptions)], o: &PdfOptions) -> 
         return Err(IoError::Format("there are no sheets to plot".into()));
     }
     if items.len() > MAX_PAGES {
-        return Err(IoError::Format(format!("at most {MAX_PAGES} sheets fit in one PDF")));
+        return Err(IoError::Format(format!("at most {MAX_PAGES} sheets fit in one PDF; publish it in parts (split)")));
     }
     // Layers that are off plot on PDF layers that start hidden: draw them from a copy with them on.
     let with_off;
@@ -450,16 +465,30 @@ pub fn pdf_items(d: &Drawing, items: &[(Space, PdfOptions)], o: &PdfOptions) -> 
         d
     };
     let links = all_links(d, o);
-    let pages = items.iter().map(|(s, po)| sheet(drawn, s, po, &links)).collect::<Result<Vec<_>>>()?;
-    let title = if o.title.is_empty() { pages.first().map(|p| p.label.clone()).unwrap_or_default() } else { o.title.clone() };
-    let fonts = if o.text_as_geometry { fonts::Fonts::default() } else { fonts::Fonts::collect(pages.iter().map(|p| &p.list)) };
-    Ok(assemble(d, &pages, &fonts, o, &title))
+    let fonts = if !o.text_as_geometry && items.len() > 1 {
+        let mut glyphs = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for (space, options) in items {
+            let page = sheet(drawn, space, options, &links)?;
+            for (face, gid, ch) in fonts::glyphs(&page.list) {
+                // Repeated pages need only one entry per face/glyph, preserving first-use order.
+                if seen.insert((face.bytes.as_ptr() as usize, face.bytes.len(), face.index, gid)) {
+                    glyphs.push((face, gid, ch));
+                }
+            }
+        }
+        fonts::Fonts::collect(glyphs)
+    } else {
+        fonts::Fonts::default()
+    };
+    assemble(d, items.iter().map(|(space, options)| sheet(drawn, space, options, &links)), fonts, o)
 }
 
 /// One plotted sheet, ready to be written as a page.
 struct SheetPage {
     /// Page size in points.
     media: Vec2,
+    user_unit: f64,
     /// What it draws, the mapping to points and the plot area (points).
     list: cadcraft_render::DisplayList,
     map: Map,
@@ -470,6 +499,8 @@ struct SheetPage {
     links: Vec<(Bounds2, String)>,
     /// Page label: the layout name.
     label: String,
+    seams: Option<[bool; 4]>,
+    seam_overlap_mm: f64,
 }
 
 /// Plot one space.
@@ -492,10 +523,12 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
         skip_viewport: None,
         cancel: None,
     };
-    let k = unit_mm * PT_PER_MM;
+    let media_pt = sheet.size * (unit_mm * PT_PER_MM);
+    let user_unit = (media_pt.x.max(media_pt.y) / 14400.0).ceil().max(1.0);
+    let k = unit_mm * PT_PER_MM / user_unit;
     let frame_bounds = o.frame.map(PlotFrame::bounds).transpose()?;
     let window = frame_bounds.or_else(|| o.window.filter(|w| matches!(space, Space::Model) && !w.is_empty()));
-    let fit = o.fit.unwrap_or(window.is_some() || matches!(space, Space::Model));
+    let fit = o.fit.unwrap_or(o.scale.is_none() && (window.is_some() || matches!(space, Space::Model)));
     // Chord tolerance: about 0.05 mm on paper.
     let est = plot_scale(&window.unwrap_or_else(|| d.extents(space)), &sheet, fit, o.scale);
     let tol = 0.05 / unit_mm / est.max(1e-300);
@@ -508,8 +541,8 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
     }
     let b = window.unwrap_or(list.bounds);
     let s = plot_scale(&b, &sheet, fit, o.scale);
-    let map = if fit || matches!(space, Space::Model) {
-        let (from, to) = placement(space, &b, fit, &sheet, o);
+    let map = if fit || window.is_some() || matches!(space, Space::Model) {
+        let (from, to) = placement(space, &b, fit || window.is_some(), &sheet, o);
         Map { from, s, to, k }
     } else {
         Map { from: Vec2::ZERO, s, to: Vec2::ZERO, k }
@@ -517,7 +550,7 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
     // Plot style ends, joins and fill patterns at the plot scale (a layout's are already drawn).
     cadcraft_render::pen::apply(&mut list, map.s * unit_mm);
     let media = sheet.size * k;
-    let clip_pt = if fit || matches!(space, Space::Model) {
+    let clip_pt = if fit || window.is_some() || o.page_margins || matches!(space, Space::Model) {
         Bounds2::new(sheet.printable.min * k, sheet.printable.max * k)
     } else {
         Bounds2::new(Vec2::ZERO, media)
@@ -532,8 +565,19 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
             }
         }
     }
-    let links = links(&list, &map, &clip_pt, links_to);
-    Ok(SheetPage { media, list, map, clip_pt, layers, links, label: o.label.clone().unwrap_or_else(|| sheet_name(space)) })
+    let links = links(&list, &map, &clip_pt, links_to, user_unit);
+    Ok(SheetPage {
+        media,
+        user_unit,
+        list,
+        map,
+        clip_pt,
+        layers,
+        links,
+        label: o.label.clone().unwrap_or_else(|| sheet_name(space)),
+        seams: o.seams,
+        seam_overlap_mm: o.seam_overlap_mm.unwrap_or(20.0),
+    })
 }
 
 /// Source and destination origins for the shared model-space PDF/PNG placement behavior.
@@ -591,7 +635,7 @@ fn pe_url(xdata: &[cadcraft_doc::RawTag]) -> Option<String> {
 
 /// Link annotation rectangles: the area (in points) each linked entity covers on the sheet,
 /// clipped to the plot area.
-fn links(list: &cadcraft_render::DisplayList, map: &Map, clip_pt: &Bounds2, links: &[(Handle, String)]) -> Vec<(Bounds2, String)> {
+fn links(list: &cadcraft_render::DisplayList, map: &Map, clip_pt: &Bounds2, links: &[(Handle, String)], user_unit: f64) -> Vec<(Bounds2, String)> {
     if links.is_empty() {
         return Vec::new();
     }
@@ -612,7 +656,7 @@ fn links(list: &cadcraft_render::DisplayList, map: &Map, clip_pt: &Bounds2, link
     for (h, url) in links {
         let Some(b) = areas.get(h).filter(|b| !b.is_empty()) else { continue };
         // A little slack so thin lines are easy to click.
-        let b = b.expand(2.0);
+        let b = b.expand(2.0 / user_unit);
         let r = Bounds2 { min: b.min.max(clip_pt.min), max: b.max.min(clip_pt.max) };
         if r.min.x < r.max.x && r.min.y < r.max.y {
             out.push((r, url.clone()));
@@ -685,6 +729,7 @@ fn content_stream(
     clip_pt: &Bounds2,
     layers: &[u32],
     texts: &std::collections::HashMap<u32, (usize, &cadcraft_render::PlotText)>,
+    user_unit: f64,
 ) -> (String, Vec<u8>) {
     let marked: std::collections::HashSet<u32> = layers.iter().copied().collect();
     let white = Rgb(255, 255, 255);
@@ -747,7 +792,7 @@ fn content_stream(
             alpha = t;
         }
         let w = f64::from(p.lw) * PT_PER_MM;
-        let w = if w.is_finite() && w > 0.0 { w.min(100.0) } else { 0.0 };
+        let w = if w.is_finite() && w > 0.0 { w.min(100.0) / user_unit } else { 0.0 };
         match p.kind {
             Kind::Polyline | Kind::Infinite { .. } => {
                 let pts: Vec<Vec2> = match p.kind {
@@ -824,7 +869,7 @@ fn content_stream(
                     color(&mut c, rgb, "rg");
                     fill = Some(rgb);
                 }
-                let half = (w.max(0.5)) / 2.0;
+                let half = w.max(0.5 / user_unit) / 2.0;
                 pt(&mut c, map.pt(*q) - Vec2::new(half, half));
                 c.push(' ');
                 num(&mut c, half * 2.0);
@@ -943,6 +988,7 @@ fn stream(data: &[u8], compress: bool, extra: &str) -> Vec<u8> {
 #[derive(Default)]
 struct Objects {
     bodies: Vec<Vec<u8>>,
+    bytes: usize,
 }
 
 impl Objects {
@@ -953,7 +999,9 @@ impl Objects {
     }
     fn set(&mut self, n: usize, body: impl Into<Vec<u8>>) {
         if let Some(b) = n.checked_sub(1).and_then(|i| self.bodies.get_mut(i)) {
-            *b = body.into();
+            let body = body.into();
+            self.bytes = self.bytes.saturating_sub(b.len()).saturating_add(body.len());
+            *b = body;
         }
     }
     fn add(&mut self, body: impl Into<Vec<u8>>) -> usize {
@@ -968,10 +1016,67 @@ fn refs(ids: impl IntoIterator<Item = usize>) -> String {
     ids.into_iter().map(|i| format!("{i} 0 R")).collect::<Vec<_>>().join(" ")
 }
 
-/// Assemble the file: catalog, page tree, pages with their content streams and link
-/// annotations, the PDF layers (one optional content group per drawing layer used, named
-/// like it), page labels, document information, cross-reference table and trailer.
-fn assemble(d: &Drawing, pages: &[SheetPage], fonts: &fonts::Fonts, o: &PdfOptions, title: &str) -> Vec<u8> {
+fn check_pdf_size(bytes: usize, page: usize) -> Result<()> {
+    if bytes > MAX_PDF_BYTES {
+        return Err(IoError::Format(format!("the PDF would exceed 512 MiB at page {page}; publish it in parts (split)")));
+    }
+    Ok(())
+}
+
+fn seam_marks(c: &mut String, page: &SheetPage) {
+    let Some(edges) = page.seams.filter(|edges| edges.iter().any(|edge| *edge)) else { return };
+    let k = PT_PER_MM / page.user_unit;
+    let overlap = page.seam_overlap_mm * k;
+    let bounds = page.clip_pt;
+    let x0 = bounds.min.x;
+    let y0 = bounds.min.y;
+    let x1 = bounds.max.x;
+    let y1 = bounds.max.y;
+    let [left, bottom, right, top] = edges;
+    let line = |c: &mut String, a: Vec2, b: Vec2| {
+        pt(c, a);
+        c.push_str(" m ");
+        pt(c, b);
+        c.push_str(" l S\n");
+    };
+    c.push_str("q\n0 G\n");
+    num(c, 0.25 * k);
+    c.push_str(" w\n");
+    for (enabled, a, b, vertical) in [
+        (left, Vec2::new((x0 + overlap).min(x1), y0), Vec2::new((x0 + overlap).min(x1), y1), true),
+        (bottom, Vec2::new(x0, (y0 + overlap).min(y1)), Vec2::new(x1, (y0 + overlap).min(y1)), false),
+        (right, Vec2::new((x1 - overlap).max(x0), y0), Vec2::new((x1 - overlap).max(x0), y1), true),
+        (top, Vec2::new(x0, (y1 - overlap).max(y0)), Vec2::new(x1, (y1 - overlap).max(y0)), false),
+    ] {
+        if !enabled {
+            continue;
+        }
+        c.push('[');
+        num(c, 3.0 * k);
+        c.push(' ');
+        num(c, 2.0 * k);
+        c.push_str("] 0 d\n");
+        line(c, a, b);
+        c.push_str("[] 0 d\n");
+        for end in [a, b] {
+            let (from, to) = if vertical {
+                let start = (end.x - 5.0 * k).max(x0).min((x1 - 10.0 * k).max(x0));
+                (Vec2::new(start, end.y), Vec2::new((start + 10.0 * k).min(x1), end.y))
+            } else {
+                let start = (end.y - 5.0 * k).max(y0).min((y1 - 10.0 * k).max(y0));
+                (Vec2::new(end.x, start), Vec2::new(end.x, (start + 10.0 * k).min(y1)))
+            };
+            line(c, from, to);
+        }
+    }
+    c.push_str("Q\n");
+}
+
+fn assemble(d: &Drawing, pages: impl ExactSizeIterator<Item = Result<SheetPage>>, mut fonts: fonts::Fonts, o: &PdfOptions) -> Result<Vec<u8>> {
+    let page_count = pages.len();
+    let mut title = o.title.clone();
+    let mut labels = Vec::with_capacity(page_count);
+    let mut large_page = false;
     let mut objs = Objects::default();
     let catalog = objs.reserve();
     let tree = objs.reserve();
@@ -981,11 +1086,20 @@ fn assemble(d: &Drawing, pages: &[SheetPage], fonts: &fonts::Fonts, o: &PdfOptio
     let mut kids = Vec::new();
     // Page dictionaries are completed once the fonts are written: (page, its fonts, the rest).
     let mut page_dicts: Vec<(usize, Vec<usize>, String, String, String)> = Vec::new();
-    for p in pages {
+    for (index, plotted) in pages.enumerate() {
+        let p = plotted?;
+        if index == 0 && title.is_empty() {
+            title.clone_from(&p.label);
+        }
+        if page_count == 1 && !o.text_as_geometry {
+            fonts = fonts::Fonts::collect(fonts::glyphs(&p.list));
+        }
         let page = objs.reserve();
         let texts = fonts.texts(&p.list);
-        let (marks, alphas) = content_stream(&p.list, &p.map, &p.clip_pt, &p.layers, &texts);
+        let (mut marks, alphas) = content_stream(&p.list, &p.map, &p.clip_pt, &p.layers, &texts, p.user_unit);
+        seam_marks(&mut marks, &p);
         let content = objs.add(stream(marks.as_bytes(), o.compress, ""));
+        drop(marks);
         let mut used: Vec<usize> = texts.values().map(|(f, _)| *f).collect();
         used.sort_unstable();
         used.dedup();
@@ -1014,11 +1128,21 @@ fn assemble(d: &Drawing, pages: &[SheetPage], fonts: &fonts::Fonts, o: &PdfOptio
         }
         let mut mb = String::new();
         pt(&mut mb, p.media);
+        let user_unit = if p.user_unit > 1.0 {
+            large_page = true;
+            format!(" /UserUnit {}", p.user_unit)
+        } else {
+            String::new()
+        };
         let annots = if annots.is_empty() { String::new() } else { format!(" /Annots [{}]", refs(annots)) };
-        page_dicts.push((page, used, props, ext_gstates(&alphas), format!("/MediaBox [0 0 {mb}] /Contents {content} 0 R{annots}")));
+        page_dicts.push((page, used, props, ext_gstates(&alphas), format!("/MediaBox [0 0 {mb}]{user_unit} /Contents {content} 0 R{annots}")));
         kids.push(page);
+        labels.push(format!("{index} << /P {} >>", pdf_string(&p.label)));
+        check_pdf_size(objs.bytes, index + 1)?;
     }
     let font_ids = if fonts.is_empty() { Vec::new() } else { fonts.write(&mut objs, o.compress) };
+    check_pdf_size(objs.bytes, page_count)?;
+    drop(fonts);
     for (page, used, props, gstates, rest) in page_dicts {
         let mut res = String::new();
         if !props.is_empty() {
@@ -1037,31 +1161,41 @@ fn assemble(d: &Drawing, pages: &[SheetPage], fonts: &fonts::Fonts, o: &PdfOptio
         // Optional content needs PDF 1.5; the catalog's version overrides the header's.
         let off: Vec<usize> = ocgs.iter().filter(|(l, _)| d.layers.get(*l as usize).is_some_and(|l| !l.on)).map(|(_, id)| *id).collect();
         let all = refs(ocgs.iter().map(|(_, id)| *id));
-        let _ = write!(cat, " /Version /1.5 /OCProperties << /OCGs [{all}] /D << /Name (Layers) /Order [{all}] /OFF [{}] >> >>", refs(off));
-        if pages.len() == 1 {
+        let version = if large_page { "1.6" } else { "1.5" };
+        let _ = write!(cat, " /Version /{version} /OCProperties << /OCGs [{all}] /D << /Name (Layers) /Order [{all}] /OFF [{}] >> >>", refs(off));
+        if page_count == 1 {
             cat.push_str(" /PageMode /UseOC");
         }
     }
-    let labels: Vec<String> = pages.iter().enumerate().map(|(i, p)| format!("{i} << /P {} >>", pdf_string(&p.label))).collect();
+    if large_page && ocgs.is_empty() {
+        cat.push_str(" /Version /1.6");
+    }
     let _ = write!(cat, " /PageLabels << /Nums [{}] >> >>", labels.join(" "));
     objs.set(catalog, cat);
-    let info = objs.add(format!("<< /Producer (CADCraft) /Creator (CADCraft) /Title {} >>", pdf_string(title)));
-    let size: usize = objs.bodies.iter().map(Vec::len).sum();
-    let mut out: Vec<u8> = Vec::with_capacity(size + 64 * objs.bodies.len() + 256);
-    out.extend_from_slice(b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+    let info = objs.add(format!("<< /Producer (CADCraft) /Creator (CADCraft) /Title {} >>", pdf_string(&title)));
+    const HEADER: &[u8] = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
+    let mut size = HEADER.len();
     let mut offsets = Vec::with_capacity(objs.bodies.len());
     for (i, body) in objs.bodies.iter().enumerate() {
-        offsets.push(out.len());
+        offsets.push(size);
+        size = size.saturating_add(format!("{} 0 obj\n", i + 1).len()).saturating_add(body.len()).saturating_add(b"\nendobj\n".len());
+        check_pdf_size(size, page_count)?;
+    }
+    let xref = size;
+    let mut x = format!("xref\n0 {}\n0000000000 65535 f \n", offsets.len() + 1);
+    for offset in &offsets {
+        let _ = writeln!(x, "{offset:010} 00000 n ");
+    }
+    let _ = write!(x, "trailer\n<< /Size {} /Root {catalog} 0 R /Info {info} 0 R >>\nstartxref\n{xref}\n%%EOF\n", offsets.len() + 1);
+    size = size.saturating_add(x.len());
+    check_pdf_size(size, page_count)?;
+    let mut out = Vec::with_capacity(size);
+    out.extend_from_slice(HEADER);
+    for (i, body) in objs.bodies.iter().enumerate() {
         out.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
         out.extend_from_slice(body);
         out.extend_from_slice(b"\nendobj\n");
     }
-    let xref = out.len();
-    let mut x = format!("xref\n0 {}\n0000000000 65535 f \n", offsets.len() + 1);
-    for o in &offsets {
-        let _ = writeln!(x, "{o:010} 00000 n ");
-    }
-    let _ = write!(x, "trailer\n<< /Size {} /Root {catalog} 0 R /Info {info} 0 R >>\nstartxref\n{xref}\n%%EOF\n", offsets.len() + 1);
     out.extend_from_slice(x.as_bytes());
-    out
+    Ok(out)
 }

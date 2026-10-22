@@ -47,23 +47,21 @@ pub(super) struct Fonts {
 
 impl Fonts {
     /// Collect the glyphs of every plotted text glyph and subset their fonts.
-    pub(super) fn collect<'a>(lists: impl IntoIterator<Item = &'a DisplayList>) -> Fonts {
+    pub(super) fn collect(glyphs: impl IntoIterator<Item = (Face, u16, char)>) -> Fonts {
         let mut used: Vec<(Face, BTreeMap<u16, char>)> = Vec::new();
         let mut index: HashMap<FaceKey, usize> = HashMap::new();
-        for list in lists {
-            for t in usable(list) {
-                let k = key(&t.glyph.face);
-                let i = match index.get(&k) {
-                    Some(i) => *i,
-                    None => {
-                        index.insert(k, used.len());
-                        used.push((t.glyph.face.clone(), BTreeMap::new()));
-                        used.len() - 1
-                    }
-                };
-                if let Some((_, chars)) = used.get_mut(i) {
-                    chars.entry(t.glyph.gid).or_insert(t.glyph.ch);
+        for (face, gid, ch) in glyphs {
+            let k = key(&face);
+            let i = match index.get(&k) {
+                Some(i) => *i,
+                None => {
+                    index.insert(k, used.len());
+                    used.push((face, BTreeMap::new()));
+                    used.len() - 1
                 }
+            };
+            if let Some((_, chars)) = used.get_mut(i) {
+                chars.entry(gid).or_insert(ch);
             }
         }
         let mut out = Fonts::default();
@@ -107,6 +105,10 @@ impl Fonts {
     pub(super) fn write(&self, objs: &mut Objects, compress: bool) -> Vec<usize> {
         self.fonts.iter().map(|f| write_font(objs, f, compress)).collect()
     }
+}
+
+pub(super) fn glyphs(list: &DisplayList) -> impl Iterator<Item = (Face, u16, char)> + '_ {
+    usable(list).map(|t| (t.glyph.face.clone(), t.glyph.gid, t.glyph.ch))
 }
 
 /// The text glyphs of a list that stand for a primitive of it.

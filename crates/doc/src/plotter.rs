@@ -15,8 +15,12 @@ pub const MAX_PLOTTER_FILE: usize = 1 << 20;
 pub const MAX_DEVICE_PAPERS: usize = 512;
 /// Longest device or paper name (characters).
 pub const MAX_PLOTTER_NAME: usize = 100;
-/// Largest paper side (mm), as for page setups.
-pub const MAX_PAPER_MM: f64 = 5080.0;
+/// Largest paper side accepted by plotter configurations and sheet plans (mm).
+pub const MAX_PAPER_MM: f64 = 15_000.0;
+/// Most pages in one PDF publication.
+pub const MAX_PLOT_PAGES: usize = 1000;
+/// Largest PDF publication, including its object and cross-reference tables.
+pub const MAX_PDF_BYTES: usize = 512 << 20;
 
 const FILE_MARKER: &str = "cadcraftPlotter";
 const FILE_VERSION: u64 = 1;

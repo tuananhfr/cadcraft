@@ -392,6 +392,7 @@ transparencydisplay
 trim
 u
 ubplot
+ubplot.approve
 ubplot.publish
 ubplot.scan
 ubplot.templates

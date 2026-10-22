@@ -62,10 +62,9 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions) -> Result<(Sheet, cadcraft_
     Ok((Sheet::from_page(&page, paper::paper_unit_mm(d)), page))
 }
 
-/// Paper units per drawing unit fitting `b` into the printable area; with `fit: false`, the
-/// `scale` option or 1:1, as PDF plots it.
+/// Paper units per drawing unit, fitting only when requested or when no scale is supplied.
 fn fit_scale(b: &Bounds2, sheet: &Sheet, o: &PdfOptions) -> f64 {
-    pdf::plot_scale(b, sheet, o.fit != Some(false), o.scale)
+    pdf::plot_scale(b, sheet, o.fit.unwrap_or(o.scale.is_none()), o.scale)
 }
 
 fn png(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>> {
@@ -84,10 +83,9 @@ fn png(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>> {
     let (width, height) = (px(sheet.size.x), px(sheet.size.y));
     let lineweights = o.lineweights.unwrap_or(if space.is_paper() { page.lineweights } else { true });
     let table = cadcraft_doc::plot_style_table(d, &page.plot_style_table).map(Arc::new);
-    // Paper units per drawing unit: 1 for a layout at 1:1, the fitted scale for model space.
-    let fit = matches!(space, Space::Model) || o.fit == Some(true);
     let window = o.window.filter(|w| matches!(space, Space::Model) && !w.is_empty());
-    let est = if fit { fit_scale(&window.unwrap_or_else(|| d.extents(space)), &sheet, &o) } else { 1.0 };
+    let fit = o.fit.unwrap_or(o.scale.is_none() && (window.is_some() || matches!(space, Space::Model)));
+    let est = pdf::plot_scale(&window.unwrap_or_else(|| d.extents(space)), &sheet, fit, o.scale);
     // Chord tolerance: a fifth of a pixel.
     let tolerance = (0.2 / (k * est)).max(1e-9);
     let transparency = o.plot_transparency.unwrap_or(page.plot_transparency);
@@ -95,17 +93,17 @@ fn png(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>> {
     let mut list = cadcraft_render::build_plot(d, space, &ropts);
     let half = Vec2::new(f64::from(width), f64::from(height)) / (2.0 * k);
     let b = window.unwrap_or(list.bounds);
-    let s = if fit { fit_scale(&b, &sheet, &o) } else { 1.0 };
+    let s = pdf::plot_scale(&b, &sheet, fit, o.scale);
     // Plot style ends, joins and fill patterns at the plot scale, as PDF draws them (a layout's
     // are already drawn).
     cadcraft_render::pen::apply(&mut list, s * sheet.unit_mm);
-    let view = if fit {
-        let (from, to) = pdf::placement(space, &b, true, &sheet, &o);
+    let view = if fit || matches!(space, Space::Model) {
+        let (from, to) = pdf::placement(space, &b, fit, &sheet, &o);
         // The world point at the image centre, mapped through the same paper origin as PDF.
         let center = from + (half - to) / s;
         raster::View { center, scale: k * s, width, height }
     } else {
-        raster::View { center: half, scale: k, width, height }
+        raster::View { center: half / s, scale: k * s, width, height }
     };
     let px_per_mm = if lineweights { (k / sheet.unit_mm) as f32 } else { 0.0 };
     let ro = raster::RasterOptions { background: Rgb(255, 255, 255), hairline: 1.0, px_per_mm, antialias: true };

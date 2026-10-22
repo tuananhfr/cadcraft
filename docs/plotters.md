@@ -66,11 +66,14 @@ files are not read; we haven't found a public specification of that format.
 
 Reading fixes hostile values:
 
-- Sizes are kept within 1–5080 mm, and width and height are swapped to portrait.
+- Sizes are kept within 1–15000 mm, and width and height are swapped to portrait.
 - Margins are kept within 0–1000 mm. Margins that leave no printable area are dropped.
 - Paper names are unique, and a device keeps at most 512 papers.
 - A missing or unknown `defaultPaper` becomes the first paper.
 - Files over 1 MB are refused.
+
+PDF publications accept at most 1000 pages and 512 MiB. Sheets with a side over 14400 points
+use `/UserUnit` and catalog version PDF 1.6; each side must be at most 15000 mm.
 
 In the file name, characters other than letters, digits, spaces and `-_()+,` become `_`.
 
@@ -108,11 +111,23 @@ In the file name, characters other than letters, digits, spaces and `-_()+,` bec
     printable area's lower-left origin; offsets are millimetres, default to `[0, 0]`, and are
     bounded to ±100,000 mm. PDF and PNG support these controls. SVG plots keep their extents view;
     an active offset is rejected rather than ignored. Layout plots do not use model offsets.
+  - `scale` is a positive number or ratio such as `"1:100"`. By default it means paper
+    units per drawing unit: paper units are millimetres with `MEASUREMENT=1`, inches
+    otherwise. This legacy meaning is unchanged.
+  - `scaleMode: "real"` interprets `scale` as a physical ratio using `INSUNITS`,
+    independently of `MEASUREMENT`. For example, a metre drawing (`INSUNITS=6`) at
+    `"1:100"` prints 1 m as 10 mm. Unitless or unknown INSUNITS codes assume mm.
+  - With `scale` and no `fit`, PDF and PNG preserve the requested scale. Model plots
+    without a scale fit by default; layouts default to 1:1. `fit: true` explicitly fits even
+    when a scale is supplied; `fit: false` without a scale uses 1:1.
+  - PDF `pages` items accept their own `scale`, `fit` and `margins`; an item without `fit`
+    fits only when it has no scale. UBPLOT Ratio sheets publish with `fit: false`, Fit
+    sheets with `fit: true`. PDF/custom sheets have zero margins; available device papers
+    supply their own margins.
   - `exportpdf` takes the same options and always writes PDF.
 
-Model-space PDF plots don't apply the paper's margins yet. They fit the drawing inside the
-default margins. PNG plots apply them. SVG plots show a layout's whole sheet, or the
-model-space extents.
+PDF and PNG plots apply the paper's margins to their printable area. SVG plots show a
+layout's whole sheet, or the model-space extents.
 
 ## Plot transparency
 
