@@ -11,7 +11,7 @@ use cadcraft_ui_egui::wsprofile::migrate::from_legacy_v1;
 use cadcraft_ui_egui::wsprofile::presets::SAFE_PRESET;
 use cadcraft_ui_egui::wsprofile::rfc3339;
 use cadcraft_ui_egui::wsprofile::schema::{ProfileStatus, WorkspaceProfile};
-use cadcraft_ui_egui::wsprofile::startup::parse_set;
+use cadcraft_ui_egui::wsprofile::startup::{parse_set, set_text};
 use cadcraft_ui_egui::wsprofile::store::{ProfileSet, ProfileStore};
 use serde_json::Value;
 
@@ -73,7 +73,10 @@ fn migrate_legacy(root: &Path, store: &mut FileProfileStore, rename: &dyn Fn(&Pa
     profile.updated_at = now;
     profile.revision = 1;
     let set = ProfileSet { active: SAFE_PRESET.into(), user: Some(profile), ..ProfileSet::default() };
-    let json = serde_json::to_string(&set).map_err(|error| describe(&error))?;
+    let converted = serde_json::to_string(&set).map_err(|error| describe(&error))?;
+    let set = parse_set(&converted).map_err(|fallback| describe(&format!("{fallback:?}")))?;
+    // Stored in the current schema, as a commit would write it; a 1.x set would be backed up and rewritten on attach.
+    let json = set_text(&set, &[]).map_err(|error| describe(&error))?;
     // Never replace the old file with something startup would refuse to read back.
     parse_set(&json).map_err(|fallback| describe(&format!("{fallback:?}")))?;
     store.push_snapshot(1, &json)?;

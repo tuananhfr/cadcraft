@@ -278,7 +278,7 @@ fn stored_profile(profile: &WorkspaceProfile, policy: &[Layer]) -> Result<Value,
 }
 
 /// The text a commit writes for `set`.
-pub(crate) fn set_text(set: &ProfileSet, policy: &[Layer]) -> Result<String, String> {
+pub fn set_text(set: &ProfileSet, policy: &[Layer]) -> Result<String, String> {
     let mut value = serde_json::to_value(set).map_err(|error| error.to_string())?;
     let fields = value.as_object_mut().ok_or("a profile set must serialise to an object")?;
     if let Some(user) = &set.user {
