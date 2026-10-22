@@ -123,7 +123,8 @@ pub fn show(app: &mut CadApp, ctx: &egui::Context) {
             ctx.data_mut(|d| d.remove::<State>(state_id()));
             // The editor holds the whole contents: one input, then Enter ends MTEXT's text entry.
             if !st.fmt.is_empty() {
-                let _ = app.session.input(cadcraft_engine::Input::Text(st.fmt.to_contents()));
+                let contents = crate::i18n::fold::nfc(&st.fmt.to_contents()).into_owned();
+                let _ = app.session.input(cadcraft_engine::Input::Text(contents));
             }
             if app.session.running.as_ref().is_some_and(|r| r.id == "mtext") {
                 let _ = app.session.input(cadcraft_engine::Input::Enter);

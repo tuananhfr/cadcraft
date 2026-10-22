@@ -32,11 +32,12 @@ pub(crate) fn known(id: &str) -> bool {
     crate::wsprofile::apply::command_known(id)
 }
 
-fn text<'a>(params: &'a Value, field: &str) -> Result<&'a str, String> {
+fn text<'a>(params: &'a Value, field: &str) -> Result<std::borrow::Cow<'a, str>, String> {
     params
         .get(field)
         .and_then(Value::as_str)
         .filter(|text| !text.trim().is_empty() && text.chars().count() <= 1024)
+        .map(crate::i18n::fold::nfc)
         .ok_or_else(|| crate::tf!("Missing or invalid field: {field}", field = field))
 }
 
@@ -98,14 +99,15 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
             created = Some(id);
         } else {
             let tab_id = text(params, "tab")?;
-            let from = ribbon.tabs.iter().position(|tab| tab.id == tab_id).ok_or_else(|| crate::tl!("Ribbon tab was not found").to_string())?;
+            let from =
+                ribbon.tabs.iter().position(|tab| tab.id == tab_id.as_ref()).ok_or_else(|| crate::tl!("Ribbon tab was not found").to_string())?;
             if command == "ui.ribbon.tab.remove" {
                 ribbon.tabs.remove(from);
             } else if command == "ui.ribbon.tab.move" {
                 let mut tabs: Vec<_> = ribbon.tabs.iter().filter(|tab| tab.contextual.is_none()).cloned().collect();
                 tabs.sort_by_key(|tab| tab.order);
                 let orders: Vec<_> = tabs.iter().map(|tab| tab.order).collect();
-                if let Some(from) = tabs.iter().position(|tab| tab.id == tab_id) {
+                if let Some(from) = tabs.iter().position(|tab| tab.id == tab_id.as_ref()) {
                     move_item(&mut tabs, from, destination(params)?);
                     for (moved, order) in tabs.iter().zip(orders) {
                         if let Some(tab) = ribbon.tabs.iter_mut().find(|tab| tab.id == moved.id) {
@@ -127,7 +129,7 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
                         let from = tab
                             .groups
                             .iter()
-                            .position(|group| group.id == group_id)
+                            .position(|group| group.id == group_id.as_ref())
                             .ok_or_else(|| crate::tl!("Ribbon group was not found").to_string())?;
                         match command {
                             "ui.ribbon.group.move" => move_item(&mut tab.groups, from, destination(params)?),
@@ -140,16 +142,16 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
                                     "ui.ribbon.group.rename" => group.label = text(params, "label")?.into(),
                                     "ui.ribbon.button.add" => {
                                         let id = text(params, "id")?;
-                                        if !known(id) {
+                                        if !known(id.as_ref()) {
                                             return Err(crate::tf!("Unknown command: {id}", id = id));
                                         }
-                                        if !group.commands.iter().any(|held| held == id) {
+                                        if !group.commands.iter().any(|held| held == id.as_ref()) {
                                             group.commands.push(id.into());
                                         }
                                     }
                                     _ => {
                                         let id = text(params, "id")?;
-                                        group.commands.retain(|held| held != id);
+                                        group.commands.retain(|held| held != id.as_ref());
                                     }
                                 }
                             }

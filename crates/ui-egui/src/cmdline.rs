@@ -377,6 +377,7 @@ pub fn submit(app: &mut CadApp) {
         }
     }
     let text = std::mem::take(&mut app.cmd.buffer);
+    let text = crate::i18n::fold::nfc(&text).into_owned();
     app.cmd.locked_second = None;
     app.cmd.history_pos = None;
     if !text.trim().is_empty() && !app.session.prompting() {
@@ -795,6 +796,15 @@ mod tests {
     use super::*;
     use cadcraft_engine::Session;
     use egui::{Event, PointerButton};
+
+    #[test]
+    fn submit_normalizes_typed_text_to_nfc() {
+        let mut app = CadApp::new(Session::new(), crate::Services::default());
+        app.cmd.buffer = "lo\u{031b}\u{0301}p".into();
+        submit(&mut app);
+        assert_eq!(app.cmd.history.last().map(String::as_str), Some("lớp"));
+        assert!(app.cmd.buffer.is_empty());
+    }
 
     #[test]
     fn compact_canvas_contains_history_controls_without_changing_line_preference() {

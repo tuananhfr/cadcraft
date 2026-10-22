@@ -10,6 +10,14 @@ fn placeholders(text: &str) -> BTreeSet<&str> {
 }
 
 #[test]
+fn catalogs_are_nfc() {
+    for language in &LANGUAGES {
+        assert!(unicode_normalization::is_nfc(language.source), "{} catalog is not NFC", language.code);
+    }
+    assert!(unicode_normalization::is_nfc(include_str!("vi_glossary.tsv")), "Vietnamese glossary is not NFC");
+}
+
+#[test]
 fn catalog_is_valid_and_preserves_placeholders_and_ellipses() {
     for language in &LANGUAGES {
         let (catalog, errors) = parse(language.source);
