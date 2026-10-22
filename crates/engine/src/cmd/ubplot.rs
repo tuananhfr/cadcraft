@@ -262,7 +262,7 @@ fn run_templates(s: &mut Session, params: &Value) -> Result<Value> {
     Ok(json!({"templates": templates}))
 }
 
-pub(crate) fn source_hash(s: &mut Session) -> Result<String> {
+pub fn source_hash(s: &mut Session) -> Result<String> {
     let state = s.state()?;
     let (uid, revision) = (state.uid, state.revision);
     if let Some((cached_uid, cached_revision, hash)) = &s.ubplot.hash_cache

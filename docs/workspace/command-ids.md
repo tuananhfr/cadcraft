@@ -5,7 +5,7 @@ Engine commands only; UI-only ids are added by `ui-egui`. An id listed here neve
 
 Status describes desktop; commands requiring `xref` are unsupported on web.
 
-UI-only focus/fullscreen ids: `ui.fullscreen`, `ui.focusmode`, `cleanscreenon`, `cleanscreenoff` (registered in `ui-egui::menus::UI_COMMANDS`).
+UI-only focus/fullscreen and plot jobs ids: `ui.fullscreen`, `ui.focusmode`, `cleanscreenon`, `cleanscreenoff`, `ui.ubplot.jobs` (registered in `ui-egui::menus::UI_COMMANDS`).
 
 | stable_id | namespaced_id | category | contexts | status | risk | aliases |
 | --- | --- | --- | --- | --- | --- | --- |

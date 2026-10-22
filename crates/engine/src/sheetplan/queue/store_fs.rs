@@ -18,6 +18,10 @@ impl DirJobStore {
         crate::cmd::plotters::settings_root().map(|root| Self::new(root.join("jobs")))
     }
 
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     pub fn temp_name(job_id: &str, file: &str) -> String {
         format!("{file}.{job_id}.part")
     }

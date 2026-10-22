@@ -1898,3 +1898,29 @@
 	SHEET_ID_DUPLICATE	Дубльований код аркуша
 	REVISION_OLD	Застаріла редакція
 	TEMPLATE_SUPERSEDED	Шаблон замінено новішим
+	Background printing is only available in the desktop app	Фоновий друк доступний лише в настільній програмі
+	Background printing is not available in this build	Фоновий друк недоступний у цій збірці
+	Print worker stopped unexpectedly	Фоновий процес друку несподівано зупинився
+	Print job is already queued or running	Завдання друку вже в черзі або виконується
+	Print job queue is full	Черга завдань друку заповнена
+	Stored print job is missing	Збережене завдання друку відсутнє
+	Stored print job exceeds supported limits	Збережене завдання друку перевищує допустимі межі
+	Stored print job does not match its id	Збережене завдання друку не відповідає своєму ідентифікатору
+	Print job is already complete	Завдання друку вже завершено
+	Print job id is required	Потрібен ідентифікатор завдання друку
+	Print output is unavailable	Результат друку недоступний
+	Unknown print job action	Невідома дія із завданням друку
+	No print jobs	Немає завдань друку
+	Print job {jobId}	Завдання друку {jobId}
+	Print job {jobId} queued	Завдання друку {jobId} додано до черги
+	Print job {jobId} was interrupted	Завдання друку {jobId} було перервано
+	Print job {jobId}: {status}	Завдання друку {jobId}: {status}
+	{done}/{total} sheets	{done}/{total} аркушів
+	Current sheet: {sheet}	Поточний аркуш: {sheet}
+	Queued	У черзі
+	Running	Виконується
+	Cancelled	Скасовано
+	Done	Готово
+	Failed	Помилка
+	Resume	Продовжити
+	Open folder	Відкрити теку

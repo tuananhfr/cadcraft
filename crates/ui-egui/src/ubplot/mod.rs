@@ -1,7 +1,10 @@
 mod dialog;
 mod exceptions;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod jobs_panel;
 pub(crate) mod overlay;
 mod split;
+pub mod worker;
 
 use cadcraft_engine::sheetplan::{ScanRequest, ids::sheet_key};
 use serde_json::{Value, json};
@@ -21,6 +24,14 @@ struct WindowPick {
 const PICKING: &str = "ubplot_picking_window";
 
 pub(crate) fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(result) = jobs_panel::route(app, id, params) {
+        return Some(result);
+    }
+    #[cfg(target_arch = "wasm32")]
+    if id == "ui.ubplot.jobs" {
+        return Some(Err(crate::tl!("Background printing is only available in the desktop app").into()));
+    }
     if !matches!(id, "ubplot" | "ubp") || !params.is_null() {
         return None;
     }
