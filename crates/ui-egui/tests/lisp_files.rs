@@ -1,11 +1,40 @@
 //! AutoLISP in the app (#758): a dropped `.lsp` file loads (its `c:` functions become
 //! commands), and a long routine runs a slice per frame so the window stays live.
 
+use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard};
+
 use cadcraft_engine::Session;
+use cadcraft_engine::lisp::{sandbox, trust};
 use cadcraft_ui_egui::{CadApp, Services};
+
+static PERMISSIONS: Mutex<()> = Mutex::new(());
+
+struct Permissions {
+    _lock: MutexGuard<'static, ()>,
+    approved: Vec<String>,
+    roots: Vec<PathBuf>,
+}
+
+impl Permissions {
+    fn new() -> Self {
+        let lock = PERMISSIONS.lock().unwrap_or_else(|error| error.into_inner());
+        let previous = Self { _lock: lock, approved: trust::approved(), roots: sandbox::write_roots() };
+        trust::set_approved(Vec::new());
+        previous
+    }
+}
+
+impl Drop for Permissions {
+    fn drop(&mut self) {
+        trust::set_approved(self.approved.clone());
+        sandbox::set_write_roots(self.roots.clone());
+    }
+}
 
 #[test]
 fn a_dropped_lisp_file_loads_and_defines_its_commands() {
+    let _permissions = Permissions::new();
     let mut app = CadApp::new(Session::new(), Services::default());
     app.open_bytes("Hello.LSP", b"(defun c:hello () (princ \"hi from lisp\") (princ))");
     assert!(app.session.lisp_review_pending());
@@ -19,6 +48,7 @@ fn a_dropped_lisp_file_loads_and_defines_its_commands() {
 
 #[test]
 fn a_long_routine_runs_across_frames() {
+    let _permissions = Permissions::new();
     let mut app = CadApp::new(Session::new(), Services::default());
     app.open_bytes("loop.lsp", b"(setq i 0) (while (< i 2000000) (setq i (1+ i))) (princ \"done\")");
     assert!(app.session.lisp_review_pending());
@@ -75,6 +105,8 @@ fn a_canvas_click_answers_a_routine_waiting_for_a_point() {
 fn lisp_approval_round_trips_through_host_profile() {
     use cadcraft_engine::lisp::trust::{approve, approved, is_approved, revoke, source_sha};
 
+    let _permissions = Permissions::new();
+
     let text = "(setq profile_review 701)";
     let sha = source_sha(text);
     let was_approved = is_approved(&sha);
@@ -95,4 +127,90 @@ fn lisp_approval_round_trips_through_host_profile() {
     if !was_approved {
         revoke(&sha);
     }
+}
+
+#[test]
+fn panel_shows_review_state() {
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
+    use serde_json::json;
+
+    let _permissions = Permissions::new();
+    let reviewed = "(defun c:panel-edit () (command \"line\" \"0,0\" \"10,0\" \"\"))";
+    let unreviewed = "(setq panel_unreviewed 13)";
+    let reviewed_sha = trust::source_sha(reviewed);
+    let unreviewed_sha = trust::source_sha(unreviewed);
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.run("lisptrust", json!({"action": "approve", "sha256": reviewed_sha})).unwrap();
+    app.run("appload", json!({"name": "reviewed.lsp", "text": reviewed})).unwrap();
+    app.open_bytes("unreviewed.lsp", unreviewed.as_bytes());
+    assert!(app.session.lisp_review_pending());
+    app.session.cmdline("Y").unwrap();
+    assert!(!trust::is_approved(&unreviewed_sha));
+    assert!(app.session.lisp_audit().is_empty());
+
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(720.0, 768.0))
+        .build_ui_state(|ui, app: &mut CadApp| cadcraft_ui_egui::i18n::with_language("en", || cadcraft_ui_egui::lisp_panel::body(ui, app)), app);
+    harness.run_steps(3);
+    for label in ["reviewed.lsp", "unreviewed.lsp", "Reviewed", "Unreviewed", &reviewed_sha[..8], &unreviewed_sha[..8]] {
+        assert!(harness.query_by_label(label).is_some(), "missing {label}");
+    }
+    assert!(harness.query_by_label("No LISP edits in this session").is_some());
+    assert_eq!(harness.query_all_by_label("Created: 1").count(), 0);
+
+    let invalid = "(defun";
+    harness.state_mut().run("lisptrust", json!({"action": "approve", "sha256": trust::source_sha(invalid)})).unwrap();
+    assert!(harness.state_mut().run("appload", json!({"name": "reviewed.lsp", "text": invalid})).is_err());
+    harness.run_steps(3);
+    assert!(harness.query_by_label(&reviewed_sha[..8]).is_some());
+    assert!(harness.query_by_label(&trust::source_sha(invalid)[..8]).is_none());
+
+    harness.state_mut().session.cmdline("PANEL-EDIT").unwrap();
+    assert_eq!(harness.state().session.lisp_audit().len(), 1);
+    let record = harness.state().session.lisp_audit().into_iter().next().unwrap();
+    assert_eq!((record.created, record.modified, record.deleted), (1, 0, 0));
+    harness.run_steps(3);
+    assert!(harness.query_by_label("No LISP edits in this session").is_none());
+    assert_eq!(harness.query_all_by_label("Created: 1").count(), 1);
+    assert!(harness.query_by_label("Modified: 0").is_some());
+    assert!(harness.query_by_label("Deleted: 0").is_some());
+    assert_eq!(harness.query_all_by_label("reviewed.lsp").count(), 2);
+    assert!(harness.query_by_label(format!("Time (Unix ms): {}", record.at_ms).as_str()).is_some());
+    assert!(harness.query_by_label(format!("Undo: {}", record.undo_label).as_str()).is_some());
+
+    harness.state_mut().run("lisptrust", json!({"action": "revoke", "sha256": reviewed_sha})).unwrap();
+    harness.run_steps(3);
+    assert!(harness.query_by_label("Reviewed").is_none());
+    assert_eq!(harness.query_all_by_label("Unreviewed").count(), 2);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn panel_folder_controls_use_sandbox_commands() {
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::{NodeT, Queryable};
+
+    let _permissions = Permissions::new();
+    sandbox::set_write_roots(Vec::new());
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).canonicalize().unwrap();
+    let mut harness = Harness::builder().with_size(egui::vec2(720.0, 768.0)).build_ui_state(
+        |ui, app: &mut CadApp| cadcraft_ui_egui::i18n::with_language("en", || cadcraft_ui_egui::lisp_panel::body(ui, app)),
+        CadApp::new(Session::new(), Services::default()),
+    );
+    harness.run_steps(3);
+    harness.get_by_label("Allowed folders…").click();
+    harness.run_steps(3);
+    assert!(harness.query_by_label("No allowed folders").is_some());
+    harness.get_by_role_and_label(egui::accesskit::Role::TextInput, "Folder path").type_text(&root.to_string_lossy());
+    harness.run_steps(3);
+    harness.get_by_label("Add").click();
+    harness.run_steps(3);
+    assert_eq!(sandbox::write_roots(), [root.clone()]);
+    assert!(harness.query_by_label(root.to_string_lossy().as_ref()).is_some());
+    harness.get_by_label("Remove").click();
+    harness.run_steps(3);
+    assert!(sandbox::write_roots().is_empty());
+    assert!(harness.query_by_label("No allowed folders").is_some());
+    assert!(harness.state().session.lisp_audit().is_empty());
 }

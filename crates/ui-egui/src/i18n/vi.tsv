@@ -2012,3 +2012,16 @@ ribbon	Check	Kiểm tra
 	Text as geometry	Văn bản dạng hình học
 	Lineweights	Độ dày nét
 	Retry limit	Giới hạn thử lại
+	Reviewed	Đã duyệt
+	Unreviewed	Chưa duyệt
+	Allowed folders…	Thư mục được phép…
+	Recent LISP edits	Chỉnh sửa LISP gần đây
+	No LISP edits in this session	Chưa có chỉnh sửa LISP trong phiên này
+	No allowed folders	Không có thư mục được phép
+	Folder path	Đường dẫn thư mục
+	LISP cannot write files in the browser	LISP không thể ghi tệp trong trình duyệt
+	Time (Unix ms): {time}	Thời gian (Unix ms): {time}
+	Created: {n}	Đã tạo: {n}
+	Modified: {n}	Đã sửa: {n}
+	Deleted: {n}	Đã xóa: {n}
+	Undo: {label}	Hoàn tác: {label}

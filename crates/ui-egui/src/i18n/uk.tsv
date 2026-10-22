@@ -2008,3 +2008,16 @@ ribbon	Check	Перевірка
 	Text as geometry	Текст як геометрія
 	Lineweights	Товщини ліній
 	Retry limit	Ліміт повторів
+	Reviewed	Перевірено
+	Unreviewed	Не перевірено
+	Allowed folders…	Дозволені теки…
+	Recent LISP edits	Останні зміни LISP
+	No LISP edits in this session	У цьому сеансі немає змін LISP
+	No allowed folders	Немає дозволених тек
+	Folder path	Шлях до теки
+	LISP cannot write files in the browser	LISP не може записувати файли в браузері
+	Time (Unix ms): {time}	Час (Unix мс): {time}
+	Created: {n}	Створено: {n}
+	Modified: {n}	Змінено: {n}
+	Deleted: {n}	Видалено: {n}
+	Undo: {label}	Скасування: {label}

@@ -91,3 +91,25 @@ CLI checks, builds or visual QA were run for this documentation task.
 | Independent PDF CLI checks on mixed-size and 15 m output | Pending — lead |
 | Web release build and visual QA: 1366×768, 1920×1080, 200% zoom | Pending — lead |
 | Desktop smoke: approved three-piece split and PDF inspection | Pending — lead |
+
+## V2.2 GĐ6
+
+- UBPLOT print profiles merge Platform → Company → Project → SheetSet → Drawing → User,
+  preserving inherited locks. The Print Profile dialog shows origins and locked fields;
+  `ubplot.profile` supports JSON edits/import/export without dialogs. SheetSet has no host
+  binding yet. Desktop keeps last-good copies; browser print settings last for the visit.
+- Frame templates have versioned ids, approval status and source hashes. Read-only audits
+  feed explicitly approved baseline imports; changed sources supersede prior active versions
+  while retaining them. Revision/duplicate/template reports are available as JSON or CSV.
+- LISP adds `getpropertyvalue` and `ubplot-*` adapters. General VLA/ActiveX and AutoCAD `-plot`
+  prompt compatibility remain unavailable.
+- APPLOAD asks before loading unreviewed source; JSON APPLOAD and `(load)` require an approved
+  digest. The LISP panel shows Reviewed/Unreviewed and eight digest characters. Desktop
+  **Allowed folders…** controls manage write roots through LISPSANDBOX; web shows a read-only
+  notice because LISP file streams cannot write there. SAVE/SAVEAS/WBLOCK still use host I/O
+  outside this policy. MCP cannot change permissions or Company print policy.
+- Editing routines retain one undo step and produce audit records. The panel shows the latest
+  20, newest first; desktop rotates JSONL logs and web retains the session ring. Company locks
+  and write restrictions are local policy, not an OS security boundary.
+- Compilation, automated tests, browser visual QA, desktop smoke and LPC/AutoCAD round-trip
+  evidence remain with the controller; this entry does not claim those gates passed.
