@@ -1974,3 +1974,11 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	Drawing autosave queue is full	Hàng đợi tự lưu bản vẽ đã đầy
 	Could not autosave the drawing: {error}	Không thể tự lưu bản vẽ: {error}
 	Print settings last for this visit	Thiết lập in chỉ được giữ trong phiên truy cập này
+ribbon	Block	Khối
+ribbon	Edit	Sửa
+ribbon	Count	Đếm
+ribbon	Replace	Thay thế
+ribbon	Check	Kiểm tra
+	Replace Block	Thay thế khối
+	Select block references to replace	Chọn các tham chiếu khối cần thay thế
+	Enter replacement block name	Nhập tên khối thay thế

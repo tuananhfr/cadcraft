@@ -50,6 +50,7 @@ bclose	cad.other.bclose
 bedit	cad.tools.bedit
 blend	cad.modify.blend
 block	cad.draw.block
+blockreplace	cad.modify.blockreplace
 blocks.dynamic	cad.other.blocks.dynamic
 blocks.list	cad.other.blocks.list
 blocks.reference	cad.other.blocks.reference

@@ -115,6 +115,11 @@ fn known_tools() -> &'static [Tool] {
     })
 }
 
+/// Whether a toolbar or ribbon button with this id runs a real command in this build.
+pub fn is_known(id: &str) -> bool {
+    resolve(id).known
+}
+
 pub(crate) fn resolve(id: &str) -> Command {
     if let Some((icon, _, label, shortcut)) = known_tools().iter().find(|tool| tool.1 == id) {
         return Command { label: (*label).to_string(), icon: Some(*icon), shortcut: *shortcut, known: true };

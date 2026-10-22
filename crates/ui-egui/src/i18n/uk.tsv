@@ -1970,3 +1970,11 @@
 	Drawing autosave queue is full	Черга автозбереження креслень заповнена
 	Could not autosave the drawing: {error}	Не вдалося автоматично зберегти креслення: {error}
 	Print settings last for this visit	Налаштування друку діють лише протягом цього відвідування
+ribbon	Block	Блок
+ribbon	Edit	Редагування
+ribbon	Count	Підрахунок
+ribbon	Replace	Замінити
+ribbon	Check	Перевірка
+	Replace Block	Замінити блок
+	Select block references to replace	Виберіть посилання на блоки для заміни
+	Enter replacement block name	Введіть назву блока для заміни
