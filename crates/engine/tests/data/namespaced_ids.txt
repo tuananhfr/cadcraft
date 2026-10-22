@@ -50,6 +50,7 @@ bclose	cad.other.bclose
 bedit	cad.tools.bedit
 blend	cad.modify.blend
 block	cad.draw.block
+blockreplace	cad.modify.blockreplace
 blocks.dynamic	cad.other.blocks.dynamic
 blocks.list	cad.other.blocks.list
 blocks.reference	cad.other.blocks.reference
@@ -395,7 +396,10 @@ trim	cad.modify.trim
 u	cad.edit.u
 ubplot	cad.file.ubplot
 ubplot.approve	cad.other.ubplot.approve
+ubplot.folder	cad.other.ubplot.folder
+ubplot.jobs	cad.other.ubplot.jobs
 ubplot.publish	cad.other.ubplot.publish
+ubplot.report	cad.other.ubplot.report
 ubplot.scan	cad.other.ubplot.scan
 ubplot.templates	cad.other.ubplot.templates
 undo	cad.other.undo

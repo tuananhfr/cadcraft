@@ -300,7 +300,7 @@ fn ribbon_presets_carry_the_eight_standard_tabs() {
         let standard: Vec<&str> = ribbon.tabs.iter().filter(|tab| tab.contextual.is_none()).map(|tab| tab.label.as_str()).collect();
         assert_eq!(standard, ["Home", "Insert", "Annotate", "Layers", "View", "Layout", "Tools", "Output"], "{id}");
         let contextual: Vec<&str> = ribbon.tabs.iter().filter_map(|tab| tab.contextual.as_deref()).collect();
-        assert_eq!(contextual, ["dimension", "hatch"], "{id}");
+        assert_eq!(contextual, ["dimension", "hatch", "block"], "{id}");
         assert!(ribbon.tabs.iter().all(|tab| !tab.groups.is_empty() && tab.groups.iter().all(|group| !group.commands.is_empty())), "{id}");
     }
 }

@@ -35,7 +35,7 @@ pub(crate) fn validate_name(name: &str) -> Result<(), String> {
     if name.is_empty()
         || name.len() > 255
         || matches!(name, "." | "..")
-        || !name.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-'))
+        || !name.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-'))
     {
         return Err("invalid name".into());
     }

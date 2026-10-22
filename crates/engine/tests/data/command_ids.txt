@@ -50,6 +50,7 @@ bclose
 bedit
 blend
 block
+blockreplace
 blocks.dynamic
 blocks.list
 blocks.reference
@@ -395,7 +396,10 @@ trim
 u
 ubplot
 ubplot.approve
+ubplot.folder
+ubplot.jobs
 ubplot.publish
+ubplot.report
 ubplot.scan
 ubplot.templates
 undo

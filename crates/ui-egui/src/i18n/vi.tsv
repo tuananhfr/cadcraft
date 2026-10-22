@@ -1775,8 +1775,10 @@ ribbon	Output	Xuất bản
 	No frames selected	Chưa chọn khung bản vẽ nào
 	{n} frame(s) added, {m} ignored (not frames), {t} total	Đã thêm {n} khung, bỏ qua {m} (không phải khung), tổng {t}
 	UBPLOT: {n} sheet(s), {b} blocked, {w} warning(s)	UBPLOT: {n} tờ bản vẽ, {b} bị chặn, {w} cảnh báo
+	Plot Jobs	Tác vụ in
 	Publish Plot Frames	Xuất bản các khung in
 	Scan Plot Frames	Quét các khung in
+	Plot Sheet Report	Báo cáo tờ in
 	Plot Frame Templates	Mẫu khung in
 	Loaded	Đã tải
 	Not Found	Không tìm thấy
@@ -1953,6 +1955,35 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	Safe mode	Chế độ an toàn
 	Saving drawing…	Đang lưu bản vẽ…
 	Drawing autosaved	Bản vẽ đã tự lưu
+	Safe Mode	Chế độ an toàn
+	Restart in safe mode: add ?safe to the address / --safe-mode	Khởi động lại ở chế độ an toàn: thêm ?safe vào địa chỉ / --safe-mode
+	Safe mode ended. Changes made in safe mode were discarded; the stored workspace was restored.	Đã thoát chế độ an toàn. Các thay đổi trong chế độ an toàn đã bị bỏ; không gian làm việc đã lưu được khôi phục.
+	The file is damaged or was edited by hand (checksum mismatch)	Tệp bị hỏng hoặc đã được sửa thủ công (mã kiểm tra không khớp)
+	The file has no checksum; it cannot be checked for damage	Tệp không có mã kiểm tra; không thể kiểm tra tệp có bị hỏng hay không
+	Workspace import is not available in safe mode	Không thể nhập không gian làm việc trong chế độ an toàn
+	Import Workspace	Nhập không gian làm việc
+	Changes	Thay đổi
+	Ignored device settings	Cài đặt thiết bị bị bỏ qua
+	Warnings	Cảnh báo
+	{count} more items	và {count} mục khác
+	Import	Nhập
+	Browser storage is full	Bộ nhớ trình duyệt đã đầy
+	Saving in limited browser storage	Đang lưu vào bộ nhớ trình duyệt hạn chế
+	Recovery Status	Trạng thái khôi phục
+	Drawing too large to autosave in the browser	Bản vẽ quá lớn để tự lưu trong trình duyệt
+	Could not autosave the drawing	Không thể tự lưu bản vẽ
+	Could not recover the drawing	Không thể khôi phục bản vẽ
+	Drawing autosave queue is full	Hàng đợi tự lưu bản vẽ đã đầy
+	Could not autosave the drawing: {error}	Không thể tự lưu bản vẽ: {error}
+	Print settings last for this visit	Thiết lập in chỉ được giữ trong phiên truy cập này
+ribbon	Block	Khối
+ribbon	Edit	Sửa
+ribbon	Count	Đếm
+ribbon	Replace	Thay thế
+ribbon	Check	Kiểm tra
+	Replace Block	Thay thế khối
+	Select block references to replace	Chọn các tham chiếu khối cần thay thế
+	Enter replacement block name	Nhập tên khối thay thế
 	BASELINE_CHANGED	Tệp mẫu cơ sở đã thay đổi
 	AUDIT_LIMIT	Vượt giới hạn kiểm tra tệp mẫu
 	LISP file approvals	Phê duyệt tệp LISP

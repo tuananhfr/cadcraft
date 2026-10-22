@@ -671,6 +671,8 @@ pub struct Session {
     /// The window last picked with PLOTWINDOW (the Plot dialog's "Window <").
     pub plot_window: Option<cadcraft_geom::Bounds2>,
     pub ubplot: cmd::ubplot::UbplotState,
+    pub(crate) plot_jobs: sheetplan::queue::SessionJobs,
+    print_profile_store: Box<dyn sheetplan::profile::PrintProfileStore>,
     /// AutoLISP: each drawing's symbols and the routine running ([`lisp`]).
     lisp: lisp::LispState,
     /// How the last LISP run ended (its value or error message).
@@ -724,6 +726,8 @@ impl Session {
             clipboard_source: None,
             plot_window: None,
             ubplot: cmd::ubplot::UbplotState::default(),
+            plot_jobs: sheetplan::queue::SessionJobs::default(),
+            print_profile_store: Box::new(sheetplan::profile::MemoryPrintProfileStore::default()),
             lisp: lisp::LispState::default(),
             lisp_last: None,
             hatch_picks: None,

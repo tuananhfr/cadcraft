@@ -5,7 +5,9 @@ Engine commands only; UI-only ids are added by `ui-egui`. An id listed here neve
 
 Status describes desktop; commands requiring `xref` are unsupported on web.
 
-UI-only focus/fullscreen ids: `ui.fullscreen`, `ui.focusmode`, `cleanscreenon`, `cleanscreenoff` (registered in `ui-egui::menus::UI_COMMANDS`).
+UI-only focus/fullscreen/safe-mode ids: `ui.fullscreen`, `ui.focusmode`, `cleanscreenon`, `cleanscreenoff`, `ui.workspace.safemode` (registered in `ui-egui::menus::UI_COMMANDS`).
+
+UI-only recovery status: `ui.recovery.status` (registered in `ui-egui::menus::UI_COMMANDS`).
 
 | stable_id | namespaced_id | category | contexts | status | risk | aliases |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -61,6 +63,7 @@ UI-only focus/fullscreen ids: `ui.fullscreen`, `ui.focusmode`, `cleanscreenon`, 
 | `bedit` | `cad.tools.bedit` | Tools | model, paper | available | read | be, -bedit |
 | `blend` | `cad.modify.blend` | Modify | model, paper | available | edit | blendcurves |
 | `block` | `cad.draw.block` | Draw | model, paper | available | edit | b, bmake |
+| `blockreplace` | `cad.modify.blockreplace` | Modify | model, paper | available | edit |  |
 | `blocks.dynamic` | `cad.other.blocks.dynamic` | Other | model, paper | available | read |  |
 | `blocks.list` | `cad.other.blocks.list` | Other | model, paper | available | read |  |
 | `blocks.reference` | `cad.other.blocks.reference` | Other | model, paper | available | read |  |
@@ -406,7 +409,10 @@ UI-only focus/fullscreen ids: `ui.fullscreen`, `ui.focusmode`, `cleanscreenon`, 
 | `u` | `cad.edit.u` | Edit | model, paper | available | edit |  |
 | `ubplot` | `cad.file.ubplot` | File | model, paper | available | file | ubp |
 | `ubplot.approve` | `cad.other.ubplot.approve` | Other | model, paper | available | edit |  |
+| `ubplot.folder` | `cad.other.ubplot.folder` | Other | model, paper | available | file |  |
+| `ubplot.jobs` | `cad.other.ubplot.jobs` | Other | model, paper | available | file |  |
 | `ubplot.publish` | `cad.other.ubplot.publish` | Other | model, paper | available | file |  |
+| `ubplot.report` | `cad.other.ubplot.report` | Other | model, paper | available | file |  |
 | `ubplot.scan` | `cad.other.ubplot.scan` | Other | model, paper | available | read |  |
 | `ubplot.templates` | `cad.other.ubplot.templates` | Other | model, paper | available | read |  |
 | `undo` | `cad.other.undo` | Other | model, paper | available | edit |  |

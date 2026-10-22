@@ -4,6 +4,8 @@
 //! cadcraft-cli info FILE.dxf                       summary as JSON
 //! cadcraft-cli convert IN.dxf OUT.(dxf|svg|png) [--window x0,y0,x1,y1 | --view extents|current]
 //! cadcraft-cli run [FILE|--sample|--metric] [--script TEXT|--script-file F.scr] [--cmd 'id {json}']... [--save OUT] [--export OUT.png] [--window ... | --view ...]
+//! cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--templates FILE] [--layouts]
+//! cadcraft-cli ubplot FILE.(dwg|dxf) --out OUT.pdf [--mode merged|per-sheet] [--pages-per-file N] [--jobs-dir DIR] [--templates FILE]
 //! cadcraft-cli commands [FILTER]                   command catalog (JSON)
 //! cadcraft-cli mcp [--connect HOST:PORT [--lazy] [--launch]]  MCP server on stdio (headless or bridged to the app)
 //! cadcraft-cli perf [N]                            timing table on a synthetic N-entity drawing
@@ -59,11 +61,17 @@ const USAGE: &str = "usage:
   cadcraft-cli info FILE.dxf
   cadcraft-cli convert IN.dxf OUT.(dxf|dwg|svg|png|pdf) [FRAMING]
   cadcraft-cli run [FILE | --sample | --metric] [--script TEXT] [--script-file F.scr] [--cmd 'id {json}']... [--save OUT.dxf] [--export OUT.(png|svg|pdf)] [FRAMING]
+  cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--templates FILE] [--layouts]
+  cadcraft-cli ubplot FILE.(dwg|dxf) --out OUT.pdf [--mode merged|per-sheet] [--pages-per-file N] [--jobs-dir DIR] [--templates FILE]
   cadcraft-cli commands [FILTER]
   cadcraft-cli mcp [--connect HOST:PORT [--lazy] [--launch]]
   cadcraft-cli perf [N | FILE]
   cadcraft-cli sample (bracket|floorplan) OUT.(dxf|dwg|svg|png)
   cadcraft-cli --version
+
+ubplot jobs: --jobs-dir defaults to <OUT directory>/.ubplot-jobs; repeat the same command to resume.
+  --templates FILE overrides saved frame templates for this run only (strict registry JSON, at most 2 MiB).
+  stdout is the manifest JSON; exit 0 = DONE, 1 = failed/cancelled, 2 = bad arguments.
 
 image framing (png 2400x1600, svg, pdf; always model space):
   default                  convert: fit the drawing extents.
@@ -181,6 +189,12 @@ fn install_io() {
         write: |d, name| cadcraft_io::write(d, name).map_err(|e| e.to_string()),
         plot: Some(|d, space, opts| cadcraft_io::plotter::plot(d, space, opts).map_err(|e| e.to_string())),
     });
+    cadcraft_engine::cmd::file::set_budget_plot(|d, space, opts, cancel, max_prims| {
+        cadcraft_io::pdf::plot_with_budget(d, space, opts, Some(cancel), Some(max_prims)).map_err(|error| error.to_string())
+    });
+    cadcraft_engine::cmd::file::set_merge_pdf(|parts, labels, title| {
+        cadcraft_io::pdf_merge::merge_own(parts, labels, title).map_err(|error| error.to_string())
+    });
     cadcraft_engine::cmd::file::set_write_as(|d, name, o| {
         cadcraft_io::write_with(d, name, &cadcraft_io::SaveOptions { version: o.version, binary: o.binary }).map_err(|e| e.to_string())
     });
@@ -221,6 +235,266 @@ fn validate_options(command: &str, args: &[String], specs: &[OptionSpec]) -> Res
 }
 
 const NO_OPTIONS: &[OptionSpec] = &[];
+
+const UBPLOT_OPTIONS: &[OptionSpec] = &[
+    OptionSpec { name: "--folder", takes_value: true },
+    OptionSpec { name: "--out", takes_value: true },
+    OptionSpec { name: "--mode", takes_value: true },
+    OptionSpec { name: "--pages-per-file", takes_value: true },
+    OptionSpec { name: "--max-files", takes_value: true },
+    OptionSpec { name: "--max-depth", takes_value: true },
+    OptionSpec { name: "--jobs-dir", takes_value: true },
+    OptionSpec { name: "--templates", takes_value: true },
+    OptionSpec { name: "--layouts", takes_value: false },
+];
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug)]
+struct UbplotOptions {
+    folder: Option<String>,
+    file: Option<String>,
+    out: String,
+    mode: &'static str,
+    pages_per_file: u32,
+    max_files: u32,
+    max_depth: u32,
+    layouts: bool,
+    jobs_dir: std::path::PathBuf,
+    templates: Option<String>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn parse_ubplot_args(args: &[String]) -> Result<UbplotOptions, String> {
+    validate_options("ubplot", args, UBPLOT_OPTIONS)?;
+    let mut options = UbplotOptions {
+        folder: None,
+        file: None,
+        out: String::new(),
+        mode: "merged",
+        pages_per_file: 256,
+        max_files: 1000,
+        max_depth: 16,
+        layouts: false,
+        jobs_dir: std::path::PathBuf::new(),
+        templates: None,
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        if !arg.starts_with('-') {
+            if options.file.replace(arg.clone()).is_some() {
+                return Err("ubplot: supply one source file or --folder DIR".into());
+            }
+            continue;
+        }
+        if !seen.insert(arg.as_str()) {
+            return Err(format!("ubplot: {arg} given more than once"));
+        }
+        if arg == "--layouts" {
+            options.layouts = true;
+            continue;
+        }
+        let value = it.next().filter(|value| !value.is_empty() && !value.starts_with("--"));
+        let value = value.ok_or_else(|| format!("ubplot: {arg} needs a value"))?;
+        let number = |min, max| -> Result<u32, String> {
+            value
+                .parse::<u32>()
+                .ok()
+                .filter(|number| (min..=max).contains(number))
+                .ok_or_else(|| format!("ubplot: {arg} must be within {min}..={max}"))
+        };
+        match arg.as_str() {
+            "--folder" => options.folder = Some(value.clone()),
+            "--out" => options.out = value.clone(),
+            "--jobs-dir" => options.jobs_dir = value.into(),
+            "--templates" => options.templates = Some(value.clone()),
+            "--mode" => {
+                options.mode = match value.as_str() {
+                    "merged" => "merged",
+                    "per-sheet" => "split",
+                    _ => return Err("ubplot: --mode must be merged or per-sheet".into()),
+                };
+            }
+            "--pages-per-file" => options.pages_per_file = number(1, 256)?,
+            "--max-files" => options.max_files = number(1, 5000)?,
+            "--max-depth" => options.max_depth = number(0, 32)?,
+            _ => return Err(format!("ubplot: unknown argument {arg}")),
+        }
+    }
+    if options.folder.is_some() == options.file.is_some() {
+        return Err("ubplot: supply one source file or --folder DIR".into());
+    }
+    if options.out.is_empty() {
+        return Err("ubplot: --out is required".into());
+    }
+    if options.file.is_some() && ["--max-files", "--max-depth", "--layouts"].iter().any(|option| seen.contains(option)) {
+        return Err("ubplot: --max-files, --max-depth and --layouts require --folder".into());
+    }
+    let extension = |path: &str, allowed: &[&str]| {
+        let ext = std::path::Path::new(path).extension().and_then(|ext| ext.to_str());
+        ext.is_some_and(|ext| allowed.iter().any(|allowed| ext.eq_ignore_ascii_case(allowed)))
+    };
+    if let Some(file) = &options.file {
+        if !extension(file, &["dwg", "dxf"]) {
+            return Err("ubplot: source file must be DWG or DXF".into());
+        }
+        if !extension(&options.out, &["pdf"]) {
+            return Err("ubplot: single-file --out must be a PDF path".into());
+        }
+    }
+    let output_dir = if options.folder.is_some() {
+        std::path::Path::new(&options.out)
+    } else {
+        std::path::Path::new(&options.out).parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or(std::path::Path::new("."))
+    };
+    if options.jobs_dir.as_os_str().is_empty() {
+        options.jobs_dir = output_dir.join(".ubplot-jobs");
+    }
+    for path in options.folder.iter().chain(&options.file).chain(&options.templates).chain(std::iter::once(&options.out)) {
+        if path.is_empty() || path.len() > 4096 || path.contains('\0') {
+            return Err("ubplot: paths must contain 1 to 4096 bytes without NUL".into());
+        }
+    }
+    if options.jobs_dir.as_os_str().len() > 4096 || options.jobs_dir.to_string_lossy().contains('\0') {
+        return Err("ubplot: --jobs-dir path exceeds supported limits".into());
+    }
+    Ok(options)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn read_ubplot_templates(path: &str) -> Result<cadcraft_engine::sheetplan::FrameRegistry, String> {
+    use std::io::Read;
+
+    // Match the registry parser's 2 MiB cap before allocating file contents.
+    const MAX_TEMPLATE_BYTES: u64 = 2 * 1024 * 1024;
+    let read = || -> Result<cadcraft_engine::sheetplan::FrameRegistry, String> {
+        let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+        let mut text = String::new();
+        file.take(MAX_TEMPLATE_BYTES + 1).read_to_string(&mut text).map_err(|error| error.to_string())?;
+        if text.len() as u64 > MAX_TEMPLATE_BYTES {
+            return Err("registry import exceeds 2 MiB".into());
+        }
+        cadcraft_engine::sheetplan::FrameRegistry::from_json(&text)
+    };
+    read().map_err(|error| format!("ubplot: --templates {path}: {error}"))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn run_ubplot(options: UbplotOptions, registry: Option<cadcraft_engine::sheetplan::FrameRegistry>) -> Result<Value, String> {
+    use cadcraft_engine::sheetplan::queue::{DirJobStore, MAX_MANIFEST_BYTES};
+
+    let mut session = Session::empty();
+    if let Some(registry) = registry {
+        session.ubplot.registry = registry;
+    }
+    session.set_job_store(Box::new(DirJobStore::new(options.jobs_dir)));
+    if let Some(folder) = options.folder {
+        return session
+            .execute(
+                "ubplot.folder",
+                &json!({
+                    "folder": folder, "out": options.out, "mode": options.mode,
+                    "pagesPerFile": options.pages_per_file, "maxFiles": options.max_files,
+                    "maxDepth": options.max_depth, "layouts": options.layouts,
+                }),
+            )
+            .map_err(|error| error.to_string());
+    }
+    let file = options.file.ok_or("ubplot: source file is missing")?;
+    let file = std::fs::canonicalize(&file).map_err(|error| format!("ubplot: {file}: {error}"))?;
+    let file = file.to_str().ok_or("ubplot: source path must be UTF-8")?;
+    let source = cadcraft_engine::sheetplan::queue::folder::folder_source(file, &session.ubplot.registry, false)?;
+    let blocked: Vec<_> = source
+        .plan
+        .sheets
+        .iter()
+        .flat_map(|sheet| {
+            sheet
+                .issues
+                .iter()
+                .filter(|issue| issue.severity == cadcraft_engine::sheetplan::Severity::Block)
+                .map(|issue| format!("{}: {}: {}", sheet.sheet_id, issue.code, issue.message))
+        })
+        .collect();
+    if !blocked.is_empty() {
+        return Err(format!("ubplot: PLAN_HAS_BLOCKED: {}", blocked.join("; ")));
+    }
+    open(&mut session, file)?;
+    let response = session
+        .execute(
+            "ubplot.publish",
+            &json!({
+                "plan": source.plan, "path": options.out, "mode": options.mode,
+                "pagesPerFile": options.pages_per_file, "background": true,
+            }),
+        )
+        .map_err(|error| error.to_string())?;
+    let id = response.get("jobId").and_then(Value::as_str).ok_or("ubplot: queue did not return a jobId")?;
+    let store = session.job_store_mut().ok_or("ubplot: job store is missing")?;
+    if store.read_artifact(id, "folder.json")?.is_none() {
+        let manifest = store.read_manifest(id)?.ok_or("ubplot: stored manifest is missing")?;
+        if manifest.len() > MAX_MANIFEST_BYTES {
+            return Err("ubplot: manifest exceeds supported limits".into());
+        }
+        // File jobs must reread and verify the source on resume just like folder jobs.
+        store.commit(id, &[("folder.json".into(), b"true".to_vec())], &manifest)?;
+    }
+    session.execute("ubplot.jobs", &json!({"action": "resume", "jobId": id})).map_err(|error| error.to_string())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn ubplot(args: &[String]) -> ExitCode {
+    let options = match parse_ubplot_args(args) {
+        Ok(options) => options,
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::from(2);
+        }
+    };
+    let registry = match options.templates.as_deref().map(read_ubplot_templates).transpose() {
+        Ok(registry) => registry,
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::from(2);
+        }
+    };
+    let result = run_ubplot(options, registry).and_then(|response| {
+        let manifest = response.get("manifest").ok_or("ubplot: queue did not return a manifest")?;
+        outln!("{}", serde_json::to_string(manifest).map_err(|error| error.to_string())?);
+        if manifest.get("status").and_then(Value::as_str) == Some("DONE") {
+            return Ok(());
+        }
+        if let Some(sheets) = manifest.get("sheets").and_then(Value::as_array) {
+            for sheet in sheets {
+                if sheet.get("status").and_then(Value::as_str).is_some_and(|status| matches!(status, "FAILED" | "BLOCKED")) {
+                    eprintln!(
+                        "ubplot: {}: {}",
+                        sheet.get("sheet_id").and_then(Value::as_str).unwrap_or("unknown sheet"),
+                        sheet.get("issues").unwrap_or(&Value::Null),
+                    );
+                }
+            }
+        }
+        Err(format!("ubplot: job ended with status {}", manifest.get("status").unwrap_or(&Value::Null)))
+    });
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn ubplot(args: &[String]) -> ExitCode {
+    if let Err(error) = validate_options("ubplot", args, UBPLOT_OPTIONS) {
+        eprintln!("{error}");
+        return ExitCode::from(2);
+    }
+    eprintln!("ubplot is only in the desktop app");
+    ExitCode::FAILURE
+}
 
 fn info(path: &str) -> Result<(), String> {
     let mut s = Session::empty();
@@ -606,6 +880,71 @@ fn mcp(args: &[String]) -> Result<(), String> {
     cadcraft_mcp::Server::new(backend).serve(stdin.lock(), stdout.lock()).map_err(|e| e.to_string())
 }
 
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod ubplot_args_tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).into()).collect()
+    }
+
+    #[test]
+    fn ubplot_parses_both_forms_and_jobs_defaults() {
+        let options = parse_ubplot_args(&args(&["--folder", "drawings", "--out", "published", "--layouts"])).unwrap();
+        assert_eq!(options.folder.as_deref(), Some("drawings"));
+        assert_eq!(options.mode, "merged");
+        assert_eq!(options.pages_per_file, 256);
+        assert!(options.templates.is_none());
+        assert!(options.layouts);
+        assert_eq!(options.jobs_dir, std::path::Path::new("published").join(".ubplot-jobs"));
+        let options =
+            parse_ubplot_args(&args(&["drawing.DXF", "--out", "published/set.pdf", "--mode", "per-sheet", "--templates", "frames.json"])).unwrap();
+        assert_eq!(options.templates.as_deref(), Some("frames.json"));
+        assert_eq!(options.file.as_deref(), Some("drawing.DXF"));
+        assert_eq!(options.mode, "split");
+        assert_eq!(options.jobs_dir, std::path::Path::new("published").join(".ubplot-jobs"));
+        let options = parse_ubplot_args(&args(&["drawing.dwg", "--out", "set.pdf", "--jobs-dir", "custom"])).unwrap();
+        assert_eq!(options.jobs_dir, std::path::Path::new("custom"));
+        let options = parse_ubplot_args(&args(&["--folder", "drawings", "--out", "published", "--templates", "office frames.json"])).unwrap();
+        assert_eq!(options.templates.as_deref(), Some("office frames.json"));
+    }
+
+    #[test]
+    fn ubplot_rejects_bad_values_before_execution() {
+        for tail in [
+            vec!["--pages-per-file", "0"],
+            vec!["--pages-per-file", "257"],
+            vec!["--pages-per-file", "18446744073709551616"],
+            vec!["--max-files", "0"],
+            vec!["--max-files", "5001"],
+            vec!["--max-depth", "33"],
+            vec!["--max-depth", "-1"],
+            vec!["--mode", "split"],
+            vec!["--mode"],
+            vec!["--out", "other"],
+            vec!["--jobs-dir", ""],
+            vec!["--templates"],
+            vec!["--templates", ""],
+            vec!["--templates", "one.json", "--templates", "two.json"],
+            vec!["--templates", "bad\0path"],
+            vec!["extra.dxf"],
+        ] {
+            let mut input = args(&["--folder", "drawings", "--out", "published"]);
+            input.extend(args(&tail));
+            assert!(parse_ubplot_args(&input).is_err(), "{input:?}");
+        }
+        for input in [
+            vec![],
+            vec!["drawing.dxf", "--out", "out.png"],
+            vec!["drawing.pdf", "--out", "out.pdf"],
+            vec!["drawing.dxf", "--out", "out.pdf", "--layouts"],
+            vec!["drawing.dxf", "--out", "out.pdf", "--max-depth", "1"],
+        ] {
+            assert!(parse_ubplot_args(&args(&input)).is_err(), "{input:?}");
+        }
+    }
+}
+
 #[cfg(test)]
 mod mcp_args_tests {
     use super::*;
@@ -661,6 +1000,7 @@ fn cli() -> ExitCode {
         Some("info") => validate_options("info", &rest, NO_OPTIONS).and_then(|_| rest.first().ok_or_else(|| USAGE.to_string())).and_then(|p| info(p)),
         Some("convert") => convert(&rest),
         Some("run") => run(&rest),
+        Some("ubplot") => return ubplot(&rest),
         Some("perf") => validate_options("perf", &rest, NO_OPTIONS).and_then(|_| perf(&rest)),
         Some("sample") => validate_options("sample", &rest, NO_OPTIONS).and_then(|_| sample(&rest)),
         Some("commands") => validate_options("commands", &rest, NO_OPTIONS).map(|_| {

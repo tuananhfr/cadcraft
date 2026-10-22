@@ -5,7 +5,8 @@
 pub mod pgp;
 mod template;
 
-use std::sync::OnceLock;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, OnceLock};
 
 use cadcraft_doc::Drawing;
 pub use cadcraft_dxf::Version;
@@ -26,6 +27,30 @@ pub struct IoHooks {
     pub write: fn(&Drawing, &str) -> std::result::Result<Vec<u8>, String>,
     /// PLOT / EXPORTPDF (optional: builds without a plotter report "not available").
     pub plot: Option<PlotHook>,
+}
+
+pub type BudgetPlotHook = fn(&Drawing, &cadcraft_doc::Space, &Value, Arc<AtomicBool>, usize) -> std::result::Result<Vec<u8>, String>;
+
+static BUDGET_PLOT: OnceLock<BudgetPlotHook> = OnceLock::new();
+
+pub fn set_budget_plot(h: BudgetPlotHook) {
+    let _ = BUDGET_PLOT.set(h);
+}
+
+pub(crate) fn budget_plot() -> Option<BudgetPlotHook> {
+    BUDGET_PLOT.get().copied()
+}
+
+pub type MergePdfHook = fn(&[&[u8]], &[String], &str) -> std::result::Result<Vec<u8>, String>;
+
+static MERGE_PDF: OnceLock<MergePdfHook> = OnceLock::new();
+
+pub fn set_merge_pdf(h: MergePdfHook) {
+    let _ = MERGE_PDF.set(h);
+}
+
+pub(crate) fn merge_pdf() -> Option<MergePdfHook> {
+    MERGE_PDF.get().copied()
 }
 
 static IO: OnceLock<IoHooks> = OnceLock::new();

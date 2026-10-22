@@ -12,6 +12,8 @@
 //! viewer can switch on and off, and entity hyperlinks become link annotations.
 
 use std::fmt::Write as _;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use cadcraft_color::Rgb;
 use cadcraft_doc::{Drawing, Handle, MAX_PAPER_MM, MAX_PDF_BYTES, PageSetup, Space};
@@ -78,6 +80,8 @@ impl PlotFrame {
 /// model space).
 #[derive(Clone, Debug)]
 pub struct PdfOptions {
+    pub cancel: Option<Arc<AtomicBool>>,
+    pub max_prims: Option<usize>,
     /// Plot style table name, replacing the page setup's (`"None"` plots without one).
     pub plot_style_table: Option<String>,
     /// Paper name from [`cadcraft_render::PAPER_SIZES`] (`"A4"`, `"Letter"`, `"ANSI B"`…).
@@ -134,6 +138,8 @@ pub struct PdfOptions {
 impl Default for PdfOptions {
     fn default() -> Self {
         PdfOptions {
+            cancel: None,
+            max_prims: None,
             plot_style_table: None,
             paper: None,
             paper_mm: None,
@@ -173,6 +179,8 @@ impl PdfOptions {
             _ => None,
         };
         PdfOptions {
+            cancel: None,
+            max_prims: None,
             // `layers?` (default on), `offLayers?`, `links?: [{handle, url}]`, `text?: "text" |
             // "geometry"`.
             text_as_geometry: v.get("text").and_then(Value::as_str).is_some_and(|t| t.eq_ignore_ascii_case("geometry")),
@@ -258,10 +266,16 @@ fn window(v: Option<&Value>) -> Option<Bounds2> {
 
 /// Plot with JSON options (the engine's `plot` hook).
 pub fn plot(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>> {
+    plot_with_budget(d, space, opts, None, None)
+}
+
+pub fn plot_with_budget(d: &Drawing, space: &Space, opts: &Value, cancel: Option<Arc<AtomicBool>>, max_prims: Option<usize>) -> Result<Vec<u8>> {
     validate_plot_offset_json(opts)?;
     // `layouts: [name | "Model"] | "all"` plots those sheets into one file, one page each,
     // instead of `space`; "all" = Model if it has objects, then the layouts in tab order.
-    let o = PdfOptions::from_json(opts);
+    let mut o = PdfOptions::from_json(opts);
+    o.cancel = cancel;
+    o.max_prims = max_prims;
     if let Some(outline) = opts.get("outline") {
         PlotFrame::from_outline(outline)?;
     }
@@ -313,6 +327,8 @@ pub fn plot(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>> {
                     po.landscape = Some(w > h);
                 }
                 po.compress = o.compress;
+                po.cancel = o.cancel.clone();
+                po.max_prims = o.max_prims;
                 Ok((page_space, po))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -443,6 +459,28 @@ pub fn pdf_sheets(d: &Drawing, spaces: &[Space], o: &PdfOptions) -> Result<Vec<u
 /// page plots with its own options (window, paper, orientation); `o` supplies the file-wide
 /// ones (compression, title, layers, links).
 pub fn pdf_items(d: &Drawing, items: &[(Space, PdfOptions)], o: &PdfOptions) -> Result<Vec<u8>> {
+    check_cancelled(o)?;
+    let bounded;
+    let items = if o.cancel.is_some() || o.max_prims.is_some() {
+        bounded = items
+            .iter()
+            .take(MAX_PAGES + 1)
+            .map(|(space, options)| {
+                let mut options = options.clone();
+                if o.cancel.is_some() {
+                    options.cancel = o.cancel.clone();
+                }
+                options.max_prims = match (options.max_prims, o.max_prims) {
+                    (Some(page), Some(file)) => Some(page.min(file)),
+                    (page, file) => page.or(file),
+                };
+                (space.clone(), options)
+            })
+            .collect::<Vec<_>>();
+        bounded.as_slice()
+    } else {
+        items
+    };
     if items.iter().any(|(_, io)| io.offset.is_some_and(|offset| !valid_plot_offset(offset))) {
         return Err(IoError::Format("plot offset must contain two finite values within ±100000 mm".into()));
     }
@@ -481,7 +519,12 @@ pub fn pdf_items(d: &Drawing, items: &[(Space, PdfOptions)], o: &PdfOptions) -> 
     } else {
         fonts::Fonts::default()
     };
-    assemble(d, items.iter().map(|(space, options)| sheet(drawn, space, options, &links)), fonts, o)
+    let bytes = assemble(d, items.iter().map(|(space, options)| sheet(drawn, space, options, &links)), fonts, o)?;
+    check_cancelled(o)?;
+    for (_, options) in items {
+        check_cancelled(options)?;
+    }
+    Ok(bytes)
 }
 
 /// One plotted sheet, ready to be written as a page.
@@ -503,8 +546,16 @@ struct SheetPage {
     seam_overlap_mm: f64,
 }
 
+fn check_cancelled(o: &PdfOptions) -> Result<()> {
+    if o.cancel.as_ref().is_some_and(|cancel| cancel.load(Ordering::Relaxed)) {
+        return Err(IoError::Format("plot cancelled".into()));
+    }
+    Ok(())
+}
+
 /// Plot one space.
 fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String)]) -> Result<SheetPage> {
+    check_cancelled(o)?;
     let page = page_for(d, space, o)?;
     let unit_mm = paper::paper_unit_mm(d);
     let sheet = Sheet::from_page(&page, unit_mm);
@@ -521,7 +572,7 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
         plot_style_table,
         view: None,
         skip_viewport: None,
-        cancel: None,
+        cancel: o.cancel.clone(),
     };
     let media_pt = sheet.size * (unit_mm * PT_PER_MM);
     let user_unit = (media_pt.x.max(media_pt.y) / 14400.0).ceil().max(1.0);
@@ -536,6 +587,10 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
     // Relative point sizes follow the plotted window (else the extents).
     let view_height = window.map(|w| w.height()).unwrap_or(0.0);
     let mut list = cadcraft_render::build_plot(d, space, &cadcraft_render::Options { tolerance, view_height, ..ropts });
+    check_cancelled(o)?;
+    if o.max_prims.is_some_and(|limit| list.prims.len() > limit) {
+        return Err(IoError::Format(format!("SHEET_TOO_LARGE: {} primitives exceed the sheet budget", list.prims.len())));
+    }
     if let Some(frame) = o.frame {
         list.rotate_about(frame.center, -frame.rotation);
     }
@@ -549,6 +604,10 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
     };
     // Plot style ends, joins and fill patterns at the plot scale (a layout's are already drawn).
     cadcraft_render::pen::apply(&mut list, map.s * unit_mm);
+    check_cancelled(o)?;
+    if o.max_prims.is_some_and(|limit| list.prims.len() > limit) {
+        return Err(IoError::Format(format!("SHEET_TOO_LARGE: {} primitives exceed the sheet budget", list.prims.len())));
+    }
     let media = sheet.size * k;
     let clip_pt = if fit || window.is_some() || o.page_margins || matches!(space, Space::Model) {
         Bounds2::new(sheet.printable.min * k, sheet.printable.max * k)

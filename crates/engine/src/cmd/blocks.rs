@@ -3,6 +3,7 @@
 
 pub(crate) mod bedit;
 mod purge;
+mod replace;
 
 use std::sync::Arc;
 
@@ -43,6 +44,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .alias(&["att", "-attdef"])
             .params("{tag, prompt?, default?, at, height?, invisible?}")
             .interactive(|_| Ok(Box::new(AttdefM::default()))),
+        replace::spec(),
         attedit::attedit_spec(),
         attedit::dash_attedit_spec(),
         CommandSpec::new("wblock", "Write Block", run_wblock).alias(&["w"]).params("{path, name? | handles?, base?}"),

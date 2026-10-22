@@ -280,3 +280,175 @@ fn unknown_nested_fields_survive_loading_and_saving() {
     assert_eq!(device.extra.get("futureThing"), input["deviceGeometry"].get("futureThing"));
     assert_eq!(device.screen.unwrap().extra.get("Weird_Key"), Some(&json!("kept")));
 }
+
+fn import_app() -> CadApp {
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
+    app.attach_profile_store(Box::new(MemoryStore::default()));
+    app.commit_workspace_now().unwrap();
+    app
+}
+
+#[test]
+fn export_is_wire_v3_with_checksum() {
+    let mut app = import_app();
+    app.run("ui.workspace.set", json!({"pointer": "/ui_scale", "value": 1.5})).unwrap();
+    app.run("ui.workspace.set", json!({"scope": "device", "pointer": "/command_line/height_ratio", "value": 0.3})).unwrap();
+    let exported = app.run("ui.workspace.export", json!({})).unwrap();
+    let text = exported["text"].as_str().unwrap();
+    let value: Value = serde_json::from_str(text).unwrap();
+    assert_eq!(value["schemaVersion"], 3);
+    assert!(value.get("schema_version").is_none());
+    assert_eq!(verify_checksum(&value), ChecksumCheck::Valid);
+    for key in ["deviceGeometry", "device", "ui_scale", "uiScale", "heightRatio", "height_ratio", "dockTree", "dock_tree"] {
+        assert!(!text.contains(&format!("\"{key}\"")), "{key} leaked into export");
+    }
+    let imported = app.run("ui.workspace.import", json!({"text": text})).unwrap();
+    assert_eq!(imported["warnings"], json!([]));
+    assert!(app.ui.dialog.is_none());
+}
+
+#[test]
+fn import_refuses_checksum_mismatch() {
+    let mut app = import_app();
+    let exported = app.run("ui.workspace.export", json!({})).unwrap();
+    let mut value: Value = serde_json::from_str(exported["text"].as_str().unwrap()).unwrap();
+    value["layout"]["commandLine"]["lines"] = json!(7);
+    let user = app.ws.user.clone();
+    let device = app.ws.device.clone();
+    let raw = app.ws.store.as_ref().unwrap().read_current();
+    let snapshots = app.ws.store.as_ref().unwrap().snapshots();
+    let history = app.ws.history.undo_len();
+    for dry_run in [true, false] {
+        let error = app.run("ui.workspace.import", json!({"text": value.to_string(), "dry_run": dry_run})).unwrap_err();
+        assert_eq!(error, "The file is damaged or was edited by hand (checksum mismatch)");
+        assert_eq!(app.ws.user, user);
+        assert_eq!(app.ws.device, device);
+        assert_eq!(app.ws.store.as_ref().unwrap().read_current(), raw);
+        assert_eq!(app.ws.store.as_ref().unwrap().snapshots(), snapshots);
+        assert_eq!(app.ws.history.undo_len(), history);
+    }
+}
+
+#[test]
+fn import_without_checksum_warns() {
+    let mut app = import_app();
+    let text = include_str!("fixtures/workspace/legacy-v1.json");
+    let before = app.ws.user.clone();
+    let device = app.ws.device.clone();
+    let raw = app.ws.store.as_ref().unwrap().read_current();
+    let expected = json!(["The file has no checksum; it cannot be checked for damage"]);
+    let preview = app.run("ui.workspace.import", json!({"text": text, "dry_run": true})).unwrap();
+    assert_eq!(preview["warnings"], expected);
+    assert_eq!(app.ws.user, before);
+    assert_eq!(app.ws.device, device);
+    assert_eq!(app.ws.store.as_ref().unwrap().read_current(), raw);
+    let imported = app.run("ui.workspace.import", json!({"text": text})).unwrap();
+    assert_eq!(imported["warnings"], expected);
+    assert_eq!(app.ws.user.layout.command_line.lines, 5);
+    assert!(app.ws.user.revision > before.revision);
+    assert_eq!(app.ws.device, device);
+    assert!(app.ui.dialog.is_none());
+}
+
+#[test]
+fn import_preview_lists_changes_then_applies_on_confirm() {
+    use cadcraft_ui_egui::wsprofile::import_preview::DIALOG;
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::{NodeT, Queryable};
+
+    let app = import_app();
+    let text = json!({
+        "schemaVersion": 3, "uiScale": 2.0, "deviceGeometry": {"uiScale": 2.0},
+        "layout": {"commandLine": {"lines": 7, "heightRatio": 0.5}}
+    })
+    .to_string();
+    let mut h = Harness::builder().with_size(egui::vec2(1024.0, 768.0)).build_ui_state(
+        |ui, app: &mut CadApp| {
+            app.logic(ui.ctx());
+            app.ui(ui);
+        },
+        app,
+    );
+    h.run_steps(3);
+    h.state_mut().commit_workspace_now().unwrap();
+    let before = h.state().ws.user.clone();
+    let device = h.state().ws.device.clone();
+    let stored = h.state().ws.store.as_ref().unwrap().read_current();
+    let history = h.state().ws.history.undo_len();
+    h.state_mut().open_import_preview(text);
+    assert_eq!(h.state().ui.dialog.as_deref(), Some(DIALOG));
+    assert_eq!(h.state().ws.user, before);
+    assert_eq!(h.state().ws.store.as_ref().unwrap().read_current(), stored);
+    assert_eq!(h.state().ws.history.undo_len(), history);
+    h.run_steps(3);
+    let window = h.get_by_role_and_label(egui::accesskit::Role::Window, "Import Workspace");
+    assert!(window.query_all_by_label("/command_line/lines").next().is_some());
+    assert!(window.query_all_by_label("/deviceGeometry").next().is_some());
+    assert!(window.query_all_by_label("The file has no checksum; it cannot be checked for damage").next().is_some());
+    let import = window.get_by_role_and_label(egui::accesskit::Role::Button, "Import");
+    assert!(!import.accesskit_node().is_disabled());
+    import.click();
+    h.run_steps(3);
+    assert!(h.state().ui.dialog.is_none());
+    assert_eq!(h.state().ws.user.layout.command_line.lines, 7);
+    assert_eq!(h.state().ui.history_lines, 7);
+    assert!(h.state().ws.user.revision > before.revision);
+    let stored = h.state().ws.store.as_ref().unwrap().read_current();
+    assert_ne!(stored, h.state().ws.store.as_ref().unwrap().read_snapshot(before.revision));
+    assert_eq!(parse_set(stored.as_deref().unwrap()).unwrap().user.unwrap().layout.command_line.lines, 7);
+    assert_eq!(h.state().ws.device, device);
+
+    let before = h.state().ws.user.clone();
+    let device = h.state().ws.device.clone();
+    let history = h.state().ws.history.undo_len();
+    h.state_mut().open_import_preview(json!({"schemaVersion": 3, "layout": {"commandLine": {"lines": 9}}}).to_string());
+    h.run_steps(3);
+    assert_eq!(h.state().ws.user, before);
+    h.get_by_role_and_label(egui::accesskit::Role::Window, "Import Workspace").get_by_role_and_label(egui::accesskit::Role::Button, "Cancel").click();
+    h.run_steps(3);
+    assert!(h.state().ui.dialog.is_none());
+    assert_eq!(h.state().ws.user, before);
+    assert_eq!(h.state().ws.device, device);
+    assert_eq!(h.state().ws.history.undo_len(), history);
+    assert_eq!(h.state().ws.store.as_ref().unwrap().read_current(), stored);
+}
+
+#[test]
+fn import_is_refused_in_safe_mode() {
+    let mut app = import_app();
+    app.run("ui.workspace.safemode", json!({"on": true})).unwrap();
+    let user = app.ws.user.clone();
+    let device = app.ws.device.clone();
+    let text = include_str!("fixtures/workspace/aged-1y.json");
+    for dry_run in [true, false] {
+        let error = app.run("ui.workspace.import", json!({"text": text, "dry_run": dry_run})).unwrap_err();
+        assert_eq!(error, "Workspace import is not available in safe mode");
+    }
+    app.open_import_preview(text.into());
+    assert!(app.ui.dialog.is_none());
+    assert_eq!(app.ws.user, user);
+    assert_eq!(app.ws.device, device);
+}
+
+#[test]
+fn import_dry_run_does_not_capture_pending_ui_edits() {
+    let mut app = import_app();
+    let user = app.ws.user.clone();
+    let device = app.ws.device.clone();
+    let history = app.ws.history.undo_len();
+    let stored = app.ws.store.as_ref().unwrap().read_current();
+    let status = app.ws.status.clone();
+    let pending = app.ws.autosave.pending();
+    app.ui.history_lines = 8;
+    let text = json!({"schemaVersion": 3, "layout": {"commandLine": {"lines": 9}}}).to_string();
+    let result = app.run("ui.workspace.import", json!({"text": text, "dry_run": true})).unwrap();
+    assert!(result["changes"].as_array().unwrap().contains(&json!("/command_line/lines")));
+    assert_eq!(app.ui.history_lines, 8);
+    assert_eq!(app.ws.user, user);
+    assert_eq!(app.ws.device, device);
+    assert_eq!(app.ws.history.undo_len(), history);
+    assert_eq!(app.ws.store.as_ref().unwrap().read_current(), stored);
+    assert_eq!(app.ws.status, status);
+    assert_eq!(app.ws.autosave.pending(), pending);
+}

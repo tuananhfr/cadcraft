@@ -146,6 +146,9 @@ Publish parameters:
 - `path`: merged file path, or the base file whose directory and stem name split files.
 - `title`: optional PDF document title.
 
+With `background` absent or `false`, publishing remains synchronous with the same
+renderer, result fields and failure handling described below.
+
 The result is `{plan, files, failed}`. Each file has `name`, `sheets` (sheet keys),
 `bytes` (byte count), `sha256` (SHA-256 of the PDF bytes), and either a desktop `path`
 or base64 `data` when `path` was omitted. Failed entries have `sheetKey` and `issues`.
@@ -184,6 +187,54 @@ On the web, a supplied path provides the download name through the host delivery
 there is no filesystem write. Split downloads are limited to 20 files because browsers
 may block repeated downloads; use merged output for larger sets. Without a path, both
 platforms return base64 PDF data. No command opens a save dialog programmatically.
+
+Background jobs:
+
+- `background: true` queues the supplied `plan` or the last scanned plan and returns
+  `{jobId, status: "QUEUED"}`. The host can take the job through `take_queued_job()`;
+  queueing itself does not render or open a dialog.
+- `mode`: `"merged"` (default) or `"split"` (one file per sheet); `output` is also accepted.
+- `pagesPerFile`: 1–1000, default 256 on desktop or 64 on web. Approved split pieces
+  count as pages and stay together, even when one sheet exceeds the chosen group size.
+- `retryLimit`: 0–5 retries after the first attempt, default 2.
+- `path`: optional base filename whose directory and stem name queue output. Stems
+  contain ASCII letters, digits, dots or hyphens, up to 160 bytes. Merged files are
+  `{stem}.pdf` or `{stem}-{group:03}.pdf`; split files are `{stem}-{order:04}-{id}.pdf`
+  with sanitized ASCII sheet ids. Without a path the store chooses delivery.
+
+Background jobs refuse blocked sheets and plan-level BLOCK issues with `PLAN_HAS_BLOCKED`.
+WARN issues still require audited approval and stale plans must be rescanned. A source
+path cannot be used as the output path. The store persists a `job.json` definition with
+its QUEUED manifest so another session can resume without the previous scan state.
+Without a host-installed store, a session uses `MemoryJobStore` and adds INFO
+`JOBS_NOT_PERSISTED`; those jobs disappear when the session ends. Queue delivery goes
+through the store; it does not add base64 data or a manifest to synchronous publish results.
+
+`ubplot.jobs` accepts `action` and, except for `list`, a `jobId`:
+
+- `list` returns `[{jobId, status, done, failed, total, updatedMs}]`.
+- `status` returns the same summary for one job; `manifest` returns `{manifest}`.
+- `resume` runs synchronously to completion and returns `{manifest}`. It uses the
+  open drawing snapshot and its source hash; changed sources fail pending sheets
+  instead of mixing drawings. Both budgeted PDF rendering and PDF merge hooks must
+  be installed by the host. Completed outputs are retained without redelivery.
+- `cancel` records a request for the host. A queued job becomes CANCELLED and is
+  removed from the pending queue; RUNNING jobs stop when their host processes the
+  request. `take_cancel_requests()` drains the requests.
+- `remove` deletes stored job state and pending requests; RUNNING jobs are refused.
+  Delivered output files are retained.
+
+A resume manifest has `status`, ordered `sheets` (attempts, checksums, issues and
+output/page indices), and `files` (name, pages, checksum, delivery destination/time).
+Statuses are QUEUED, RUNNING, CANCELLED, DONE or FAILED. Timestamps use the installed
+clock hook or zero. Repeating an identical publish returns the stored job status;
+reusing its id with different plan contents is refused rather than overwriting progress.
+
+```json
+{"command":"ubplot.publish","params":{"background":true,"mode":"merged","pagesPerFile":64}}
+{"command":"ubplot.jobs","params":{"action":"list"}}
+{"command":"ubplot.jobs","params":{"action":"resume","jobId":"<jobId from publish>"}}
+```
 
 Limits: 10,000 scan frames/windows/layouts; 200,000 entity leaves per INSERT; nested
 blocks at most 16 levels. Each PDF accepts at most 1000 pages and 512 MiB, with paper
@@ -259,3 +310,39 @@ An unknown or removed device produces WARN `DEVICE_UNAVAILABLE` and falls back t
 PDF after warning approval. Web contexts treat every device except `CADCraft PDF`
 as unavailable and produce no device BLOCK or split proposal. Publishing rechecks
 capabilities so a removed device cannot silently use an old split or another printer.
+
+## Headless CLI
+
+```text
+cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--templates FILE] [--layouts]
+cadcraft-cli ubplot FILE.(dwg|dxf) --out OUT.pdf [--mode merged|per-sheet] [--pages-per-file N] [--jobs-dir DIR] [--templates FILE]
+```
+
+The CLI uses the engine's folder scan rule: select model-space frames matching a
+registered non-generic template. `--layouts` also includes paper-space layouts in
+folder mode. Each run loads `frame-templates.json` from the desktop settings
+folder; a missing settings folder or registry file uses the built-in registry.
+`CADCRAFT_CONFIG_DIR` overrides the settings root.
+
+`--templates FILE` replaces that registry for this run only, without changing
+settings. Both syntaxes accept it. The file must be UTF-8 registry JSON accepted
+by the strict registry parser (at most 2 MiB); invalid, oversized or unreadable
+files exit 2 with the filename before scanning or creating outputs/jobs.
+A registry containing only the built-in generic template selects no model-space
+frames; register the frame block names or use folder mode with `--layouts`.
+
+`merged` is the default. `per-sheet` selects the engine's `split` mode. Folder output
+uses the stem `plot`; single-file output uses the stem and directory of `OUT.pdf`.
+Merged jobs split into numbered files when `--pages-per-file` is exceeded. The page
+limit is 1–256 (default 256), `--max-files` is 1–5000 (default 1000), and
+`--max-depth` is 0–32 (default 16). The last two options and `--layouts` require
+folder mode. Paths can contain spaces; quote them in the shell.
+
+`--jobs-dir` defaults to `.ubplot-jobs` inside the output directory (the parent of
+`OUT.pdf` in single-file mode). Repeat the same command to resume the persisted job.
+Completed outputs retain their checksums and modification times. Jobs store their
+source hashes, plans and progress; pending sheets reread and verify source files.
+
+Stdout contains the manifest JSON only. Exit status is 0 for `DONE`, 1 for failed
+or cancelled jobs and operational errors, and 2 for invalid arguments. Diagnostics
+go to stderr. Arguments are validated before source loading or filesystem writes.

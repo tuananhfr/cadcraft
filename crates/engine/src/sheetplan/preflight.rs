@@ -8,7 +8,7 @@ use super::approval::{approved, refresh_status};
 use super::codes::{self, issue};
 use super::ids::sheet_key;
 use super::outline::{Relation, relation};
-use super::{AuditEntry, FrameRegistry, Severity, Sheet, SheetPlan, SheetSource, SheetStatus};
+use super::{AuditEntry, FrameRegistry, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, TemplateStatus};
 
 pub struct FontStatus {
     pub style: String,
@@ -209,6 +209,13 @@ pub fn rev_cmp(mut a: &str, mut b: &str) -> Ordering {
     a.is_empty().cmp(&b.is_empty()).reverse()
 }
 
+pub(crate) fn sheet_revision<'a>(sheet: &'a Sheet, registry: &FrameRegistry) -> Option<&'a str> {
+    let template = sheet.frame_template_id.as_deref().and_then(|id| super::registry_store::resolve(registry, id))?;
+    template.attributes.revision.iter().find_map(|tag| {
+        sheet.attributes.iter().find(|(key, value)| key.eq_ignore_ascii_case(tag) && !value.trim().is_empty()).map(|(_, value)| value.trim())
+    })
+}
+
 fn check_metadata(d: &Drawing, plan: &mut SheetPlan, ctx: &PreflightContext<'_>) {
     for font in ctx.fonts {
         let replacement = font.with.as_deref().unwrap_or("the built-in stroke font");
@@ -221,9 +228,16 @@ fn check_metadata(d: &Drawing, plan: &mut SheetPlan, ctx: &PreflightContext<'_>)
         }
     }
     let mut counts = BTreeMap::<&str, usize>::new();
+    let mut latest = BTreeMap::<String, String>::new();
     for sheet in &plan.sheets {
         let count = counts.entry(&sheet.sheet_id).or_default();
         *count = count.saturating_add(1);
+        if let Some(revision) = sheet_revision(sheet, ctx.registry) {
+            let highest = latest.entry(sheet.sheet_id.clone()).or_insert_with(|| revision.to_string());
+            if rev_cmp(revision, highest) == Ordering::Greater {
+                *highest = revision.to_string();
+            }
+        }
     }
     let duplicates: BTreeSet<String> = counts.into_iter().filter(|(_, count)| *count > 1).map(|(id, _)| id.to_string()).collect();
     let mut plot_styles = BTreeSet::new();
@@ -236,24 +250,32 @@ fn check_metadata(d: &Drawing, plan: &mut SheetPlan, ctx: &PreflightContext<'_>)
                 Some(&sheet.sheet_id),
             ));
         }
-        if let Some(template) = sheet.frame_template_id.as_ref().and_then(|id| super::registry_store::resolve(ctx.registry, id)) {
-            if let Some(successor) = &template.superseded_by {
-                sheet.issues.push(issue(
-                    Severity::Warn,
-                    codes::TEMPLATE_SUPERSEDED,
-                    format!("Template `{}` is superseded by `{successor}`.", template.id),
-                    Some(&sheet.sheet_id),
-                ));
-            }
+        let template = sheet.frame_template_id.as_ref().and_then(|id| super::registry_store::resolve(ctx.registry, id));
+        if let Some(template) = template
+            && (template.status == TemplateStatus::Superseded || template.superseded_by.is_some())
+        {
+            let successor = template.superseded_by.as_deref().unwrap_or("an unspecified successor");
+            sheet.issues.push(issue(
+                Severity::Warn,
+                codes::TEMPLATE_SUPERSEDED,
+                format!("Template `{}` is superseded by `{successor}`.", template.id),
+                Some(&sheet.sheet_id),
+            ));
+        }
+        let revision = sheet_revision(sheet, ctx.registry);
+        let old_revision = revision.and_then(|revision| {
+            latest.get(&sheet.sheet_id).filter(|highest| rev_cmp(revision, highest) == Ordering::Less).map(|highest| (revision, highest))
+        });
+        if let Some((revision, highest)) = old_revision {
+            sheet.issues.push(issue(
+                Severity::Warn,
+                codes::REVISION_OLD,
+                format!("Revision `{revision}` is older than highest revision `{highest}` for sheet id `{}` in this plan.", sheet.sheet_id),
+                Some(&sheet.sheet_id),
+            ));
+        } else if template.is_some() {
             if let Some(expected) = ctx.revisions.get(&sheet.sheet_id) {
-                let revision = template
-                    .attributes
-                    .revision
-                    .iter()
-                    .find_map(|tag| {
-                        sheet.attributes.iter().find(|(key, value)| key.eq_ignore_ascii_case(tag) && !value.trim().is_empty()).map(|(_, v)| v.trim())
-                    })
-                    .unwrap_or("");
+                let revision = revision.unwrap_or("");
                 let (severity, code) = match rev_cmp(revision, expected.trim()) {
                     Ordering::Less => (Severity::Warn, codes::REVISION_OLD),
                     Ordering::Greater => (Severity::Info, codes::REVISION_NEWER),
