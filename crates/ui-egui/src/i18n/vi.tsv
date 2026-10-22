@@ -45,3 +45,4 @@ menu	Help	Trợ giúp
 	Current: {color}	Hiện hành: {color}
 @plural	{n} contributor	{n} người đóng góp
 	No font covers the Vietnamese interface	Không có phông chữ hỗ trợ giao diện tiếng Việt
+	Approve Plot Warnings	Duyệt cảnh báo in
