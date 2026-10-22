@@ -660,6 +660,7 @@ pub struct Session {
     pub select_mode: Option<select::SelectMode>,
     /// SIngle typed at "Select objects": the next selection ends the prompt.
     pub select_single: bool,
+    pub(crate) select_remove_once: bool,
     pub untitled_counter: u32,
     /// The last dimension created (DIMCONTINUE / DIMBASELINE).
     pub last_dim: Option<Handle>,
@@ -716,6 +717,7 @@ impl Session {
             pending_window: None,
             select_mode: None,
             select_single: false,
+            select_remove_once: false,
             untitled_counter: 0,
             last_dim: None,
             last_used: LastUsed::default(),
@@ -1041,6 +1043,14 @@ impl Session {
         let r = self.input_to_command(input);
         self.lisp_after_command_input();
         r
+    }
+
+    /// Remove objects for this input only, without changing the prompt's Add/Remove mode.
+    pub fn input_removing(&mut self, input: Input) -> Result<()> {
+        let previous = std::mem::replace(&mut self.select_remove_once, true);
+        let result = self.input(input);
+        self.select_remove_once = previous;
+        result
     }
 
     fn input_to_command(&mut self, input: Input) -> Result<()> {
@@ -1411,6 +1421,10 @@ impl Session {
             (None, None) => Vec::new(),
         };
         kinds.into_iter().map(|k| Entity { handle: Handle(0), common: common.clone(), kind: k }).collect()
+    }
+
+    pub fn marks(&self) -> Vec<prompt::Mark> {
+        self.running.as_ref().map_or_else(Vec::new, |run| run.machine.marks(self))
     }
 
     /// The active command's preview as a transform of existing objects (see

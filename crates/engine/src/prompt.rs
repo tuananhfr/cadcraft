@@ -241,6 +241,13 @@ pub enum Step {
     Cancel,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Mark {
+    pub outline: Vec<Vec2>,
+    pub label: String,
+    pub warn: bool,
+}
+
 /// A prompt-driven command.
 pub trait Interactive: Send {
     fn name(&self) -> &'static str;
@@ -252,6 +259,9 @@ pub trait Interactive: Send {
     }
     /// Rubber-band geometry for the cursor position.
     fn preview(&self, _s: &Session, _cursor: Vec2) -> Vec<EntityKind> {
+        Vec::new()
+    }
+    fn marks(&self, _s: &Session) -> Vec<Mark> {
         Vec::new()
     }
     /// The preview as existing objects under one transform, when it is that (MOVE, COPY,

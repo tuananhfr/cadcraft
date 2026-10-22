@@ -55,7 +55,8 @@ impl SelectPhase {
     pub fn feed(&mut self, s: &mut Session, i: &Input) -> Result<SelOutcome> {
         match i {
             Input::Pick(hs) => {
-                let changed: Vec<Handle> = if self.removing {
+                let removing = self.removing || s.select_remove_once;
+                let changed: Vec<Handle> = if removing {
                     let gone: Vec<Handle> = self.picked.iter().copied().filter(|h| hs.contains(h)).collect();
                     self.picked.retain(|h| !hs.contains(h));
                     gone
@@ -73,7 +74,7 @@ impl SelectPhase {
                     if self.history.len() >= MAX_SELECT_HISTORY {
                         self.history.remove(0);
                     }
-                    self.history.push((changed, self.removing));
+                    self.history.push((changed, removing));
                 }
                 let n = hs.len();
                 if n > 0 {
