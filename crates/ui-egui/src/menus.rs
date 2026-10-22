@@ -4,6 +4,7 @@
 use serde_json::{Value, json};
 
 use crate::CadApp;
+use crate::wsprofile::schema::RibbonMode;
 
 /// The top-level menus, in order.
 pub const MENUS: &[&str] = &["File", "Edit", "View", "Insert", "Format", "Tools", "Draw", "Dimension", "Modify", "Window", "Help"];
@@ -41,6 +42,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.ribbon.button.add", "Add to Ribbon", &[], None),
     ("ui.ribbon.button.remove", "Remove from Ribbon", &[], None),
     ("ui.ribbon.collapse", "Minimize Ribbon", &["Window", "Minimize Ribbon"], None),
+    ("ui.ribbon.mode", "Ribbon Display Mode", &["View", "Ribbon", "Display Mode"], None),
     ("ui.shortcut.bind", "Assign Shortcut", &[], None),
     ("ui.shortcut.unbind", "Remove Shortcut", &[], None),
     ("ui.quickaccess.pin", "Add to Quick Access", &[], None),
@@ -700,6 +702,7 @@ fn entry_ui_with_ribbon(ui: &mut egui::Ui, e: &Entry, clicked: &mut Option<Strin
 pub fn menu_bar(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = crate::theme::Tokens::get();
     let tree = tree(app);
+    let collapsed = app.ws.effective.layout.ribbon.effective_mode() == RibbonMode::TabsOnly;
     let mut clicked = None;
     egui::Panel::top("cc_menubar").exact_size(22.0).frame(egui::Frame::NONE.fill(t.chrome_dark).inner_margin(egui::Margin::symmetric(6, 0))).show(
         ui,
@@ -711,7 +714,7 @@ pub fn menu_bar(app: &mut CadApp, ui: &mut egui::Ui) {
                     for (name, entries) in &tree {
                         ui.menu_button(crate::i18n::menu(name), |ui| {
                             for e in entries {
-                                entry_ui_with_ribbon(ui, e, &mut clicked, Some(app.ws.effective.layout.ribbon.collapsed));
+                                entry_ui_with_ribbon(ui, e, &mut clicked, Some(collapsed));
                             }
                         });
                     }

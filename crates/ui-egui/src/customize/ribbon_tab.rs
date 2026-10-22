@@ -4,9 +4,10 @@ use serde_json::json;
 
 use super::{State, commands, edit, row, run};
 use crate::CadApp;
+use crate::wsprofile::schema::RibbonMode;
 
 pub(super) fn show(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State) {
-    let mut collapsed = app.ws.effective.layout.ribbon.collapsed;
+    let mut collapsed = app.ws.effective.layout.ribbon.effective_mode() == RibbonMode::TabsOnly;
     if ui.checkbox(&mut collapsed, crate::tl!("Minimize ribbon")).changed() {
         let _ = run(app, "ui.ribbon.collapse", json!({"collapsed": collapsed}), state);
     }

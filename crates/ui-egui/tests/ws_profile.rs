@@ -6,7 +6,7 @@ use cadcraft_engine::{Session, command_specs};
 use cadcraft_ui_egui::docking::Panel;
 use cadcraft_ui_egui::menus::UI_COMMANDS;
 use cadcraft_ui_egui::wsprofile::presets::{PRESET_IDS, SAFE_PRESET, preset, preset_json};
-use cadcraft_ui_egui::wsprofile::schema::{Dock, OwnerType, PanelMode, ProfileStatus, SCHEMA_VERSION, WorkspaceLayout, WorkspaceProfile};
+use cadcraft_ui_egui::wsprofile::schema::{Dock, OwnerType, PanelMode, ProfileStatus, RibbonMode, SCHEMA_VERSION, WorkspaceLayout, WorkspaceProfile};
 use cadcraft_ui_egui::wsprofile::store::MemoryStore;
 use cadcraft_ui_egui::wsprofile::validate::{Issue, Mode, validate};
 use cadcraft_ui_egui::{CadApp, Services};
@@ -438,6 +438,13 @@ fn schema_doc_lists_every_field() {
     assert_eq!(schema["properties"]["schema_version"]["const"], SCHEMA_VERSION);
     let default = serde_json::to_value(WorkspaceProfile::default()).unwrap();
     assert_documented(&schema, &schema, &default, "");
+    for mode in [RibbonMode::Expanded, RibbonMode::Compact, RibbonMode::TabsOnly, RibbonMode::Hidden] {
+        let mut profile = WorkspaceProfile::default();
+        profile.layout.ribbon.set_mode(mode);
+        let value = serde_json::to_value(&profile).unwrap();
+        assert_documented(&schema, &schema, &value, "");
+        assert!(schema["$defs"]["ribbon"]["properties"]["mode"]["enum"].as_array().unwrap().contains(&value["layout"]["ribbon"]["mode"]));
+    }
     for id in PRESET_IDS {
         let value = serde_json::to_value(preset(id).unwrap()).unwrap();
         assert_documented(&schema, &schema, &value, &format!("{id}:"));

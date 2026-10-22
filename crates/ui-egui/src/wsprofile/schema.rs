@@ -99,12 +99,41 @@ impl Default for RibbonTab {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RibbonMode {
+    #[default]
+    Expanded,
+    Compact,
+    TabsOnly,
+    Hidden,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Ribbon {
     pub visible: bool,
     pub collapsed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<RibbonMode>,
     pub tabs: Vec<RibbonTab>,
+}
+
+impl Ribbon {
+    pub fn effective_mode(&self) -> RibbonMode {
+        match self.mode {
+            Some(mode) => mode,
+            None if !self.visible => RibbonMode::Hidden,
+            None if self.collapsed => RibbonMode::TabsOnly,
+            None => RibbonMode::Expanded,
+        }
+    }
+
+    pub fn set_mode(&mut self, mode: RibbonMode) {
+        self.mode = Some(mode);
+        self.visible = mode != RibbonMode::Hidden;
+        self.collapsed = mode == RibbonMode::TabsOnly;
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

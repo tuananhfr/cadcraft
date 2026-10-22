@@ -61,6 +61,7 @@
       "properties": {
         "visible": { "type": "boolean" },
         "collapsed": { "type": "boolean" },
+        "mode": { "enum": ["expanded", "compact", "tabs_only", "hidden", null], "description": "When absent or null, uses visible/collapsed legacy flags." },
         "tabs": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/ribbonTab" } }
       }
     },

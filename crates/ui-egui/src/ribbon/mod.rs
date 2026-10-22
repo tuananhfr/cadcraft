@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 
 use crate::CadApp;
-use crate::wsprofile::schema::{RibbonGroup, RibbonTab};
+use crate::wsprofile::schema::{RibbonGroup, RibbonMode, RibbonTab};
 
 pub mod contextual;
 pub mod render;
@@ -75,14 +75,25 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
             | "ui.ribbon.button.add"
             | "ui.ribbon.button.remove"
             | "ui.ribbon.collapse"
+            | "ui.ribbon.mode"
     ) {
         return None;
     }
     Some((|| {
         let mut ribbon = app.ws.effective.layout.ribbon.clone();
         let mut created = None;
-        if command == "ui.ribbon.collapse" {
-            ribbon.collapsed = params.get("collapsed").and_then(Value::as_bool).unwrap_or(!ribbon.collapsed);
+        if command == "ui.ribbon.mode" {
+            let mode = match params.get("mode").and_then(Value::as_str) {
+                Some("expanded") => RibbonMode::Expanded,
+                Some("compact") => RibbonMode::Compact,
+                Some("tabs_only") => RibbonMode::TabsOnly,
+                Some("hidden") => RibbonMode::Hidden,
+                _ => return Err(crate::tl!("mode must be expanded, compact, tabs_only or hidden").to_string()),
+            };
+            ribbon.set_mode(mode);
+        } else if command == "ui.ribbon.collapse" {
+            let collapsed = params.get("collapsed").and_then(Value::as_bool).unwrap_or(ribbon.effective_mode() != RibbonMode::TabsOnly);
+            ribbon.set_mode(if collapsed { RibbonMode::TabsOnly } else { RibbonMode::Expanded });
         } else if command == "ui.ribbon.tab.add" {
             let label = text(params, "label")?;
             let id = fresh_id(ribbon.tabs.iter().map(|tab| tab.id.as_str()));

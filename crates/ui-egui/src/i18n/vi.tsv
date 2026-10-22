@@ -1853,3 +1853,8 @@ ribbon	Take-off	Bóc khối lượng
 ribbon	Utilities	Tiện ích
 ribbon	Visibility	Hiện/ẩn
 ribbon	Walls and Openings	Tường và lỗ mở
+
+# GĐ3 Task 1: ribbon display modes.
+	Ribbon Display Mode	Chế độ hiển thị Ribbon
+	Display Mode	Chế độ hiển thị
+	mode must be expanded, compact, tabs_only or hidden	mode phải là expanded, compact, tabs_only hoặc hidden

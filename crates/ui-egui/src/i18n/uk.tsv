@@ -1851,3 +1851,8 @@
 	A3	A3
 	A4	A4
 	A5	A5
+
+# GĐ3 Task 1: ribbon display modes.
+	Ribbon Display Mode	Режим відображення стрічки
+	Display Mode	Режим відображення
+	mode must be expanded, compact, tabs_only or hidden	mode має бути expanded, compact, tabs_only або hidden

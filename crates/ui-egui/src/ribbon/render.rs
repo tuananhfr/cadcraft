@@ -5,7 +5,7 @@ use serde_json::json;
 
 use crate::CadApp;
 use crate::theme::Tokens;
-use crate::wsprofile::schema::{RibbonGroup, RibbonTab};
+use crate::wsprofile::schema::{RibbonGroup, RibbonMode, RibbonTab};
 
 fn preset_tabs() -> &'static [RibbonTab] {
     static TABS: std::sync::OnceLock<Vec<RibbonTab>> = std::sync::OnceLock::new();
@@ -32,7 +32,7 @@ pub(crate) fn group_label<'a>(tab: &RibbonTab, group: &'a RibbonGroup) -> &'a st
 }
 
 pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
-    if !app.ws.effective.layout.ribbon.visible {
+    if app.ws.effective.layout.ribbon.effective_mode() == RibbonMode::Hidden {
         return;
     }
     let tabs = super::visible_tabs(app);
@@ -53,7 +53,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         reserved += crate::cmdline::docked_height(app, ui.ctx().content_rect().height());
     }
     let compact = ui.available_height() < EXPANDED_HEIGHT + reserved;
-    let collapsed = app.ws.effective.layout.ribbon.collapsed || compact;
+    let collapsed = app.ws.effective.layout.ribbon.effective_mode() == RibbonMode::TabsOnly || compact;
     let height = if collapsed { TAB_HEIGHT } else { EXPANDED_HEIGHT };
     egui::Panel::top("cc_ribbon").exact_size(height).frame(egui::Frame::NONE.fill(Tokens::get().chrome)).show(ui, |ui| {
         ui.horizontal(|ui| {
