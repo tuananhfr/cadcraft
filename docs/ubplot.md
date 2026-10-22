@@ -58,6 +58,31 @@ If the scaled frame exceeds the printable area, scan blocks it with
 Matching allows the existing 0.5% or 1 mm tolerance, whichever is greater.
 Nonstandard custom sizes carry INFO `PAPER_CUSTOM`.
 
+Preflight runs after frame detection, overrides, exclusions and paper/scale resolution.
+Each sheet gets its highest issue severity as its verdict: `PASS` when there are no
+issues, then `INFO`, `WARN`, or `BLOCK`. Scan returns `summary` with exactly
+`pass`, `info`, `warn`, and `block` counts, one verdict per sheet. Plan-level issues
+remain in `issues` and do not inflate those sheet counts.
+
+Clean and INFO-only sheets are `READY`; an unapproved WARN leaves a sheet in
+`NEEDS_PREVIEW`; any BLOCK makes it `BLOCKED`. Status derives from issues rather
+than a supplied status flag. A WARN approval requires both `approved_by_user` and a
+matching audit fingerprint; a BLOCK always blocks. Audit storage and the approval
+command arrive in B7. Paper/scale BLOCKs from resolution remain part of the verdict.
+
+Preflight checks xref INSERT bounds in each sheet's space, including nested block
+transforms and dynamic visibility. A block/window sheet uses its exact outline;
+a layout sheet also checks the model AABB visible through each enabled viewport.
+`NotFound`, `Unresolved`, and `NotLoaded` references intersecting a sheet add BLOCK
+`XREF_MISSING`, naming the reference and its path. On the web this also explains that
+external references are not loaded on the web. `Unloaded` adds WARN `XREF_UNLOADED`.
+Missing references outside all sheets add plan-level INFO `XREF_MISSING_OUTSIDE`.
+The AABB rule needs cached geometry: an empty definition or zero-area bound cannot
+establish an overlap, so it is reported at plan level rather than assigned to a sheet.
+Traversal is bounded to 16 nested levels and 200,000 visited entities; reaching a
+limit adds BLOCK `XREF_SCAN_LIMIT` to every sheet. Repeating preflight replaces its
+own issues and recomputes statuses without duplicating diagnostics.
+
 Templates take `action: "list" | "import" | "reset"`, and `text` for JSON import.
 
 Publish parameters:
@@ -109,9 +134,9 @@ Issue codes:
 
 | Severity | Codes |
 | --- | --- |
-| BLOCK | `FRAME_AMBIGUOUS`, `FRAME_NOT_FOUND`, `FRAME_MINSERT`, `PAPER_TOO_SMALL`, `PAPER_TOO_LARGE`, `SCALE_PAPER_MISMATCH`, `RENDER_FAILED` |
-| WARN | `FRAME_DUPLICATE`, `FRAME_OVERLAP`, `FRAME_NESTED`, `FRAME_MIRRORED`, `FRAME_NONUNIFORM` |
-| INFO | `PAPER_CUSTOM`, `SCALE_NOT_SET`, `UNITS_ASSUMED`, `HANDLE_DUPLICATE`, `SHEET_EXCLUDED`, `SOURCE_HASH_WEAK` |
+| BLOCK | `FRAME_AMBIGUOUS`, `FRAME_NOT_FOUND`, `FRAME_MINSERT`, `PAPER_TOO_SMALL`, `PAPER_TOO_LARGE`, `SCALE_PAPER_MISMATCH`, `RENDER_FAILED`, `XREF_MISSING`, `XREF_SCAN_LIMIT` |
+| WARN | `FRAME_DUPLICATE`, `FRAME_OVERLAP`, `FRAME_NESTED`, `FRAME_MIRRORED`, `FRAME_NONUNIFORM`, `XREF_UNLOADED` |
+| INFO | `PAPER_CUSTOM`, `SCALE_NOT_SET`, `UNITS_ASSUMED`, `HANDLE_DUPLICATE`, `SHEET_EXCLUDED`, `SOURCE_HASH_WEAK`, `XREF_MISSING_OUTSIDE` |
 
 Command errors include `PLAN_STALE` (drawing changed since scan), `PLAN_INVALID`
 (invalid or unresolved plan), and `OUTPUT_IS_SOURCE` (output would overwrite the source).

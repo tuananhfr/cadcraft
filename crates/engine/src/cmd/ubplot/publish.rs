@@ -9,6 +9,7 @@ use crate::cmd::file::base64_encode;
 use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::ids::{sha256_hex, sheet_key};
 use crate::sheetplan::paper::sheet_margins;
+use crate::sheetplan::preflight::derive_status;
 use crate::sheetplan::{PlotScale, ScanMode, ScanRequest, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, parse_plan};
 use crate::{Result, Session};
 
@@ -52,9 +53,8 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
         return Err(bad(COMMAND, "web split output is limited to 20 files; use merged output"));
     }
     for sheet in &mut plan.sheets {
-        if sheet.issues.iter().chain(&plan.issues).any(|entry| entry.severity == Severity::Block) {
-            sheet.status = SheetStatus::Blocked;
-        }
+        sheet.status =
+            if plan.issues.iter().any(|entry| entry.severity == Severity::Block) { SheetStatus::Blocked } else { derive_status(sheet, &[]) };
     }
     let names = split_names(&plan.sheets);
     let base = Path::new(path.unwrap_or("Drawing.pdf"));

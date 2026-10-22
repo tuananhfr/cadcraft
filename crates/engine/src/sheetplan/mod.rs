@@ -4,10 +4,12 @@ pub mod ids;
 pub mod outline;
 pub mod paper;
 pub mod plan;
+pub mod preflight;
 pub mod registry;
 pub mod types;
 
 pub use detect::{FrameCandidate, detect_frames, is_frame_candidate};
 pub use plan::{ScanMode, ScanRequest, SheetOverride, build_plan};
+pub use preflight::{FontStatus, PreflightContext, derive_status, preflight, verdict};
 pub use registry::*;
 pub use types::*;

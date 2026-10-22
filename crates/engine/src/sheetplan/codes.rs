@@ -1,5 +1,9 @@
 use super::types::{PreflightIssue, Severity};
 
+pub const XREF_MISSING: &str = "XREF_MISSING";
+pub const XREF_UNLOADED: &str = "XREF_UNLOADED";
+pub const XREF_MISSING_OUTSIDE: &str = "XREF_MISSING_OUTSIDE";
+pub const XREF_SCAN_LIMIT: &str = "XREF_SCAN_LIMIT";
 pub const FRAME_AMBIGUOUS: &str = "FRAME_AMBIGUOUS";
 pub const FRAME_NOT_FOUND: &str = "FRAME_NOT_FOUND";
 pub const FRAME_MINSERT: &str = "FRAME_MINSERT";

@@ -18,6 +18,16 @@ pub struct SheetPlan {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct AuditEntry {
+    pub at_ms: u64,
+    pub by: String,
+    pub action: String,
+    pub sheet_key: String,
+    pub code: String,
+    pub fingerprint: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Sheet {
     pub sheet_id: String,
     pub order: u32,

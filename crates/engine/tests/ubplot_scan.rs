@@ -78,8 +78,8 @@ fn scan_block_mode_ten_of_hundred_in_pick_order() {
     let result = scan(&mut s, json!({"mode": "block", "handles": picked}));
     let plan = typed(&result);
     assert_eq!(plan.sheets.len(), 10);
-    assert_eq!(result["summary"]["sheets"], 10);
-    assert_eq!(result["summary"]["blocked"], 0);
+    assert_eq!(result["sheets"].as_array().unwrap().len(), 10);
+    assert_eq!(result["summary"]["block"], 0);
     for (index, (sheet, handle)) in plan.sheets.iter().zip(&picked).enumerate() {
         assert_eq!(sheet.order, (index + 1) as u32);
         assert!(matches!(&sheet.source, SheetSource::Block { block_handle, .. } if block_handle == handle));
@@ -87,7 +87,7 @@ fn scan_block_mode_ten_of_hundred_in_pick_order() {
         assert!(sheet.landscape);
         assert_eq!(sheet.plot_scale, PlotScale::Ratio { paper_mm: 1.0, drawing_units: 1.0 });
         assert_eq!(result["sheets"][index]["plot_scale"], "1:1");
-        assert_eq!(sheet.status, SheetStatus::NeedsPreview);
+        assert_eq!(sheet.status, SheetStatus::Ready);
     }
 }
 
@@ -122,7 +122,7 @@ fn scan_block_mode_in_layout_space() {
     assert_eq!(block_handle, &handle.hex());
     assert_eq!(s.doc().unwrap().space_of(handle), Some(paper));
     assert_eq!(*outline, [[0.0, 0.0], [420.0, 0.0], [420.0, 297.0], [0.0, 297.0]]);
-    assert_eq!(plan.sheets[0].status, SheetStatus::NeedsPreview);
+    assert_eq!(plan.sheets[0].status, SheetStatus::Ready);
 }
 
 #[test]
@@ -253,7 +253,7 @@ fn scan_duplicate_handles_print_once() {
     assert_eq!(plan.sheets[0].order, 1);
     assert_eq!(plan.sheets[1].order, 2);
     assert_eq!(plan.issues.iter().filter(|i| i.code == codes::HANDLE_DUPLICATE && i.severity == Severity::Info).count(), 1);
-    assert_eq!(result["summary"]["info"], 2);
+    assert_eq!(result["summary"], json!({"pass": 2, "info": 0, "warn": 0, "block": 0}));
 }
 
 #[test]
@@ -266,7 +266,7 @@ fn scan_plan_mode_resolves_appendix_short_form() {
     });
     let plan = typed(&scan(&mut s, json!({"mode": "plan", "plan": appendix})));
     assert_eq!(plan.sheets[0].sheet_id, "KT-01");
-    assert_eq!(plan.sheets[0].status, SheetStatus::NeedsPreview);
+    assert_eq!(plan.sheets[0].status, SheetStatus::Ready);
     assert!(matches!(&plan.sheets[0].source, SheetSource::Block { block_handle, outline, .. }
         if block_handle == &handles[0] && *outline == [[0.0, 0.0], [420.0, 0.0], [420.0, 297.0], [0.0, 297.0]]));
 }
@@ -289,7 +289,7 @@ fn scan_rejects_hostile_params() {
         assert!(s.execute("ubplot.scan", &params).is_err());
     }
     let result = scan(&mut s, json!({"mode": "block", "handles": ["FFFFFFFFFFFFFFFE"]}));
-    assert_eq!(result["summary"]["blocked"], 1);
+    assert_eq!(result["summary"]["block"], 1);
     let plan = typed(&result);
     assert!(plan.sheets[0].issues.iter().any(|i| i.code == codes::FRAME_NOT_FOUND && i.severity == Severity::Block));
     assert_eq!(plan.sheets[0].status, SheetStatus::Blocked);
@@ -381,14 +381,14 @@ fn scan_block_paper_scale_and_issue_rules() {
     assert_eq!(plan.sheets[4].plot_scale, PlotScale::Fit);
     assert!(plan.sheets[4].issues.iter().any(|i| i.code == codes::FRAME_NONUNIFORM && i.severity == Severity::Warn));
     assert_eq!(plan.sheets[5].status, SheetStatus::Blocked);
-    assert_eq!(result["summary"]["blocked"], 2);
+    assert_eq!(result["summary"]["block"], 2);
     let repaired = scan(
         &mut s,
         json!({"mode": "block", "handles": [missing.hex()],
             "overrides": {"S-001@1": {"window": [[0, 0], [420, 297]], "paper": "A3"}}}),
     );
     assert_eq!(typed(&repaired).sheets[0].mode, SheetMode::Window);
-    assert_eq!(repaired["summary"]["blocked"], 0);
+    assert_eq!(repaired["summary"]["block"], 0);
 }
 
 #[cfg(not(target_arch = "wasm32"))]

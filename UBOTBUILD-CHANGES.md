@@ -48,6 +48,9 @@ This branch (`tuananhfr`) is UbotCAD, the UbotBuild build of [CADCraft](https://
 
 ## V2.2 GĐ2
 
+- UBPLOT preflight checks xrefs against sheet outlines and layout viewport model bounds, with nested transforms and dynamic visibility. Essential missing references block with `XREF_MISSING`; unloaded references warn with `XREF_UNLOADED`; missing references outside all sheets report plan-level INFO `XREF_MISSING_OUTSIDE`. Web missing-reference messages explain that external references are not loaded there. Empty definitions have no usable AABB and remain plan-level diagnostics under the specified overlap rule.
+- Clean and INFO-only UBPLOT sheets now scan as `READY`; unapproved WARNs need preview and BLOCKs remain blocked, including paper/scale errors. `derive_status` verifies WARN audit fingerprints and is the path to `READY`. Scan summary now counts sheets by verdict with exactly `pass`, `info`, `warn`, `block` keys. Repeated preflight replaces its own diagnostics; traversal limits block with `XREF_SCAN_LIMIT`.
+
 - PDF publications accept 1000 pages and 512 MiB. The writer collects font glyphs separately and releases each page display list after writing it. Sheets over 14400 points use `/UserUnit` with scaled MediaBox/content and catalog PDF 1.6; smaller sheets retain their existing PDF version. Oversized paper is rejected instead of clamped, and merged jobs over the page cap suggest split output.
 
 - PLOT and EXPORTPDF with an explicit `scale` and no `fit` now preserve that scale on Model instead of silently fitting. PDF page items and PNG use the same default; `fit: true` still requests fitting. UBPLOT publishes Ratio sheets at their stored scale and Fit sheets with fitting, with per-page paper margins (zero for PDF/custom paper; device margins when available).

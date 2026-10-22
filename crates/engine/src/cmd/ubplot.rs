@@ -8,8 +8,9 @@ use super::file::io;
 use super::{CommandSpec, has_doc};
 use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::ids::sha256_hex;
-use crate::sheetplan::plan::validate_request_value;
-use crate::sheetplan::{FrameRegistry, ScanMode, ScanRequest, Severity, SheetPlan, SheetStatus, build_plan};
+use crate::sheetplan::plan::{build_plan_with_context, validate_request_value};
+use crate::sheetplan::preflight::{PreflightContext, verdict};
+use crate::sheetplan::{FrameRegistry, ScanMode, ScanRequest, Severity, SheetPlan};
 use crate::{EngineError, Result, Session};
 
 pub struct UbplotState {
@@ -84,7 +85,15 @@ pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
         plan
     } else {
         let hash = source_hash(s)?;
-        let mut plan = build_plan(s.doc()?, &request, &s.ubplot.registry, &hash).map_err(|error| bad("ubplot.scan", error))?;
+        let ctx = PreflightContext {
+            registry: &s.ubplot.registry,
+            device: None,
+            device_missing: false,
+            revisions: &std::collections::BTreeMap::new(),
+            fonts: &[],
+            web: cfg!(target_arch = "wasm32"),
+        };
+        let mut plan = build_plan_with_context(s.doc()?, &request, &ctx, &hash).map_err(|error| bad("ubplot.scan", error))?;
         plan.issues.retain(|entry| entry.code != codes::SOURCE_HASH_WEAK);
         if hash == sha256_hex(format!("{uid}:{revision}").as_bytes()) {
             plan.issues.push(issue(Severity::Info, codes::SOURCE_HASH_WEAK, "Source hash uses only the drawing identity and revision.", None));
@@ -99,18 +108,17 @@ pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
 
 fn plan_result(plan: &SheetPlan, rescanned: bool) -> Result<Value> {
     let mut result = serde_json::to_value(plan).map_err(|error| bad("ubplot.scan", error.to_string()))?;
-    let mut warn = 0_u64;
-    let mut info = 0_u64;
-    for entry in plan.issues.iter().chain(plan.sheets.iter().flat_map(|sheet| &sheet.issues)) {
-        match entry.severity {
-            Severity::Warn => warn = warn.saturating_add(1),
-            Severity::Info => info = info.saturating_add(1),
-            _ => {}
+    let (mut pass, mut info, mut warn, mut block) = (0_u64, 0_u64, 0_u64, 0_u64);
+    for sheet in &plan.sheets {
+        match verdict(sheet) {
+            Severity::Pass => pass += 1,
+            Severity::Info => info += 1,
+            Severity::Warn => warn += 1,
+            Severity::Block => block += 1,
         }
     }
-    let blocked = plan.sheets.iter().filter(|sheet| sheet.status == SheetStatus::Blocked).count();
     let object = result.as_object_mut().ok_or_else(|| bad("ubplot.scan", "plan must serialize as an object"))?;
-    object.insert("summary".into(), json!({"sheets": plan.sheets.len(), "blocked": blocked, "warn": warn, "info": info}));
+    object.insert("summary".into(), json!({"pass": pass, "info": info, "warn": warn, "block": block}));
     object.insert("jobId".into(), json!(plan.job_id));
     if rescanned {
         object.insert("rescanned".into(), Value::Bool(true));

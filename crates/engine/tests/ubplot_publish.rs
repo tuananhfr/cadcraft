@@ -297,7 +297,7 @@ fn publish_hostile_params_are_errors_without_writes() {
     }
     plan["job_id"] = json!("../escape");
     assert!(s.execute("ubplot.publish", &json!({"plan": plan})).unwrap_err().to_string().contains("PLAN_INVALID"));
-    assert_eq!(s.ubplot.last.as_ref().unwrap().plan.sheets[0].status, SheetStatus::NeedsPreview);
+    assert_eq!(s.ubplot.last.as_ref().unwrap().plan.sheets[0].status, SheetStatus::Ready);
 }
 
 #[test]

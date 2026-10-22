@@ -10,6 +10,7 @@ use super::codes::{self, issue};
 use super::ids::{job_id, sheet_key};
 use super::outline::{normalize_outline, rect_of};
 use super::paper::{PaperChoice, matches_size, resolve_paper, sheet_margins};
+use super::preflight::{PreflightContext, preflight};
 use super::{
     FrameCandidate, FrameRegistry, MAX_SCAN_FRAMES, PlotScale, SHEETPLAN_SCHEMA, Severity, Sheet, SheetMode, SheetPlan, SheetSource, SheetStatus,
 };
@@ -72,6 +73,19 @@ pub(crate) fn validate_request_value(value: &Value) -> Result<(), String> {
 }
 
 pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_hash: &str) -> Result<SheetPlan, String> {
+    let ctx = PreflightContext {
+        registry: reg,
+        device: None,
+        device_missing: false,
+        revisions: &BTreeMap::new(),
+        fonts: &[],
+        web: cfg!(target_arch = "wasm32"),
+    };
+    build_plan_with_context(d, req, &ctx, source_hash)
+}
+
+pub(crate) fn build_plan_with_context(d: &Drawing, req: &ScanRequest, ctx: &PreflightContext<'_>, source_hash: &str) -> Result<SheetPlan, String> {
+    let reg = ctx.registry;
     if [req.handles.len(), req.windows.len(), req.layouts.len(), req.overrides.len(), req.exclude.len()].into_iter().any(|n| n > MAX_SCAN_FRAMES) {
         return Err(format!("scan exceeds {MAX_SCAN_FRAMES} entries"));
     }
@@ -239,14 +253,10 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
         for entry in &mut sheet.issues {
             entry.sheet_id = Some(sheet.sheet_id.clone());
         }
-        sheet.status = if sheet.issues.iter().chain(&plan.issues).any(|i| i.severity == Severity::Block) {
-            SheetStatus::Blocked
-        } else {
-            SheetStatus::NeedsPreview
-        };
         sheets.push(sheet);
     }
     plan.sheets = sheets;
+    preflight(d, &mut plan, ctx);
     Ok(plan)
 }
 
