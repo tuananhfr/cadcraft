@@ -8,24 +8,22 @@ const COMMAND: &str = "ubplot.profile";
 
 pub fn is_user_only_profile_action(params: &Value) -> bool {
     let action = params.get("action").and_then(Value::as_str).unwrap_or("");
-    let level = params.get("level").and_then(Value::as_str);
-    if matches!(action, "lock" | "unlock") {
-        return level.is_none_or(|level| level == "company");
-    }
-    if !matches!(action, "import" | "set") {
+    if !matches!(action, "set" | "unset" | "lock" | "unlock" | "import") {
         return false;
     }
-    if level == Some("company") {
-        return true;
-    }
-    action == "import"
-        && level.is_none()
-        && params
+    // Resolve the level with run_profile's parser; anything it cannot read stays with the user.
+    let parse = |value: &Value| serde_json::from_value::<ProfileLevel>(value.clone()).ok();
+    let level = match params.get("level") {
+        Some(value) => parse(value),
+        None if action == "import" => params
             .get("text")
             .and_then(Value::as_str)
-            .filter(|text| text.len() <= profile::MAX_PROFILE_BYTES)
             .and_then(|text| serde_json::from_str::<Value>(text).ok())
-            .is_some_and(|doc| doc.get("level").and_then(Value::as_str) == Some("company"))
+            .and_then(|doc| doc.get("level").map_or(Some(ProfileLevel::User), parse)),
+        None if matches!(action, "lock" | "unlock") => Some(ProfileLevel::Company),
+        None => Some(ProfileLevel::User),
+    };
+    level.is_none_or(|level| level == ProfileLevel::Company)
 }
 
 fn validate_content(value: &Value, depth: usize, remaining: &mut usize) -> std::result::Result<(), String> {
@@ -402,5 +400,10 @@ mod tests {
         assert!(!is_user_only_profile_action(&json!({"action": "set", "level": "user"})));
         assert!(!is_user_only_profile_action(&json!({"action": "import", "level": "drawing"})));
         assert!(is_user_only_profile_action(&json!({"action": "import", "text": "{\"level\":\"company\"}"})));
+        assert!(is_user_only_profile_action(&json!({"action": "set", "level": {"company": null}})));
+        assert!(is_user_only_profile_action(&json!({"action": "set", "level": "Company"})));
+        assert!(is_user_only_profile_action(&json!({"action": "import", "text": "{\"level\":{\"company\":null}}"})));
+        assert!(is_user_only_profile_action(&json!({"action": "import", "text": "not json"})));
+        assert!(is_user_only_profile_action(&json!({"action": "unset", "level": "company"})));
     }
 }
