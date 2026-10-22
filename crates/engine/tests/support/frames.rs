@@ -132,3 +132,62 @@ pub fn frames_drawing(n: usize) -> Drawing {
     }
     session.doc().unwrap().clone()
 }
+
+#[allow(dead_code)]
+pub fn install_budget_plot() {
+    cadcraft_engine::cmd::file::set_budget_plot(|d, space, options, cancel, max_prims| {
+        cadcraft_io::pdf::plot_with_budget(d, space, options, Some(cancel), Some(max_prims)).map_err(|error| error.to_string())
+    });
+}
+
+#[allow(dead_code)]
+pub struct FixedSheetRenderer(pub usize);
+
+impl cadcraft_engine::sheetplan::queue::SheetRenderer for FixedSheetRenderer {
+    fn render(
+        &self,
+        _: &Drawing,
+        _: &cadcraft_engine::sheetplan::Sheet,
+        _: &cadcraft_engine::sheetplan::queue::SheetBudget,
+    ) -> Result<Vec<u8>, cadcraft_engine::sheetplan::queue::RenderFailure> {
+        Ok(vec![0; self.0])
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[allow(dead_code)]
+pub struct WaitingSheetRenderer;
+
+#[cfg(not(target_arch = "wasm32"))]
+impl cadcraft_engine::sheetplan::queue::SheetRenderer for WaitingSheetRenderer {
+    fn render(
+        &self,
+        _: &Drawing,
+        _: &cadcraft_engine::sheetplan::Sheet,
+        budget: &cadcraft_engine::sheetplan::queue::SheetBudget,
+    ) -> Result<Vec<u8>, cadcraft_engine::sheetplan::queue::RenderFailure> {
+        let started = std::time::Instant::now();
+        while !budget.cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            if started.elapsed() >= std::time::Duration::from_secs(1) {
+                return Err(cadcraft_engine::sheetplan::queue::RenderFailure::Error("test watchdog did not cancel".into()));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        Err(cadcraft_engine::sheetplan::queue::RenderFailure::Cancelled)
+    }
+}
+
+#[allow(dead_code)]
+pub struct CancellingSheetRenderer;
+
+impl cadcraft_engine::sheetplan::queue::SheetRenderer for CancellingSheetRenderer {
+    fn render(
+        &self,
+        _: &Drawing,
+        _: &cadcraft_engine::sheetplan::Sheet,
+        budget: &cadcraft_engine::sheetplan::queue::SheetBudget,
+    ) -> Result<Vec<u8>, cadcraft_engine::sheetplan::queue::RenderFailure> {
+        budget.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        Ok(vec![0; 1024])
+    }
+}

@@ -304,3 +304,90 @@ mod directory {
         assert!(store.deliver(&job, "other.pdf", b"replacement").unwrap_err().contains("OUTPUT_IS_SOURCE"));
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn watchdog_cancels_after_deadline() {
+    let drawing = frames_drawing(1);
+    let source = source(1);
+    let sheet = source.plan.sheets.first().unwrap();
+    let budget = SheetBudget { time_ms: 50, ..SheetBudget::desktop() };
+    let started = std::time::Instant::now();
+    let error = budget.render(&support::frames::WaitingSheetRenderer, &drawing, sheet).unwrap_err();
+    assert_eq!(error, RenderFailure::TimedOut);
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    assert!(budget.cancel.load(std::sync::atomic::Ordering::Relaxed));
+}
+
+#[test]
+fn output_over_max_bytes_is_too_large() {
+    let drawing = frames_drawing(1);
+    let source = source(1);
+    let sheet = source.plan.sheets.first().unwrap();
+    let budget = SheetBudget { max_bytes: 1024, ..SheetBudget::desktop() };
+    let error = budget.render(&support::frames::FixedSheetRenderer(2048), &drawing, sheet).unwrap_err();
+    assert!(matches!(error, RenderFailure::TooLarge(_)), "{error:?}");
+    assert_eq!(budget.render(&support::frames::FixedSheetRenderer(1024), &drawing, sheet).unwrap().len(), 1024);
+}
+
+#[test]
+fn render_budgets_have_platform_limits() {
+    let desktop = SheetBudget::desktop();
+    assert_eq!(desktop.max_prims, 50_000_000);
+    assert_eq!(desktop.max_bytes, 512 * 1024 * 1024);
+    assert_eq!(desktop.time_ms, 300_000);
+    let web = SheetBudget::web();
+    assert_eq!(web.max_prims, 10_000_000);
+    assert_eq!(web.max_bytes, 128 * 1024 * 1024);
+    assert!(!desktop.cancel.load(std::sync::atomic::Ordering::Relaxed));
+    assert!(!web.cancel.load(std::sync::atomic::Ordering::Relaxed));
+}
+
+#[test]
+fn cancelled_budget_discards_renderer_output() {
+    let drawing = frames_drawing(1);
+    let source = source(1);
+    let sheet = source.plan.sheets.first().unwrap();
+    let budget = SheetBudget::desktop();
+    assert_eq!(budget.render(&support::frames::CancellingSheetRenderer, &drawing, sheet), Err(RenderFailure::Cancelled));
+    assert_eq!(budget.render(&support::frames::FixedSheetRenderer(1024), &drawing, sheet), Err(RenderFailure::Cancelled));
+    assert_eq!(PdfSheetRenderer.render(&drawing, sheet, &budget), Err(RenderFailure::Cancelled));
+}
+
+#[test]
+fn pdf_sheet_renderer_passes_primitive_budget_and_writes_one_page() {
+    support::frames::install_budget_plot();
+    let drawing = frames_drawing(1);
+    let source = source(1);
+    let sheet = source.plan.sheets.first().unwrap();
+    let budget = SheetBudget::desktop();
+    let bytes = budget.render(&PdfSheetRenderer, &drawing, sheet).unwrap();
+    let pages = support::pdf_probe::pages(&bytes);
+    assert_eq!(pages.len(), 1);
+    assert_eq!(pages[0].label.as_deref(), Some(sheet.sheet_id.as_str()));
+    let tiny = SheetBudget { max_prims: 0, ..SheetBudget::desktop() };
+    assert!(matches!(tiny.render(&PdfSheetRenderer, &drawing, sheet), Err(RenderFailure::TooLarge(_))));
+    let tiny = SheetBudget { max_bytes: 1, ..SheetBudget::desktop() };
+    assert!(matches!(PdfSheetRenderer.render(&drawing, sheet, &tiny), Err(RenderFailure::TooLarge(_))));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn watchdog_disarm_keeps_completed_sheet_uncancelled() {
+    let budget = SheetBudget::desktop();
+    let started = std::time::Instant::now();
+    let watchdog = Watchdog::arm(budget.cancel.clone(), std::time::Duration::from_secs(300)).unwrap();
+    assert!(!watchdog.disarm());
+    assert!(!budget.cancel.load(std::sync::atomic::Ordering::Relaxed));
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+}
+
+#[test]
+fn pdf_sheet_renderer_rejects_split_instead_of_dropping_pages() {
+    let drawing = frames_drawing(1);
+    let source = source(1);
+    let mut sheet = source.plan.sheets.first().unwrap().clone();
+    sheet.split = Some(cadcraft_engine::sheetplan::SplitPlan { pieces: Vec::new(), overlap_mm: 0.0, approved: true });
+    let error = PdfSheetRenderer.render(&drawing, &sheet, &SheetBudget::desktop()).unwrap_err();
+    assert!(matches!(error, RenderFailure::Error(message) if message.contains("split")));
+}

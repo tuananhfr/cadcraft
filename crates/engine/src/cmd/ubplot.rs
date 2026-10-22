@@ -1,5 +1,5 @@
 mod interactive;
-mod publish;
+pub(crate) mod publish;
 
 use std::sync::OnceLock;
 
