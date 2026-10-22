@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use cadcraft_doc::{Handle, Space};
+use cadcraft_doc::{Drawing, Handle, Space};
 use serde_json::{Value, json};
 
 use super::{LastPlan, bad, io, source_hash};
@@ -189,9 +189,16 @@ pub(super) fn remember(s: &mut Session, plan: &SheetPlan, supplied: Option<&Valu
 }
 
 fn sheet_pages(s: &Session, sheet: &Sheet) -> std::result::Result<Vec<Value>, String> {
+    sheet_pages_for_drawing(s.doc().map_err(|error| error.to_string())?, sheet)
+}
+
+pub(crate) fn sheet_pages_for_drawing(d: &Drawing, sheet: &Sheet) -> std::result::Result<Vec<Value>, String> {
     let Some(split) = sheet.split.as_ref().filter(|split| split.approved) else {
-        return page(s, sheet).map(|page| vec![page]);
+        return page_for_drawing(d, sheet).map(|page| vec![page]);
     };
+    if !(2..=MAX_PAGES).contains(&split.pieces.len()) {
+        return Err("split piece count is outside the page limits".into());
+    }
     let (_, [width, height], scale) = crate::sheetplan::split::frame(sheet).ok_or_else(|| "split needs a rectangular outline".to_string())?;
     let mut pages = Vec::with_capacity(split.pieces.len());
     for (index, outline) in split.pieces.iter().enumerate() {
@@ -206,7 +213,7 @@ fn sheet_pages(s: &Session, sheet: &Sheet) -> std::result::Result<Vec<Value>, St
         piece.landscape = piece_width > piece_height;
         piece.plot_scale = PlotScale::Ratio { paper_mm: scale, drawing_units: 1.0 };
         piece.sheet_id = format!("{} ({}/{})", sheet.sheet_id, index.saturating_add(1), split.pieces.len());
-        let mut value = page(s, &piece)?;
+        let mut value = page_for_drawing(d, &piece)?;
         let seams = if width >= height {
             [index > 0, false, index.saturating_add(1) < split.pieces.len(), false]
         } else {
@@ -222,42 +229,52 @@ fn sheet_pages(s: &Session, sheet: &Sheet) -> std::result::Result<Vec<Value>, St
     Ok(pages)
 }
 
-fn page(s: &Session, sheet: &Sheet) -> std::result::Result<Value, String> {
-    let d = s.doc().map_err(|error| error.to_string())?;
+pub(crate) fn page_item(sheet: &Sheet) -> Value {
     let [a, b] = sheet.paper_mm;
     let (width, height) = if sheet.landscape { (a.max(b), a.min(b)) } else { (a.min(b), a.max(b)) };
-    let mut page = json!({"width": width, "height": height, "landscape": sheet.landscape, "label": sheet.sheet_id});
-    let object = page.as_object_mut().ok_or_else(|| "page must be an object".to_string())?;
-    match &sheet.source {
-        SheetSource::Block { block_handle, outline, .. } => {
-            let handle = Handle::parse_hex(block_handle).ok_or_else(|| "invalid block handle".to_string())?;
-            let space = s.doc().map_err(|error| error.to_string())?.space_of(handle).ok_or_else(|| "frame block no longer exists".to_string())?;
-            object.insert("space".into(), json!(space.tab_name()));
-            object.insert("outline".into(), json!(outline));
-        }
-        SheetSource::Window { outline, .. } => {
-            object.insert("space".into(), json!("Model"));
-            object.insert("outline".into(), json!(outline));
-        }
-        SheetSource::Layout { name } => {
-            object.insert("layout".into(), json!(name));
-        }
-    }
-    match sheet.plot_scale {
-        PlotScale::Fit => {
-            object.insert("fit".into(), json!(true));
-        }
-        PlotScale::Ratio { paper_mm, drawing_units } => {
-            let scale = paper_mm / drawing_units / cadcraft_render::paper::paper_unit_mm(d);
-            if !scale.is_finite() || scale <= 0.0 {
-                return Err("plot scale must be finite and positive after unit conversion".into());
+    let mut page = json!({
+        "width": width, "height": height, "landscape": sheet.landscape, "label": sheet.sheet_id,
+        "margins": [0.0, 0.0, 0.0, 0.0],
+    });
+    if let Some(object) = page.as_object_mut() {
+        match &sheet.source {
+            SheetSource::Block { outline, .. } | SheetSource::Window { outline, .. } => {
+                object.insert("space".into(), json!("Model"));
+                object.insert("outline".into(), json!(outline));
             }
-            object.insert("scale".into(), json!(scale));
-            object.insert("fit".into(), json!(false));
+            SheetSource::Layout { name } => {
+                object.insert("layout".into(), json!(name));
+            }
+        }
+        match sheet.plot_scale {
+            PlotScale::Fit => {
+                object.insert("fit".into(), json!(true));
+            }
+            PlotScale::Ratio { paper_mm, drawing_units } => {
+                object.insert("scale".into(), json!(paper_mm / drawing_units));
+                object.insert("fit".into(), json!(false));
+            }
         }
     }
-    let margins = sheet_margins(d, sheet);
-    object.insert("margins".into(), json!(margins));
+    page
+}
+
+pub(crate) fn page_for_drawing(d: &Drawing, sheet: &Sheet) -> std::result::Result<Value, String> {
+    let mut page = page_item(sheet);
+    let object = page.as_object_mut().ok_or_else(|| "page must be an object".to_string())?;
+    if let SheetSource::Block { block_handle, .. } = &sheet.source {
+        let handle = Handle::parse_hex(block_handle).ok_or_else(|| "invalid block handle".to_string())?;
+        let space = d.space_of(handle).ok_or_else(|| "frame block no longer exists".to_string())?;
+        object.insert("space".into(), json!(space.tab_name()));
+    }
+    if let PlotScale::Ratio { paper_mm, drawing_units } = sheet.plot_scale {
+        let scale = paper_mm / drawing_units / cadcraft_render::paper::paper_unit_mm(d);
+        if !scale.is_finite() || scale <= 0.0 {
+            return Err("plot scale must be finite and positive after unit conversion".into());
+        }
+        object.insert("scale".into(), json!(scale));
+    }
+    object.insert("margins".into(), json!(sheet_margins(d, sheet)));
     Ok(page)
 }
 
@@ -367,7 +384,7 @@ fn store(path: &Path, _job_id: &str, bytes: &[u8]) -> std::result::Result<(), St
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn check_source(output: &Path, source: &str) -> Result<()> {
+pub(super) fn check_source(output: &Path, source: &str) -> Result<()> {
     fn normalize(path: &Path) -> std::io::Result<PathBuf> {
         use std::path::Component;
         let absolute = if path.is_absolute() { path.to_path_buf() } else { std::env::current_dir()?.join(path) };

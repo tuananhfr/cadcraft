@@ -393,6 +393,7 @@ trim
 u
 ubplot
 ubplot.approve
+ubplot.jobs
 ubplot.publish
 ubplot.scan
 ubplot.templates

@@ -117,3 +117,66 @@ fn pe_url_hyperlinks_become_link_annotations() {
     let own = pdf_text(&read, json!({"links": [{"handle": first, "url": "https://example.org/own"}]}));
     assert!(own.contains("https://example.org/own") && !own.contains("example.com/plan"), "{own}");
 }
+
+#[test]
+fn cancelled_plot_is_an_error_not_a_partial_page() {
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+
+    use cadcraft_io::PdfOptions;
+    use cadcraft_io::pdf::pdf_items;
+
+    let mut d = Drawing::new_metric();
+    line(&mut d, (0.0, 0.0), (100.0, 50.0));
+    let options = PdfOptions { cancel: Some(Arc::new(AtomicBool::new(true))), ..Default::default() };
+    let error = pdf_items(&d, &[(Space::Model, PdfOptions::default())], &options).unwrap_err().to_string();
+    assert!(error.contains("cancelled"), "{error}");
+    let error = pdf_items(&d, &[(Space::Model, options)], &PdfOptions::default()).unwrap_err().to_string();
+    assert!(error.contains("cancelled"), "{error}");
+}
+
+#[test]
+fn too_many_primitives_is_an_error() {
+    use cadcraft_io::PdfOptions;
+    use cadcraft_io::pdf::pdf_items;
+
+    let mut d = Drawing::new_metric();
+    for index in 0..100 {
+        line(&mut d, (0.0, f64::from(index)), (100.0, f64::from(index)));
+    }
+    let options = PdfOptions { max_prims: Some(10), ..Default::default() };
+    let error = pdf_items(&d, &[(Space::Model, options.clone())], &options).unwrap_err().to_string();
+    assert!(error.contains("SHEET_TOO_LARGE"), "{error}");
+    let error = pdf_items(&d, &[(Space::Model, PdfOptions::default())], &options).unwrap_err().to_string();
+    assert!(error.contains("SHEET_TOO_LARGE"), "{error}");
+}
+
+#[test]
+fn default_options_render_unchanged() {
+    use cadcraft_io::PdfOptions;
+    use cadcraft_io::pdf::pdf_items;
+
+    let mut d = Drawing::new_metric();
+    line(&mut d, (0.0, 0.0), (100.0, 50.0));
+    let options = PdfOptions::default();
+    let explicit = PdfOptions { cancel: None, max_prims: None, ..options.clone() };
+    let bytes = pdf_items(&d, &[(Space::Model, options.clone())], &options).unwrap();
+    let unchanged = pdf_items(&d, &[(Space::Model, explicit.clone())], &explicit).unwrap();
+    assert_eq!(bytes, unchanged);
+}
+
+#[test]
+fn json_pages_inherit_render_budget() {
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+
+    use cadcraft_io::pdf::plot_with_budget;
+
+    let mut d = Drawing::new_metric();
+    line(&mut d, (0.0, 0.0), (100.0, 50.0));
+    let options = json!({"pages": [{"window": [[0, 0], [100, 50]]}]});
+    let error = plot_with_budget(&d, &Space::Model, &options, Some(Arc::new(AtomicBool::new(true))), None).unwrap_err().to_string();
+    assert!(error.contains("cancelled"), "{error}");
+    let error = plot_with_budget(&d, &Space::Model, &options, None, Some(0)).unwrap_err().to_string();
+    assert!(error.contains("SHEET_TOO_LARGE"), "{error}");
+}

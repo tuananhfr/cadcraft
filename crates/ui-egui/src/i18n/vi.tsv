@@ -1774,6 +1774,7 @@ ribbon	Output	Xuất bản
 	No frames selected	Chưa chọn khung bản vẽ nào
 	{n} frame(s) added, {m} ignored (not frames), {t} total	Đã thêm {n} khung, bỏ qua {m} (không phải khung), tổng {t}
 	UBPLOT: {n} sheet(s), {b} blocked, {w} warning(s)	UBPLOT: {n} tờ bản vẽ, {b} bị chặn, {w} cảnh báo
+	Plot Jobs	Tác vụ in
 	Publish Plot Frames	Xuất bản các khung in
 	Scan Plot Frames	Quét các khung in
 	Plot Frame Templates	Mẫu khung in
