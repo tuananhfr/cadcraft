@@ -11,6 +11,10 @@ on:
         description: Run the ignored workspace SLO measurements (release build)
         type: boolean
         default: false
+      windows:
+        description: Build and test the desktop app on Windows
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -118,6 +122,58 @@ jobs:
           name: cadcraft-web-${{ github.sha }}
           path: dist/web
           retention-days: 7
+
+  # On demand only: Windows runner minutes cost twice as much as Linux minutes.
+  windows:
+    name: Windows desktop
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.windows }}
+    runs-on: windows-2025
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out craft-fonts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: tuananhfr/craft-fonts
+          ref: ${{ env.CRAFT_FONTS_REF }}
+          path: craft-fonts
+      - name: Install Rust (stable)
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: windows
+      - name: tests
+        shell: bash
+        env:
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+        run: |
+          set -o pipefail
+          cargo test --no-fail-fast -p cadcraft -p cadcraft-ui-egui 2>&1 | tee test.log
+      - name: Build Windows desktop
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+        run: cargo build --release -p cadcraft
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: cadcraft-windows-${{ github.sha }}
+          path: target/release/cadcraft.exe
+          retention-days: 7
+          if-no-files-found: error
+      - name: Summary of failing tests
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          {
+            echo "### Failing tests"
+            grep -E '^test .* \.\.\. FAILED$' test.log | sed 's/^test /- /; s/ \.\.\. FAILED$//' || echo "none"
+            grep -E '^test result' test.log | awk '{p+=$4; f+=$6} END {print "\npassed=" p " failed=" f}'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   perf:
     # On demand only: release builds of two test binaries; shared runners make the numbers indicative.
