@@ -125,11 +125,14 @@ impl Inbox {
         for upload in self.files.take() {
             match upload {
                 Ok((Purpose::Drawing, name, bytes)) => app.open_bytes(&name, &bytes),
-                Ok((Purpose::Workspace, name, bytes)) => {
-                    if let Err(e) = upload_route::route(Purpose::Workspace, &name, &bytes).and_then(|(id, params)| app.run(&id, params)) {
-                        app.open_failed(e);
+                Ok((Purpose::Workspace, name, bytes)) => match upload_route::route(Purpose::Workspace, &name, &bytes) {
+                    Ok((_, params)) => {
+                        if let Some(text) = params.get("text").and_then(serde_json::Value::as_str) {
+                            app.open_import_preview(text.to_string());
+                        }
                     }
-                }
+                    Err(error) => app.open_failed(error),
+                },
                 Err(e) => app.open_failed(e),
             }
         }

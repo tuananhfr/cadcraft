@@ -160,10 +160,14 @@ impl<K: KeyValue> LocalStorageStore<K> {
         if let Some(stored) = kv.get(CURRENT_KEY) {
             remember_created(&stored, &mut created);
         }
+        Self { created, ..Self::unread(kv, now_ms) }
+    }
+
+    fn unread(kv: K, now_ms: fn() -> f64) -> Self {
         Self {
             kv,
             now_ms,
-            created,
+            created: BTreeMap::new(),
             external: Rc::new(Cell::new(false)),
             #[cfg(target_arch = "wasm32")]
             repaint: Rc::new(RefCell::new(None)),
@@ -361,11 +365,26 @@ impl KeyValue for BrowserStorage {
 /// The page's `localStorage`; `None` when the browser blocks it.
 #[cfg(target_arch = "wasm32")]
 pub fn open() -> Option<LocalStorageStore<BrowserStorage>> {
+    open_with(false)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn open_safe() -> Option<LocalStorageStore<BrowserStorage>> {
+    open_with(true)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn open_with(safe_mode: bool) -> Option<LocalStorageStore<BrowserStorage>> {
     use wasm_bindgen::{JsCast, closure::Closure};
 
     let window = web_sys::window()?;
     let storage = window.local_storage().ok().flatten()?;
-    let store = LocalStorageStore::new(BrowserStorage(storage), web_sys::js_sys::Date::now);
+    // Safe startup must not inspect the saved workspace, even to recover creation timestamps.
+    let store = if safe_mode {
+        LocalStorageStore::unread(BrowserStorage(storage), web_sys::js_sys::Date::now)
+    } else {
+        LocalStorageStore::new(BrowserStorage(storage), web_sys::js_sys::Date::now)
+    };
     let external = Rc::clone(&store.external);
     let repaint = Rc::clone(&store.repaint);
     let listener = Closure::<dyn FnMut(web_sys::StorageEvent)>::new(move |event: web_sys::StorageEvent| {
@@ -442,6 +461,26 @@ mod tests {
 
     fn store(storage: FakeStorage) -> LocalStorageStore<FakeStorage> {
         LocalStorageStore::new(storage, || 1_800_000_000_000.0)
+    }
+
+    #[test]
+    fn safe_store_construction_does_not_read_workspace() {
+        struct Counted(Rc<Cell<usize>>);
+        impl KeyValue for Counted {
+            fn get(&self, _key: &str) -> Option<String> {
+                self.0.set(self.0.get() + 1);
+                Some("stored workspace".into())
+            }
+            fn set(&mut self, _key: &str, _value: &str) -> Result<(), String> {
+                Ok(())
+            }
+            fn remove(&mut self, _key: &str) {}
+        }
+        let reads = Rc::new(Cell::new(0));
+        let store = LocalStorageStore::unread(Counted(Rc::clone(&reads)), || 1_800_000_000_000.0);
+        assert_eq!(reads.get(), 0);
+        assert_eq!(store.read_current().as_deref(), Some("stored workspace"));
+        assert_eq!(reads.get(), 1, "the retained store can be read when safe mode ends");
     }
 
     #[test]

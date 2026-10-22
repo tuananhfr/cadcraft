@@ -33,6 +33,7 @@ pub fn show(app: &mut CadApp, ctx: &egui::Context) {
         "authoring" => crate::bedit::authoring_dialog(app, ctx, &mut open),
         "stylesmanager" => crate::plotstyles::dialog(app, ctx, &mut open),
         "fonts" => crate::fontmgr::dialog(app, ctx, &mut open),
+        crate::wsprofile::import_preview::DIALOG => crate::wsprofile::import_preview::dialog(app, ctx, &mut open),
         crate::wsprofile::tab_conflict::DIALOG => crate::wsprofile::tab_conflict::dialog(app, ctx, &mut open),
         crate::wsprofile::picker::PICKER_DIALOG => crate::wsprofile::picker::dialog(app, ctx, &mut open),
         crate::wsprofile::picker::SAVE_AS_DIALOG => crate::wsprofile::picker::save_as_dialog(app, ctx, &mut open),

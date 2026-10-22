@@ -73,6 +73,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.workspace.import", "Import Workspace...", &[], None),
     ("ui.workspace.restore", "Restore Workspace Revision", &[], None),
     ("ui.workspace.rollback", "Roll Back Workspace to 1.0.0", &[], None),
+    ("ui.workspace.safemode", "Safe Mode", &["Window", "Safe Mode"], None),
     ("ui.workspace.status", "Workspace Save Status", &[], None),
     ("ui.workspace.set", "Set Workspace Value", &[], None),
     ("ui.workspace.resolve", "Resolve Workspace Conflict", &[], None),
@@ -147,6 +148,10 @@ pub fn run_ui_command(app: &mut CadApp, id: &str, params: &Value) -> Option<Resu
     }
     if let Some(result) = crate::i18n::with_language(app.language(), || crate::focus::route(app, id, params)) {
         return Some(result);
+    }
+    // Preview and rejected imports must not capture pending UI edits into the workspace.
+    if id == "ui.workspace.import" {
+        return crate::i18n::with_language(app.language(), || crate::wsprofile::commands::route(app, id, params));
     }
     // Pending interface edits belong to the command's undo step; automatic geometry repairs
     // belong to the existing drag instead of adding undo steps.

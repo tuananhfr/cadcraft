@@ -204,17 +204,25 @@ mod web {
                         }
                         // After the preferences: a profile that names a theme or language overrides them.
                         // Blocked storage still gets a store, one that reports every save as failed.
-                        match crate::profile_store::open() {
+                        let safe_mode = query_param("safe").is_some();
+                        let store = if safe_mode { crate::profile_store::open_safe() } else { crate::profile_store::open() };
+                        match store {
                             Some(mut store) => {
                                 store.repaint_on_external_change(&cc.egui_ctx);
-                                app.attach_profile_store(Box::new(store));
+                                if safe_mode {
+                                    app.attach_profile_store_safe(Box::new(store));
+                                } else {
+                                    app.attach_profile_store(Box::new(store));
+                                }
                             }
                             None => {
                                 log::warn!("workspace: localStorage is not available; the layout will not be saved");
-                                app.attach_profile_store(Box::new(cadcraft_ui_egui::wsprofile::store::MemoryStore {
-                                    fail_writes: true,
-                                    ..Default::default()
-                                }));
+                                let store = Box::new(cadcraft_ui_egui::wsprofile::store::MemoryStore { fail_writes: true, ..Default::default() });
+                                if safe_mode {
+                                    app.attach_profile_store_safe(store);
+                                } else {
+                                    app.attach_profile_store(store);
+                                }
                             }
                         }
                         if query_param("lang").as_deref() == Some("qps") {

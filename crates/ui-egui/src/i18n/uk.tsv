@@ -1949,3 +1949,14 @@
 	Safe mode	Безпечний режим
 	Saving drawing…	Збереження креслення…
 	Drawing autosaved	Креслення автозбережено
+	Safe Mode	Безпечний режим
+	Restart in safe mode: add ?safe to the address / --safe-mode	Перезапустіть у безпечному режимі: додайте ?safe до адреси / --safe-mode
+	Safe mode ended. Changes made in safe mode were discarded; the stored workspace was restored.	Безпечний режим завершено. Зміни, зроблені в ньому, відкинуто; збережений робочий простір відновлено.
+	The file is damaged or was edited by hand (checksum mismatch)	Файл пошкоджено або змінено вручну (контрольна сума не збігається)
+	The file has no checksum; it cannot be checked for damage	Файл не має контрольної суми; перевірити його на пошкодження неможливо
+	Workspace import is not available in safe mode	Імпорт робочого простору недоступний у безпечному режимі
+	Import Workspace	Імпорт робочого простору
+	Changes	Зміни
+	Ignored device settings	Пропущені налаштування пристрою
+	Warnings	Попередження
+	{count} more items	Ще {count} пунктів
