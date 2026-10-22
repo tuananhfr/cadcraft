@@ -1858,3 +1858,12 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	The browser uses this key; choose another shortcut	Trình duyệt dùng phím này; hãy chọn phím tắt khác
 # GĐ3 Task 7: dock clamp.
 	The docking content area must be finite and positive	Vùng nội dung bảng phải hữu hạn và có kích thước dương
+	Full Screen	Toàn màn hình
+	Focus Mode	Chế độ tập trung
+	Clean Screen On	Bật màn hình gọn
+	Clean Screen Off	Tắt màn hình gọn
+	Exit Focus Mode (Esc)	Thoát chế độ tập trung (Esc)
+	Full screen needs a click in the browser	Cần nhấp chuột trong trình duyệt để mở toàn màn hình
+	Full screen is blocked here (iframe needs allow="fullscreen"); using Focus mode	Toàn màn hình bị chặn (iframe cần allow="fullscreen"); đang dùng chế độ tập trung
+	on must be a boolean	on phải là giá trị boolean
+	command_line must be floating or hidden	command_line phải là floating hoặc hidden

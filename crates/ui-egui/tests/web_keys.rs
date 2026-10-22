@@ -32,9 +32,11 @@ fn web_defaults_avoid_browser_reserved_keys() {
 fn web_defaults_keep_every_safe_desktop_binding() {
     let desktop = shortcuts::defaults_for(KeyPlatform::Desktop);
     let web = shortcuts::defaults_for(KeyPlatform::Web);
-    let removed = desktop.values().filter(|keys| shortcuts::is_browser_reserved(keys)).count();
+    // Web full screen needs a click and Ctrl+0 resets browser zoom, so these stay desktop-only.
+    let desktop_only = |command: &str| matches!(command, "ui.fullscreen" | "ui.focusmode");
+    let removed = desktop.iter().filter(|(command, keys)| desktop_only(command) || shortcuts::is_browser_reserved(keys)).count();
     for (command, keys) in &desktop {
-        if !shortcuts::is_browser_reserved(keys) {
+        if !desktop_only(command) && !shortcuts::is_browser_reserved(keys) {
             assert_eq!(web.get(command), Some(keys), "{command}");
         }
     }

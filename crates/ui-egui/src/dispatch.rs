@@ -34,6 +34,9 @@ fn dispatch_command(app: &mut CadApp, id: &str, params: Value) -> Dispatched {
         app.session.echo(reason.clone());
         return Dispatched { outcome: Outcome::Unsupported, result: Err(reason) };
     }
+    if id.eq_ignore_ascii_case("ui.fullscreen") {
+        return crate::fullscreen::dispatch(app, false);
+    }
     if let Some(result) = menus::run_ui_command(app, id, &params) {
         let outcome = match &result {
             Ok(value) if value.get("cancelled").and_then(Value::as_bool) == Some(true) => Outcome::Cancelled,

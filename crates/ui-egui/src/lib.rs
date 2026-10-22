@@ -25,9 +25,11 @@ pub mod dialogs;
 pub mod dispatch;
 pub mod dock_clamp;
 pub mod docking;
+pub mod focus;
 pub mod fontmgr;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod fontstore;
+pub mod fullscreen;
 pub mod hatchdlg;
 mod mtext_editor;
 pub mod spacemouse;
@@ -208,6 +210,7 @@ pub struct FileKind {
 /// Host services (file pickers, clipboard) injected by the app so this crate stays portable.
 #[derive(Default)]
 pub struct Services {
+    pub fullscreen: Option<Box<dyn fullscreen::FullscreenHost>>,
     pub pick_open: Option<Box<dyn Fn() -> Option<String>>>,
     pub pick_save: Option<Box<dyn Fn(&str) -> Option<String>>>,
     pub pick_open_kind: Option<Box<dyn Fn(&FileKind) -> Option<String>>>,
@@ -244,6 +247,9 @@ pub struct CadApp {
     /// The interface's own preferences from the Options dialog ([`options`]).
     pub options: options::UiOptions,
     pub services: Services,
+    pub fullscreen: fullscreen::State,
+    pub focus: focus::State,
+    pub(crate) command_context: egui::Context,
     pub canvas: canvas::CanvasState,
     /// Desktop HID status and navigation preferences; the web host supplies no HID backend.
     /// Fonts the user added and the replacement dialog ([`fontmgr`]).
@@ -309,6 +315,9 @@ impl CadApp {
             ui: UiState::default(),
             options: options::UiOptions::default(),
             services,
+            fullscreen: fullscreen::State::default(),
+            focus: focus::State::default(),
+            command_context: egui::Context::default(),
             canvas: canvas::CanvasState::default(),
             fontmgr: fontmgr::State::default(),
             autohide: autohide::State::default(),
@@ -395,7 +404,24 @@ impl CadApp {
             let first = text.split_whitespace().next().unwrap_or("");
             // `cmd {json}` is a programmatic call: the engine runs it with those parameters.
             let json_form = text.trim_start().get(first.len()..).is_some_and(|rest| rest.trim_start().starts_with('{'));
-            if !first.is_empty() && !json_form && menus::run_ui_command(self, &first.to_ascii_lowercase(), &Value::Null).is_some() {
+            if json_form && menus::is_ui_command(&first.to_ascii_lowercase()) {
+                let result = serde_json::from_str::<Value>(text.trim_start().get(first.len()..).unwrap_or(""))
+                    .map_err(|error| error.to_string())
+                    .and_then(|params| self.run(&first.to_ascii_lowercase(), params));
+                if let Err(error) = result {
+                    self.session.echo(error.clone());
+                    return Some(error);
+                }
+                return None;
+            }
+            if !first.is_empty()
+                && !json_form
+                && let Some(result) = menus::run_ui_command(self, &first.to_ascii_lowercase(), &Value::Null)
+            {
+                if let Err(error) = result {
+                    self.session.echo(error.clone());
+                    return Some(error);
+                }
                 return None;
             }
         }
@@ -600,6 +626,11 @@ impl CadApp {
 
     /// Per-frame logic before layout.
     pub fn logic(&mut self, ctx: &egui::Context) {
+        if self.command_context != *ctx && self.services.fullscreen.is_none() && self.fullscreen.phase == fullscreen::Phase::Requested {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+        }
+        self.command_context = ctx.clone();
+        fullscreen::sync(self, ctx);
         // A long LISP routine runs a slice per frame, so the window stays live (and Esc stops it).
         self.session.lisp_tick();
         if self.session.lisp_busy() {
@@ -692,41 +723,60 @@ impl CadApp {
     }
 
     fn draw(&mut self, ui: &mut egui::Ui) {
+        self.command_context = ui.ctx().clone();
         let t0 = now_ms();
         control::begin_frame(ui.ctx());
         let t = theme::Tokens::get();
-        chrome::title_and_toolbar(self, ui);
-        if self.ui.in_window_menu {
+        if !focus::hides(self, focus::Chrome::Toolbars) {
+            chrome::title_and_toolbar(self, ui);
+        }
+        if self.ui.in_window_menu && !focus::hides(self, focus::Chrome::MenuBar) {
             menus::menu_bar(self, ui);
         }
-        ribbon::render::show(self, ui);
-        if self.ui.show_status_bar {
+        if !focus::hides(self, focus::Chrome::Ribbon) {
+            ribbon::render::show(self, ui);
+        }
+        if self.ui.show_status_bar && !focus::hides(self, focus::Chrome::StatusBar) {
             chrome::status_bar(self, ui);
         }
-        toolbars::show_docked(ui, self, wsprofile::schema::Dock::Bottom);
-        if self.ui.show_file_tabs {
+        if !focus::hides(self, focus::Chrome::Toolbars) {
+            toolbars::show_docked(ui, self, wsprofile::schema::Dock::Bottom);
+        }
+        if self.ui.show_file_tabs && !focus::hides(self, focus::Chrome::FileTabs) {
             chrome::file_tabs(self, ui);
         }
-        toolbars::show_docked(ui, self, wsprofile::schema::Dock::Left);
-        toolbars::show_docked(ui, self, wsprofile::schema::Dock::Right);
+        if !focus::hides(self, focus::Chrome::Toolbars) {
+            toolbars::show_docked(ui, self, wsprofile::schema::Dock::Left);
+            toolbars::show_docked(ui, self, wsprofile::schema::Dock::Right);
+        }
         let has_doc = !self.session.docs.is_empty() && !self.ui.start_tab;
-        if has_doc && self.ui.show_command_line {
+        if !has_doc && (self.focus.active() || self.fullscreen.phase != fullscreen::Phase::Off) {
+            cmdline::keyboard(self, ui.ctx());
+        }
+        if has_doc && self.ui.show_command_line && !self.focus.active() {
             cmdline::show_docked(self, ui);
         }
-        if has_doc {
+        if has_doc && !focus::hides(self, focus::Chrome::Panels) {
             autohide::edges(self, ui);
         }
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {
             if has_doc {
-                docking::show(self, ui);
+                if focus::hides(self, focus::Chrome::Panels) {
+                    canvas::show(self, ui);
+                } else {
+                    docking::show(self, ui);
+                }
             } else {
                 chrome::start_page(self, ui);
             }
         });
-        if has_doc {
+        if has_doc && !focus::hides(self, focus::Chrome::Panels) {
             autohide::overlay(self, ui.ctx());
         }
-        toolbars::show_floating(ui.ctx(), self);
+        if !focus::hides(self, focus::Chrome::Toolbars) {
+            toolbars::show_floating(ui.ctx(), self);
+        }
+        focus::exit_button(ui.ctx(), self);
         dialogs::show(self, ui.ctx());
         wsprofile::conflict::show_conflict_dialog(ui.ctx(), self);
         palettes::patterns::prompt_picker(self, ui.ctx());

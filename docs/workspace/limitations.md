@@ -71,3 +71,5 @@ Workspace revision checks detect a stale writer before commit, on desktop as wel
 PDFBOOK still selects frames by the requested height. Other-height closed outlines are ignored; only requested-height frames that match no paper receive `FRAME_PAPER_MISMATCH`. Invalid coordinates/dimensions report `FRAME_OUT_OF_RANGE`; reaching the model-entity scan cap reports `FRAME_LIMIT`, which does not count as a skipped frame. These diagnostics do not establish general frame-detection parity.
 
 GĐ0 shortcut, upload, recovery and local-conflict messages have Ukrainian catalog entries. Vietnamese translations, including the recovery revision notice and the conflict choices, remain a GĐ1B handoff; no `vi.tsv` exists in this branch.
+
+Browser fullscreen requires a click in the application and Fullscreen API permission. Embedded iframes need `allow="fullscreen"`. If the browser refuses fullscreen, the application enters Focus mode and shows a status message. Programmatic web requests return Unsupported; desktop fullscreen uses the native viewport. Focus and fullscreen are temporary and are never saved in a workspace profile.

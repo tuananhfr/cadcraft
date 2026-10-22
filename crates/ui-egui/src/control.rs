@@ -290,6 +290,7 @@ fn key_from(name: &str) -> Option<egui::Key> {
 }
 
 pub fn handle(app: &mut CadApp, ctx: &egui::Context, req: &ControlRequest) -> Outcome {
+    app.command_context = ctx.clone();
     let p = &req.params;
     let s = |k: &str| p.get(k).and_then(Value::as_str);
     let f = |k: &str| p.get(k).and_then(Value::as_f64);
@@ -302,11 +303,20 @@ pub fn handle(app: &mut CadApp, ctx: &egui::Context, req: &ControlRequest) -> Ou
         }
         "ui.menu.invoke" => {
             let Some(id) = s("command").or(s("id")) else { return err("missing `command`") };
+            if id.eq_ignore_ascii_case("ui.fullscreen") {
+                return wrap(app.dispatch(id, json!({})));
+            }
             crate::menus::activate(app, id);
             ok(cmdline_state(app))
         }
         "cmdline.input" => {
             let text = s("text").unwrap_or("");
+            if app.services.fullscreen.is_some()
+                && !app.session.prompting()
+                && text.split_whitespace().next().is_some_and(|id| id.eq_ignore_ascii_case("ui.fullscreen"))
+            {
+                return wrap(app.dispatch("ui.fullscreen", json!({})));
+            }
             let before = app.session.log.len();
             let error = app.cmdline(text);
             let out: Vec<String> = app.session.log.iter().skip(before).cloned().collect();

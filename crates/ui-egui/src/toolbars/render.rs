@@ -310,7 +310,11 @@ fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect,
         ui.painter().rect_filled(bar_rect, 0.0, t.chrome.gamma_multiply(0.55));
     }
     if let Some(command) = clicked {
-        app.start(&command);
+        if command == "ui.fullscreen" {
+            crate::menus::activate(app, &command);
+        } else {
+            app.start(&command);
+        }
     }
     building(ui.ctx(), |geometry| {
         geometry.bars.push(BarRect { id: bar.id.clone(), rect: bar_rect });

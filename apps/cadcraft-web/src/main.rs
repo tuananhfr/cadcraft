@@ -12,6 +12,8 @@
 #[cfg(target_arch = "wasm32")]
 pub mod download;
 #[cfg(target_arch = "wasm32")]
+mod fullscreen;
+#[cfg(target_arch = "wasm32")]
 mod host;
 #[cfg(target_arch = "wasm32")]
 mod leave_guard;
@@ -32,18 +34,25 @@ mod web {
     /// the files File > Open… and drag and drop read for it in the background, the page embedding
     /// it (`?host=parent`), and the browser's `prefers-reduced-motion` (it stays live, so View ▸
     /// Accessibility ▸ Animation Effects ▸ Use System Setting follows a change).
-    struct Shell(
+    pub(crate) struct Shell(
         Rc<RefCell<CadApp>>,
         crate::upload::Inbox,
         Option<(crate::host::Bridge, crate::host::DirtyReport)>,
         Option<web_sys::MediaQueryList>,
         crate::fonts::Fonts,
         Option<crate::leave_guard::LeaveGuard>,
+        Option<crate::fullscreen::WebFullscreen>,
+        pub(crate) egui::Context,
     );
 
     impl eframe::App for Shell {
         fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
             let Ok(mut app) = self.0.try_borrow_mut() else { return };
+            if self.6.as_ref().and_then(crate::fullscreen::WebFullscreen::take_event) == Some(false)
+                && app.fullscreen.phase == cadcraft_ui_egui::fullscreen::Phase::Requested
+            {
+                cadcraft_ui_egui::fullscreen::rejected(&mut app);
+            }
             self.1.take_dropped(ctx);
             self.1.drain(&mut app);
             self.4.frame(&mut app);
@@ -249,7 +258,19 @@ mod web {
                         }
                         let app = Rc::new(RefCell::new(app));
                         flush_when_leaving(&app);
-                        Ok(Box::new(Shell(app, inbox, host, reduced_motion, fonts, leave_guard)))
+                        let mut shell = Shell(app, inbox, host, reduced_motion, fonts, leave_guard, None, cc.egui_ctx.clone());
+                        let fullscreen = match crate::fullscreen::install(&shell) {
+                            Ok(fullscreen) => fullscreen,
+                            Err(error) => {
+                                log::warn!("fullscreen: {error:?}");
+                                crate::fullscreen::WebFullscreen::default()
+                            }
+                        };
+                        if let Ok(mut app) = shell.0.try_borrow_mut() {
+                            app.services.fullscreen = Some(Box::new(fullscreen.clone()));
+                        }
+                        shell.6 = Some(fullscreen);
+                        Ok(Box::new(shell))
                     }),
                 )
                 .await;

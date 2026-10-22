@@ -104,6 +104,8 @@ const MARKED_UI_SOURCES: &[(&str, &str)] = &[
     ("canvas.rs", include_str!("../canvas.rs")),
     ("chrome.rs", include_str!("../chrome.rs")),
     ("cmdline.rs", include_str!("../cmdline.rs")),
+    ("focus.rs", include_str!("../focus.rs")),
+    ("fullscreen.rs", include_str!("../fullscreen.rs")),
     ("credits.rs", include_str!("../credits.rs")),
     ("palettes/quickcalc.rs", include_str!("../palettes/quickcalc.rs")),
     ("palettes/patterns.rs", include_str!("../palettes/patterns.rs")),
