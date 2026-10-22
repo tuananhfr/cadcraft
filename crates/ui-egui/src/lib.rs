@@ -540,7 +540,7 @@ impl CadApp {
             ));
         }
         (len > Self::MAX_OPEN_BYTES)
-            .then(|| format!("Open: {name} is {mb:.1} MB, larger than the {} MB CADCraft opens in the browser", Self::MAX_OPEN_BYTES >> 20))
+            .then(|| format!("Open: {name} is {mb:.1} MB, larger than the {} MB UbotCAD opens in the browser", Self::MAX_OPEN_BYTES >> 20))
     }
 
     /// Open a drawing from its contents where there is no path to open (on the web: the file

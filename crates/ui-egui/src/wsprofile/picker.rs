@@ -43,7 +43,7 @@ fn preset_name(id: &str) -> Option<&'static str> {
 
 fn preset_description(id: &str) -> &'static str {
     match id {
-        "SIMPLE" => crate::tl!("The CADCraft window as it is today: tool bar, Tool Sets and palettes."),
+        "SIMPLE" => crate::tl!("The UbotCAD window as it is today: tool bar, Tool Sets and palettes."),
         "AUTOCAD_FAMILIAR" => crate::tl!("Ribbon with tabs and groups in the order AutoCAD users expect."),
         "PLANNING_GIS" => crate::tl!("Ribbon plus a survey tool bar and base map attachments."),
         "ARCHITECTURE" => crate::tl!("Walls and openings, schedules and an architecture tool bar."),

@@ -52,7 +52,7 @@
 	> Greater than	> Більше ніж
 	A variable name starts with a letter and has only letters, digits and _	Ім'я змінної починається з літери й містить лише літери, цифри та _
 	About	Про програму
-	About CADCraft	Про CADCraft
+	About UbotCAD	Про UbotCAD
 	Absolute	Абсолютні
 	Add Leader	Додати виноску
 	Additional angles	Додаткові кути
@@ -113,7 +113,8 @@
 	ByBlock	За блоком
 	ByColor	За кольором
 	ByLayer	За шаром
-	CADCraft Help	Довідка CADCraft
+	UbotCAD	UbotCAD
+	UbotCAD Help	Довідка UbotCAD
 	Cancel	Скасувати
 	Cartesian (x, y)	Декартові (x, y)
 	Center	Центр
@@ -703,7 +704,7 @@
 	Quick Select...	Швидкий вибір...
 	QuickCalc	Калькулятор
 	QuickCalc Pick	Вибір для калькулятора
-	Quit CADCraft	Вийти з CADCraft
+	Quit UbotCAD	Вийти з UbotCAD
 	Radius	Радіус
 	Raster Image	Растрове зображення
 	Ray	Промінь
@@ -938,7 +939,7 @@
 # Options dialog (OPTIONS).
 	A drawing opened from a file keeps that file's format.	Креслення, відкрите з файлу, зберігає формат цього файлу.
 	An array that would create more objects than this is refused.	Масив, що створив би більше об'єктів, буде відхилено.
-	CADCraft keeps these preferences, object snap modes and drafting toggles for your user account and restores them when it starts.	CADCraft зберігає ці параметри, режими об'єктної прив'язки та перемикачі креслення для вашого облікового запису й відновлює їх під час запуску.
+	UbotCAD keeps these preferences, object snap modes and drafting toggles for your user account and restores them when it starts.	UbotCAD зберігає ці параметри, режими об'єктної прив'язки та перемикачі креслення для вашого облікового запису й відновлює їх під час запуску.
 	Changes apply at once and are kept for next time.	Зміни застосовуються одразу й зберігаються на наступний раз.
 	Command line history	Історія командного рядка
 	Copy as JSON	Копіювати як JSON
@@ -1211,7 +1212,7 @@
 @plural	{n} contributor	{n} учасник|{n} учасники|{n} учасників
 	Drawing as bytes	Креслення як байти
 	Services	Служби
-	Hide CADCraft	Приховати CADCraft
+	Hide UbotCAD	Приховати UbotCAD
 	Hide Others	Приховати інші
 	Accessibility	Спеціальні можливості
 	Show System Cursor	Показувати системний курсор
@@ -1349,7 +1350,7 @@
 	Infrastructure	Інфраструктура
 	Quantity Survey and QA	Кошториси та контроль якості
 	Sheets and Publishing	Аркуші та публікація
-	The CADCraft window as it is today: tool bar, Tool Sets and palettes.	Вікно CADCraft таким, яким воно є зараз: панель інструментів, набори інструментів і палітри.
+	The UbotCAD window as it is today: tool bar, Tool Sets and palettes.	Вікно UbotCAD таким, яким воно є зараз: панель інструментів, набори інструментів і палітри.
 	Ribbon with tabs and groups in the order AutoCAD users expect.	Стрічка з вкладками та групами в порядку, звичному для користувачів AutoCAD.
 	Ribbon plus a survey tool bar and base map attachments.	Стрічка, панель інструментів знімання та підключення підкладок.
 	Walls and openings, schedules and an architecture tool bar.	Стіни й отвори, відомості та архітектурна панель інструментів.

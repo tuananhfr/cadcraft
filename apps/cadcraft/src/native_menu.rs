@@ -39,14 +39,14 @@ impl NativeMenu {
             CheckMenuItem::with_id("cc-ribbon-minimize", i18n::tr(language, "Minimize Ribbon"), true, app.ws.effective.layout.ribbon.collapsed, None);
         let mut submenus = Vec::new();
         let mut counter = 0usize;
-        let app_menu = Submenu::new("CADCraft", true);
-        let about = MenuItem::with_id("cc-about", i18n::tr(language, "About CADCraft"), true, None);
+        let app_menu = Submenu::new("UbotCAD", true);
+        let about = MenuItem::with_id("cc-about", i18n::tr(language, "About UbotCAD"), true, None);
         let predefined = vec![
             ("Services", PredefinedMenuItem::services(Some(i18n::tr(language, "Services")))),
-            ("Hide CADCraft", PredefinedMenuItem::hide(Some(i18n::tr(language, "Hide CADCraft")))),
+            ("Hide UbotCAD", PredefinedMenuItem::hide(Some(i18n::tr(language, "Hide UbotCAD")))),
             ("Hide Others", PredefinedMenuItem::hide_others(Some(i18n::tr(language, "Hide Others")))),
             ("Show All", PredefinedMenuItem::show_all(Some(i18n::tr(language, "Show All")))),
-            ("Quit CADCraft", PredefinedMenuItem::quit(Some(i18n::tr(language, "Quit CADCraft")))),
+            ("Quit UbotCAD", PredefinedMenuItem::quit(Some(i18n::tr(language, "Quit UbotCAD")))),
         ];
         // The Mac place for preferences: CADCraft ▸ Settings… (⌘,) opens the Options dialog.
         let settings = MenuItem::with_id("cc-settings", i18n::tr(language, "Settings..."), true, accel("Cmd+Comma"));
@@ -57,7 +57,7 @@ impl NativeMenu {
                 let _ = app_menu.append(&PredefinedMenuItem::separator());
             }
         }
-        items.insert("cc-about".into(), ("ui.dialog.about".into(), "About CADCraft".into(), about));
+        items.insert("cc-about".into(), ("ui.dialog.about".into(), "About UbotCAD".into(), about));
         items.insert("cc-settings".into(), ("options".into(), "Settings...".into(), settings));
         let _ = menu.append(&app_menu);
         for (title, entries) in menus::tree(app) {
