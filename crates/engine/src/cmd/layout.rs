@@ -76,13 +76,13 @@ pub fn specs() -> Vec<CommandSpec> {
             .params(
                 "{layout?: current, device?: plotter name (PLOTTERMANAGER) | \"None\", paper?: the device's paper | \"A4\"|\"A3\"|\"Letter\"|\"ANSI B\"|…, width?, height? (mm), landscape?, margins?: [l,b,r,t] mm, lineweights?, plotArea?, scale?, scaleToFit?, center?, plotStyleTable?: \"monochrome.ctb\"|\"grayscale.ctb\"|\"default.ctb\"|\"None\"|…, displayPlotStyles?: bool, plotTransparency?: bool}",
             ),
-        CommandSpec::new("plot", "Print...", |s, p| run_plot(s, &super::plotters::plot_options(s, p, "plot")?, "plot"))
+        CommandSpec::new("plot", "Print...", |s, p| run_plot(s, p, "plot"))
             .menu(&["File", "Print..."])
             .key("Cmd+P")
             .alias(&["print"])
             .params("{path? (else returns base64 `data`), layout?: current|\"Model\", paper?, landscape?, fit?: bool, scale?: number | \"1:50\", scaleMode?: \"real\" (physical ratio using INSUNITS; default: paper units per drawing unit), center?: bool (Model, default true), offset?: [x,y] mm (Model, when center is false; each within ±100000), lineweights?: bool, plotTransparency?: bool (default: the page setup's; PLOTTRANSPARENCYOVERRIDE 0/2 overrides it), plotArea?: extents|display|limits|window (Model) | layout, window?: [[x1,y1],[x2,y2]]} (typed or from the menu: the Plot dialog)")
             .noundo(),
-        CommandSpec::new("exportpdf", "Export to PDF...", |s, p| run_plot(s, &super::plotters::plot_options(s, p, "exportpdf")?, "exportpdf"))
+        CommandSpec::new("exportpdf", "Export to PDF...", |s, p| run_plot(s, p, "exportpdf"))
             .menu(&["File", "Export to PDF..."])
             .params("{path? (else returns base64 `data`), layout?, paper?, landscape?, fit?, scale?, scaleMode?: \"real\" (as PLOT), center?: bool (Model, default true), offset?: [x,y] mm (Model, when center is false; each within ±100000), lineweights?, plotTransparency?, plotArea?, window?} (as PLOT)")
             .noundo(),
@@ -771,6 +771,8 @@ fn plot_sheets(cmd: &str, d: &cadcraft_doc::Drawing, v: &Value) -> Result<Vec<St
 /// `layers?: bool` (drawing layers as PDF layers, default on), `offLayers?: bool` (layers that
 /// are off on hidden PDF layers), `links?: [{handle, url}]` (hyperlinks) and `title?`.
 fn run_plot(s: &mut Session, p: &Value, cmd: &str) -> Result<Value> {
+    let (options, warnings) = super::plotters::plot_options(s, p, cmd)?;
+    let p = &options;
     let hook = io().and_then(|h| h.plot).ok_or_else(|| bad(cmd, "plotting is not available in this build"))?;
     // Checked here for a clear error; the plotter resolves the names the same way.
     let sheets = p.get("layouts").map(|v| plot_sheets(cmd, s.doc()?, v)).transpose()?;
@@ -834,7 +836,7 @@ fn run_plot(s: &mut Session, p: &Value, cmd: &str) -> Result<Value> {
         None => space.tab_name().to_string(),
     };
     let pages = sheets.as_ref().map_or(1, Vec::len);
-    match str_param(p, "path") {
+    let mut result = match str_param(p, "path") {
         Some(path) => {
             super::file::store_file(cmd, path, &bytes)?;
             let mut r = json!({ "path": path, "bytes": bytes.len(), "layout": layout, "pages": pages });
@@ -843,10 +845,19 @@ fn run_plot(s: &mut Session, p: &Value, cmd: &str) -> Result<Value> {
             {
                 output.insert("download".into(), json!(true));
             }
-            Ok(r)
+            r
         }
-        None => Ok(json!({ "data": base64_encode(&bytes), "bytes": bytes.len(), "layout": layout, "pages": pages })),
+        None => json!({ "data": base64_encode(&bytes), "bytes": bytes.len(), "layout": layout, "pages": pages }),
+    };
+    if !warnings.is_empty() {
+        for warning in &warnings {
+            s.echo(&warning.message);
+        }
+        if let Some(output) = result.as_object_mut() {
+            output.insert("warnings".into(), json!(warnings));
+        }
     }
+    Ok(result)
 }
 
 /// The model-space rectangle a plot of `plotArea` covers: `extents` (default) plots everything,
