@@ -780,6 +780,7 @@ impl CadApp {
             "layout_save": save_state::LayoutSave::from_ws(ws).as_str(),
             "drawing_save": save_state::DrawingSave::from_app(self).as_str(),
             "persisted": ws.store.is_some(),
+            "persisted_storage": ws.store.as_ref().and_then(|store| store.persisted_storage()),
             "fallback": fallback,
             "restored_revision": restored_revision,
             "undo": ws.history.undo_len(),

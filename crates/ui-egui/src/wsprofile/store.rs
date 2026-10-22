@@ -89,6 +89,10 @@ pub trait ProfileStore {
     fn durability(&mut self) -> Durability {
         Durability::Committed
     }
+    /// Whether the browser granted protection against automatic storage eviction.
+    fn persisted_storage(&self) -> Option<bool> {
+        None
+    }
     /// Stored revisions, ascending.
     fn snapshots(&self) -> Vec<u64>;
     fn read_snapshot(&self, revision: u64) -> Option<String>;

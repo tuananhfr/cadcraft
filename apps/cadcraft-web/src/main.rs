@@ -6,7 +6,7 @@
 //! with egui shapes instead of the GPU canvas, `?sample` opens the sample drawing. Saving downloads
 //! the drawing through the browser (`download.rs`). With `?host=parent` (inside an `<iframe>`), a
 //! same-origin parent page sends the drawing to open and stores what CADCraft saves instead
-//! (`host.rs`). The workspace layout is kept in `localStorage` (`profile_store.rs`).
+//! (`host.rs`). The workspace layout is kept in IndexedDB, with a localStorage fallback.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 #[cfg(target_arch = "wasm32")]
@@ -181,6 +181,7 @@ mod web {
             {
                 create.instance_descriptor.backends = eframe::wgpu::Backends::GL;
             }
+            let profile_store = crate::idb_profile_store::open().await;
             let result = eframe::WebRunner::new()
                 .start(
                     canvas,
@@ -202,19 +203,33 @@ mod web {
                         if let Some(prefs) = cc.storage.and_then(|s| s.get_string(cadcraft_ui_egui::PREFS_KEY)) {
                             app.load_prefs(&prefs);
                         }
-                        // After the preferences: a profile that names a theme or language overrides them.
-                        // Blocked storage still gets a store, one that reports every save as failed.
-                        match crate::profile_store::open() {
-                            Some(mut store) => {
+                        // A workspace can override the language and theme loaded from preferences.
+                        match profile_store {
+                            Ok(mut store) => {
                                 store.repaint_on_external_change(&cc.egui_ctx);
                                 app.attach_profile_store(Box::new(store));
                             }
-                            None => {
-                                log::warn!("workspace: localStorage is not available; the layout will not be saved");
-                                app.attach_profile_store(Box::new(cadcraft_ui_egui::wsprofile::store::MemoryStore {
-                                    fail_writes: true,
-                                    ..Default::default()
-                                }));
+                            Err(error) => {
+                                log::warn!("workspace: IndexedDB unavailable: {}", error.message());
+                                match crate::profile_store::open() {
+                                    Some(mut store) => {
+                                        store.repaint_on_external_change(&cc.egui_ctx);
+                                        app.attach_profile_store(Box::new(store));
+                                    }
+                                    None => {
+                                        app.attach_profile_store(Box::new(cadcraft_ui_egui::wsprofile::store::MemoryStore {
+                                            fail_writes: true,
+                                            ..Default::default()
+                                        }));
+                                    }
+                                }
+                                let notice = cadcraft_ui_egui::tl!("Saving in limited browser storage");
+                                let message = app.ws.message.get_or_insert_with(String::new);
+                                if !message.is_empty() {
+                                    message.push(' ');
+                                }
+                                message.push_str(&notice);
+                                app.set_status(notice);
                             }
                         }
                         if query_param("lang").as_deref() == Some("qps") {
@@ -301,6 +316,10 @@ fn wants_cpu(query: &str) -> bool {
 mod font_index;
 #[cfg(target_arch = "wasm32")]
 mod fonts;
+#[cfg(target_arch = "wasm32")]
+pub mod idb;
+#[cfg(any(target_arch = "wasm32", test))]
+pub mod idb_profile_store;
 #[cfg(any(target_arch = "wasm32", test))]
 mod profile_store;
 #[cfg(target_arch = "wasm32")]

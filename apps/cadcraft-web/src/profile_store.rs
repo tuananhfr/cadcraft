@@ -341,6 +341,11 @@ impl<K: KeyValue> ProfileStore for LocalStorageStore<K> {
 pub struct BrowserStorage(web_sys::Storage);
 
 #[cfg(target_arch = "wasm32")]
+pub fn browser_storage() -> Option<BrowserStorage> {
+    web_sys::window()?.local_storage().ok().flatten().map(BrowserStorage)
+}
+
+#[cfg(target_arch = "wasm32")]
 impl KeyValue for BrowserStorage {
     fn get(&self, key: &str) -> Option<String> {
         self.0.get_item(key).ok().flatten()
