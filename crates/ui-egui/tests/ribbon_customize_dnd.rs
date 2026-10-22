@@ -188,6 +188,27 @@ fn clicking_a_command_row_selects_it_before_reordering() {
 }
 
 #[test]
+fn focusing_a_later_command_keeps_the_drag_source_reachable() {
+    let _guard = test_lock();
+    let mut h = harness(familiar());
+    let before = commands(h.state(), "draw");
+    focus_command(&mut h, &before[0]);
+    let source_id = h.ctx.memory(|memory| memory.focused()).unwrap();
+    focus_command(&mut h, &before[3]);
+    let target_id = h.ctx.memory(|memory| memory.focused()).unwrap();
+    for id in [source_id, target_id] {
+        let response = h.ctx.read_response(id).unwrap();
+        assert!(response.sense.senses_click() && response.sense.senses_drag());
+        assert!(response.interact_rect.expand(0.5).contains_rect(response.rect), "command clipped: {response:?}");
+    }
+    drag_command(&mut h, 0, 3);
+    assert!(!egui::DragAndDrop::has_any_payload(&h.ctx));
+    h.state_mut().run("ui.layout.undo", json!({})).unwrap();
+    assert_eq!(commands(h.state(), "draw"), before);
+    assert!(!h.state().session.state().unwrap().is_dirty());
+}
+
+#[test]
 fn keyboard_reorder_matches_drag() {
     let _guard = test_lock();
     let mut keyboard = harness(familiar());

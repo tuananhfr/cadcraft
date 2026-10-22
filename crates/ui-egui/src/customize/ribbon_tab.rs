@@ -175,17 +175,19 @@ fn command_rows(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State, group: &
     ui.label(crate::tl!("Ribbon commands"));
     let focus = state.ribbon_focus.take();
     let mut movement = None;
-    egui::ScrollArea::vertical().id_salt(("ribbon_commands", &state.tab, &state.group)).max_height(160.0).show(ui, |ui| {
+    // The outer scrolling page can leave no height; keep this list usable for multi-row drags.
+    let scroll = egui::ScrollArea::vertical().id_salt(("ribbon_commands", &state.tab, &state.group)).min_scrolled_height(160.0).max_height(160.0);
+    scroll.show(ui, |ui| {
         for (index, command) in group.commands.iter().enumerate() {
             let payload = RibbonDrag { tab: state.tab.clone(), group: state.group.clone(), index };
             let id = ui.make_persistent_id(("ribbon_command", index));
             let (zone, dropped) = ui.dnd_drop_zone::<RibbonDrag, _>(egui::Frame::NONE, |ui| {
                 ui.push_id(id, |ui| {
                     let resolved = crate::toolbars::resolve(command);
-                    // A separate drag-source overlay would swallow clicks needed to select the row.
-                    let response = ui
-                        .add(egui::Button::selectable(state.ribbon_index == Some(index), crate::i18n::t(&resolved.label)))
-                        .interact(egui::Sense::drag());
+                    let response = ui.add(
+                        egui::Button::selectable(state.ribbon_index == Some(index), crate::i18n::t(&resolved.label))
+                            .sense(egui::Sense::click_and_drag()),
+                    );
                     response.dnd_set_drag_payload(payload);
                     if focus == Some(index) {
                         response.request_focus();

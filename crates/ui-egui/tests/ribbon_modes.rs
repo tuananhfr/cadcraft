@@ -273,6 +273,37 @@ fn tabs_only_flyout_reaches_every_command_at_200_percent_tc11() {
 }
 
 #[test]
+fn tabs_only_flyout_wraps_groups_without_horizontal_overflow() {
+    let _guard = test_lock();
+    for density in ["compact", "normal", "comfortable"] {
+        let mut app = familiar("tabs_only");
+        app.run("ui.density", json!({"density": density})).unwrap();
+        let mut h = scaled_harness(app, 2.0);
+        select_ribbon_tab(&mut h, "Home");
+        assert!(popup_open(&h));
+        let screen = h.ctx.content_rect();
+        let home = cadcraft_ui_egui::ribbon::visible_tabs(h.state()).into_iter().find(|tab| tab.id == "home").unwrap();
+        let mut group_tops = Vec::new();
+        for group in &home.groups {
+            let first = group.commands.first().unwrap();
+            let first_label = command_label(first);
+            group_tops.push(button_nth(&h, &first_label, 0).rect().top());
+            for id in &group.commands {
+                let label = command_label(id);
+                let buttons: Vec<_> = ribbon_buttons(&h, &label).collect();
+                assert!(!buttons.is_empty(), "{density}: {id}");
+                for button in buttons {
+                    let rect = button.rect();
+                    assert!(rect.left() >= screen.left() && rect.right() <= screen.right(), "{density}: {id} {rect:?}");
+                }
+            }
+        }
+        assert!(group_tops.iter().any(|top| *top > group_tops[0] + 1.0), "{density}: groups must wrap to another row");
+        inside(screen, h.ctx.read_response(Id::new("cc_ribbon_flyout")).unwrap().rect);
+    }
+}
+
+#[test]
 fn tabs_only_flyout_wraps_a_wide_custom_group_at_200_percent() {
     let _guard = test_lock();
     let mut app = familiar("tabs_only");

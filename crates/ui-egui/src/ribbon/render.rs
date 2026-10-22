@@ -579,8 +579,9 @@ fn expanded_group(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &
         })
         .collect();
     let height = top + metrics.columns_height;
-    ui.push_id((&tab.id, &group.id), |ui| {
-        ui.allocate_ui_with_layout(vec2(width, height + ROW_GAP + LABEL_HEIGHT), Layout::top_down(Align::Min), |ui| {
+    // Allocate in the wrapping parent before an identity scope resets the row's left edge.
+    ui.allocate_ui_with_layout(vec2(width, height + ROW_GAP + LABEL_HEIGHT), Layout::top_down(Align::Min), |ui| {
+        ui.push_id((&tab.id, &group.id), |ui| {
             ui.spacing_mut().item_spacing.y = ROW_GAP;
             let (rect, _) = ui.allocate_exact_size(vec2(width, height), egui::Sense::hover());
             for (column, commands) in group.commands.chunks(ROWS).enumerate() {
