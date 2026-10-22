@@ -233,6 +233,7 @@ fn button(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGr
                 }
             })
             .inner;
+        let response = if command.known { response } else { response.on_disabled_hover_text(crate::toolbars::placeholder_reason(&command)) };
         crate::control::record_widget(ui, &response, &label, "button", None);
         if response.clicked() {
             crate::menus::activate(app, id);

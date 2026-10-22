@@ -12,6 +12,8 @@ use cadcraft_ui_egui::wsprofile::rfc3339;
 use cadcraft_ui_egui::wsprofile::store::{CORRUPT_SNAPSHOT, KEEP_SNAPSHOTS, MAX_SET_BYTES, ProfileStore, expired_snapshots};
 use serde_json::Value;
 
+const BACKUP_KEY: &str = "cadcraft.ws.backup:1.0.0";
+
 pub const CURRENT_KEY: &str = "cadcraft.ws.current";
 pub const SNAPSHOT_PREFIX: &str = "cadcraft.ws.snap:";
 /// The revisions kept, as a JSON list; `localStorage` cannot list keys by prefix cheaply.
@@ -96,8 +98,9 @@ fn profiles_mut(set: &mut Value) -> Vec<&mut Value> {
 pub fn remember_created(json: &str, created: &mut BTreeMap<String, String>) {
     let Ok(mut set) = serde_json::from_str::<Value>(json) else { return };
     for profile in profiles_mut(&mut set) {
-        let id = profile.get("profile_id").and_then(Value::as_str);
-        let time = profile.get("created_at").and_then(Value::as_str).filter(|time| !time.starts_with(EPOCH_PREFIX));
+        let id = profile.get("profileId").or_else(|| profile.get("profile_id")).and_then(Value::as_str);
+        let time =
+            profile.get("createdAt").or_else(|| profile.get("created_at")).and_then(Value::as_str).filter(|time| !time.starts_with(EPOCH_PREFIX));
         if let (Some(id), Some(time)) = (id, time) {
             created.entry(id.to_string()).or_insert_with(|| time.to_string());
         }
@@ -113,19 +116,27 @@ pub fn stamp_clock(json: &str, now: &str, created: &mut BTreeMap<String, String>
     let Ok(mut set) = serde_json::from_str::<Value>(json) else { return json.to_string() };
     let mut changed = false;
     for profile in profiles_mut(&mut set) {
-        let id = profile.get("profile_id").and_then(Value::as_str).unwrap_or_default().to_string();
-        for field in ["created_at", "updated_at"] {
+        let wire = profile.get("schemaVersion").is_some();
+        let id = profile.get(if wire { "profileId" } else { "profile_id" }).and_then(Value::as_str).unwrap_or_default().to_string();
+        for field in if wire { ["createdAt", "updatedAt"] } else { ["created_at", "updated_at"] } {
             let Some(slot) = profile.get_mut(field) else { continue };
             if !slot.as_str().is_some_and(|time| time.starts_with(EPOCH_PREFIX)) {
                 continue;
             }
-            let time = if field == "created_at" { created.entry(id.clone()).or_insert_with(|| now.to_string()).clone() } else { now.to_string() };
+            let time = if matches!(field, "created_at" | "createdAt") {
+                created.entry(id.clone()).or_insert_with(|| now.to_string()).clone()
+            } else {
+                now.to_string()
+            };
             *slot = Value::String(time);
             changed = true;
         }
     }
     if !changed {
         return json.to_string();
+    }
+    if set.get("checksum").is_some() {
+        set = cadcraft_ui_egui::wsprofile::canonical::with_checksum(set);
     }
     serde_json::to_string(&set).unwrap_or_else(|_| json.to_string())
 }
@@ -149,10 +160,14 @@ impl<K: KeyValue> LocalStorageStore<K> {
         if let Some(stored) = kv.get(CURRENT_KEY) {
             remember_created(&stored, &mut created);
         }
+        Self { created, ..Self::unread(kv, now_ms) }
+    }
+
+    fn unread(kv: K, now_ms: fn() -> f64) -> Self {
         Self {
             kv,
             now_ms,
-            created,
+            created: BTreeMap::new(),
             external: Rc::new(Cell::new(false)),
             #[cfg(target_arch = "wasm32")]
             repaint: Rc::new(RefCell::new(None)),
@@ -227,6 +242,21 @@ impl<K: KeyValue> LocalStorageStore<K> {
 }
 
 impl<K: KeyValue> ProfileStore for LocalStorageStore<K> {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        if version != "1.0.0" {
+            return Err("unsupported backup version".into());
+        }
+        within(raw)?;
+        if self.kv.get(BACKUP_KEY).is_none() {
+            self.kv.set(BACKUP_KEY, raw)?;
+        }
+        Ok(())
+    }
+
+    fn read_backup(&self, version: &str) -> Option<String> {
+        (version == "1.0.0").then(|| self.kv.get(BACKUP_KEY)).flatten()
+    }
+
     fn take_external_change(&mut self) -> bool {
         self.external.replace(false)
     }
@@ -241,7 +271,7 @@ impl<K: KeyValue> ProfileStore for LocalStorageStore<K> {
 
     fn write_current(&mut self, json: &str) -> Result<(), String> {
         within(json)?;
-        let text = self.stamped(json);
+        let text = if self.kv.get(BACKUP_KEY).as_deref() == Some(json) { json.to_string() } else { self.stamped(json) };
         let mut index = self.read_index();
         let before = index.len();
         let written = self.set_evicting(CURRENT_KEY, &text, &mut index, None);
@@ -315,6 +345,11 @@ impl<K: KeyValue> ProfileStore for LocalStorageStore<K> {
 pub struct BrowserStorage(web_sys::Storage);
 
 #[cfg(target_arch = "wasm32")]
+pub fn browser_storage() -> Option<BrowserStorage> {
+    web_sys::window()?.local_storage().ok().flatten().map(BrowserStorage)
+}
+
+#[cfg(target_arch = "wasm32")]
 impl KeyValue for BrowserStorage {
     fn get(&self, key: &str) -> Option<String> {
         self.0.get_item(key).ok().flatten()
@@ -335,11 +370,26 @@ impl KeyValue for BrowserStorage {
 /// The page's `localStorage`; `None` when the browser blocks it.
 #[cfg(target_arch = "wasm32")]
 pub fn open() -> Option<LocalStorageStore<BrowserStorage>> {
+    open_with(false)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn open_safe() -> Option<LocalStorageStore<BrowserStorage>> {
+    open_with(true)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn open_with(safe_mode: bool) -> Option<LocalStorageStore<BrowserStorage>> {
     use wasm_bindgen::{JsCast, closure::Closure};
 
     let window = web_sys::window()?;
     let storage = window.local_storage().ok().flatten()?;
-    let store = LocalStorageStore::new(BrowserStorage(storage), web_sys::js_sys::Date::now);
+    // Safe startup must not inspect the saved workspace, even to recover creation timestamps.
+    let store = if safe_mode {
+        LocalStorageStore::unread(BrowserStorage(storage), web_sys::js_sys::Date::now)
+    } else {
+        LocalStorageStore::new(BrowserStorage(storage), web_sys::js_sys::Date::now)
+    };
     let external = Rc::clone(&store.external);
     let repaint = Rc::clone(&store.repaint);
     let listener = Closure::<dyn FnMut(web_sys::StorageEvent)>::new(move |event: web_sys::StorageEvent| {
@@ -416,6 +466,56 @@ mod tests {
 
     fn store(storage: FakeStorage) -> LocalStorageStore<FakeStorage> {
         LocalStorageStore::new(storage, || 1_800_000_000_000.0)
+    }
+
+    #[test]
+    fn safe_store_construction_does_not_read_workspace() {
+        struct Counted(Rc<Cell<usize>>);
+        impl KeyValue for Counted {
+            fn get(&self, _key: &str) -> Option<String> {
+                self.0.set(self.0.get() + 1);
+                Some("stored workspace".into())
+            }
+            fn set(&mut self, _key: &str, _value: &str) -> Result<(), String> {
+                Ok(())
+            }
+            fn remove(&mut self, _key: &str) {}
+        }
+        let reads = Rc::new(Cell::new(0));
+        let store = LocalStorageStore::unread(Counted(Rc::clone(&reads)), || 1_800_000_000_000.0);
+        assert_eq!(reads.get(), 0);
+        assert_eq!(store.read_current().as_deref(), Some("stored workspace"));
+        assert_eq!(reads.get(), 1, "the retained store can be read when safe mode ends");
+    }
+
+    #[test]
+    fn local_storage_backup_key_round_trips() {
+        let mut store = store(FakeStorage::default());
+        let raw = "{\r\n  \"schema_version\": \"1.0.0\"\r\n}";
+        assert_eq!(store.read_backup("1.0.0"), None);
+        store.keep_backup("1.0.0", raw).unwrap();
+        store.keep_backup("1.0.0", "replacement").unwrap();
+        assert_eq!(store.read_backup("1.0.0").as_deref(), Some(raw));
+        assert_eq!(store.storage().get("cadcraft.ws.backup:1.0.0").as_deref(), Some(raw));
+        assert_eq!(store.read_backup("4"), None);
+        store.write_current(raw).unwrap();
+        assert_eq!(store.read_current().as_deref(), Some(raw));
+    }
+
+    #[test]
+    fn wire_clock_stamping_preserves_the_checksum_and_backup_bytes() {
+        use cadcraft_ui_egui::wsprofile::canonical::{ChecksumCheck, verify_checksum, with_checksum};
+        let raw = with_checksum(serde_json::json!({"schemaVersion": 3, "user": {
+            "schemaVersion": 3, "profileId": "u", "createdAt": "1970-01-01T00:00:00Z", "updatedAt": "1970-01-01T00:00:00Z"
+        }}))
+        .to_string();
+        let mut store = store(FakeStorage::default());
+        store.keep_backup("1.0.0", &raw).unwrap();
+        store.push_snapshot(1, &raw).unwrap();
+        let stamped: Value = serde_json::from_str(&store.read_snapshot(1).unwrap()).unwrap();
+        assert_eq!(stamped["user"]["updatedAt"], "2027-01-15T08:00:00Z");
+        assert_eq!(verify_checksum(&stamped), ChecksumCheck::Valid);
+        assert_eq!(store.read_backup("1.0.0").as_deref(), Some(raw.as_str()));
     }
 
     #[test]

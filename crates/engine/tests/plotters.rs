@@ -9,7 +9,14 @@ use cadcraft_engine::cmd::plotters::{PlotterStore, set_plotter_store};
 use serde_json::{Value, json};
 
 /// The plot hook echoes the options it gets.
-fn echo_plot(_: &Drawing, _: &Space, opts: &Value) -> Result<Vec<u8>, String> {
+fn echo_plot(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>, String> {
+    // The process-global hook must also serve the existing option-echo tests.
+    if opts.get("_test_pdf").and_then(Value::as_bool) == Some(true) {
+        assert_eq!(opts["output"], "pdf");
+        assert!(opts.get("device").is_none());
+        assert!(opts.get("resolution").is_none(), "no substitute device's defaults");
+        return cadcraft_io::pdf::plot(d, space, opts).map_err(|e| e.to_string());
+    }
     Ok(opts.to_string().into_bytes())
 }
 
@@ -189,4 +196,62 @@ fn plotwindow_keeps_the_picked_window_for_the_plot_dialog() {
     let r = s.execute("plotwindow", &json!({"p1": [0, 0], "p2": [3, 4]})).unwrap();
     assert_eq!(r["window"], json!([[0.0, 0.0], [3.0, 4.0]]));
     assert!(s.execute("plotwindow", &json!({"p1": [0, 0], "p2": [3, 0]})).is_err());
+}
+
+#[test]
+fn missing_page_setup_device_plots_pdf_with_warning() {
+    let mut s = session();
+    s.doc_mut().unwrap().layouts.iter_mut().find(|l| l.name == "Layout1").unwrap().page.device = "Office A3".into();
+    let message = "Plotter `Office A3` is not installed; plotted to PDF instead";
+    for cmd in ["plot", "exportpdf"] {
+        let r = s.execute(cmd, &json!({"layout": "Layout1", "_test_pdf": true})).unwrap();
+        assert_eq!(r["warnings"].as_array().unwrap().len(), 1);
+        assert_eq!(r["warnings"][0]["code"], "DEVICE_UNAVAILABLE");
+        assert_eq!(r["warnings"][0]["severity"], "WARN");
+        assert_eq!(r["warnings"][0]["message"], message);
+        assert_eq!(r["warnings"][0]["approved_by_user"], false);
+        assert_eq!(r["warnings"][0]["sheet_id"], Value::Null);
+        let bytes = base64_decode(r["data"].as_str().unwrap()).unwrap();
+        assert!(bytes.starts_with(b"%PDF"));
+        assert_eq!(s.log.iter().filter(|line| line.as_str() == message).count(), if cmd == "plot" { 1 } else { 2 });
+    }
+    s.execute("layout.set", &json!({"name": "Layout1"})).unwrap();
+    let r = s.execute("plot", &json!({})).unwrap();
+    assert_eq!(r["warnings"][0]["code"], "DEVICE_UNAVAILABLE", "the current layout's page setup");
+    let r = s.execute("publish", &json!({"layouts": ["Layout1"]})).unwrap();
+    assert_eq!(r["sheets"][0]["warnings"][0]["message"], message);
+    assert_eq!(s.doc().unwrap().layout("Layout1").unwrap().page.device, "Office A3");
+}
+
+#[test]
+fn explicit_missing_device_is_still_an_error() {
+    let mut s = session();
+    for cmd in ["plot", "exportpdf"] {
+        let err = s.execute(cmd, &json!({"layout": "Layout1", "device": "Office A3"})).unwrap_err();
+        assert!(err.to_string().contains("unknown plotter `Office A3`"), "{err}");
+    }
+    assert!(!s.log.iter().any(|line| line.contains("plotted to PDF instead")));
+}
+
+#[test]
+fn available_and_unset_page_setup_devices_do_not_warn() {
+    let mut s = session();
+    for device in ["", "None", " nOnE ", "CADCraft PDF"] {
+        s.doc_mut().unwrap().layouts.iter_mut().find(|l| l.name == "Layout1").unwrap().page.device = device.into();
+        for cmd in ["plot", "exportpdf"] {
+            let r = s.execute(cmd, &json!({"layout": "Layout1"})).unwrap();
+            assert!(r.get("warnings").is_none(), "{device}: {r}");
+        }
+    }
+    s.doc_mut().unwrap().layouts.iter_mut().find(|l| l.name == "Layout1").unwrap().page.device = "Office A3".into();
+    for device in ["", "None", "CADCraft SVG"] {
+        let r = s.execute("plot", &json!({"layout": "Layout1", "device": device})).unwrap();
+        assert!(r.get("warnings").is_none(), "an explicit override: {device}");
+        if device == "CADCraft SVG" {
+            assert_eq!(plotted(r)["output"], "svg");
+        }
+    }
+    let r = s.execute("plot", &json!({"layout": "Model"})).unwrap();
+    assert!(r.get("warnings").is_none());
+    assert!(!s.log.iter().any(|line| line.contains("plotted to PDF instead")));
 }

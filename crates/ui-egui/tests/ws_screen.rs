@@ -3,10 +3,14 @@
 use std::sync::{Mutex, MutexGuard};
 
 use cadcraft_engine::Session;
+use cadcraft_ui_egui::dock_clamp::{MAX_FLOAT_SHARE, MIN_RATIO};
+use cadcraft_ui_egui::docking::{Panel, Workspace};
 use cadcraft_ui_egui::toolbars;
+use cadcraft_ui_egui::wsprofile::SaveStatus;
 use cadcraft_ui_egui::wsprofile::schema::Dock;
 use cadcraft_ui_egui::wsprofile::store::MemoryStore;
 use cadcraft_ui_egui::{CadApp, Services};
+use craft_ui::docking::Layout;
 use egui::{Id, Key, Modifiers, Rect, vec2};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
@@ -530,4 +534,182 @@ fn compact_ribbon_double_click_keeps_saved_collapsed_preference() {
     h.run_steps(3);
     assert!(!h.state().ws.effective.layout.ribbon.collapsed);
     assert!(!restarted(h.state_mut()).ws.effective.layout.ribbon.collapsed);
+}
+
+fn move_to_screen(h: &mut Harness<'static, CadApp>, width: f32, height: f32, ppp: f32) {
+    // A monitor's display scale is the native ratio; egui zoom would be saved as the interface scale instead.
+    h.input_mut().viewports.get_mut(&egui::ViewportId::ROOT).unwrap().native_pixels_per_point = Some(ppp);
+    h.set_size(vec2(width, height) / ppp);
+    h.run_steps(6);
+}
+
+fn floating_properties(h: &Harness<'_, CadApp>) -> Rect {
+    let group = h.state().ui.docking.layout.floating.iter().find(|group| group.panels.contains(&Panel::Properties)).expect("Properties floats");
+    let [x, y, width, height] = group.rect;
+    Rect::from_min_size(egui::pos2(x, y), vec2(width, height))
+}
+
+fn docked_panels(h: &Harness<'_, CadApp>) -> Vec<Panel> {
+    let root = Layout { root: h.state().ui.docking.layout.root.clone(), floating: Vec::new() };
+    Panel::ALL.iter().copied().filter(|panel| *panel != Panel::Canvas && root.contains(panel)).collect()
+}
+
+/// Properties' floating rectangle as the device layer stores it, in fractions of the content area.
+fn stored_properties(h: &Harness<'_, CadApp>) -> [f32; 4] {
+    let tree = h.state().ws.effective.layout.dock_tree.clone().expect("the dock tree is stored");
+    let workspace: Workspace = serde_json::from_value(tree).unwrap();
+    workspace.layout.floating.iter().find(|group| group.panels.contains(&Panel::Properties)).expect("Properties is stored floating").rect
+}
+
+fn canvas_keeps_its_share(h: &Harness<'_, CadApp>, case: &str) {
+    let content = h.ctx.content_rect();
+    let canvas = h.state().canvas.rect.unwrap();
+    assert!(
+        canvas.width() >= MIN_RATIO * content.width() && canvas.height() >= MIN_RATIO * content.height(),
+        "{case}: canvas {canvas:?} in {content:?}"
+    );
+}
+
+fn close(actual: [f32; 4], expected: [f32; 4], tolerance: f32, label: &str) {
+    assert!(actual.iter().zip(expected).all(|(value, wanted)| (value - wanted).abs() <= tolerance), "{label}: {actual:?} != {expected:?}");
+}
+
+fn corners(rect: Rect) -> [f32; 4] {
+    [rect.min.x, rect.min.y, rect.max.x, rect.max.y]
+}
+
+#[test]
+fn unplugging_a_wide_monitor_pulls_panels_back_tc15() {
+    let _guard = test_lock();
+    let app = attached(MemoryStore::default());
+    let mut h = harness(app, 3840.0, 1080.0, 1.0);
+    h.state_mut().run("ui.dock", json!({"operation": "float", "panel": "properties", "rect": [3000.0, 100.0, 640.0, 900.0]})).unwrap();
+    h.run_steps(4);
+    assert!(floating_properties(&h).left() >= 2900.0, "Properties floats on the second monitor's half");
+    let docked = docked_panels(&h);
+    assert!(docked.contains(&Panel::Layers), "{docked:?}");
+    let dirty = h.state().session.state().unwrap().is_dirty();
+    let wide = h.state().canvas.rect.unwrap();
+    h.set_size(vec2(1366.0, 768.0));
+    h.run_steps(6);
+    let content = h.ctx.content_rect();
+    let panel = floating_properties(&h);
+    inside(content, panel, "Properties after unplugging");
+    assert!(panel.width() <= MAX_FLOAT_SHARE * content.width() + 0.01, "{panel:?} in {content:?}");
+    assert!(panel.height() <= MAX_FLOAT_SHARE * content.height() + 0.01, "{panel:?} in {content:?}");
+    inside(content, h.get_by_role_and_label(egui::accesskit::Role::Tab, "Properties").rect(), "Properties tab after unplugging");
+    assert_eq!(docked_panels(&h), docked, "docked panels stay docked");
+    canvas_keeps_its_share(&h, "1366x768 after 3840x1080");
+    assert!(h.state().canvas.rect.unwrap().width() < wide.width());
+    assert_eq!(h.state().session.state().unwrap().is_dirty(), dirty);
+}
+
+#[test]
+fn ppp_change_with_shrink_keeps_layout_recoverable_h13() {
+    let _guard = test_lock();
+    let app = attached(MemoryStore::default());
+    let mut h = harness(app, 1920.0, 1080.0, 1.0);
+    h.state_mut().run("ui.dock", json!({"operation": "float", "panel": "properties", "rect": [960.0, 378.0, 420.0, 360.0]})).unwrap();
+    h.run_steps(4);
+    let dirty = h.state().session.state().unwrap().is_dirty();
+    let docked = docked_panels(&h);
+    assert!(docked.contains(&Panel::Layers), "{docked:?}");
+    let floating = floating_properties(&h);
+    let stored = stored_properties(&h);
+    let canvas = h.state().canvas.rect.unwrap();
+    let user = h.state().ws.user.layout.clone();
+
+    move_to_screen(&mut h, 1366.0, 768.0, 1.5);
+    assert!((h.ctx.pixels_per_point() - 1.5).abs() < 0.01);
+    assert_eq!(h.ctx.zoom_factor(), 1.0, "a display scale change is not an interface zoom");
+    let content = h.ctx.content_rect();
+    assert!((content.width() - 1366.0 / 1.5).abs() < 0.5, "{content:?}");
+    inside(content, floating_properties(&h), "Properties at 150%");
+    assert_eq!(docked_panels(&h), docked, "docked panels stay docked at 150%");
+    canvas_keeps_its_share(&h, "1366x768 at 150%");
+    close(stored_properties(&h), stored, 0.001, "the device layer keeps the floating proportions at 150%");
+
+    move_to_screen(&mut h, 1920.0, 1080.0, 1.0);
+    assert!((h.ctx.pixels_per_point() - 1.0).abs() < 0.01);
+    assert_eq!(docked_panels(&h), docked, "docked panels stay docked after returning");
+    close(corners(floating_properties(&h)), corners(floating), 0.5, "Properties returns to its proportional place");
+    close(corners(h.state().canvas.rect.unwrap()), corners(canvas), 1.0, "docked sizes return with the screen");
+    close(stored_properties(&h), stored, 0.001, "the device layer keeps the floating proportions after returning");
+    assert_eq!(h.state().ws.user.layout, user, "screen geometry stays on the device layer");
+    assert_eq!(h.state().session.state().unwrap().is_dirty(), dirty);
+}
+
+#[test]
+fn saved_workspace_remaps_without_edits_or_saves() {
+    let _guard = test_lock();
+    let app = attached(MemoryStore::default());
+    let mut h = harness(app, 1920.0, 1080.0, 1.0);
+    h.state_mut().run("ui.dock", json!({"operation": "float", "panel": "properties", "rect": [960.0, 378.0, 420.0, 360.0]})).unwrap();
+    h.run_steps(4);
+    for scale in [1.0, 1.25, 1.0, 1.5, 1.0] {
+        // Choosing zoom is a device edit; only the subsequent screen remap must leave this save intact.
+        set(h.state_mut(), "/ui_scale", json!(scale));
+        h.state_mut().commit_workspace_now().unwrap();
+        let user = h.state().ws.user.clone();
+        let geometry = h.state().ws.device.layout_patch.clone();
+        let history = (h.state().ws.history.undo_len(), h.state().ws.history.redo_len());
+        let revision = h.state().ws.known_revision;
+        let store = h.state().ws.store.as_deref().unwrap();
+        let current = store.read_current();
+        let snapshots = store.snapshots();
+        let unchanged = |h: &Harness<'_, CadApp>| {
+            let app = h.state();
+            assert_eq!(app.ws.status, SaveStatus::SavedLocally);
+            assert!(!app.ws.autosave.pending());
+            assert!(!app.ws.needs_flush());
+            assert_eq!(app.ws.user, user);
+            assert_eq!(app.ws.device.layout_patch, geometry);
+            assert_eq!((app.ws.history.undo_len(), app.ws.history.redo_len()), history);
+            assert_eq!(app.ws.known_revision, revision);
+            let store = app.ws.store.as_deref().unwrap();
+            assert_eq!(store.read_current(), current);
+            assert_eq!(store.snapshots(), snapshots);
+        };
+        for _ in 0..8 {
+            h.run_steps(1);
+            unchanged(&h);
+        }
+        assert!((h.ctx.zoom_factor() - scale).abs() < 0.01);
+        for _ in 0..3 {
+            for (width, height, ppp) in [(1600.0, 900.0, 1.5), (1366.0, 768.0, 1.0), (1920.0, 1080.0, 1.0)] {
+                move_to_screen(&mut h, width, height, ppp);
+                unchanged(&h);
+            }
+        }
+        h.run_steps(60);
+        unchanged(&h);
+    }
+}
+
+#[test]
+fn screen_remap_preserves_pending_layout_edits() {
+    let _guard = test_lock();
+    let app = attached(MemoryStore::default());
+    let mut h = harness(app, 1920.0, 1080.0, 1.0);
+    h.state_mut().run("ui.dock", json!({"operation": "float", "panel": "properties", "rect": [960.0, 378.0, 420.0, 360.0]})).unwrap();
+    h.run_steps(4);
+    h.state_mut().commit_workspace_now().unwrap();
+    let history = h.state().ws.history.undo_len();
+    let stored = stored_properties(&h);
+    h.state_mut().ui.show_status_bar = false;
+    let group = h.state_mut().ui.docking.layout.floating.iter_mut().find(|group| group.panels.contains(&Panel::Properties)).unwrap();
+    group.rect[0] -= 192.0;
+    h.set_size(vec2(1366.0, 768.0));
+    h.run_steps(3);
+    assert_eq!(h.state().ws.status, SaveStatus::Unsaved);
+    assert!(h.state().ws.autosave.pending());
+    assert_eq!(h.state().ws.history.undo_len(), history + 1);
+    assert!(!h.state().ws.effective.layout.status_bar.visible);
+    let mut moved = stored;
+    moved[0] -= 0.1;
+    close(stored_properties(&h), moved, 0.000001, "the pending move is observed in the new area");
+    h.state_mut().run("ui.layout.undo", json!({})).unwrap();
+    h.run_steps(3);
+    assert!(h.state().ws.effective.layout.status_bar.visible);
+    close(stored_properties(&h), stored, 0.000001, "undo restores the saved layout");
 }

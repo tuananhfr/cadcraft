@@ -11,6 +11,7 @@ use super::presets::{SAFE_PRESET, preset, preset_json};
 use super::schema::{OwnerType, ProfileStatus, WorkspaceLayout, WorkspaceProfile};
 use super::store::{CORRUPT_SNAPSHOT, KEEP_SNAPSHOTS, MAX_SET_BYTES, MAX_USER_PROFILES, ProfileSet, ProfileStore};
 use super::validate::{Issue, Mode, validate};
+use super::wire::{from_wire, to_wire};
 
 pub const FALLBACK_MESSAGE: &str = "Workspace could not be read; using SIMPLE. The damaged copy was kept.";
 pub const RESTORED_MESSAGE: &str = "Workspace could not be read; restored the last good copy (revision {revision}). The damaged copy was kept.";
@@ -144,6 +145,7 @@ pub fn parse_set_with(raw: &str, policy: &[Layer]) -> Result<ProfileSet, Fallbac
     if matches!(verify_checksum(&value), ChecksumCheck::Mismatch { .. }) {
         return Err(Fallback::Corrupt("checksum mismatch".into()));
     }
+    let value = from_wire(&value);
     let Value::Object(mut root) = value else { return Err(Fallback::Corrupt("the stored workspace is not a JSON object".into())) };
     root.remove(CHECKSUM_KEY);
     let is_set = ["active", "profiles", "user"].iter().any(|key| root.contains_key(*key));
@@ -154,10 +156,12 @@ pub fn parse_set_with(raw: &str, policy: &[Layer]) -> Result<ProfileSet, Fallbac
         let active = user.base_id.clone().filter(|id| preset_json(id).is_some()).unwrap_or_else(|| SAFE_PRESET.into());
         return Ok(ProfileSet { active, user: Some(user), device, ..ProfileSet::default() });
     }
-    if let Some(version) = root.get("schema_version").and_then(Value::as_str)
-        && newer_major(version)
-    {
-        return Err(Fallback::NewerMajor(version.to_string()));
+    if let Some(version) = root.get("schema_version") {
+        let major =
+            super::schema::version_major(version).ok_or_else(|| Fallback::Invalid(vec![issue("/schema_version", "unreadable schema_version")]))?;
+        if major > super::schema::SCHEMA_VERSION {
+            return Err(Fallback::NewerMajor(version.as_str().map(str::to_string).unwrap_or_else(|| version.to_string())));
+        }
     }
     let active = match root.remove("active") {
         Some(Value::String(active)) => active,
@@ -204,11 +208,14 @@ fn legacy_device(value: &Value, policy: &[Layer]) -> Result<Option<DeviceState>,
     resolve_layout_patch(&mut resolved, policy)?;
     let text = serde_json::to_string(&resolved).map_err(|error| Fallback::Corrupt(error.to_string()))?;
     validate(&text, Mode::Local).map_err(Fallback::Invalid)?;
-    let migrated = migrate(resolved).map_err(|error| match error {
+    let migrated = migrate(resolved.clone()).map_err(|error| match error {
         MigrateError::NewerMajor(version) => Fallback::NewerMajor(version),
         other => Fallback::Invalid(vec![issue("", &other.to_string())]),
     })?;
-    let value = &migrated.value;
+    if let Some(device) = migrated.value.get("device") {
+        return serde_json::from_value(device.clone()).map(Some).map_err(|error| Fallback::Invalid(vec![issue("/device", &error.to_string())]));
+    }
+    let value = &resolved;
     let scale = value.get("ui_scale").or_else(|| value.get("uiScale"));
     let layout = value.get(LAYOUT_PATCH_KEY).or_else(|| value.get("layout")).unwrap_or(value);
     let geometry = split_geometry(layout.clone()).1;
@@ -223,11 +230,6 @@ fn legacy_device(value: &Value, policy: &[Layer]) -> Result<Option<DeviceState>,
 
 fn issue(pointer: &str, reason: &str) -> Issue {
     Issue { pointer: pointer.into(), reason: reason.into() }
-}
-
-fn newer_major(version: &str) -> bool {
-    let major = |text: &str| text.split('.').next().and_then(|part| part.parse::<u64>().ok());
-    matches!((major(version), major(super::schema::SCHEMA_VERSION)), (Some(found), Some(ours)) if found > ours)
 }
 
 /// Turns a stored layer back into a whole layout over today's base and policy. Done before
@@ -253,8 +255,12 @@ fn load_profile(mut value: Value, policy: &[Layer]) -> Result<WorkspaceProfile, 
         MigrateError::NewerMajor(version) => Fallback::NewerMajor(version),
         other => Fallback::Invalid(vec![issue("", &other.to_string())]),
     })?;
+    let mut migrated_value = migrated.value;
+    if let Some(fields) = migrated_value.as_object_mut() {
+        fields.remove("device");
+    }
     let mut profile: WorkspaceProfile =
-        serde_json::from_value(migrated.value).map_err(|error| Fallback::Invalid(vec![issue("", &error.to_string())]))?;
+        serde_json::from_value(migrated_value).map_err(|error| Fallback::Invalid(vec![issue("", &error.to_string())]))?;
     let below = below_user(profile.base_id.as_deref(), policy);
     let (user, _) = split_geometry(diff_patch(&below, &profile.layout));
     profile.layout = super::merge::apply_patch(&below, &user);
@@ -272,7 +278,7 @@ fn stored_profile(profile: &WorkspaceProfile, policy: &[Layer]) -> Result<Value,
 }
 
 /// The text a commit writes for `set`.
-pub(crate) fn set_text(set: &ProfileSet, policy: &[Layer]) -> Result<String, String> {
+pub fn set_text(set: &ProfileSet, policy: &[Layer]) -> Result<String, String> {
     let mut value = serde_json::to_value(set).map_err(|error| error.to_string())?;
     let fields = value.as_object_mut().ok_or("a profile set must serialise to an object")?;
     if let Some(user) = &set.user {
@@ -280,7 +286,18 @@ pub(crate) fn set_text(set: &ProfileSet, policy: &[Layer]) -> Result<String, Str
     }
     let profiles = set.profiles.iter().map(|profile| stored_profile(profile, policy)).collect::<Result<Vec<_>, _>>()?;
     fields.insert("profiles".into(), Value::Array(profiles));
-    serde_json::to_string(&with_checksum(value)).map_err(|error| error.to_string())
+    serde_json::to_string(&with_checksum(to_wire(&value))).map_err(|error| error.to_string())
+}
+
+pub(crate) fn needs_backup(raw: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<Value>(raw) else { return false };
+    let value = from_wire(&value);
+    value.get("schema_version").is_some_and(|v| super::schema::version_major(v) == Some(1))
+        || value.get("version").and_then(Value::as_u64) == Some(1)
+        || value.get("user").and_then(|user| user.get("schema_version")).is_some_and(|v| super::schema::version_major(v) == Some(1))
+        || value.get("profiles").and_then(Value::as_array).is_some_and(|items| {
+            items.iter().any(|profile| profile.get("schema_version").is_some_and(|v| super::schema::version_major(v) == Some(1)))
+        })
 }
 
 /// Refuses a profile that startup would not read back.
@@ -314,7 +331,7 @@ pub fn policy_layers(raw: &str) -> Vec<Layer> {
     let Some(items) = value.get("layers").and_then(Value::as_array) else { return Vec::new() };
     items
         .iter()
-        .filter_map(|item| serde_json::from_value::<Layer>(item.clone()).ok())
+        .filter_map(|item| serde_json::from_value::<Layer>(from_wire(item)).ok())
         .filter(|layer| policy_level(layer.level))
         .take(MAX_POLICY_LAYERS)
         .collect()
@@ -334,7 +351,7 @@ pub fn policy_problem(raw: &str) -> Option<String> {
     if items.len() > MAX_POLICY_LAYERS {
         return Some(format!("only the first {MAX_POLICY_LAYERS} layers are used"));
     }
-    items.iter().enumerate().find_map(|(index, item)| match serde_json::from_value::<Layer>(item.clone()) {
+    items.iter().enumerate().find_map(|(index, item)| match serde_json::from_value::<Layer>(from_wire(item)) {
         Err(error) => Some(format!("/layers/{index}: {error}")),
         Ok(layer) if !policy_level(layer.level) => Some(format!("/layers/{index}: a policy cannot set the {:?} level", layer.level)),
         Ok(_) => None,

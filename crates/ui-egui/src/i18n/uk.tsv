@@ -1898,3 +1898,74 @@
 	SHEET_ID_DUPLICATE	Дубльований код аркуша
 	REVISION_OLD	Застаріла редакція
 	TEMPLATE_SUPERSEDED	Шаблон замінено новішим
+	Planned	Заплановано
+	Double-click to repeat command	Двічі клацніть, щоб повторити команду
+	Aliases	Псевдоніми
+	Assign Alias	Призначити псевдонім
+	Remove Alias	Видалити псевдонім
+	Reset Aliases	Скинути псевдоніми
+	Export Aliases...	Експортувати псевдоніми...
+	Import Aliases...	Імпортувати псевдоніми...
+	Aliases (JSON)	Псевдоніми (JSON)
+	Use letters A–Z, digits 0–9, _ or - for aliases	Використовуйте літери A–Z, цифри 0–9, _ або - для псевдонімів
+	Alias cannot be empty	Псевдонім не може бути порожнім
+	Alias must be at most 16 characters	Псевдонім має містити щонайбільше 16 символів
+	{command} is a command name and cannot be an alias	{command} — назва команди, яка не може бути псевдонімом
+	Alias already runs {command}; confirm to replace	Псевдонім уже виконує {command}; підтвердьте заміну
+	Too many aliases	Забагато псевдонімів
+	{key} is required	Потрібно вказати {key}
+	Paste alias JSON to import in the browser	Вставте JSON псевдонімів для імпорту в браузері
+	Alias file is too large	Файл псевдонімів завеликий
+	Paste alias JSON to import	Вставте JSON псевдонімів для імпорту
+	Expected an aliases object	Очікується об’єкт aliases
+	Expected a command name	Очікується назва команди
+	{imported} imported, {skipped} skipped	Імпортовано: {imported}, пропущено: {skipped}
+	Filter aliases	Фільтрувати псевдоніми
+	Alias	Псевдонім
+	Command	Команда
+	Source	Джерело
+	Built-in	Вбудований
+	Alias command	Команда псевдоніма
+	Import Alias File...	Імпортувати файл псевдонімів...
+	Import Aliases	Імпортувати псевдоніми
+	Replace Alias?	Замінити псевдонім?
+	Replace Alias	Замінити псевдонім
+	Roll Back Workspace to 1.0.0	Відкотити робочий простір до 1.0.0
+	Restored the 1.0.0 workspace. Changes are not saved until restart.	Відновлено робочий простір 1.0.0. Зміни не зберігатимуться до перезапуску.
+	Saving suspended	Збереження призупинено
+	No 1.0.0 workspace backup is available	Резервна копія робочого простору 1.0.0 відсутня
+	Layout saved on this device (not synced)	Компонування збережено на цьому пристрої (не синхронізовано)
+	Layout changed	Компонування змінено
+	Saving layout…	Збереження компонування…
+	Could not save layout; retrying	Не вдалося зберегти компонування; повторна спроба
+	Layout restored from revision {n}	Компонування відновлено з ревізії {n}
+	Safe mode: layout changes are not saved	Безпечний режим: зміни компонування не зберігаються
+	Drawing saved	Креслення збережено
+	Drawing downloaded	Креслення завантажено
+	Drawing has unsaved changes	Креслення має незбережені зміни
+	Drawing autosaved in this browser {time}	Креслення автоматично збережено в цьому браузері {time}
+	Layout saved	Компонування збережено
+	Layout not saved	Компонування не збережено
+	Layout restored	Компонування відновлено
+	Safe mode	Безпечний режим
+	Saving drawing…	Збереження креслення…
+	Drawing autosaved	Креслення автозбережено
+	Safe Mode	Безпечний режим
+	Restart in safe mode: add ?safe to the address / --safe-mode	Перезапустіть у безпечному режимі: додайте ?safe до адреси / --safe-mode
+	Safe mode ended. Changes made in safe mode were discarded; the stored workspace was restored.	Безпечний режим завершено. Зміни, зроблені в ньому, відкинуто; збережений робочий простір відновлено.
+	The file is damaged or was edited by hand (checksum mismatch)	Файл пошкоджено або змінено вручну (контрольна сума не збігається)
+	The file has no checksum; it cannot be checked for damage	Файл не має контрольної суми; перевірити його на пошкодження неможливо
+	Workspace import is not available in safe mode	Імпорт робочого простору недоступний у безпечному режимі
+	Import Workspace	Імпорт робочого простору
+	Changes	Зміни
+	Ignored device settings	Пропущені налаштування пристрою
+	Warnings	Попередження
+	{count} more items	Ще {count} пунктів
+	Browser storage is full	Сховище браузера заповнене
+	Saving in limited browser storage	Збереження в обмеженому сховищі браузера
+	Recovery Status	Стан відновлення
+	Drawing too large to autosave in the browser	Креслення завелике для автозбереження у браузері
+	Could not autosave the drawing	Не вдалося автоматично зберегти креслення
+	Could not recover the drawing	Не вдалося відновити креслення
+	Drawing autosave queue is full	Черга автозбереження креслень заповнена
+	Could not autosave the drawing: {error}	Не вдалося автоматично зберегти креслення: {error}

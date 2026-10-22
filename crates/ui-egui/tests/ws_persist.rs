@@ -9,9 +9,10 @@ use cadcraft_ui_egui::wsprofile::SaveStatus;
 use cadcraft_ui_egui::wsprofile::canonical::with_checksum;
 use cadcraft_ui_egui::wsprofile::merge::Level;
 use cadcraft_ui_egui::wsprofile::presets::{PRESET_IDS, preset};
+use cadcraft_ui_egui::wsprofile::save_state::LayoutSave;
 use cadcraft_ui_egui::wsprofile::schema::{Dock, OwnerType, ProfileStatus, WorkspaceProfile};
 use cadcraft_ui_egui::wsprofile::startup::{FALLBACK_MESSAGE, Fallback, RESTORED_MESSAGE, parse_set};
-use cadcraft_ui_egui::wsprofile::store::{CORRUPT_SNAPSHOT, MAX_USER_PROFILES, MemoryStore, ProfileSet, ProfileStore};
+use cadcraft_ui_egui::wsprofile::store::{CORRUPT_SNAPSHOT, Commit, Durability, MAX_USER_PROFILES, MemoryStore, ProfileSet, ProfileStore};
 use cadcraft_ui_egui::wsprofile::validate::{Mode, validate};
 use cadcraft_ui_egui::{CadApp, Services};
 use craft_ui::docking::Node;
@@ -19,6 +20,8 @@ use craft_ui::layout::SplitSize;
 use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::{Value, json};
+
+const SAFE_HINT: &str = "Restart in safe mode: add ?safe to the address / --safe-mode";
 
 const SPEC_SAMPLE: &str = r#"{"schema_version":"1.0.0","profile_id":"uuid","revision":12,"base_id":"AUTOCAD_FAMILIAR","panels":[{"id":"properties","mode":"dock","side":"right","width_ratio":0.24}],"command_line":{"side":"bottom","height_ratio":0.15},"shortcuts":{"line":"L"}}"#;
 
@@ -184,9 +187,9 @@ fn corrupt_store_falls_back_ux15() {
     assert_eq!(shared.damaged(), vec![b"{".to_vec()]);
     assert!(!store(&app).snapshots().contains(&CORRUPT_SNAPSHOT), "the copy is kept beside the snapshots");
     assert_eq!(FALLBACK_MESSAGE, "Workspace could not be read; using SIMPLE. The damaged copy was kept.");
-    assert_eq!(app.ws.message.as_deref(), Some(FALLBACK_MESSAGE));
-    assert_eq!(app.status.as_ref().map(|(text, _)| text.as_str()), Some(FALLBACK_MESSAGE));
-    assert_eq!(run(&mut app, "ui.workspace.status", json!({}))["message"], json!(FALLBACK_MESSAGE));
+    assert_eq!(app.ws.message.as_deref(), Some(format!("{FALLBACK_MESSAGE} {SAFE_HINT}").as_str()));
+    assert_eq!(app.status.as_ref().map(|(text, _)| text.as_str()), Some(format!("{FALLBACK_MESSAGE} {SAFE_HINT}").as_str()));
+    assert_eq!(run(&mut app, "ui.workspace.status", json!({}))["message"], json!(format!("{FALLBACK_MESSAGE} {SAFE_HINT}")));
     // The app keeps working, and its next save keeps the damaged copy.
     run(&mut app, "ui.toggle.toolbar", json!({"on": false}));
     app.commit_workspace_now().unwrap();
@@ -194,10 +197,10 @@ fn corrupt_store_falls_back_ux15() {
     assert!(!standard_toolbar_visible(&current_set(&app).user.unwrap()));
 
     let mut newer = preset("SIMPLE").unwrap();
-    newer.schema_version = "2.0.0".into();
+    newer.schema_version = 4;
     let newer = serde_json::to_string(&json!({"active": "SIMPLE", "user": newer})).unwrap();
     let app = attached(MemoryStore { current: Some(newer), ..MemoryStore::default() });
-    assert!(matches!(app.ws.fallback, Some(Fallback::NewerMajor(ref version)) if version == "2.0.0"), "{:?}", app.ws.fallback);
+    assert!(matches!(app.ws.fallback, Some(Fallback::NewerMajor(ref version)) if version == "4"), "{:?}", app.ws.fallback);
 
     let invalid = json!({"active": "SIMPLE", "user": {"schema_version": "1.0.0", "name": "x".repeat(2000)}}).to_string();
     let shared = Shared::new(MemoryStore { current: Some(invalid.clone()), ..MemoryStore::default() });
@@ -242,7 +245,7 @@ fn corrupt_current_restores_last_valid_snapshot() {
     assert_eq!(app.ui.history_lines, 7);
     assert_eq!(shared.damaged(), vec![damaged.as_bytes().to_vec()]);
     assert_eq!(store(&app).read_current().as_deref(), Some(damaged), "startup waits for a commit before replacing current");
-    let message = RESTORED_MESSAGE.replace("{revision}", "3");
+    let message = format!("{} {SAFE_HINT}", RESTORED_MESSAGE.replace("{revision}", "3"));
     assert_eq!(app.ws.message.as_deref(), Some(message.as_str()));
     assert_eq!(app.status.as_ref().map(|(text, _)| text.as_str()), Some(message.as_str()));
     assert!(app.ws.autosave.pending(), "the restored set must replace the damaged current on the next save");
@@ -275,12 +278,12 @@ fn newer_major_still_falls_back_to_simple() {
     let _aliases = alias_lock();
     let shared = three_committed_revisions();
     let mut newer: Value = serde_json::from_str(&shared.read_current().unwrap()).unwrap();
-    newer["schema_version"] = json!("2.0.0");
+    newer["schemaVersion"] = json!(4);
     // A genuine newer writer signs its set; an unsigned edit would read as corruption instead.
     let damaged = with_checksum(newer).to_string();
     shared.0.borrow_mut().current = Some(damaged.clone());
     let app = reattach(&shared);
-    assert_eq!(app.ws.fallback, Some(Fallback::NewerMajor("2.0.0".into())));
+    assert_eq!(app.ws.fallback, Some(Fallback::NewerMajor("4".into())));
     assert_eq!(app.ws.user.base_id.as_deref(), Some("SIMPLE"));
     assert_eq!(app.ws.effective.layout, preset("SIMPLE").unwrap().layout);
     assert_eq!(shared.damaged(), vec![damaged.into_bytes()]);
@@ -770,6 +773,13 @@ struct SnapshotsRefused {
 }
 
 impl ProfileStore for SnapshotsRefused {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        self.inner.keep_backup(version, raw)
+    }
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.inner.read_backup(version)
+    }
+
     fn read_current(&self) -> Option<String> {
         self.inner.read_current()
     }
@@ -863,11 +873,15 @@ fn a_drag_is_one_undo_step_and_is_saved_on_release() {
 
 /// A `MemoryStore` the test can still look into after the app took it.
 #[derive(Clone)]
-struct Shared(std::rc::Rc<std::cell::RefCell<MemoryStore>>, std::rc::Rc<std::cell::Cell<bool>>);
+struct Shared(std::rc::Rc<std::cell::RefCell<MemoryStore>>, std::rc::Rc<std::cell::Cell<bool>>, std::rc::Rc<std::cell::Cell<usize>>);
 
 impl Shared {
     fn new(store: MemoryStore) -> Self {
-        Self(std::rc::Rc::new(std::cell::RefCell::new(store)), std::rc::Rc::new(std::cell::Cell::new(false)))
+        Self(
+            std::rc::Rc::new(std::cell::RefCell::new(store)),
+            std::rc::Rc::new(std::cell::Cell::new(false)),
+            std::rc::Rc::new(std::cell::Cell::new(0)),
+        )
     }
 
     fn damaged(&self) -> Vec<Vec<u8>> {
@@ -876,31 +890,77 @@ impl Shared {
 }
 
 impl ProfileStore for Shared {
+    fn durability(&mut self) -> Durability {
+        self.2.set(self.2.get() + 1);
+        Durability::Committed
+    }
+
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        self.2.set(self.2.get() + 1);
+        self.0.borrow_mut().keep_backup(version, raw)
+    }
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.2.set(self.2.get() + 1);
+        self.0.borrow().read_backup(version)
+    }
+
     fn take_external_change(&mut self) -> bool {
+        self.2.set(self.2.get() + 1);
         self.1.replace(false)
     }
 
     fn read_current(&self) -> Option<String> {
+        self.2.set(self.2.get() + 1);
         self.0.borrow().read_current()
     }
     fn write_current(&mut self, json: &str) -> Result<(), String> {
+        self.2.set(self.2.get() + 1);
         self.0.borrow_mut().write_current(json)
     }
     fn push_snapshot(&mut self, revision: u64, json: &str) -> Result<(), String> {
+        self.2.set(self.2.get() + 1);
         self.0.borrow_mut().push_snapshot(revision, json)
     }
     fn snapshots(&self) -> Vec<u64> {
+        self.2.set(self.2.get() + 1);
         self.0.borrow().snapshots()
     }
     fn read_snapshot(&self, revision: u64) -> Option<String> {
+        self.2.set(self.2.get() + 1);
         self.0.borrow().read_snapshot(revision)
     }
     fn read_policy(&self) -> Option<String> {
+        self.2.set(self.2.get() + 1);
         self.0.borrow().read_policy()
     }
     fn keep_damaged(&mut self, raw: &[u8]) -> Result<String, String> {
+        self.2.set(self.2.get() + 1);
         self.0.borrow_mut().keep_damaged(raw)
     }
+}
+
+#[test]
+fn write_commit_default_refuses_older_expected() {
+    let set = |revision: u64| format!(r#"{{"active":"SIMPLE","user":{{"revision":{revision}}}}}"#);
+    let shared = Shared::new(MemoryStore::default());
+    let mut store = shared.clone();
+    let first = set(1);
+    store.write_commit(Commit { expected: 0, revision: 1, json: &first, prune: Vec::new() }).unwrap();
+    assert_eq!(store.durability(), Durability::Committed);
+    assert_eq!(shared.0.borrow().current.as_deref(), Some(first.as_str()));
+    assert_eq!(store.snapshots(), vec![1]);
+
+    // A writer that last saw revision 0 must not replace revision 1.
+    let stale = set(2);
+    let error = store.write_commit(Commit { expected: 0, revision: 2, json: &stale, prune: Vec::new() }).unwrap_err();
+    assert!(error.contains("changed in another tab"), "{error}");
+    assert_eq!(shared.0.borrow().current.as_deref(), Some(first.as_str()), "current is untouched");
+    assert_eq!(store.snapshots(), vec![1], "no snapshot is written either");
+
+    store.write_commit(Commit { expected: 1, revision: 2, json: &stale, prune: Vec::new() }).unwrap();
+    assert_eq!(shared.0.borrow().current.as_deref(), Some(stale.as_str()));
+    assert_eq!(store.snapshots(), vec![1, 2]);
+    assert_eq!(store.read_snapshot(2).as_deref(), Some(stale.as_str()));
 }
 
 #[test]
@@ -945,6 +1005,13 @@ impl Flaky {
 }
 
 impl ProfileStore for Flaky {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        self.inner.keep_backup(version, raw)
+    }
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.inner.read_backup(version)
+    }
+
     fn read_current(&self) -> Option<String> {
         self.inner.read_current()
     }
@@ -991,7 +1058,7 @@ fn second_damaged_start_keeps_both_copies() {
     let mut app = CadApp::new(Session::new(), Services::default());
     app.skip_first_run_picker = true;
     app.attach_profile_store(Box::new(shared.clone()));
-    assert_eq!(app.ws.message.as_deref(), Some(FALLBACK_MESSAGE));
+    assert_eq!(app.ws.message.as_deref(), Some(format!("{FALLBACK_MESSAGE} {SAFE_HINT}").as_str()));
     drop(app);
     // Damaged again, differently, before anything was committed.
     shared.0.borrow_mut().current = Some("[1".into());
@@ -1119,6 +1186,13 @@ struct RefuseOutgoingOnce {
 }
 
 impl ProfileStore for RefuseOutgoingOnce {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        self.inner.keep_backup(version, raw)
+    }
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.inner.read_backup(version)
+    }
+
     fn read_current(&self) -> Option<String> {
         self.inner.read_current()
     }
@@ -1564,4 +1638,171 @@ fn workspace_resolution_requires_a_valid_choice_and_conflict() {
     assert!(cadcraft_ui_egui::menus::UI_COMMANDS.iter().any(|(id, label, menu, shortcut)| {
         *id == "ui.workspace.resolve" && *label == "Resolve Workspace Conflict" && menu.is_empty() && shortcut.is_none()
     }));
+}
+
+fn safe_mode_store() -> Shared {
+    let mut user = cadcraft_ui_egui::wsprofile::startup::fresh_user("AUTOCAD_FAMILIAR", &[]);
+    user.profile_id = "user.safe-mode-test".into();
+    user.layout.command_line.lines = 7;
+    user.revision = 9;
+    let set = ProfileSet { active: user.profile_id.clone(), user: Some(user), ..ProfileSet::default() };
+    let text = cadcraft_ui_egui::wsprofile::startup::set_text(&set, &[]).unwrap();
+    let mut memory = MemoryStore { current: Some(text.clone()), ..MemoryStore::default() };
+    memory.snapshot_map.insert(9, text);
+    memory.backups.insert("1.0.0".into(), "original bytes".into());
+    memory.damaged.insert("old-damage".into(), b"damaged bytes".to_vec());
+    Shared::new(memory)
+}
+
+fn workspace_store_bytes(shared: &Shared) -> Value {
+    let memory = shared.0.borrow();
+    json!({
+        "current": memory.current,
+        "snapshots": memory.snapshot_map,
+        "backups": memory.backups,
+        "damaged": memory.damaged,
+        "policy": memory.policy,
+    })
+}
+
+#[test]
+fn safe_mode_starts_simple_and_writes_nothing() {
+    let _aliases = alias_lock();
+    let shared = safe_mode_store();
+    let before = workspace_store_bytes(&shared);
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.attach_profile_store_safe(Box::new(shared.clone()));
+    assert!(app.ws.safe_mode);
+    assert_eq!(app.ws.effective.layout, preset("SIMPLE").unwrap().layout);
+    assert_eq!(LayoutSave::from_ws(&app.ws), LayoutSave::SafeMode);
+    let ctx = egui::Context::default();
+    frame(&mut app, &ctx, 0.0);
+    for lines in 4..9 {
+        run(&mut app, "ui.workspace.set", json!({"pointer": "/command_line/lines", "value": lines}));
+        assert_eq!(app.ui.history_lines, lines);
+        frame(&mut app, &ctx, lines as f64 * 2.0);
+    }
+    run(&mut app, "ui.workspace.select", json!({"id": "SIMPLE"}));
+    shared.1.set(true);
+    frame(&mut app, &ctx, 100.0);
+    assert_eq!(app.commit_workspace_now().unwrap_err(), "safe mode");
+    for command in ["ui.workspace.restore", "ui.workspace.rollback", "ui.workspace.resolve"] {
+        assert!(app.run(command, json!({"revision": 9, "keep": "theirs"})).is_err());
+    }
+    let status = run(&mut app, "ui.workspace.status", json!({}));
+    assert_eq!(status["status"], "safe_mode");
+    assert_eq!(status["layout_save"], "safe_mode");
+    assert_eq!(status["safe_mode"], true);
+    assert_eq!(status["label"], LayoutSave::SafeMode.label());
+    assert_eq!(status["snapshots"], json!([]));
+    assert!(!app.ws.needs_flush());
+    assert!(!app.ws.autosave.pending(), "safe mode never schedules a retry");
+    assert_eq!(LayoutSave::from_ws(&app.ws), LayoutSave::SafeMode);
+    assert_eq!(workspace_store_bytes(&shared), before);
+    app.attach_remote(Box::new(cadcraft_ui_egui::wsprofile::sync::MemoryRemote::default()));
+    app.sync_now();
+    assert_eq!(shared.2.get(), 0, "safe mode must not call any store method");
+}
+
+#[test]
+fn leaving_safe_mode_restores_the_stored_profile() {
+    let _aliases = alias_lock();
+    let shared = safe_mode_store();
+    let before = workspace_store_bytes(&shared);
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.attach_profile_store_safe(Box::new(shared.clone()));
+    run(&mut app, "ui.workspace.set", json!({"pointer": "/command_line/lines", "value": 4}));
+    assert_eq!(shared.2.get(), 0);
+    assert_eq!(run(&mut app, "ui.workspace.safemode", json!({"on": false})), json!({"safe_mode": false}));
+    assert!(!app.ws.safe_mode);
+    assert_eq!(app.ws.active, "user.safe-mode-test");
+    assert_eq!(app.ui.history_lines, 7);
+    assert_eq!(app.ws.user.revision, 9);
+    assert_eq!(LayoutSave::from_ws(&app.ws), LayoutSave::Clean);
+    assert_eq!(app.ws.history.undo_len(), 0, "safe-mode changes cannot be restored through layout undo");
+    assert!(app.ws.message.as_deref().unwrap().contains("discarded"));
+    assert_eq!(workspace_store_bytes(&shared), before);
+    run(&mut app, "ui.workspace.set", json!({"pointer": "/command_line/lines", "value": 6}));
+    app.commit_workspace_now().unwrap();
+    assert_eq!(parse_set(shared.0.borrow().current.as_deref().unwrap()).unwrap().user.unwrap().layout.command_line.lines, 6);
+}
+
+#[test]
+fn entering_safe_mode_at_runtime_keeps_the_store() {
+    let _aliases = alias_lock();
+    let shared = safe_mode_store();
+    let mut app = reattach(&shared);
+    let before = workspace_store_bytes(&shared);
+    run(&mut app, "ui.workspace.set", json!({"pointer": "/command_line/lines", "value": 5}));
+    shared.2.set(0);
+    assert_eq!(run(&mut app, "ui.workspace.safemode", json!({"on": true})), json!({"safe_mode": true}));
+    assert!(app.ws.store.is_some());
+    assert_eq!(app.ws.effective.layout, preset("SIMPLE").unwrap().layout);
+    assert!(!app.ws.needs_flush());
+    frame(&mut app, &egui::Context::default(), 10.0);
+    assert_eq!(workspace_store_bytes(&shared), before);
+    assert_eq!(shared.2.get(), 0);
+    run(&mut app, "ui.workspace.safemode", json!({"on": false}));
+    assert_eq!(app.ui.history_lines, 7);
+    assert_eq!(workspace_store_bytes(&shared), before);
+}
+
+#[test]
+fn safe_mode_never_touches_the_drawing() {
+    let _aliases = alias_lock();
+    for dirty in [false, true] {
+        let mut app = CadApp::new(Session::new(), Services::default());
+        if dirty {
+            run(&mut app, "line", json!({"points": [[0, 0], [10, 10]]}));
+        }
+        app.session.state_mut().unwrap().set_view_quiet(cadcraft_engine::View { center: cadcraft_geom::Vec2::new(12.0, -7.0), height: 42.0 });
+        let view = app.session.state().unwrap().view();
+        let drawing = app.session.state().unwrap().doc.clone();
+        let selection = app.session.selection();
+        let undo = app.session.state().unwrap().undo.len();
+        assert_eq!(app.session.state().unwrap().is_dirty(), dirty);
+        app.attach_profile_store_safe(Box::new(safe_mode_store()));
+        for on in [false, true, false] {
+            run(&mut app, "ui.workspace.safemode", json!({"on": on}));
+            assert_eq!(app.session.state().unwrap().is_dirty(), dirty);
+            assert_eq!(app.session.state().unwrap().view(), view);
+            assert_eq!(app.session.selection(), selection);
+            assert_eq!(app.session.state().unwrap().undo.len(), undo);
+            assert!(std::sync::Arc::ptr_eq(&drawing, &app.session.state().unwrap().doc));
+        }
+    }
+}
+
+#[test]
+fn safe_mode_keeps_loaded_policy_without_reading_store() {
+    let _aliases = alias_lock();
+    let shared = safe_mode_store();
+    shared.0.borrow_mut().policy =
+        Some(json!({"layers": [{"level": "company", "patch": {"status_bar": {"visible": false}}, "locks": ["/status_bar/visible"]}]}).to_string());
+    let mut app = reattach(&shared);
+    let before = workspace_store_bytes(&shared);
+    shared.2.set(0);
+    run(&mut app, "ui.workspace.safemode", json!({"on": true}));
+    assert!(!app.ui.show_status_bar);
+    assert!(app.run("ui.workspace.set", json!({"pointer": "/status_bar/visible", "value": true})).is_err());
+    assert!(!app.ui.show_status_bar);
+    assert_eq!(workspace_store_bytes(&shared), before);
+    assert_eq!(shared.2.get(), 0);
+}
+
+#[test]
+fn safe_mode_command_is_registered_and_validates_parameters() {
+    let _aliases = alias_lock();
+    let mut app = reattach(&safe_mode_store());
+    assert!(cadcraft_ui_egui::menus::UI_COMMANDS.iter().any(|(id, label, menu, shortcut)| {
+        *id == "ui.workspace.safemode" && *label == "Safe Mode" && *menu == ["Window", "Safe Mode"] && shortcut.is_none()
+    }));
+    for params in [json!({}), json!({"on": "true"}), json!({"on": 1})] {
+        assert!(app.run("ui.workspace.safemode", params).is_err());
+        assert!(!app.ws.safe_mode);
+    }
+    run(&mut app, "ui.workspace.safemode", Value::Null);
+    assert!(app.ws.safe_mode);
+    run(&mut app, "ui.workspace.safemode", Value::Null);
+    assert!(!app.ws.safe_mode);
 }

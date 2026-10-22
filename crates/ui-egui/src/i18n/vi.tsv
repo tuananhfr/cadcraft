@@ -1169,7 +1169,7 @@ menu	Help	Trợ giúp
 	Visual Effect Settings	Cài đặt hiệu ứng hiển thị
 	Visual Effect Settings...	Cài đặt hiệu ứng hiển thị...
 	W	T
-	WCS ⌄	WCS ⌄
+	WCS ⌄	WCS ˅
 	Walls and openings, schedules and an architecture tool bar.	Tường và lỗ mở, bảng thống kê và thanh công cụ kiến trúc.
 	When a command is active	Khi có lệnh đang chạy
 	When no command is active	Khi không có lệnh đang chạy
@@ -1900,3 +1900,76 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	REVISION_OLD	Phiên bản sửa đổi cũ
 	TEMPLATE_SUPERSEDED	Mẫu đã được thay thế
 	Approve Plot Warnings	Duyệt cảnh báo in
+	Planned	Dự kiến
+	Double-click to repeat command	Nhấp đúp để lặp lại lệnh
+	Aliases	Lệnh tắt
+	Assign Alias	Gán lệnh tắt
+	Remove Alias	Xóa lệnh tắt
+	Reset Aliases	Đặt lại lệnh tắt
+	Export Aliases...	Xuất lệnh tắt...
+	Import Aliases...	Nhập lệnh tắt...
+	Aliases (JSON)	Lệnh tắt (JSON)
+	Use letters A–Z, digits 0–9, _ or - for aliases	Dùng chữ cái A–Z, chữ số 0–9, _ hoặc - cho lệnh tắt
+	Alias cannot be empty	Lệnh tắt không được để trống
+	Alias must be at most 16 characters	Lệnh tắt có tối đa 16 ký tự
+	{command} is a command name and cannot be an alias	{command} là tên lệnh và không thể dùng làm lệnh tắt
+	Alias already runs {command}; confirm to replace	Lệnh tắt đã chạy lệnh {command}; hãy xác nhận để thay thế
+	Too many aliases	Quá nhiều lệnh tắt
+	{key} is required	Cần có {key}
+	Paste alias JSON to import in the browser	Dán JSON lệnh tắt để nhập trong trình duyệt
+	Alias file is too large	Tệp lệnh tắt quá lớn
+	Paste alias JSON to import	Dán JSON lệnh tắt để nhập
+	Expected an aliases object	Cần một đối tượng aliases
+	Expected a command name	Cần tên lệnh
+	{imported} imported, {skipped} skipped	Đã nhập {imported}, đã bỏ qua {skipped}
+	Filter aliases	Lọc lệnh tắt
+	Alias	Lệnh tắt
+	Command	Lệnh
+	Source	Nguồn
+	User	Người dùng
+	Built-in	Có sẵn
+	Alias command	Lệnh mà lệnh tắt chạy
+	Import Alias File...	Nhập tệp lệnh tắt...
+	Import Aliases	Nhập lệnh tắt
+	Replace Alias?	Thay thế lệnh tắt?
+	Replace Alias	Thay thế lệnh tắt
+	Roll Back Workspace to 1.0.0	Khôi phục workspace 1.0.0
+	Restored the 1.0.0 workspace. Changes are not saved until restart.	Đã khôi phục workspace 1.0.0. Thay đổi sẽ không được lưu cho tới khi khởi động lại.
+	Saving suspended	Đã tạm dừng lưu
+	No 1.0.0 workspace backup is available	Không có bản sao lưu workspace 1.0.0
+	Layout saved on this device (not synced)	Bố cục đã lưu trên máy này (chưa đồng bộ)
+	Layout changed	Bố cục có thay đổi
+	Saving layout…	Đang lưu bố cục…
+	Could not save layout; retrying	Không lưu được bố cục; đang thử lại
+	Layout restored from revision {n}	Bố cục khôi phục từ bản {n}
+	Safe mode: layout changes are not saved	Chế độ an toàn: thay đổi bố cục không được lưu
+	Drawing saved	Bản vẽ đã lưu
+	Drawing downloaded	Đã tải bản vẽ xuống
+	Drawing has unsaved changes	Bản vẽ chưa lưu
+	Drawing autosaved in this browser {time}	Bản vẽ tự lưu trong trình duyệt lúc {time}
+	Layout saved	Đã lưu bố cục
+	Layout not saved	Chưa lưu bố cục
+	Layout restored	Đã khôi phục bố cục
+	Safe mode	Chế độ an toàn
+	Saving drawing…	Đang lưu bản vẽ…
+	Drawing autosaved	Bản vẽ đã tự lưu
+	Safe Mode	Chế độ an toàn
+	Restart in safe mode: add ?safe to the address / --safe-mode	Khởi động lại ở chế độ an toàn: thêm ?safe vào địa chỉ / --safe-mode
+	Safe mode ended. Changes made in safe mode were discarded; the stored workspace was restored.	Đã thoát chế độ an toàn. Các thay đổi trong chế độ an toàn đã bị bỏ; không gian làm việc đã lưu được khôi phục.
+	The file is damaged or was edited by hand (checksum mismatch)	Tệp bị hỏng hoặc đã được sửa thủ công (mã kiểm tra không khớp)
+	The file has no checksum; it cannot be checked for damage	Tệp không có mã kiểm tra; không thể kiểm tra tệp có bị hỏng hay không
+	Workspace import is not available in safe mode	Không thể nhập không gian làm việc trong chế độ an toàn
+	Import Workspace	Nhập không gian làm việc
+	Changes	Thay đổi
+	Ignored device settings	Cài đặt thiết bị bị bỏ qua
+	Warnings	Cảnh báo
+	{count} more items	và {count} mục khác
+	Import	Nhập
+	Browser storage is full	Bộ nhớ trình duyệt đã đầy
+	Saving in limited browser storage	Đang lưu vào bộ nhớ trình duyệt hạn chế
+	Recovery Status	Trạng thái khôi phục
+	Drawing too large to autosave in the browser	Bản vẽ quá lớn để tự lưu trong trình duyệt
+	Could not autosave the drawing	Không thể tự lưu bản vẽ
+	Could not recover the drawing	Không thể khôi phục bản vẽ
+	Drawing autosave queue is full	Hàng đợi tự lưu bản vẽ đã đầy
+	Could not autosave the drawing: {error}	Không thể tự lưu bản vẽ: {error}

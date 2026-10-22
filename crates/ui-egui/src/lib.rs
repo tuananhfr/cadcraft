@@ -125,6 +125,10 @@ pub struct UiState {
     pub save_version: String,
     /// Drawings opened from a path, newest first (File ▸ Open Recent and the Start page).
     pub recent_files: Vec<String>,
+    /// Drawings (by [`cadcraft_engine::DocState::uid`]) whose last save was a browser download.
+    /// Not kept across runs: uids are per run.
+    #[serde(skip)]
+    pub downloaded: std::collections::BTreeSet<u64>,
 }
 
 /// A DXF/DWG file version (2000 … 2018).
@@ -196,6 +200,7 @@ impl Default for UiState {
             save_format: SaveFormat::default(),
             save_version: SaveVersion::default().year().to_string(),
             recent_files: Vec::new(),
+            downloaded: std::collections::BTreeSet::new(),
         }
     }
 }
@@ -287,8 +292,9 @@ pub struct CadApp {
     pub quit_confirmed: bool,
     /// A close request waiting for "Save changes?" answers ([`closing`]).
     pub closing: Option<closing::Closing>,
-    /// Autosave (desktop; `None` until [`Self::enable_autosave`]).
+    /// Autosave planner; enabled by the host after its storage is available.
     pub autosave: Option<cadcraft_engine::autosave::Autosaver>,
+    pub(crate) browser_autosave: Option<autosave::BrowserAutosave>,
     /// Drawing Recovery: autosave files a crashed app left behind.
     pub recovery: autosave::Recovery,
     /// GPU errors and device loss reported by wgpu ([`gpu::GpuFaults`]).
@@ -343,6 +349,7 @@ impl CadApp {
             quit_confirmed: false,
             closing: None,
             autosave: None,
+            browser_autosave: None,
             recovery: autosave::Recovery::default(),
             gpu_faults: std::sync::Arc::default(),
             gpu_notice: None,

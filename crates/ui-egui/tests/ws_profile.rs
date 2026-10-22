@@ -42,7 +42,7 @@ fn profile_commands(profile: &WorkspaceProfile) -> Vec<&String> {
 fn spec_sample_imports() {
     let value = validate(SPEC_SAMPLE, Mode::Import).unwrap();
     let profile = parse(value);
-    assert_eq!(profile.schema_version, SCHEMA_VERSION);
+    assert_eq!(profile.schema_version, 1);
     assert_eq!(profile.base_id.as_deref(), Some("AUTOCAD_FAMILIAR"));
     assert_eq!(profile.revision, 12);
     let properties = profile.layout.panels.iter().find(|panel| panel.id == "properties").unwrap();
@@ -438,12 +438,32 @@ fn schema_doc_lists_every_field() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/workspace/workspace-profile.schema.json");
     let schema: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     assert_eq!(schema["$schema"], "https://json-schema.org/draft/2020-12/schema");
-    assert_eq!(schema["properties"]["schema_version"]["const"], SCHEMA_VERSION);
+    assert_eq!(schema["properties"]["schemaVersion"]["const"], SCHEMA_VERSION);
     let default = serde_json::to_value(WorkspaceProfile::default()).unwrap();
-    assert_documented(&schema, &schema, &default, "");
+    assert_documented(&schema, &schema, &cadcraft_ui_egui::wsprofile::wire::to_wire(&default), "");
     for id in PRESET_IDS {
         let value = serde_json::to_value(preset(id).unwrap()).unwrap();
-        assert_documented(&schema, &schema, &value, &format!("{id}:"));
+        assert_documented(&schema, &schema, &cadcraft_ui_egui::wsprofile::wire::to_wire(&value), &format!("{id}:"));
+    }
+    let mut documented = BTreeSet::new();
+    let mut pending = vec![&schema];
+    while let Some(node) = pending.pop() {
+        match node {
+            Value::Object(fields) => {
+                if let Some(properties) = fields.get("properties").and_then(Value::as_object) {
+                    documented.extend(properties.keys().cloned());
+                }
+                pending.extend(fields.values());
+            }
+            Value::Array(items) => pending.extend(items),
+            _ => {}
+        }
+    }
+    let known: serde_json::Map<String, Value> =
+        cadcraft_ui_egui::wsprofile::wire::KNOWN_KEYS.iter().map(|key| ((*key).into(), Value::Null)).collect();
+    let wire = cadcraft_ui_egui::wsprofile::wire::to_wire(&json!({"device": known}));
+    for key in wire["deviceGeometry"].as_object().unwrap().keys() {
+        assert!(documented.contains(key), "undocumented wire field {key}");
     }
 }
 
@@ -723,11 +743,11 @@ fn status_bar_shows_save_state() {
     let mut harness = shell(first_run_app(true));
     harness.state_mut().run("ui.cmdline.lines", json!({"lines": 7})).unwrap();
     harness.run_steps(2);
-    harness.get_by_label("Saving…");
+    harness.get_by_label("Layout changed");
     harness.state_mut().commit_workspace_now().unwrap();
     harness.run_steps(3);
-    harness.get_by_label("Saved locally");
-    assert!(harness.query_by_label("Saving…").is_none());
+    harness.get_by_label("Layout saved");
+    assert!(harness.query_by_label("Layout changed").is_none());
 
     let mut failing = first_run_app(true);
     failing.ws.store = Some(Box::new(MemoryStore { fail_writes: true, ..Default::default() }));
@@ -735,7 +755,7 @@ fn status_bar_shows_save_state() {
     harness.state_mut().run("ui.cmdline.lines", json!({"lines": 7})).unwrap();
     let _ = harness.state_mut().commit_workspace_now();
     harness.run_steps(3);
-    harness.get_by_label("Not saved");
+    harness.get_by_label("Layout not saved");
 }
 
 #[test]
@@ -743,7 +763,7 @@ fn status_bar_without_storage_shows_no_save_state() {
     let mut app = CadApp::new(Session::new(), Services::default());
     app.skip_first_run_picker = true;
     let harness = shell(app);
-    for label in ["Saved locally", "Saving…", "Not saved"] {
+    for label in ["Layout saved", "Layout changed", "Saving layout…", "Layout not saved"] {
         assert!(harness.query_by_label(label).is_none(), "{label}");
     }
 }
