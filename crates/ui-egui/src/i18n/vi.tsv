@@ -1862,6 +1862,8 @@ ribbon	Visibility	Hiện/ẩn
 ribbon	Walls and Openings	Tường và lỗ mở
 
 # GĐ3 Task 1: ribbon display modes.
+menu	Ribbon	Ribbon
+menu	Display Mode	Chế độ hiển thị
 	Ribbon Display Mode	Chế độ hiển thị Ribbon
 	Display Mode	Chế độ hiển thị
 	mode must be expanded, compact, tabs_only or hidden	mode phải là expanded, compact, tabs_only hoặc hidden

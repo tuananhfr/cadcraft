@@ -616,16 +616,13 @@ fn read_only(ui: &mut egui::Ui, text: &str) {
 /// Quick Select buttons.
 fn properties_header(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
-    let hr = section_header(ui, "Properties");
-    // All | My segmented control ("My" property sets don't exist yet).
-    let seg = Rect::from_min_size(pos2(hr.right() - 120.0, hr.top() + 4.0), vec2(70.0, 18.0));
-    ui.painter().rect_filled(seg, 3.0, t.chrome_dark);
-    let half = Rect::from_min_size(seg.min, vec2(35.0, 18.0));
-    let my = half.translate(vec2(35.0, 0.0));
-    ui.painter().rect_filled(if app.ui.properties_all { half } else { my }, 3.0, t.control);
-    ui.painter().text(half.center(), egui::Align2::CENTER_CENTER, crate::tl!("All"), crate::theme::small(), t.text);
-    ui.painter().text(my.center(), egui::Align2::CENTER_CENTER, crate::tl!("My"), crate::theme::small(), t.text_faint);
-    ui.interact(my, ui.id().with("prop_my"), Sense::hover()).on_hover_text(crate::tl!("My properties: not available yet"));
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(8.0);
+        ui.label(egui::RichText::new(crate::tl!("Properties")).size(14.0).color(t.text));
+        ui.add(egui::Button::selectable(app.ui.properties_all, crate::tl!("All")).truncate());
+        ui.add_enabled(false, egui::Button::selectable(!app.ui.properties_all, crate::tl!("My")).truncate())
+            .on_disabled_hover_text(crate::tl!("My properties: not available yet"));
+    });
     let sel = app.session.selection();
     let pickadd = app.session.settings.pickadd;
     let Ok(d) = app.session.doc() else { return };
@@ -652,30 +649,32 @@ fn properties_header(app: &mut CadApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         ui.add_space(8.0);
         ui.spacing_mut().item_spacing = vec2(3.0, 0.0);
-        let w = (ui.available_width() - 80.0).max(60.0);
-        let resp = ui.allocate_ui(vec2(w, 20.0), |ui| value_box(ui, &header, true, count > 0)).inner;
-        if count > 0 {
-            // Narrow the selection to one object type.
-            egui::Popup::from_toggle_button_response(&resp).width(w - 10.0).close_behavior(egui::PopupCloseBehavior::CloseOnClick).show(|ui| {
-                for (ty, hs) in &types {
-                    if ui.button(format!("{} ({})", crate::i18n::t(ty), hs.len())).clicked() {
-                        run = Some(("select", json!({ "handles": hs })));
+        let size = 22.0_f32.max(ui.spacing().interact_size.y);
+        let w = (ui.available_width() - 3.0 * (size + ui.spacing().item_spacing.x)).max(1.0);
+        ui.allocate_ui(vec2(w, size), |ui| {
+            ui.add_enabled_ui(count > 0, |ui| {
+                egui::ComboBox::from_id_salt("properties_selection").width(w).selected_text(&header).truncate().show_ui(ui, |ui| {
+                    for (ty, hs) in &types {
+                        if ui.button(format!("{} ({})", crate::i18n::t(ty), hs.len())).clicked() {
+                            run = Some(("select", json!({ "handles": hs })));
+                            ui.close();
+                        }
                     }
-                }
+                });
             });
-        }
+        });
         let tip = if pickadd {
             crate::tl!("Toggle PICKADD (on: picks add to the selection)")
         } else {
             crate::tl!("Toggle PICKADD (off: each pick replaces the selection)")
         };
-        if icons::button(ui, Icon::PickAdd, 22.0, tip, pickadd).clicked() {
+        if icons::button(ui, Icon::PickAdd, size, tip, pickadd).clicked() {
             run = Some(("setvar", json!({ "name": "PICKADD", "value": i32::from(!pickadd) })));
         }
-        if icons::button(ui, Icon::SelectObjects, 22.0, crate::tl!("Select Objects"), false).clicked() {
+        if icons::button(ui, Icon::SelectObjects, size, crate::tl!("Select Objects"), false).clicked() {
             start = Some("select");
         }
-        if icons::button(ui, Icon::QuickSelect, 22.0, crate::tl!("Quick Select"), false).clicked() {
+        if icons::button(ui, Icon::QuickSelect, size, crate::tl!("Quick Select"), false).clicked() {
             start = Some("ui.dialog.qselect");
         }
     });
@@ -1112,5 +1111,50 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
     report_bad(app, bad);
     if let Some(p) = custom_set {
         let _ = app.run("blocks.reference.set", p);
+    }
+}
+
+#[cfg(test)]
+mod header_tests {
+    use super::*;
+    use egui::accesskit::Role;
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
+
+    #[test]
+    fn translated_properties_header_fits_the_minimum_palette_width() -> Result<(), String> {
+        for language in ["en", "vi"] {
+            for density in ["normal", "comfortable"] {
+                for width in [220.0, 260.0, 300.0] {
+                    let mut app = CadApp::new(cadcraft_engine::Session::new(), crate::Services::default());
+                    app.skip_first_run_picker = true;
+                    app.run("options", json!({"interfaceLanguage": language, "animations": "off"}))?;
+                    app.run("ui.density", json!({"density": density}))?;
+                    let mut h = Harness::builder().with_size(vec2(width, 400.0)).build_ui_state(
+                        |ui, app: &mut CadApp| {
+                            app.logic(ui.ctx());
+                            // Exercise translated geometry even without optional Vietnamese fonts.
+                            crate::i18n::with_language(app.ui.interface_language.code(), || properties_header(app, ui));
+                        },
+                        app,
+                    );
+                    h.run_steps(5);
+                    assert_eq!(h.state().ui.interface_language.code(), language);
+                    let all = h.get_by_role_and_label(Role::Button, crate::i18n::tr(language, "All")).rect();
+                    let my = h.get_by_role_and_label(Role::Button, crate::i18n::tr(language, "My")).rect();
+                    let selection = h.get_by_role(Role::ComboBox).rect();
+                    assert!(!all.intersects(my), "{language}/{density}/{width}: {all:?}, {my:?}");
+                    for rect in [all, my, selection] {
+                        assert!(h.ctx.content_rect().contains_rect(rect), "{language}/{density}/{width}: {rect:?}");
+                    }
+                    for label in ["Toggle PICKADD (on: picks add to the selection)", "Select Objects", "Quick Select"] {
+                        let rect = h.get_by_role_and_label(Role::Button, crate::i18n::tr(language, label)).rect();
+                        assert!(h.ctx.content_rect().contains_rect(rect), "{language}/{density}/{width}: {label} {rect:?}");
+                        assert!(!rect.intersects(selection), "{language}/{density}/{width}: {label} overlaps {selection:?}");
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }

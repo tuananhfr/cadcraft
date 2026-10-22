@@ -438,3 +438,47 @@ fn focus_without_a_drawing_still_exits_on_escape() {
     h.run_steps(2);
     assert!(!h.state().focus.active());
 }
+
+#[test]
+fn focus_exit_and_wrapped_fallback_keep_the_viewcube_clear() {
+    for size in [vec2(1366.0, 768.0), vec2(683.0, 384.0)] {
+        let mut app = app();
+        app.run("ui.focusmode", json!({"on": true})).unwrap();
+        app.fullscreen.fallback_focus = true;
+        let message = "Full screen is blocked here; using Focus mode. Check the browser fullscreen permission before trying again.";
+        app.set_status(message);
+        let mut h = harness(app);
+        h.set_size(size);
+        h.run_steps(5);
+        let screen = h.ctx.content_rect();
+        let cube = cadcraft_ui_egui::viewcube::Layout::new(h.state().canvas.rect.unwrap());
+        let area = h.ctx.memory(|memory| memory.area_rect(egui::Id::new("cc_exit_focus"))).unwrap();
+        assert!(screen.contains_rect(area), "{size:?}: {area:?}");
+        assert!(!area.intersects(cube.bounds) && !area.intersects(cube.home), "{size:?}: {area:?}, {cube:?}");
+        assert!(area.width() <= 321.0, "{area:?}");
+        assert!(h.get_by_label(message).rect().height() > 20.0, "the fallback wraps");
+        h.get_by_label("Exit Focus Mode (Esc)").click();
+        h.run_steps(3);
+        assert!(!h.state().focus.active());
+    }
+}
+
+#[test]
+fn options_escape_closes_without_cancelling_the_active_command_or_focus() {
+    for focused in [false, true] {
+        for tab in ["display", "files", "drafting", "selection", "preferences", "profiles"] {
+            let mut app = app();
+            app.run("ui.focusmode", json!({"on": focused})).unwrap();
+            app.start("line");
+            app.cmd.buffer = "1,2".into();
+            app.ui.dialog = Some(format!("options:{tab}"));
+            let mut h = harness(app);
+            h.key_press(Key::Escape);
+            h.run_steps(3);
+            assert!(h.state().ui.dialog.is_none(), "{focused}/{tab}");
+            assert_eq!(running(h.state()), Some("line"), "{focused}/{tab}");
+            assert_eq!(h.state().cmd.buffer, "1,2", "{focused}/{tab}");
+            assert_eq!(h.state().focus.active(), focused);
+        }
+    }
+}

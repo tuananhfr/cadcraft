@@ -27,6 +27,10 @@ const MIN_TAB_HEIGHT: f32 = 200.0;
 
 /// Show the Options dialog (`name` is `"options"` or `"options:<tab>"`).
 pub fn dialog(app: &mut CadApp, ctx: &egui::Context, name: &str, open: &mut bool) {
+    if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        *open = false;
+        return;
+    }
     let tab = name.strip_prefix("options:").and_then(|t| TABS.iter().find(|(id, _)| *id == t)).map_or("display", |(id, _)| *id);
     let mut changes = Map::new();
     let mut next_tab = None;

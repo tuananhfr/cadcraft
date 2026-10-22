@@ -51,19 +51,22 @@ pub fn exit_button(ctx: &Context, app: &mut CadApp) {
     }
     egui::Area::new(Id::new("cc_exit_focus"))
         .order(Order::Foreground)
-        .anchor(Align2::RIGHT_TOP, vec2(-8.0, 8.0))
+        .anchor(Align2::CENTER_TOP, vec2(0.0, 8.0))
         .constrain_to(ctx.content_rect())
         .movable(false)
         .show(ctx, |ui| {
-            ui.set_max_width((ctx.content_rect().width() - 16.0).max(1.0));
-            if ui.button(crate::tl!("Exit Focus Mode (Esc)")).clicked() {
-                let _ = app.run("ui.focusmode", json!({"on": false}));
-            }
-            if app.fullscreen.fallback_focus
-                && let Some((message, _)) = &app.status
-            {
-                ui.label(message);
-            }
+            // Symmetric clearance keeps the centred notice away from the ViewCube on narrow screens.
+            ui.set_max_width((ctx.content_rect().width() - 352.0).clamp(1.0, 320.0));
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                if ui.button(crate::tl!("Exit Focus Mode (Esc)")).clicked() {
+                    let _ = app.run("ui.focusmode", json!({"on": false}));
+                }
+                if app.fullscreen.fallback_focus
+                    && let Some((message, _)) = &app.status
+                {
+                    ui.add(egui::Label::new(message).wrap());
+                }
+            });
         });
 }
 
@@ -95,6 +98,11 @@ pub(crate) fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result
 }
 
 pub(crate) fn escape(app: &mut CadApp, ctx: &Context) {
+    // Options closes on Esc without touching the command; other dialogs are non-modal, so Esc still cancels drawing.
+    if app.ui.dialog.as_deref().is_some_and(|name| name == "options" || name.starts_with("options:")) {
+        app.ui.dialog = None;
+        return;
+    }
     if !app.focus.active() && app.fullscreen.phase == crate::fullscreen::Phase::Off {
         app.cmd.buffer.clear();
         app.session.cancel();

@@ -16,6 +16,8 @@ pub const DIALOG: &str = "customize_workspace";
 #[derive(Default)]
 pub struct State {
     page: usize,
+    list_height: f32,
+    scroll_ribbon_page: bool,
     aliases: alias_tab::State,
     tab: String,
     group: String,
@@ -61,23 +63,42 @@ fn edit(ui: &mut egui::Ui, text: &mut String, label: &str) -> egui::Response {
     ui.label(label);
     // Keep Escape with the editor so egui cannot clear IME focus before the dialog handles input.
     let response = ui.add(
-        egui::TextEdit::singleline(text).id_salt(label).hint_text(label).char_limit(1024).desired_width(240.0).event_filter(egui::EventFilter {
-            horizontal_arrows: true,
-            vertical_arrows: true,
-            escape: true,
-            ..Default::default()
-        }),
+        egui::TextEdit::singleline(text)
+            .id_salt(label)
+            .hint_text(label)
+            .char_limit(1024)
+            .desired_width(ui.available_width().min(240.0))
+            .event_filter(egui::EventFilter { horizontal_arrows: true, vertical_arrows: true, escape: true, ..Default::default() }),
     );
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, label));
     response
 }
 
 fn row(ui: &mut egui::Ui, selected: bool, label: &str) -> bool {
-    let response = ui.add(egui::Button::selectable(selected, label));
+    let response = ui.add(egui::Button::selectable(selected, label).truncate());
     if response.gained_focus() {
         response.scroll_to_me(None);
     }
     response.clicked()
+}
+
+fn list<R>(
+    ui: &mut egui::Ui,
+    id_salt: impl std::hash::Hash + std::fmt::Debug,
+    height: Option<f32>,
+    add_contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> R {
+    if let Some(height) = height {
+        egui::ScrollArea::vertical()
+            .id_salt(id_salt)
+            .min_scrolled_height(height)
+            .max_height(height)
+            .auto_shrink([false, false])
+            .show(ui, add_contents)
+            .inner
+    } else {
+        ui.push_id(id_salt, add_contents).inner
+    }
 }
 
 pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
@@ -93,15 +114,16 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                 _ => composing,
             })
         });
+    let screen = ctx.content_rect();
     egui::Window::new(crate::tl!("Customize Workspace..."))
         .id(egui::Id::new(DIALOG))
         .open(open)
-        .default_width(700.0)
-        .default_height(520.0)
+        .fixed_size(vec2((screen.width() - 48.0).clamp(240.0, 1100.0), (screen.height() - 80.0).clamp(120.0, 660.0)))
+        .resizable(false)
         .collapsible(false)
         .anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0))
         .show(ctx, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 let pages = [crate::tl!("Ribbon"), crate::tl!("Toolbars"), crate::tl!("Keyboard"), crate::tl!("Quick Access"), crate::tl!("Aliases")];
                 for (page, label) in pages.iter().enumerate() {
                     let response = ui.add(egui::Button::selectable(state.page == page, *label));
@@ -115,13 +137,21 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                 state.focused = true;
             });
             ui.separator();
-            egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| match state.page {
-                0 => ribbon_tab::show(app, ui, &mut state),
-                1 => toolbars_tab::show(app, ui, &mut state),
-                2 => keyboard_tab::show(app, ui, &mut state),
-                3 => quick_access_tab::show(app, ui, &mut state),
-                _ => alias_tab::show(app, ui, &mut state),
-            });
+            let row = ui.spacing().interact_size.y + ui.spacing().item_spacing.y;
+            let body = (ui.available_height() - row - 16.0 - if state.error.is_some() { row * 2.0 } else { 0.0 }).max(1.0);
+            state.list_height = (body - row * 6.0).max(row * 5.0);
+            // An inner list consumes scroll-to requests before the page can reveal it on short screens.
+            state.scroll_ribbon_page = body < row * 11.0;
+            egui::ScrollArea::vertical().id_salt("customize_page").auto_shrink([false, false]).min_scrolled_height(body).max_height(body).show(
+                ui,
+                |ui| match state.page {
+                    0 => ribbon_tab::show(app, ui, &mut state),
+                    1 => toolbars_tab::show(app, ui, &mut state),
+                    2 => keyboard_tab::show(app, ui, &mut state),
+                    3 => quick_access_tab::show(app, ui, &mut state),
+                    _ => alias_tab::show(app, ui, &mut state),
+                },
+            );
             if let Some(error) = &state.error {
                 ui.colored_label(crate::theme::Tokens::get().warn, error);
             }
@@ -173,7 +203,8 @@ fn commands(app: &CadApp, ui: &mut egui::Ui, state: &mut State) {
     {
         state.command = (*id).into();
     }
-    egui::ScrollArea::vertical().id_salt("command_list").max_height(110.0).show(ui, |ui| {
+    let height = (!(state.page == 0 && state.scroll_ribbon_page)).then_some(state.list_height);
+    list(ui, "command_list", height, |ui| {
         for &(id, label) in &state.commands {
             ui.push_id(id, |ui| {
                 if row(ui, state.command == id, &format!("{} ({id})", crate::i18n::t(label))) {
