@@ -837,3 +837,157 @@ mod persistence {
         assert_eq!(std::fs::read_dir(&outside.0).unwrap().count(), 1);
     }
 }
+
+mod commands {
+    use super::*;
+    use cadcraft_engine::Session;
+    use cadcraft_engine::cmd::file::{IoHooks, set_io};
+
+    fn session() -> Session {
+        static HOOKS: std::sync::Once = std::sync::Once::new();
+        HOOKS.call_once(|| {
+            set_io(IoHooks {
+                read: |_, _| Err("not needed by the synthetic profile fixture".into()),
+                write: |drawing, _| Ok(cadcraft_io::write_dxf(drawing).into_bytes()),
+                plot: Some(|drawing, space, options| cadcraft_io::plotter::plot(drawing, space, options).map_err(|error| error.to_string())),
+            });
+        });
+        let mut session = Session::empty();
+        session.open_drawing(cadcraft_doc::Drawing::new_metric(), "x.dxf", None);
+        session
+    }
+
+    fn scan(session: &mut Session, count: usize) -> Value {
+        let windows: Vec<_> = (0..count)
+            .map(|index| {
+                let x = index as f64 * 500.0;
+                json!([[x, 0.0], [x + 420.0, 297.0]])
+            })
+            .collect();
+        let plan = session.execute("ubplot.scan", &json!({"mode": "window", "windows": windows})).unwrap();
+        let mut approvals = Vec::new();
+        for issue in plan["issues"].as_array().unwrap() {
+            if issue["severity"] == "WARN" {
+                approvals.push(json!({"sheetKey": "*", "code": issue["code"]}));
+            }
+        }
+        for sheet in plan["sheets"].as_array().unwrap() {
+            for issue in sheet["issues"].as_array().unwrap() {
+                if issue["severity"] == "WARN" {
+                    approvals.push(json!({"sheetKey": format!("{}@{}", sheet["sheet_id"].as_str().unwrap(), sheet["order"]), "code": issue["code"]}));
+                }
+            }
+        }
+        session.execute("ubplot.approve", &json!({"approvals": approvals, "by": "user"})).unwrap()
+    }
+
+    #[test]
+    fn effective_profile_applied_to_new_plan() {
+        let mut session = session();
+        session.write_print_profile(&doc(ProfileLevel::User, json!({"pages_per_file": 64, "naming": "{stem}-{sheet_id}"}), &[])).unwrap();
+        let version = session.effective_print_profile().version;
+        let mut plan = scan(&mut session, 65);
+        assert_eq!(plan["device"], "CADCraft PDF");
+        for (index, sheet) in plan["sheets"].as_array_mut().unwrap().iter_mut().enumerate() {
+            sheet["sheet_id"] = json!(format!("KT-{:02}", index + 1));
+        }
+        let result = session.execute("ubplot.publish", &json!({"plan": plan})).unwrap();
+        let files = result["files"].as_array().unwrap();
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0]["sheets"].as_array().unwrap().len(), 64);
+        assert_eq!(files[1]["sheets"].as_array().unwrap().len(), 1);
+        assert_eq!(files[0]["name"], "x-KT-01.pdf");
+        assert_eq!(files[1]["name"], "x-KT-65.pdf");
+        assert_eq!(result["manifest"]["profile_version"], version);
+        let background = session.execute("ubplot.publish", &json!({"plan": plan, "background": true})).unwrap();
+        let job = session.take_queued_job().unwrap();
+        assert_eq!(background["jobId"], job.job_id);
+        assert_eq!(job.output.pages_per_file, 64);
+        assert_eq!(job.naming.as_deref(), Some("{stem}-{sheet_id}"));
+        assert_eq!(job.profile_version.as_deref(), Some(version.as_str()));
+        assert_eq!(job.profile_id.as_deref(), Some("platform>user"));
+    }
+
+    #[test]
+    fn locked_property_refuses_every_route() {
+        let mut session = session();
+        session.write_print_profile(&doc(ProfileLevel::Company, json!({"device": "CADCraft PDF"}), &["/device"])).unwrap();
+        let effective = session.effective_print_profile();
+        let plan = scan(&mut session, 1);
+        let assert_locked = |error: String| assert!(error.contains("LOCKED_BY_POLICY: /device (company)"), "{error}");
+        assert_locked(
+            session.execute("ubplot.profile", &json!({"action": "set", "level": "user", "key": "device", "value": "X"})).unwrap_err().to_string(),
+        );
+        for background in [false, true] {
+            assert_locked(
+                session.execute("ubplot.publish", &json!({"plan": plan, "device": "X", "background": background})).unwrap_err().to_string(),
+            );
+            let mut changed = plan.clone();
+            changed["device"] = json!("X");
+            assert_locked(session.execute("ubplot.publish", &json!({"plan": changed, "background": background})).unwrap_err().to_string());
+        }
+        assert_locked(
+            session.execute("ubplot.scan", &json!({"mode": "window", "windows": [[[0, 0], [420, 297]]], "device": "X"})).unwrap_err().to_string(),
+        );
+        let mut changed = plan.clone();
+        changed["device"] = json!("X");
+        let quoted =
+            cadcraft_engine::lisp::value::to_text(&cadcraft_engine::lisp::value::Value::str(&serde_json::to_string(&changed).unwrap()), true);
+        let lisp = session.execute("lisp", &json!({"code": format!("(ubplot-publish {quoted} nil)")})).unwrap();
+        assert_locked(lisp["error"].as_str().unwrap().to_string());
+        let imported = doc(ProfileLevel::User, json!({"device": "X", "naming": "changed"}), &[]);
+        assert_locked(
+            session
+                .execute("ubplot.profile", &json!({"action": "import", "level": "user", "text": serde_json::to_string(&imported).unwrap()}))
+                .unwrap_err()
+                .to_string(),
+        );
+        assert_eq!(session.effective_print_profile(), effective);
+        assert!(session.execute("ubplot.profile", &json!({"action": "get", "level": "user"})).unwrap()["settings"].as_object().unwrap().is_empty());
+        assert!(session.take_queued_job().is_none());
+    }
+
+    #[test]
+    fn import_rejects_executable_keys() {
+        let mut session = session();
+        let before = session.effective_print_profile();
+        let mut cases = Vec::new();
+        for key in ["script", "lisp", "exec", "eval", "code", "onload", "startup", "OnLoad"] {
+            let mut settings = json!({"nested": {}});
+            settings["nested"][key] = json!("bad");
+            cases.push(doc(ProfileLevel::User, settings, &[]));
+        }
+        for path in ["x.lsp", "x.FAS", "x.vlx", "x.exe", "x.dll"] {
+            cases.push(doc(ProfileLevel::User, json!({"nested": [path]}), &[]));
+        }
+        let mut deep = json!("leaf");
+        for _ in 0..33 {
+            deep = json!({"nested": deep});
+        }
+        cases.push(doc(ProfileLevel::User, deep, &[]));
+        cases.push(doc(ProfileLevel::User, json!({"naming": "{unknown}"}), &[]));
+        cases.push(doc(ProfileLevel::User, json!({"naming": "x".repeat(MAX_PROFILE_BYTES)}), &[]));
+        for doc in cases {
+            let text = serde_json::to_string(&doc).unwrap();
+            assert!(session.execute("ubplot.profile", &json!({"action": "import", "level": "user", "text": text})).is_err());
+            assert_eq!(session.effective_print_profile(), before);
+        }
+    }
+
+    #[test]
+    fn explain_reports_origin_level_and_lock() {
+        let mut session = session();
+        session.write_print_profile(&doc(ProfileLevel::Company, json!({"device": "CADCraft PDF"}), &[])).unwrap();
+        session.execute("ubplot.profile", &json!({"action": "lock", "level": "company", "key": "device"})).unwrap();
+        session.execute("ubplot.profile", &json!({"action": "set", "key": "/naming", "value": "{stem}-{part}"})).unwrap();
+        let explanation = session.execute("ubplot.profile", &json!({"action": "explain"})).unwrap();
+        assert_eq!(explanation["origin"]["/device"], "company");
+        assert_eq!(explanation["locked"]["/device"], "company");
+        assert_eq!(explanation["origin"]["/naming"], "user");
+        session.execute("ubplot.profile", &json!({"action": "unset", "key": "naming"})).unwrap();
+        assert_eq!(session.effective_print_profile().settings.naming, "{stem}");
+        session.execute("ubplot.profile", &json!({"action": "unlock", "key": "device"})).unwrap();
+        session.execute("ubplot.profile", &json!({"action": "set", "key": "device", "value": "X"})).unwrap();
+        assert_eq!(session.effective_print_profile().settings.device, "X");
+    }
+}

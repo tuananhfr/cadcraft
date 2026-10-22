@@ -397,6 +397,7 @@ ubplot
 ubplot.approve
 ubplot.folder
 ubplot.jobs
+ubplot.profile
 ubplot.publish
 ubplot.scan
 ubplot.templates

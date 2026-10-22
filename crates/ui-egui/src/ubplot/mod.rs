@@ -1,6 +1,7 @@
 mod dialog;
 mod exceptions;
 pub(crate) mod overlay;
+pub(crate) mod profile_dialog;
 mod split;
 
 use cadcraft_engine::sheetplan::{ScanRequest, ids::sheet_key};
@@ -21,6 +22,10 @@ struct WindowPick {
 const PICKING: &str = "ubplot_picking_window";
 
 pub(crate) fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
+    if id == "ui.ubplot.profile" {
+        app.ui.dialog = Some(profile_dialog::DIALOG.into());
+        return Some(Ok(Value::Null));
+    }
     if !matches!(id, "ubplot" | "ubp") || !params.is_null() {
         return None;
     }

@@ -1985,3 +1985,24 @@ ribbon	Check	Kiểm tra
 	Enter replacement block name	Nhập tên khối thay thế
 	BASELINE_CHANGED	Tệp mẫu cơ sở đã thay đổi
 	AUDIT_LIMIT	Vượt giới hạn kiểm tra tệp mẫu
+	Print Profile	Hồ sơ in
+	Profile…	Hồ sơ…
+	Edit level	Cấp chỉnh sửa
+	From level	Từ cấp
+	Platform	Nền tảng
+	Company	Công ty
+	Project	Dự án
+	Sheet Set	Bộ bản vẽ
+	Drawing	Bản vẽ
+	Device	Thiết bị
+	Printer	Máy in
+	Paper	Giấy
+	Sheet order	Thứ tự bản vẽ
+	Frame templates	Mẫu khung
+	Naming	Đặt tên
+	Output mode	Chế độ đầu ra
+	Pages per file	Số trang mỗi tệp
+	PDF layers	Lớp PDF
+	Text as geometry	Văn bản dạng hình học
+	Lineweights	Độ dày nét
+	Retry limit	Giới hạn thử lại

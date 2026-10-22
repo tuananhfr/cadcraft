@@ -49,6 +49,8 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     if !boolean(PUBLISH, params, "background")? {
         return publish::run_publish(s, params);
     }
+    let (resolved, effective) = super::profile::resolve_params(s, params, PUBLISH)?;
+    let params = &resolved;
     crate::sheetplan::plan::validate_request_value(params).map_err(|error| bad(PUBLISH, error))?;
     let path = text(PUBLISH, params, "path")?;
     if path.is_some_and(|path| path.is_empty() || path.len() > 4096) {
@@ -65,6 +67,9 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
         _ => return Err(bad(PUBLISH, "mode must be merged or split")),
     };
     let mut output = OutputSpec { mode, ..Default::default() };
+    if params.get("naming").and_then(Value::as_str).is_some_and(|naming| naming != "{stem}") {
+        output.stem = Path::new(&s.state()?.title).file_stem().and_then(|stem| stem.to_str()).unwrap_or("Drawing").into();
+    }
     let max_pages = u64::try_from(cadcraft_doc::MAX_PLOT_PAGES).map_err(|error| bad(PUBLISH, error.to_string()))?;
     let pages = number(PUBLISH, params, "pagesPerFile", u64::from(output.pages_per_file), 1, max_pages)?;
     output.pages_per_file = u32::try_from(pages).map_err(|error| bad(PUBLISH, error.to_string()))?;
@@ -79,12 +84,19 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     if output.stem.len() > 160 {
         return Err(bad(PUBLISH, "output stem exceeds 160 bytes"));
     }
-    let plan = queue_plan(s, params)?;
+    let mut plan = queue_plan(s, params)?;
+    super::profile::apply_plan(s.doc()?, &mut plan, params, &effective, PUBLISH)?;
     let source = JobSource { path: s.state()?.path.clone(), source_hash: plan.source_hash.clone(), plan };
     let mut job = PrintJob::new(vec![source], output, retry_limit).map_err(job_error)?;
     let source = job.sources.first_mut().ok_or_else(|| bad(PUBLISH, "job source is missing"))?;
     prepare_plan(&mut source.plan)?;
-    let job = PrintJob::new(job.sources, job.output, job.retry_limit).map_err(job_error)?;
+    let mut job = PrintJob::new(job.sources, job.output, job.retry_limit).map_err(job_error)?;
+    job.profile_id = Some(super::profile::profile_id(s)?);
+    job.profile_version = Some(effective.version.clone());
+    job.naming = params.get("naming").and_then(Value::as_str).filter(|naming| *naming != "{stem}").map(str::to_owned);
+    let identity = json!({"output": job.output, "retry_limit": job.retry_limit, "naming": job.naming,
+        "profile_version": job.profile_version, "device": params.get("device"), "paper": params.get("paper"), "scale": params.get("scale")});
+    job.job_id = crate::sheetplan::ids::job_id(&job.sources.first().ok_or_else(|| bad(PUBLISH, "missing source"))?.source_hash, &identity);
     let mut manifest = PublishManifest::new(&job, now());
     if !s.plot_jobs.persisted {
         manifest.issues.push(issue(Severity::Info, "JOBS_NOT_PERSISTED", "Jobs are kept in memory until a host installs persistent storage.", None));

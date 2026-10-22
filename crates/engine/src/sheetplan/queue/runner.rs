@@ -116,6 +116,12 @@ fn groups(job: &PrintJob, sheets: &[(usize, usize)]) -> Result<Vec<FileGroup>, S
         if job.output.mode == OutputMode::Merged {
             group.name = if single { format!("{}.pdf", job.output.stem) } else { format!("{}-{:03}.pdf", job.output.stem, index + 1) };
         }
+        if let Some(pattern) = &job.naming {
+            let (artifact, _) = group.sheets.first().ok_or("missing output sheet")?;
+            let (source, sheet) = sheets.get(*artifact).ok_or("missing output sheet")?;
+            let sheet = job.sources.get(*source).and_then(|source| source.plan.sheets.get(*sheet)).ok_or("missing output sheet")?;
+            group.name = crate::sheetplan::profile::output_name(pattern, &job.output.stem, sheet, index + 1)?;
+        }
         validate_name(&group.name)?;
         if !names.insert(group.name.to_ascii_lowercase()) {
             return Err("output file names collide; use distinct sheet orders or IDs".into());
