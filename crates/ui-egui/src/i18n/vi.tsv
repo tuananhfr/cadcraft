@@ -628,3 +628,590 @@ menu	Help	Trợ giúp
 	Sweep	Quét theo đường dẫn
 	Table	Bảng
 	Torus	Hình xuyến
+
+# Batch 9d: dialog, palette and panel literals.
+	  OK  	  Đồng ý  
+	 ({count} times)	 ({count} lần)
+	 or [	 hoặc [
+	 · landscape	 · ngang
+	+  |  Top  |  2D Wireframe	+  |  Trên  |  Khung dây 2D
+	A drawing opened from a file keeps that file's format.	Bản vẽ mở từ tệp giữ định dạng của tệp đó.
+	A recovery copy of the open drawing with unsaved changes was autosaved.	Đã tự động lưu bản sao phục hồi của bản vẽ đang mở có thay đổi chưa lưu.
+	A variable name starts with a letter and has only letters, digits and _	Tên biến bắt đầu bằng chữ cái và chỉ chứa chữ cái, chữ số và _
+	A workspace you saved.	Không gian làm việc bạn đã lưu.
+	Absolute	Tuyệt đối
+	Add	Thêm
+	Add Command	Thêm lệnh
+	Add Group	Thêm nhóm
+	Add Tab	Thêm thẻ
+	Add font file...	Thêm tệp phông chữ...
+	Add installed font...	Thêm phông chữ đã cài...
+	Add: Pick points	Thêm: Bấm chọn điểm
+	Add: Select objects	Thêm: Chọn đối tượng
+	Added font {font}	Đã thêm phông chữ {font}
+	Additional angles	Góc bổ sung
+	Alignments and station annotation for infrastructure.	Tuyến và chú thích lý trình cho hạ tầng.
+	Already used by {other}	{other} đã dùng
+	An array that would create more objects than this is refused.	Từ chối mảng tạo ra nhiều đối tượng hơn giới hạn này.
+	Angle tolerance (degrees)	Dung sai góc (độ)
+	Angstroms	Angstroms
+	Animation effects	Hiệu ứng chuyển động
+	Any other missing font	Phông chữ thiếu khác
+	Appearance	Diện mạo
+	Append to current selection set	Thêm vào tập chọn hiện hành
+	Apply	Áp dụng
+	Apply changes to existing references	Áp dụng thay đổi cho các tham chiếu hiện có
+	Apply to Layout	Áp dụng cho bố cục in
+	Apply to:	Áp dụng cho:
+	Apply true color	Áp dụng màu thực
+	Architectural	Kiến trúc
+	Architecture	Kiến trúc
+	Arrowhead size	Kích thước đầu mũi tên
+	Associative	Liên kết
+	Astronomical Units	Astronomical Units
+	Attach DWG...	Đính kèm DWG...
+	AutoCAD Familiar	Quen thuộc với AutoCAD
+	Automatic save every	Tự động lưu mỗi
+	Automatic save file location	Vị trí tệp tự động lưu
+	Backwards	Ngược chiều
+	Bind	Gộp vào bản vẽ
+	Block Attribute Manager	Trình quản lý thuộc tính khối
+	Block to create or edit	Khối cần tạo hoặc sửa
+	Block:	Khối:
+	Bold	Đậm
+	Bottom	Dưới
+	Bottom left	Dưới trái
+	Bottom right	Dưới phải
+	Boundaries	Đường biên
+	Boundaries picked: {n}	Đường biên đã chọn: {n}
+	Bring every reference in line with these definitions	Đồng bộ mọi tham chiếu với các định nghĩa này
+	Built-in stroke font	Phông chữ nét tích hợp
+	Bulleted list	Danh sách dấu đầu dòng
+	ByBlock	ByBlock
+	ByLayer	ByLayer
+	Cartesian (x, y)	Đề-các (x, y)
+	Cell margin	Lề ô
+	Center the plot	Căn giữa bản in
+	Center the plotted model bounds on the printable area	Căn giữa vùng bao mô hình được in trên vùng in được
+	Centered	Căn giữa
+	Centimeters	Centimeters
+	Changed in another tab	Đã thay đổi ở thẻ khác
+	Changed: {n}	Đã thay đổi: {n}
+	Changes apply at once and are kept for next time.	Thay đổi có hiệu lực ngay và được giữ cho lần sau.
+	Choose a Workspace	Chọn không gian làm việc
+	Clear History	Xóa lịch sử
+	Click the ruler to add a tab stop, right-click to remove one	Bấm thước để thêm điểm dừng tab, bấm chuột phải để bỏ
+	Click to set new origin	Bấm để đặt gốc mới
+	Collapse Palettes	Thu gọn bảng công cụ
+	Collapse Tool Sets	Thu gọn bộ công cụ
+	Color	Màu
+	Color 1	Màu 1
+	Color 2	Màu 2
+	Command line history	Lịch sử dòng lệnh
+	Command line input	Ô nhập dòng lệnh
+	Compass: view rotation isn't available in the 2D plan view yet	La bàn: chưa hỗ trợ xoay góc nhìn trong hình chiếu bằng 2D
+	Computer-aided design and drafting: an open-source, clean-room CAD application written in pure Rust.	Thiết kế và vẽ kỹ thuật có máy tính hỗ trợ: ứng dụng CAD mã nguồn mở, phát triển độc lập, viết hoàn toàn bằng Rust.
+	Constant	Hằng số
+	Constraint bar transparency (%)	Độ trong suốt thanh ràng buộc (%)
+	Constraint types AUTOCONSTRAIN applies	Các loại ràng buộc AUTOCONSTRAIN áp dụng
+	Contents	Nội dung
+	Convert	Chuyển đổi
+	Coordinate system	Hệ tọa độ
+	Copy as JSON	Sao chép dạng JSON
+	Could not save workspace	Không thể lưu không gian làm việc
+	Create separate hatches	Tạo các mặt cắt riêng
+	Creates a user parameter	Tạo tham số người dùng
+	Crosshair size	Kích thước con trỏ chữ thập
+	Crossing selection color:	Màu vùng chọn giao cắt:
+	Ctrl+Enter to finish	Ctrl+Enter để kết thúc
+	Current	Hiện hành
+	Current linetype: {current}	Kiểu đường hiện hành: {current}
+	Current selection	Tập chọn hiện hành
+	Current shortcut: {key}	Phím tắt hiện hành: {key}
+	Current style: {current}	Kiểu hiện hành: {current}
+	Curved	Cong
+	Customize...	Tùy biến...
+	Decameters	Decameters
+	Decimal	Thập phân
+	Decimal Degrees	Độ thập phân
+	Decimeters	Decimeters
+	Default	Mặc định
+	Default save version	Phiên bản lưu mặc định
+	Default to boundary extents	Mặc định theo toàn bộ đường biên
+	Deg/Min/Sec	Deg/Min/Sec
+	Degree	Độ
+	Degrees of freedom: {n}	Bậc tự do: {n}
+	Delete	Xóa
+	Description	Mô tả
+	Detach	Gỡ bỏ
+	Details	Chi tiết
+	Dimensional	Kích thước
+	Discard	Bỏ thay đổi
+	Discipline workspaces are drafts that await CAD Manager review.	Không gian làm việc theo chuyên ngành là bản nháp chờ người quản lý CAD duyệt.
+	Dismiss	Bỏ qua
+	Display	Hiển thị
+	Distance from the printable area's lower-left corner; values range from −100000 to 100000 mm	Khoảng cách từ góc dưới trái của vùng in được; giá trị từ −100000 đến 100000 mm
+	Distance tolerance	Dung sai khoảng cách
+	Dock	Gắn cạnh
+	Double-click to edit the description	Bấm đúp để sửa mô tả
+	Drafting Settings	Cài đặt vẽ
+	Draw new objects with the selected linetype	Vẽ đối tượng mới bằng kiểu đường đã chọn
+	Draw with	Vẽ bằng
+	Drawing Recovery	Phục hồi bản vẽ
+	Drawing Units	Đơn vị bản vẽ
+	Drawings with no file yet are saved in the default version. 0 minutes turns automatic save off.	Bản vẽ chưa có tệp được lưu theo phiên bản mặc định. 0 phút sẽ tắt tự động lưu.
+	E	Đ
+	Edit Block Definition	Sửa định nghĩa khối
+	Edit attribute {tag}	Sửa thuộc tính khối {tag}
+	Enable Dynamic Input (F12)	Bật nhập động (F12)
+	Engineering	Kỹ thuật
+	Entire drawing	Toàn bộ bản vẽ
+	Evaluate	Tính giá trị
+	Every library linetype is loaded.	Đã nạp mọi kiểu đường trong thư viện.
+	Exclude from new selection set	Loại khỏi tập chọn mới
+	Exclude:	Loại trừ:
+	Expression	Biểu thức
+	Familiar to AutoCAD users	Quen thuộc với người dùng AutoCAD
+	Favorite	Yêu thích
+	Feet	Feet
+	Field	Trường
+	Filter	Bộ lọc
+	Filters	Bộ lọc
+	Find command	Tìm lệnh
+	First corner	Góc đầu
+	Fit to paper	Vừa khổ giấy
+	Float	Thả nổi
+	Font	Phông chữ
+	Fonts installed on this computer (click to add)	Phông chữ đã cài trên máy này (bấm để thêm)
+	Fonts stay on this computer. They are not uploaded and never change the drawing.	Phông chữ được giữ trên máy này. Chúng không được tải lên và không thay đổi bản vẽ.
+	Fonts you added	Phông chữ bạn đã thêm
+	Found	Đã tìm thấy
+	Found in drawing: {count}	Tìm thấy trong bản vẽ: {count}
+	Fractional	Phân số
+	From	Từ
+	From File...	Từ tệp...
+	Geometric	Hình học
+	Get from the Drawing	Lấy từ bản vẽ
+	Gigameters	Gigameters
+	Global scale factor	Hệ số tỉ lệ chung
+	Grab bag	Tổng hợp
+	Grads	Grads
+	Graphics error	Lỗi đồ họa
+	Grid On (F7)	Bật lưới (F7)
+	Grid snap	Bước nhảy lưới
+	Grid spacing	Khoảng cách lưới
+	Grip size	Kích thước điểm nắm
+	Grips	Điểm nắm
+	Group Down	Hạ nhóm
+	Group Up	Nâng nhóm
+	Groups	Nhóm
+	Hatch Pattern	Mẫu mặt cắt
+	Hatch and Gradient	Tô mặt cắt và tô chuyển màu
+	Hatch origin	Gốc mặt cắt
+	Hatches	Mặt cắt
+	Header row	Hàng tiêu đề cột
+	Hectometers	Hectometers
+	Height	Chiều cao
+	Height (0 = ask)	Chiều cao (0 = hỏi)
+	Hemispherical	Bán cầu
+	Hide	Ẩn
+	Hide UCS Icon	Ẩn biểu tượng UCS
+	Hide ViewCube	Ẩn ViewCube
+	History	Lịch sử
+	Hold Shift to add to the selection	Giữ Shift để thêm vào tập chọn
+	Home: zoom to the drawing extents	Home: thu phóng toàn bộ bản vẽ
+	How to apply:	Cách áp dụng:
+	Ignore	Bỏ qua
+	In this drawing	Trong bản vẽ này
+	Inches	Inches
+	Include in new selection set	Đưa vào tập chọn mới
+	Increment angle	Góc gia tăng
+	Index color: {index}	Màu theo chỉ số: {index}
+	Indicate selection area	Hiện vùng chọn
+	Infer geometric constraints	Suy luận ràng buộc hình học
+	Infrastructure	Hạ tầng
+	Insert tab	Chèn tab
+	Insert this block	Chèn khối này
+	Insertion scale	Tỉ lệ chèn
+	Interface language	Ngôn ngữ giao diện
+	Interface scale	Tỉ lệ giao diện
+	Interface theme	Giao diện sáng tối
+	Inverted	Đảo ngược
+	Invisible	Ẩn
+	Island detection	Phát hiện vùng đảo
+	Isometric snap	Bước nhảy đẳng trục
+	Italic	Nghiêng
+	Justify	Căn đều
+	Keep both	Giữ cả hai
+	Keep mine	Giữ bản của tôi
+	Keep my layout	Giữ bố cục của tôi
+	Keep the files and ask again next time	Giữ các tệp và hỏi lại lần sau
+	Keep the system cursor visible over the drawing area	Giữ con trỏ hệ thống hiển thị trên vùng bản vẽ
+	Key combination	Tổ hợp phím
+	Keyboard	Bàn phím
+	Kilometers	Kilometers
+	Landing gap	Khoảng hở đoạn ngang
+	Landing length	Chiều dài đoạn ngang
+	Landscape	Ngang
+	Largest array	Mảng lớn nhất
+	Later	Để sau
+	Layer State	Trạng thái lớp
+	Layers displayed: {shown} of {total}.   Current layer: {layer}	Lớp đang hiển thị: {shown} trên {total}.   Lớp hiện hành: {layer}
+	Layout list	Danh sách bố cục in
+	Layout paper	Giấy bố cục in
+	Layouts	Bố cục in
+	Layouts, plotting and publishing.	Bố cục in, in bản vẽ và xuất bản.
+	Length	Chiều dài
+	Light Years	Light Years
+	Limits	Giới hạn
+	Linetype Manager	Trình quản lý kiểu đường
+	Load all	Nạp tất cả
+	Load...	Nạp...
+	Loaded linetypes	Kiểu đường đã nạp
+	Lock	Khóa
+	Lock viewport	Khóa khung nhìn
+	Locked by company policy	Bị khóa theo chính sách công ty
+	MEP and Fire	Cơ điện và PCCC
+	MIT OR Apache-2.0. Not affiliated with Autodesk, Inc.	MIT OR Apache-2.0. Không liên kết với Autodesk, Inc.
+	Major line every	Đường chính mỗi
+	Make it a block of this drawing, keeping its layer names	Chuyển thành khối trong bản vẽ này, giữ tên lớp của tham chiếu
+	Make it a block of this drawing; its layers become NAME$0$LAYER	Chuyển thành khối trong bản vẽ này; các lớp của tham chiếu trở thành NAME$0$LAYER
+	Meters	Meters
+	Microinches	Microinches
+	Microns	Microns
+	Miles	Miles
+	Millimeters	Millimeters
+	Mils	Mils
+	Minimize ribbon	Thu nhỏ Ribbon
+	Missing	Thiếu
+	Missing or invalid field: {field}	Trường thiếu hoặc không hợp lệ: {field}
+	Mode	Chế độ
+	Model background	Nền mô hình
+	Model-space offset placement is not supported by SVG	SVG không hỗ trợ đặt độ dời trong không gian mô hình
+	Modes	Chế độ
+	More Quick Access commands	Thêm lệnh truy cập nhanh
+	More toolbar commands	Thêm lệnh thanh công cụ
+	Move Down	Di chuyển xuống
+	Move Up	Di chuyển lên
+	Multileader Style	Kiểu đường ghi chú nhiều nhánh
+	Multiline text	Chữ nhiều dòng
+	Multiple	Nhiều
+	My	Của tôi
+	My properties: not available yet	Thuộc tính của tôi: chưa có
+	My value	Giá trị của tôi
+	N	B
+	Name	Tên
+	Nanometers	Nanometers
+	New Drawing	Bản vẽ mới
+	New Group	Nhóm mới
+	New Tab	Thẻ mới
+	New block	Khối mới
+	New layout	Bố cục in mới
+	New state name	Tên trạng thái mới
+	New style name	Tên kiểu mới
+	Next ribbon groups	Các nhóm Ribbon tiếp theo
+	No	Không
+	No blocks defined in this drawing.	Chưa định nghĩa khối nào trong bản vẽ này.
+	No contributor data was built into this copy.	Bản dựng này không có dữ liệu người đóng góp.
+	No drawing is open.	Chưa mở bản vẽ.
+	No external references are attached.	Chưa đính kèm tham chiếu ngoài nào.
+	No model credits were built into this copy.	Bản dựng này không có thông tin ghi nhận mô hình.
+	No saved layer states	Chưa lưu trạng thái lớp nào
+	No selection	Chưa chọn đối tượng
+	None	Không có
+	None yet. Add the font files a drawing needs (.ttf, .otf, .ttc, .shx).	Chưa có. Thêm các tệp phông chữ bản vẽ cần (.ttf, .otf, .ttc, .shx).
+	Normal	Bình thường
+	Not a key combination	Không phải tổ hợp phím
+	Not a number or distance: {text}	Không phải số hoặc khoảng cách: {text}
+	Not available yet	Chưa có
+	Not saved	Chưa lưu
+	Nothing needed autosaving.	Không có nội dung cần tự động lưu.
+	Numbered list	Danh sách đánh số
+	Object Snap On (F3)	Bật truy bắt điểm (F3)
+	Object Snap Tracking Settings	Cài đặt truy bắt theo điểm
+	Object grouping	Nhóm đối tượng
+	Object selection limit for display of grips	Giới hạn số đối tượng hiển thị điểm nắm
+	Object snap aperture	Khẩu độ truy bắt điểm
+	Object snap marker size	Kích thước dấu truy bắt điểm
+	Object type:	Loại đối tượng:
+	Objects on locked layers	Đối tượng trên lớp bị khóa
+	Offline	Ngoại tuyến
+	Offsets must be within ±100000 mm	Độ dời phải trong khoảng ±100000 mm
+	Only in this drawing: {n}	Chỉ trong bản vẽ này: {n}
+	Only in {name}: {n}	Chỉ trong {name}: {n}
+	Open a drawing first.	Mở bản vẽ trước.
+	Open in Block Editor	Mở trong trình sửa khối
+	Opened drawings have no file name: save them to keep them.	Bản vẽ đã mở chưa có tên tệp: hãy lưu để giữ lại.
+	Operator:	Toán tử:
+	Opposite corner	Góc đối diện
+	Options	Tùy chọn
+	Orientation	Hướng
+	Origin: {x}, {y}	Gốc: {x}, {y}
+	Ortho (F8)	Trực giao (F8)
+	Outer	Ngoài cùng
+	Over-constrained	Thừa ràng buộc
+	Overlay	Chồng tham chiếu
+	Overline	Gạch trên
+	PDF on the paper chosen below	PDF trên khổ giấy đã chọn bên dưới
+	PDMODE {value}	PDMODE {value}
+	Page Setup Manager	Trình quản lý thiết lập trang in
+	Page setup of {name}	Thiết lập trang in của {name}
+	Paper size	Khổ giấy
+	Paper units per drawing unit, or a ratio such as 1:50	Đơn vị giấy trên một đơn vị bản vẽ, hoặc tỉ lệ như 1:50
+	Parsecs	Parsecs
+	Paste to Command Line	Dán vào dòng lệnh
+	Pattern	Mẫu
+	Percent	Phần trăm
+	Pick the layout that suits your work. You can change it any time from the status bar.	Chọn bố cục phù hợp với công việc. Bạn có thể đổi bất cứ lúc nào từ thanh trạng thái.
+	Pick the window's corners in the drawing	Bấm chọn các góc cửa sổ trong bản vẽ
+	Pickbox size	Kích thước ô chọn
+	Pinned commands	Lệnh đã ghim
+	Planning and GIS	Quy hoạch và GIS
+	Plot	In bản vẽ
+	Plot area	Vùng in
+	Plot object lineweights	In độ dày nét của đối tượng
+	Plot objects with their transparency (PLOTTRANSPARENCYOVERRIDE can override it)	In đối tượng với độ trong suốt của chúng (PLOTTRANSPARENCYOVERRIDE có thể ghi đè)
+	Plot offset	Độ dời bản in
+	Plot style table	Bảng kiểu in
+	Plot transparency	In độ trong suốt
+	Plus/minus	Cộng/trừ
+	Point Size	Kích thước điểm
+	Point Style	Kiểu điểm
+	Polar (distance < angle)	Cực (khoảng cách < góc)
+	Polar Tracking On (F10)	Bật truy bắt cực (F10)
+	Polar angle measurement	Đo góc cực
+	Polar distance	Khoảng cách cực
+	Polar: {distance} < {angle}°	Cực: {distance} < {angle}°
+	PolarSnap	PolarSnap
+	Portrait	Dọc
+	Precision	Độ chính xác
+	Preview	Xem trước
+	Previous ribbon groups	Các nhóm Ribbon trước
+	Printer/plotter	Máy in/thiết bị in
+	Prompt	Lời nhắc
+	Properties of {style}	Thuộc tính của {style}
+	Properties:	Thuộc tính:
+	Quantity Survey and QA	Bóc khối lượng và kiểm tra chất lượng
+	Quantity take-off, drawing comparison and checks.	Bóc khối lượng, so sánh bản vẽ và kiểm tra.
+	Quick Access	Truy cập nhanh
+	Quick Access item is not pinned	Mục truy cập nhanh chưa được ghim
+	Quick Select	Chọn nhanh
+	Radians	Radians
+	Read-only	Chỉ đọc
+	Recent	Gần đây
+	Recovery copies of {count} drawings with unsaved changes were autosaved.	Đã tự động lưu bản sao phục hồi của {count} bản vẽ có thay đổi chưa lưu.
+	Rectangular snap	Bước nhảy chữ nhật
+	Reference Name	Tên tham chiếu
+	References: {n}	Tham chiếu: {n}
+	Relative	Tương đối
+	Relative to last segment	Tương đối với đoạn cuối
+	Reload	Tải lại
+	Reload All	Tải lại tất cả
+	Remove	Bỏ
+	Remove Command	Bỏ lệnh
+	Remove Group	Bỏ nhóm
+	Remove Tab	Bỏ thẻ
+	Remove the viewport override	Bỏ ghi đè trong khung nhìn
+	Removed font {font}	Đã bỏ phông chữ {font}
+	Rename	Đổi tên
+	Rename Group	Đổi tên nhóm
+	Rename Layer	Đổi tên lớp
+	Rename Tab	Đổi tên thẻ
+	Replace conflicting shortcut	Thay thế phím tắt xung đột
+	Reserved key	Phím dành riêng
+	Reset	Đặt lại
+	Reset keeps the interface language.	Đặt lại vẫn giữ ngôn ngữ giao diện.
+	Reset to Defaults	Đặt lại mặc định
+	Restore	Khôi phục
+	Reverse the order	Đảo thứ tự
+	Ribbon	Ribbon
+	Ribbon group was not found	Không tìm thấy nhóm Ribbon
+	Ribbon groups	Nhóm Ribbon
+	Ribbon plus a survey tool bar and base map attachments.	Ribbon cùng thanh công cụ khảo sát và các bản đồ nền đính kèm.
+	Ribbon tab order is full	Thứ tự thẻ Ribbon đã đầy
+	Ribbon tab was not found	Không tìm thấy thẻ Ribbon
+	Ribbon tabs	Thẻ Ribbon
+	Ribbon with tabs and groups in the order AutoCAD users expect.	Ribbon có thẻ và nhóm theo thứ tự quen thuộc với người dùng AutoCAD.
+	Routing, symbols and take-off for services and fire protection.	Định tuyến, ký hiệu và bóc khối lượng cho hệ thống kỹ thuật và phòng cháy chữa cháy.
+	S	N
+	Sample output	Kết quả mẫu
+	Save State	Lưu trạng thái
+	Save Workspace As	Lưu không gian làm việc thành
+	Save new drawings as	Lưu bản vẽ mới thành
+	Save these settings in the layout's page setup	Lưu cài đặt này trong thiết lập trang in của bố cục
+	Save your work and restart UbotCAD. Recovery copies are offered at the next start if needed.	Lưu công việc và khởi động lại UbotCAD. Bản sao phục hồi được đề xuất ở lần khởi động tiếp theo nếu cần.
+	Saved Path	Đường dẫn đã lưu
+	Saved locally	Đã lưu trên máy
+	Saving…	Đang lưu…
+	Scientific	Khoa học
+	Screen magnifiers, screen readers and recorders follow the system cursor.	Kính lúp màn hình, trình đọc màn hình và trình ghi màn hình theo con trỏ hệ thống.
+	Search commands...	Tìm lệnh...
+	Search for layer	Tìm lớp
+	Search for parameter	Tìm tham số
+	Search for pattern	Tìm mẫu
+	Second and next points:	Điểm thứ hai và các điểm tiếp theo:
+	Select objects first, then choose a command	Chọn đối tượng trước, rồi chọn lệnh
+	Selection Area Effect	Hiệu ứng vùng chọn
+	Selection Preview Filter	Bộ lọc xem trước tập chọn
+	Selection area opacity:	Độ đục vùng chọn:
+	Selection effect color	Màu hiệu ứng chọn
+	Selection modes	Chế độ chọn
+	Selection preview	Xem trước tập chọn
+	Server value	Giá trị máy chủ
+	Set Current	Đặt hiện hành
+	Set Size Relative to Screen	Đặt kích thước tương đối với màn hình
+	Set Size in Absolute Units	Đặt kích thước theo đơn vị tuyệt đối
+	Shape	Hình dạng
+	Sheets and Publishing	Tờ bản vẽ và xuất bản
+	Show	Hiện
+	Show Quick Properties for selected objects	Hiện thuộc tính nhanh cho đối tượng đã chọn
+	Show and hide the tools of this category	Hiện và ẩn công cụ của danh mục này
+	Show command prompting near the crosshairs	Hiện lời nhắc lệnh gần con trỏ chữ thập
+	Show constraint bars	Hiện thanh ràng buộc
+	Show dynamic constraints	Hiện ràng buộc động
+	Show grips	Hiện điểm nắm
+	Show in Tool Sets	Hiện trong bộ công cụ
+	Simple	Đơn giản
+	Snap On (F9)	Bật bước nhảy (F9)
+	Snap X spacing	Khoảng cách bước nhảy X
+	Snap and Grid	Bước nhảy và lưới
+	Snap type	Loại bước nhảy
+	Snap, grid, polar tracking and Dynamic Input:	Bước nhảy, lưới, truy bắt cực và nhập động:
+	Sort	Sắp xếp
+	Specified origin	Gốc chỉ định
+	Spherical	Cầu
+	Status bar	Thanh trạng thái
+	Stroke font	Phông chữ nét
+	Structural grids, constraints and a structure tool bar.	Lưới trục kết cấu, ràng buộc và thanh công cụ kết cấu.
+	Structure	Kết cấu
+	Styles	Kiểu
+	Surveyor's Units	Đơn vị trắc địa
+	Switch between model space in a viewport and paper space	Chuyển giữa không gian mô hình trong khung nhìn và không gian giấy
+	Sync	Đồng bộ
+	Sync conflict	Xung đột đồng bộ
+	Synced	Đã đồng bộ
+	Syncing	Đang đồng bộ
+	TOP	TRÊN
+	Tab Down	Hạ thẻ
+	Tab Up	Nâng thẻ
+	Tab or group name	Tên thẻ hoặc nhóm
+	Table Style	Kiểu bảng
+	Tables	Bảng
+	Tag	Nhãn
+	Text Style	Kiểu chữ
+	Text color	Màu chữ
+	Text height	Chiều cao chữ
+	Text override	Chữ ghi đè
+	Text style	Kiểu chữ
+	Text typed for this {font} font is shown as Unicode.	Chữ gõ bằng phông chữ {font} này được hiển thị dạng Unicode.
+	The UbotCAD window as it is today: tool bar, Tool Sets and palettes.	Cửa sổ UbotCAD hiện tại: thanh công cụ, bộ công cụ và bảng công cụ.
+	The aperture is how near the cursor must come to a point for an object snap to find it.	Khẩu độ là khoảng cách tối đa từ con trỏ đến một điểm để truy bắt điểm tìm thấy điểm đó.
+	The browser uses this key	Trình duyệt dùng phím này
+	The graphics device stopped working (a driver reset or a GPU that stopped responding). UbotCAD can't draw again until it restarts.	Thiết bị đồ họa đã ngừng hoạt động (trình điều khiển bị đặt lại hoặc GPU ngừng phản hồi). UbotCAD không thể vẽ tiếp cho đến khi khởi động lại.
+	The graphics driver reported an error{times}. UbotCAD kept running, but the drawing may not display correctly.	Trình điều khiển đồ họa báo lỗi{times}. UbotCAD vẫn chạy, nhưng bản vẽ có thể hiển thị không đúng.
+	The remote workspace changed; sync again to retry	Không gian làm việc từ xa đã thay đổi; đồng bộ lại để thử lại
+	The remote workspace was not found	Không tìm thấy không gian làm việc từ xa
+	The sheet as these settings plot it	Tờ bản vẽ theo các cài đặt in này
+	The workspace cannot be stored: {reason}	Không thể lưu không gian làm việc: {reason}
+	There is nothing here yet.	Chưa có gì ở đây.
+	This drawing has no blocks with attributes.	Bản vẽ này không có khối chứa thuộc tính khối.
+	This drawing has no layouts.	Bản vẽ này không có bố cục in.
+	Time-sensitive right-click: a quick click is Enter, holding opens the menu	Bấm chuột phải theo thời gian: bấm nhanh là Enter, giữ để mở menu
+	Title row	Hàng tiêu đề bảng
+	To	Đến
+	To get started, create or open a drawing.	Để bắt đầu, tạo hoặc mở bản vẽ.
+	Toggle PICKADD (off: each pick replaces the selection)	Bật/tắt PICKADD (tắt: mỗi lần chọn thay thế tập chọn)
+	Toggle PICKADD (on: picks add to the selection)	Bật/tắt PICKADD (bật: mỗi lần chọn thêm vào tập chọn)
+	Toolbar name	Tên thanh công cụ
+	Toolbars	Thanh công cụ
+	Top	Trên
+	Top left	Trên trái
+	Top right	Trên phải
+	Top: plan view of the drawing (zoom extents)	Trên: hình chiếu bằng của bản vẽ (thu phóng toàn bộ)
+	Track orthogonally only	Chỉ truy bắt theo phương trực giao
+	Track using all polar angle settings	Truy bắt theo mọi cài đặt góc cực
+	Turn Quick Properties off (QPMODE)	Tắt thuộc tính nhanh (QPMODE)
+	Turned off, a right-click while a command runs always opens the shortcut menu.	Khi tắt, bấm chuột phải lúc lệnh đang chạy luôn mở menu ngữ cảnh.
+	Type	Loại
+	Type a command	Gõ lệnh
+	UCS icon: World Coordinate System	Biểu tượng UCS: Hệ tọa độ thế giới
+	US Survey Feet	US Survey Feet
+	US Survey Inch	US Survey Inch
+	US Survey Mile	US Survey Mile
+	US Survey Yard	US Survey Yard
+	UbotCAD did not close normally. These drawings were autosaved:	UbotCAD đã không đóng bình thường. Các bản vẽ này đã được tự động lưu:
+	UbotCAD draws in the World Coordinate System; user coordinate systems aren't available yet.	UbotCAD vẽ trong hệ tọa độ thế giới; chưa hỗ trợ hệ tọa độ người dùng.
+	UbotCAD keeps these preferences, object snap modes and drafting toggles for your user account and restores them when it starts.	UbotCAD giữ các tùy chọn này, chế độ truy bắt điểm và chế độ vẽ cho tài khoản người dùng của bạn và khôi phục khi khởi động.
+	UbotCAD — based on CADCraft by the ArtCraft team.	UbotCAD — dựa trên CADCraft của nhóm ArtCraft.
+	Underline	Gạch dưới
+	Unitless	Không đơn vị
+	Units Conversion	Chuyển đổi đơn vị
+	Units to scale inserted content	Đơn vị để định tỉ lệ nội dung chèn
+	Unknown command: {id}	Lệnh không xác định: {id}
+	Unload	Tạm gỡ
+	Unlock	Mở khóa
+	Unlock viewport	Mở khóa khung nhìn
+	Unsaved Layer State	Trạng thái lớp chưa lưu
+	Unsaved changes	Thay đổi chưa lưu
+	Updated from another tab	Đã cập nhật từ thẻ khác
+	Upside down	Lộn ngược
+	Use current origin	Dùng gốc hiện hành
+	Use server	Dùng bản máy chủ
+	Use the other tab's layout	Dùng bố cục của thẻ kia
+	Used by	Được dùng bởi
+	Value	Giá trị
+	Value:	Giá trị:
+	Variables	Biến
+	Version {version}	Phiên bản {version}
+	Viewport is locked	Khung nhìn bị khóa
+	Viewport scale	Tỉ lệ khung nhìn
+	Viewport {id}	Khung nhìn {id}
+	Visual Effect Settings	Cài đặt hiệu ứng hiển thị
+	Visual Effect Settings...	Cài đặt hiệu ứng hiển thị...
+	W	T
+	WCS ⌄	WCS ⌄
+	Walls and openings, schedules and an architecture tool bar.	Tường và lỗ mở, bảng thống kê và thanh công cụ kiến trúc.
+	When a command is active	Khi có lệnh đang chạy
+	When no command is active	Khi không có lệnh đang chạy
+	Whole workspace	Toàn bộ không gian làm việc
+	Width factor	Hệ số chiều rộng
+	Window <	Cửa sổ <
+	Window selection color:	Màu vùng chọn cửa sổ:
+	Workspace Switching	Chuyển không gian làm việc
+	Workspace could not be read; restored the last good copy (revision {revision}). The damaged copy could not be kept, so it is not overwritten until it can be.	Không thể đọc không gian làm việc; đã khôi phục bản sao tốt gần nhất (bản sửa đổi {revision}). Không thể giữ bản hỏng nên sẽ không ghi đè cho đến khi giữ được.
+	Workspace could not be read; restored the last good copy (revision {revision}). The damaged copy was kept.	Không thể đọc không gian làm việc; đã khôi phục bản sao tốt gần nhất (bản sửa đổi {revision}). Đã giữ bản hỏng.
+	Workspace sync conflict	Xung đột đồng bộ không gian làm việc
+	Workspace sync failed: {reason}	Đồng bộ không gian làm việc thất bại: {reason}
+	Workspace sync is offline	Đồng bộ không gian làm việc đang ngoại tuyến
+	Workspace sync was forbidden: {reason}	Đồng bộ không gian làm việc bị cấm: {reason}
+	Workspace: {name}	Không gian làm việc: {name}
+	World (WCS)	Thế giới (WCS)
+	X offset (mm)	Độ dời X (mm)
+	Xrefs	Tham chiếu ngoài
+	Y offset (mm)	Độ dời Y (mm)
+	Yards	Yards
+	Yes	Có
+	command is required	cần có lệnh
+	error	lỗi
+	id is required	cần có id
+	key is required	cần có phím
+	min	min
+	objects	đối tượng
+	to must be a whole number	to phải là số nguyên
+	units	đơn vị
+	{contributors} · {commits}	{contributors} · {commits}
+	{date} UTC · {size} KB	{date} UTC · {size} KB
+	{description} ({output})	{description} ({output})
+	{font} (added)	{font} (đã thêm)
+	{font} · {size} KB	{font} · {size} KB
+	{kind} (constraint {id})	{kind} (ràng buộc {id})
+	{kind} constraint {name} = {expression}  (double-click to edit)	{kind} ràng buộc {name} = {expression}  (bấm đúp để sửa)
+	{layout} · {paper}	{layout} · {paper}
+	{name} (my copy)	{name} (bản sao của tôi)
+	{name} toolbar grip	Điểm nắm thanh công cụ {name}
+	{name}: {distance} < {angle}°	{name}: {distance} < {angle}°
+	{styles} (unused)	{styles} (không dùng)
+	{title} — not available in this version	{title} — chưa có trong phiên bản này
+	{width} × {height} mm	{width} × {height} mm
+	ƒx  New User Parameter	ƒx  Tham số người dùng mới
+	⌘↩ to finish	⌘↩ để kết thúc
