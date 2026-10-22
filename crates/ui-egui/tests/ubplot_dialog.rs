@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use cadcraft_doc::{Block, Common, Drawing, Entity, EntityKind, Handle, Insert, Line, LwPolyline, Space};
+use cadcraft_doc::{Block, Common, Drawing, Entity, EntityKind, Handle, Insert, Line, LwPolyline, Space, XrefStatus};
 use cadcraft_engine::cmd::file::{IoHooks, set_io};
 use cadcraft_engine::sheetplan::{Severity, SheetMode, SheetSource, SheetStatus, approval::fingerprint, codes, derive_status, ids::sheet_key};
 use cadcraft_engine::{Input, Session};
@@ -568,6 +568,75 @@ fn publish_row_visible_at_200_percent_with_100_sheets() {
         assert!(visible.contains_rect(rect), "{label} at {rect:?} is outside the visible dialog {visible:?}");
     }
     assert_eq!(h.state().session.ubplot.last.as_ref().unwrap().plan.sheets.len(), 100);
+}
+
+#[test]
+fn blocked_sheet_can_be_excluded_at_200_percent() {
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false, false, false]);
+    // Reduced motion keeps the wheel event whole, exposing consumption by a nested scroll area.
+    app.system_animations = Some(false);
+    let drawing = app.session.doc_mut().unwrap();
+    drawing.header.set_i64("INSUNITS", 4);
+    frame_block(drawing, "MISSING-XREF", false);
+    let block = Arc::make_mut(drawing.blocks.get_mut("MISSING-XREF").unwrap());
+    block.xref_path = Some("missing/fixture.dxf".into());
+    block.xref_status = XrefStatus::NotFound;
+    place(&mut app.session, "MISSING-XREF", 500.0);
+    review(&mut app, &frames);
+    let plan = &app.session.ubplot.last.as_ref().unwrap().plan;
+    assert_eq!(plan.sheets.iter().filter(|sheet| sheet.status == SheetStatus::Blocked).count(), 1);
+    assert!(plan.sheets[1].issues.iter().any(|issue| issue.code == codes::XREF_MISSING && issue.severity == Severity::Block));
+    let blocked_key = sheet_key(&plan.sheets[1]);
+    let mut h = harness_size(app, vec2(683.0, 384.0));
+    let publish = h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish");
+    assert!(h.ctx.content_rect().contains_rect(publish.rect()));
+    assert!(publish.accesskit_node().is_disabled());
+    publish.hover();
+    h.run_steps(60);
+    for label in ["Fix or exclude blocked sheets before publishing a merged PDF", "XREF_MISSING"] {
+        let rect = h.get_by_label(label).rect();
+        assert!(h.ctx.content_rect().contains_rect(rect), "reason {label} at {rect:?} must be visible before scrolling");
+    }
+    let dialog = h.get_by_role_and_label(egui::accesskit::Role::Window, "Quick Plot");
+    let visible = dialog.rect().intersect(h.ctx.content_rect());
+    let scan = dialog.get_by_label("Scan").rect();
+    let preview = dialog.get_by_label("Preview").rect();
+    let exceptions = dialog.get_by_label("Exceptions").rect();
+    let footer = dialog.get_by_role_and_label(egui::accesskit::Role::Label, "Publish").rect();
+    let scrollbar = dialog
+        .query_all_by_role(egui::accesskit::Role::ScrollBar)
+        .max_by(|left, right| left.rect().height().total_cmp(&right.rect().height()))
+        .unwrap()
+        .rect();
+    assert!(visible.contains_rect(scrollbar));
+    assert!(scrollbar.bottom() < footer.top());
+    let body =
+        egui::Rect::from_min_max(egui::pos2(scan.left(), scrollbar.top()), egui::pos2(scrollbar.left(), scrollbar.bottom())).intersect(visible);
+    let exclude = dialog.get_by_role_and_label(egui::accesskit::Role::Button, "Exclude all").rect();
+    assert!(!body.contains_rect(exclude), "the fixture must require scrolling to reach {exclude:?}");
+    let pointer = egui::pos2(preview.center().x, (preview.bottom() + exceptions.top()) / 2.0);
+    assert!(body.contains(pointer));
+    h.event(Event::PointerMoved(pointer));
+    h.event(Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: vec2(0.0, -240.0),
+        phase: egui::TouchPhase::Move,
+        modifiers: Modifiers::NONE,
+    });
+    h.run_steps(3);
+    let dialog = h.get_by_role_and_label(egui::accesskit::Role::Window, "Quick Plot");
+    let exclude = dialog.get_by_role_and_label(egui::accesskit::Role::Button, "Exclude all");
+    let rect = exclude.rect();
+    assert!(body.contains_rect(rect), "Exclude all at {rect:?} must lie inside the visible body {body:?}");
+    assert!(rect.bottom() < dialog.get_by_role_and_label(egui::accesskit::Role::Label, "Publish").rect().top());
+    exclude.click();
+    h.run_steps(3);
+    let last = h.state().session.ubplot.last.as_ref().unwrap();
+    assert_eq!(last.request.exclude, vec![blocked_key]);
+    assert_eq!(last.plan.sheets.len(), 2);
+    assert!(last.plan.sheets.iter().all(|sheet| sheet.status != SheetStatus::Blocked));
+    assert!(!h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
 }
 
 #[test]
