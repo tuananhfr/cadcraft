@@ -5,7 +5,7 @@ use cadcraft_ui_egui::wsprofile::LOCKED_MESSAGE;
 use cadcraft_ui_egui::wsprofile::schema::{Ribbon, RibbonMode};
 use cadcraft_ui_egui::wsprofile::store::MemoryStore;
 use cadcraft_ui_egui::{CadApp, Services};
-use egui::vec2;
+use egui::{Id, Key, Rect, vec2};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use serde_json::json;
@@ -33,7 +33,11 @@ fn restarted(app: &mut CadApp) -> CadApp {
 }
 
 fn harness(app: CadApp) -> Harness<'static, CadApp> {
-    let mut h = Harness::builder().with_size(vec2(1366.0, 768.0)).build_ui_state(
+    scaled_harness(app, 1.0)
+}
+
+fn scaled_harness(app: CadApp, ppp: f32) -> Harness<'static, CadApp> {
+    let mut h = Harness::builder().with_size(vec2(1366.0, 768.0) / ppp).with_pixels_per_point(ppp).build_ui_state(
         |ui, app: &mut CadApp| {
             app.logic(&ui.ctx().clone());
             app.ui(ui);
@@ -168,4 +172,182 @@ fn collapse_command_maps_to_tabs_only() {
     app.run("ui.ribbon.collapse", json!({})).unwrap();
     assert_eq!(app.ws.effective.layout.ribbon.effective_mode(), RibbonMode::Expanded);
     assert!(!app.session.state().unwrap().is_dirty());
+}
+
+fn familiar(mode: &str) -> CadApp {
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    app.run("ui.ribbon.mode", json!({"mode": mode})).unwrap();
+    app
+}
+
+fn popup_open(h: &Harness<'_, CadApp>) -> bool {
+    egui::Popup::is_id_open(&h.ctx, Id::new("cc_ribbon_flyout"))
+}
+
+fn inside(screen: Rect, rect: Rect) {
+    assert!(rect.is_positive() && screen.expand(0.5).contains_rect(rect), "{rect:?} outside {screen:?}");
+}
+
+fn command_label(id: &str) -> String {
+    let label = cadcraft_engine::find_command(id)
+        .map(|spec| spec.label)
+        .or_else(|| cadcraft_ui_egui::menus::UI_COMMANDS.iter().find(|entry| entry.0 == id).map(|entry| entry.1))
+        .unwrap();
+    cadcraft_ui_egui::i18n::t(label).to_string()
+}
+
+#[test]
+fn tabs_only_flyout_reaches_every_command_at_200_percent_tc11() {
+    let _guard = test_lock();
+    for language in ["en", "uk", "vi"] {
+        let mut app = familiar("tabs_only");
+        app.run("options", json!({"interfaceLanguage": language})).unwrap();
+        let mut h = scaled_harness(app, 2.0);
+        let tabs = cadcraft_ui_egui::ribbon::visible_tabs(h.state());
+        let before = h.state().canvas.rect.unwrap();
+        let layout = h.state().ws.user.layout.clone();
+        for tab in tabs {
+            let title = cadcraft_ui_egui::i18n::with_language(h.state().language(), || cadcraft_ui_egui::i18n::ribbon(&tab.label).to_string());
+            h.get_by_label(&title).scroll_to_me();
+            h.run_steps(3);
+            h.get_by_label(&title).click();
+            h.run_steps(4);
+            assert!(popup_open(&h), "{language}: {}", tab.id);
+            assert_eq!(h.state().canvas.rect.unwrap(), before, "flyout must not move the canvas");
+            for id in tab.groups.iter().flat_map(|group| &group.commands) {
+                let label = cadcraft_ui_egui::i18n::with_language(h.state().language(), || command_label(id));
+                h.get_by_role_and_label(egui::accesskit::Role::Button, &label).scroll_to_me();
+                h.run_steps(3);
+                inside(h.ctx.content_rect(), h.get_by_role_and_label(egui::accesskit::Role::Button, &label).rect());
+                let popup = h.ctx.read_response(Id::new("cc_ribbon_flyout")).unwrap();
+                inside(h.ctx.content_rect(), popup.rect);
+                assert_eq!(popup.layer_id.order, egui::Order::Foreground);
+            }
+            h.key_press(Key::Escape);
+            h.run_steps(3);
+            assert!(!popup_open(&h));
+        }
+        assert_eq!(h.state().ws.user.layout, layout);
+        assert!(!h.state().session.state().unwrap().is_dirty());
+    }
+}
+
+#[test]
+fn ribbon_steps_down_when_height_is_short_h14() {
+    let _guard = test_lock();
+    let mut h = scaled_harness(familiar("expanded"), 2.0);
+    assert_eq!(cadcraft_ui_egui::ribbon::render::rendered_mode(h.state(), h.ctx.content_rect().height()), RibbonMode::TabsOnly);
+    h.get_by_label("Home").click();
+    h.run_steps(4);
+    assert!(popup_open(&h));
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Line").click();
+    h.run_steps(3);
+    assert!(!popup_open(&h));
+    assert_eq!(h.state().session.running.as_ref().map(|command| command.id.as_str()), Some("line"));
+    assert!(!h.get_by_label("Home").is_focused());
+    h.key_press(Key::Escape);
+    h.run_steps(3);
+    assert!(h.state().session.running.is_none());
+    assert_eq!(h.state().ws.effective.layout.ribbon.effective_mode(), RibbonMode::Expanded);
+    let app = familiar("expanded");
+    assert_eq!(cadcraft_ui_egui::ribbon::render::rendered_mode(&app, 768.0), RibbonMode::Expanded);
+    assert_eq!(cadcraft_ui_egui::ribbon::render::rendered_mode(&app, 560.0), RibbonMode::Compact);
+    let h = harness(app);
+    assert_eq!(cadcraft_ui_egui::ribbon::render::rendered_mode(h.state(), h.ctx.content_rect().height()), RibbonMode::Expanded);
+    let row = egui::containers::panel::PanelState::load(&h.ctx, Id::new("cc_ribbon")).unwrap().outer_rect;
+    assert!(row.height() > cadcraft_ui_egui::ribbon::render::COMPACT_HEIGHT);
+}
+
+#[test]
+fn compact_mode_shows_icon_buttons_with_tooltips() {
+    let _guard = test_lock();
+    let mut app = familiar("compact");
+    app.run("ui.ribbon.tab.add", json!({"label": "Compact test"})).unwrap();
+    let tab = app.ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.label == "Compact test").unwrap().id.clone();
+    app.run("ui.ribbon.group.add", json!({"tab": tab, "label": "Commands"})).unwrap();
+    let group = app.ws.effective.layout.ribbon.tabs.iter().find(|item| item.id == tab).unwrap().groups.first().unwrap().id.clone();
+    let ids = ["line", "ui.ribbon.mode"];
+    for id in ids {
+        app.run("ui.ribbon.button.add", json!({"tab": tab, "group": group, "id": id})).unwrap();
+    }
+    let mut h = harness(app);
+    for tab in cadcraft_ui_egui::ribbon::visible_tabs(h.state()) {
+        h.get_by_role_and_label(egui::accesskit::Role::Tab, &tab.label).scroll_to_me();
+        h.run_steps(3);
+        h.get_by_role_and_label(egui::accesskit::Role::Tab, &tab.label).click();
+        h.run_steps(3);
+        let row = egui::containers::panel::PanelState::load(&h.ctx, Id::new("cc_ribbon")).unwrap().outer_rect;
+        assert!(row.height() <= cadcraft_ui_egui::ribbon::render::COMPACT_HEIGHT + 1.0);
+        for id in tab.groups.iter().flat_map(|group| &group.commands) {
+            let label = command_label(id);
+            h.get_by_role_and_label(egui::accesskit::Role::Button, &label).scroll_to_me();
+            h.run_steps(3);
+            let item = h.get_by_role_and_label(egui::accesskit::Role::Button, &label);
+            assert!(item.rect().width() <= 25.0, "{id} uses a square icon button");
+            item.hover();
+            h.run_steps(6);
+            assert!(h.query_all_by_label(&label).count() >= 2, "{id} has a labelled tooltip");
+            h.hover_at(egui::pos2(1000.0, 650.0));
+            h.run_steps(3);
+        }
+    }
+}
+
+#[test]
+fn hidden_ribbon_always_offers_show_ribbon() {
+    let _guard = test_lock();
+    for integrated in [false, true] {
+        let mut app = familiar("hidden");
+        app.integrated_titlebar = integrated;
+        app.run("ui.toggle.menubar", json!({"on": false})).unwrap();
+        let mut h = harness(app);
+        let strip = egui::containers::panel::PanelState::load(&h.ctx, Id::new("cc_ribbon")).unwrap().outer_rect;
+        assert!((strip.height() - 6.0).abs() <= 0.5);
+        inside(h.ctx.content_rect(), h.get_by_label("Show ribbon").rect());
+        h.get_by_label("Show ribbon").click();
+        h.run_steps(3);
+        assert_eq!(h.state().ws.effective.layout.ribbon.effective_mode(), RibbonMode::Expanded);
+        assert!(h.query_by_label("Show ribbon").is_none());
+        assert!(!h.state().session.state().unwrap().is_dirty());
+    }
+}
+
+#[test]
+fn flyout_is_keyboard_operable() {
+    let _guard = test_lock();
+    let mut h = scaled_harness(familiar("tabs_only"), 2.0);
+    h.get_by_label("Home").focus();
+    h.run_steps(2);
+    h.key_press(Key::Enter);
+    h.run_steps(3);
+    assert!(popup_open(&h));
+    assert!(h.query_by_role_and_label(egui::accesskit::Role::Button, "Line").is_some());
+    h.key_press(Key::ArrowRight);
+    h.run_steps(3);
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::Tab, "Insert").is_focused());
+    assert!(h.query_by_role_and_label(egui::accesskit::Role::Button, &command_label("wblock")).is_some());
+    h.key_press(Key::ArrowLeft);
+    h.run_steps(3);
+    assert!(h.get_by_label("Home").is_focused());
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Line").focus();
+    h.run_steps(2);
+    h.key_press(Key::Escape);
+    h.run_steps(3);
+    assert!(!popup_open(&h));
+    assert!(h.get_by_label("Home").is_focused());
+    h.key_press(Key::Space);
+    h.run_steps(3);
+    assert!(popup_open(&h));
+    h.get_by_role_and_label(egui::accesskit::Role::Tab, "Insert").click();
+    h.run_steps(3);
+    assert!(popup_open(&h));
+    assert!(h.query_by_role_and_label(egui::accesskit::Role::Button, &command_label("wblock")).is_some());
+    let pos = h.state().canvas.rect.unwrap().center();
+    h.hover_at(pos);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+        h.run_steps(2);
+    }
+    assert!(!popup_open(&h));
 }

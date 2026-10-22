@@ -41,11 +41,23 @@ fn title_left(left: f32, width: f32, text_w: f32) -> f32 {
 /// Title row (with the integrated macOS title bar), then the tool bars docked to the top edge.
 pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
-    if app.integrated_titlebar {
+    let ribbon_hidden = app.ws.effective.layout.ribbon.effective_mode() == crate::wsprofile::schema::RibbonMode::Hidden;
+    if app.integrated_titlebar || ribbon_hidden {
         egui::Panel::top("cc_title_toolbar").exact_size(MAC_TITLE_BAR).show_separator_line(false).frame(egui::Frame::NONE.fill(t.chrome)).show(
             ui,
             |ui| {
                 let r = ui.max_rect();
+                let mut title_right = r.right();
+                if ribbon_hidden {
+                    let mut restore = ui.new_child(egui::UiBuilder::new().max_rect(r).layout(egui::Layout::right_to_left(egui::Align::Center)));
+                    let button = restore.button(crate::tl!("Show ribbon"));
+                    title_right = button.rect.left() - 8.0;
+                    if button.clicked()
+                        && let Err(error) = app.run("ui.ribbon.mode", json!({"mode": "expanded"}))
+                    {
+                        app.set_status(error);
+                    }
+                }
                 let title = match app.session.state() {
                     Ok(st) if !app.ui.start_tab => format!("UbotCAD      {}{}", st.title, if st.title.contains('.') { "" } else { ".dwg" }),
                     _ => format!("UbotCAD      {}", crate::tl!("Start")),
@@ -55,7 +67,7 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
                 let galley = ui.painter().layout_no_wrap(title, egui::FontId::proportional(13.0), t.text_dim);
                 let title_width = galley.size().x;
                 // Allow dragging the window by the title row.
-                let tr = Rect::from_min_size(r.min, vec2(r.width(), MAC_TITLE_BAR));
+                let tr = Rect::from_min_size(r.min, vec2((title_right - r.left()).max(0.0), MAC_TITLE_BAR));
                 let resp = ui.interact(tr, ui.id().with("titledrag"), Sense::CLICK | Sense::DRAG);
                 if resp.drag_started() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
@@ -66,14 +78,17 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
                 }
                 let mut content_left = r.left() + MAC_CONTENT_LEFT;
                 if !app.ui.in_window_menu && !app.ws.effective.layout.quick_access.is_empty() {
-                    let inner = ui.horizontal(|ui| {
-                        ui.add_space(MAC_CONTENT_LEFT);
-                        crate::quick_access::show(app, ui);
-                    });
-                    content_left = inner.response.rect.right() + 8.0;
+                    let inner =
+                        egui::ScrollArea::horizontal().id_salt("cc_title_quick_access").max_width((title_right - r.left()).max(1.0)).show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.add_space(MAC_CONTENT_LEFT);
+                                crate::quick_access::show(app, ui);
+                            })
+                        });
+                    content_left = inner.inner.response.rect.right() + 8.0;
                 }
                 let x = title_left(r.left(), r.width(), title_width).max(content_left);
-                if x + title_width <= r.right() {
+                if x + title_width <= title_right {
                     ui.painter().galley(pos2(x, r.top() + (MAC_TITLE_BAR - galley.size().y) / 2.0), galley, t.text_dim);
                 }
             },

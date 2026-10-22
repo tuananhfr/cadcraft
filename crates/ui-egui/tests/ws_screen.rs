@@ -172,6 +172,20 @@ fn controls_reachable_ux08() {
             }
         }
     }
+    let mut app = attached(MemoryStore::default());
+    app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+    app.run("ui.ribbon.mode", json!({"mode": "tabs_only"})).unwrap();
+    let mut h = harness(app, 1366.0, 768.0, 2.0);
+    let screen = h.ctx.content_rect();
+    let canvas = h.state().canvas.rect.unwrap();
+    for label in ["File", "Command line input", "Status bar", "Home"] {
+        inside(screen, h.get_by_label(label).rect(), label);
+    }
+    h.get_by_label("Home").click();
+    h.run_steps(4);
+    assert!(egui::Popup::is_id_open(&h.ctx, Id::new("cc_ribbon_flyout")));
+    inside(screen, h.get_by_role_and_label(egui::accesskit::Role::Button, "Line").rect(), "flyout command");
+    assert_eq!(h.state().canvas.rect.unwrap(), canvas);
 }
 
 #[test]

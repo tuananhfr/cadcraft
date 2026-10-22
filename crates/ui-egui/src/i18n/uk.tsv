@@ -1856,3 +1856,6 @@
 	Ribbon Display Mode	Режим відображення стрічки
 	Display Mode	Режим відображення
 	mode must be expanded, compact, tabs_only or hidden	mode має бути expanded, compact, tabs_only або hidden
+
+# GĐ3 Task 2: ribbon modes rendering.
+	Show ribbon	Показати стрічку
