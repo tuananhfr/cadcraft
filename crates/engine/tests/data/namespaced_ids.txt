@@ -392,6 +392,7 @@ transparencydisplay	cad.other.transparencydisplay
 trim	cad.modify.trim
 u	cad.edit.u
 ubplot	cad.file.ubplot
+ubplot.publish	cad.other.ubplot.publish
 ubplot.scan	cad.other.ubplot.scan
 ubplot.templates	cad.other.ubplot.templates
 undo	cad.other.undo
