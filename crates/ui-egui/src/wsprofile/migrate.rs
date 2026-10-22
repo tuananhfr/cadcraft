@@ -46,11 +46,50 @@ pub struct Step {
     pub apply: fn(&mut Value) -> Result<(), MigrateError>,
 }
 
-/// Version-to-version upgrades for the live schema. Empty while 1.0.0 is the first version.
-pub const STEPS: &[Step] = &[];
+pub const STEPS: &[Step] = &[Step { name: "device_layer", from: "1.0.0", to: "3", apply: device_layer }];
+
+fn device_layer(value: &mut Value) -> Result<(), MigrateError> {
+    let root = value.as_object_mut().ok_or(MigrateError::NotAnObject)?;
+    let scale = root.remove("ui_scale").or_else(|| root.remove("uiScale"));
+    let mut geometry = Value::Object(Map::new());
+    for key in ["layout", "layout_patch"] {
+        if let Some(layout) = root.get_mut(key) {
+            let (user, device) = super::device::split_geometry(layout.take());
+            *layout = user;
+            if let Some(fields) = geometry.as_object_mut()
+                && let Some(device) = device.as_object()
+            {
+                fields.extend(device.clone());
+            }
+        }
+    }
+    let (portable, root_geometry) = super::device::split_geometry(Value::Object(root.clone()));
+    if let Some(fields) = portable.as_object() {
+        *root = fields.clone();
+    }
+    if let Some(fields) = geometry.as_object_mut()
+        && let Some(device) = root_geometry.as_object()
+    {
+        fields.extend(device.clone());
+    }
+    if scale.is_some() || geometry.as_object().is_some_and(|fields| !fields.is_empty()) {
+        let mut device = root.remove("device").and_then(|v| v.as_object().cloned()).unwrap_or_default();
+        if let Some(scale) = scale {
+            let checked: super::device::DeviceState =
+                serde_json::from_value(serde_json::json!({"ui_scale": scale.clone()})).map_err(|error| MigrateError::Invalid(error.to_string()))?;
+            device.entry("ui_scale").or_insert_with(|| Value::from(checked.ui_scale));
+        }
+        device.entry("layout_patch").or_insert(geometry);
+        root.insert("device".into(), Value::Object(device));
+    }
+    Ok(())
+}
 
 /// `(to_version, one-line change)`, oldest first; the last entry is `SCHEMA_VERSION`.
-pub const CHANGELOG: &[(&str, &str)] = &[("1.0.0", "First profile schema; legacy workspace.json v1 files convert to a user profile over SIMPLE")];
+pub const CHANGELOG: &[(&str, &str)] = &[
+    ("1.0.0", "First profile schema; legacy workspace.json v1 files convert to a user profile over SIMPLE"),
+    ("3", "camelCase on disk, checksum, device layer (ui scale and geometry), scope"),
+];
 
 const LEGACY_STEP: &str = "legacy_v1";
 const RENAME_STEP: &str = "rename_command_ids";
@@ -64,7 +103,14 @@ const MAX_HISTORY_LINES: u64 = 12;
 
 /// Upgrades `v` to the current schema, keeping every field it does not recognise.
 pub fn migrate(v: Value) -> Result<Migrated, MigrateError> {
-    migrate_inner(v, STEPS, RENAMED)
+    let mut migrated = migrate_inner(super::wire::from_wire(&v), STEPS, RENAMED)?;
+    if schema_version(&migrated.value).ok().and_then(|version| parse_version(&version)).is_some_and(|v| v.0 < u64::from(SCHEMA_VERSION)) {
+        return Err(MigrateError::Invalid("no migration path to schema 3".into()));
+    }
+    if migrated.backup.is_some() {
+        migrated.backup = Some(v);
+    }
+    Ok(migrated)
 }
 
 /// `migrate` with an injected step table, so a test can run multi-version upgrades without touching `SCHEMA_VERSION`.
@@ -87,26 +133,28 @@ fn migrate_inner(v: Value, steps: &[Step], renamed: &[(&str, &str)]) -> Result<M
 
     let version = schema_version(&value)?;
     let (major, ..) = parse_version(&version).ok_or_else(|| MigrateError::Invalid(format!("unreadable schema_version {version:?}")))?;
-    let (current_major, ..) = parse_version(SCHEMA_VERSION).unwrap_or((1, 0, 0));
+    let current_major = u64::from(SCHEMA_VERSION);
     if major > current_major {
         return Err(MigrateError::NewerMajor(version));
     }
 
+    if major == 0 {
+        return Err(MigrateError::Invalid(format!("no migration path from schema {version}")));
+    }
     let mut current = version;
     // Each pass consumes one step, so a cyclic table cannot loop.
     for _ in 0..steps.len() {
-        let Some(step) = steps.iter().find(|step| step.from == current) else { break };
+        let step = steps
+            .iter()
+            .find(|step| step.from == current || (step.from == "1.0.0" && step.to == "3" && parse_version(&current).is_some_and(|v| v.0 == 1)));
+        let Some(step) = step else { break };
         (step.apply)(&mut value)?;
         if let Some(root) = value.as_object_mut() {
-            root.insert("schema_version".into(), Value::String(step.to.into()));
+            root.insert("schema_version".into(), step.to.parse::<u32>().map(Value::from).unwrap_or_else(|_| Value::String(step.to.into())));
         }
         current = step.to.to_string();
         applied.push(step.name);
     }
-    if parse_version(&current).is_none_or(|(major, ..)| major < current_major) {
-        return Err(MigrateError::Invalid(format!("no migration path from schema {current}")));
-    }
-
     if rename_command_ids(&mut value, renamed) {
         applied.push(RENAME_STEP);
     }
@@ -138,16 +186,19 @@ fn is_legacy_v1(root: &Map<String, Value>) -> Result<bool, MigrateError> {
 fn schema_version(value: &Value) -> Result<String, MigrateError> {
     match value.get("schema_version") {
         Some(Value::String(version)) => Ok(version.clone()),
-        Some(_) => Err(MigrateError::Invalid("schema_version must be a string".into())),
+        Some(Value::Number(number)) if number.as_u64().is_some() => Ok(number.to_string()),
+        Some(_) => Err(MigrateError::Invalid("unreadable schema_version".into())),
         None => Err(MigrateError::Invalid("missing schema_version".into())),
     }
 }
 
-/// Plain `major.minor.patch`; anything else (pre-release tags, signs, extra parts) is not a version we wrote.
+// Legacy semantic versions and v3 major numbers share the same compatibility boundary.
 fn parse_version(text: &str) -> Option<(u64, u64, u64)> {
     let number = |part: &str| (!part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit())).then(|| part.parse::<u64>().ok()).flatten();
     let mut parts = text.split('.');
-    let version = (number(parts.next()?)?, number(parts.next()?)?, number(parts.next()?)?);
+    let major = number(parts.next()?)?;
+    let Some(minor) = parts.next() else { return Some((major, 0, 0)) };
+    let version = (major, number(minor)?, number(parts.next()?)?);
     parts.next().is_none().then_some(version)
 }
 
@@ -163,6 +214,7 @@ pub fn from_legacy_v1(workspace_json: &Value) -> Value {
         }
     }
     let profile = WorkspaceProfile {
+        schema_version: 1,
         profile_id: "user.legacy-v1".into(),
         owner_type: OwnerType::User,
         name: "Imported workspace".into(),
@@ -435,9 +487,10 @@ mod tests {
     }
 
     #[test]
-    fn version_parser_accepts_only_plain_triples() {
+    fn version_parser_accepts_major_numbers_and_plain_triples() {
         assert_eq!(parse_version("1.2.3"), Some((1, 2, 3)));
-        for bad in ["", "1", "1.2", "1.2.3.4", "1.2.x", "+1.0.0", "-1.0.0", "1.0.0-beta", " 1.0.0", "1..0", "99999999999999999999.0.0"] {
+        assert_eq!(parse_version("3"), Some((3, 0, 0)));
+        for bad in ["", "1.2", "1.2.3.4", "1.2.x", "+1.0.0", "-1.0.0", "1.0.0-beta", " 1.0.0", "1..0", "99999999999999999999.0.0"] {
             assert_eq!(parse_version(bad), None, "{bad:?}");
         }
     }

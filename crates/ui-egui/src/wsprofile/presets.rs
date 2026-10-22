@@ -25,5 +25,7 @@ pub fn preset_json(id: &str) -> Option<&'static str> {
 }
 
 pub fn preset(id: &str) -> Option<WorkspaceProfile> {
-    serde_json::from_str(preset_json(id)?).ok()
+    let mut profile: WorkspaceProfile = serde_json::from_str(preset_json(id)?).ok()?;
+    profile.schema_version = super::schema::SCHEMA_VERSION;
+    Some(profile)
 }

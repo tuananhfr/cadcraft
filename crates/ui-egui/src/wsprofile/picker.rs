@@ -274,6 +274,9 @@ pub fn run_menu_action(app: &mut CadApp, action: MenuAction) {
 /// while there is nothing to say: no storage, or a first run that has changed nothing yet.
 pub fn save_text(ws: &WsState) -> Option<(&'static str, Option<String>)> {
     ws.store.as_ref()?;
+    if ws.suspended {
+        return Some((crate::tl!("Saving suspended"), Some(crate::tl!("Restored the 1.0.0 workspace. Changes are not saved until restart.").into())));
+    }
     Some(match &ws.status {
         SaveStatus::SavedLocally => (crate::tl!("Saved locally"), None),
         SaveStatus::Unsaved if ws.autosave.pending() => (crate::tl!("Saving…"), None),

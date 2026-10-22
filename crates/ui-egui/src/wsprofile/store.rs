@@ -20,7 +20,8 @@ pub const CORRUPT_SNAPSHOT: u64 = 0;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProfileSet {
-    pub schema_version: String,
+    #[serde(deserialize_with = "super::schema::schema_version")]
+    pub schema_version: u32,
     /// A preset id or the `profile_id` of one of `profiles`.
     pub active: String,
     /// Saved user profiles, at most [`MAX_USER_PROFILES`].
@@ -35,11 +36,17 @@ pub struct ProfileSet {
 
 impl Default for ProfileSet {
     fn default() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into(), active: SAFE_PRESET.into(), profiles: Vec::new(), user: None, device: None, extra: Map::new() }
+        Self { schema_version: SCHEMA_VERSION, active: SAFE_PRESET.into(), profiles: Vec::new(), user: None, device: None, extra: Map::new() }
     }
 }
 
 pub trait ProfileStore {
+    fn keep_backup(&mut self, _version: &str, _raw: &str) -> Result<(), String> {
+        Err("this storage keeps no backup".into())
+    }
+    fn read_backup(&self, _version: &str) -> Option<String> {
+        None
+    }
     /// The [`ProfileSet`] JSON last written.
     fn read_current(&self) -> Option<String>;
     /// Replaces the current set; atomic in every implementation (old or new, never half).
@@ -88,11 +95,27 @@ pub struct MemoryStore {
     pub fail_writes: bool,
     /// Copies kept by [`ProfileStore::keep_damaged`], by name.
     pub damaged: BTreeMap<String, Vec<u8>>,
+    pub backups: BTreeMap<String, String>,
 }
 
 const WRITE_REFUSED: &str = "storage is full or blocked";
 
 impl ProfileStore for MemoryStore {
+    fn keep_backup(&mut self, version: &str, raw: &str) -> Result<(), String> {
+        if self.backups.contains_key(version) {
+            return Ok(());
+        }
+        if self.fail_writes {
+            return Err(WRITE_REFUSED.into());
+        }
+        self.backups.insert(version.into(), raw.into());
+        Ok(())
+    }
+
+    fn read_backup(&self, version: &str) -> Option<String> {
+        self.backups.get(version).cloned()
+    }
+
     fn read_current(&self) -> Option<String> {
         self.current.clone()
     }

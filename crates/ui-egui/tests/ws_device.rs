@@ -81,9 +81,9 @@ fn ui_scale_lives_on_the_device() {
     let raw = app.ws.store.as_ref().unwrap().read_current().unwrap();
     let value: Value = serde_json::from_str(&raw).unwrap();
     assert_eq!(verify_checksum(&value), ChecksumCheck::Valid);
-    assert_eq!(value.pointer("/device/ui_scale"), Some(&json!(1.25)));
-    assert!(value.pointer("/user/ui_scale").is_none());
-    assert!(value.pointer("/user/layout_patch/command_line/height_ratio").is_none());
+    assert_eq!(value.pointer("/deviceGeometry/uiScale"), Some(&json!(1.25)));
+    assert!(value.pointer("/user/uiScale").is_none());
+    assert!(value.pointer("/user/layoutPatch/commandLine/heightRatio").is_none());
     let set = parse_set(&raw).unwrap();
     assert_eq!(set.device.unwrap().ui_scale, 1.25);
 }

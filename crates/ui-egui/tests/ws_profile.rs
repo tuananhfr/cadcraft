@@ -42,7 +42,7 @@ fn profile_commands(profile: &WorkspaceProfile) -> Vec<&String> {
 fn spec_sample_imports() {
     let value = validate(SPEC_SAMPLE, Mode::Import).unwrap();
     let profile = parse(value);
-    assert_eq!(profile.schema_version, SCHEMA_VERSION);
+    assert_eq!(profile.schema_version, 1);
     assert_eq!(profile.base_id.as_deref(), Some("AUTOCAD_FAMILIAR"));
     assert_eq!(profile.revision, 12);
     let properties = profile.layout.panels.iter().find(|panel| panel.id == "properties").unwrap();
@@ -438,12 +438,32 @@ fn schema_doc_lists_every_field() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/workspace/workspace-profile.schema.json");
     let schema: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     assert_eq!(schema["$schema"], "https://json-schema.org/draft/2020-12/schema");
-    assert_eq!(schema["properties"]["schema_version"]["const"], SCHEMA_VERSION);
+    assert_eq!(schema["properties"]["schemaVersion"]["const"], SCHEMA_VERSION);
     let default = serde_json::to_value(WorkspaceProfile::default()).unwrap();
-    assert_documented(&schema, &schema, &default, "");
+    assert_documented(&schema, &schema, &cadcraft_ui_egui::wsprofile::wire::to_wire(&default), "");
     for id in PRESET_IDS {
         let value = serde_json::to_value(preset(id).unwrap()).unwrap();
-        assert_documented(&schema, &schema, &value, &format!("{id}:"));
+        assert_documented(&schema, &schema, &cadcraft_ui_egui::wsprofile::wire::to_wire(&value), &format!("{id}:"));
+    }
+    let mut documented = BTreeSet::new();
+    let mut pending = vec![&schema];
+    while let Some(node) = pending.pop() {
+        match node {
+            Value::Object(fields) => {
+                if let Some(properties) = fields.get("properties").and_then(Value::as_object) {
+                    documented.extend(properties.keys().cloned());
+                }
+                pending.extend(fields.values());
+            }
+            Value::Array(items) => pending.extend(items),
+            _ => {}
+        }
+    }
+    let known: serde_json::Map<String, Value> =
+        cadcraft_ui_egui::wsprofile::wire::KNOWN_KEYS.iter().map(|key| ((*key).into(), Value::Null)).collect();
+    let wire = cadcraft_ui_egui::wsprofile::wire::to_wire(&json!({"device": known}));
+    for key in wire["deviceGeometry"].as_object().unwrap().keys() {
+        assert!(documented.contains(key), "undocumented wire field {key}");
     }
 }
 

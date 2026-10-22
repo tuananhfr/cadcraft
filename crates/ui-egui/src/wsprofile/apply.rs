@@ -70,6 +70,7 @@ impl Fingerprint {
                 layer_list: app.ui.show_layer_list,
                 properties_all: app.ui.properties_all,
                 in_window_menu: app.ui.in_window_menu,
+                ..ViewState::default()
             },
             theme: app.ui.theme.as_str(),
             language: app.ui.interface_language.code(),
@@ -763,6 +764,7 @@ fn panels_from_docking(workspace: &Workspace, area: egui::Rect, previous: &[Pane
             y_ratio: 0.0,
             width_ratio: unit_or(width_ratio, 0.2),
             height_ratio: unit_or(height_ratio, 1.0),
+            extra: earlier(item.panel).map(|state| state.extra.clone()).unwrap_or_default(),
         });
     }
     for group in &workspace.layout.floating {
@@ -778,6 +780,7 @@ fn panels_from_docking(workspace: &Workspace, area: egui::Rect, previous: &[Pane
                 y_ratio,
                 width_ratio,
                 height_ratio,
+                extra: earlier(*panel).map(|state| state.extra.clone()).unwrap_or_default(),
             });
         }
     }

@@ -20,6 +20,7 @@ pub mod store;
 pub mod sync;
 pub mod tab_conflict;
 pub mod validate;
+pub mod wire;
 
 use serde_json::{Map, Value, json};
 
@@ -129,6 +130,8 @@ pub struct WsState {
     pub(crate) synced: Option<Fingerprint>,
     /// A damaged set startup could not copy aside; commits wait until the copy succeeds.
     unkept_damage: Option<Vec<u8>>,
+    unkept_backup: Option<String>,
+    pub suspended: bool,
     failed_commits: u32,
     now: f64,
     drag_before: Option<WorkspaceLayout>,
@@ -168,6 +171,8 @@ impl Default for WsState {
             toolbar_drag: crate::toolbars::DragPhase::Idle,
             synced: None,
             unkept_damage: None,
+            unkept_backup: None,
+            suspended: false,
             failed_commits: 0,
             now: 0.0,
             drag_before: None,
@@ -216,11 +221,11 @@ impl WsState {
 
     /// Whether a change is not stored yet; a host checks this before it exits.
     pub fn needs_flush(&self) -> bool {
-        self.autosave.pending() || matches!(self.status, SaveStatus::Failed(_) | SaveStatus::TabConflict)
+        !self.suspended && (self.autosave.pending() || matches!(self.status, SaveStatus::Failed(_) | SaveStatus::TabConflict))
     }
 
     fn mark_changed(&mut self) {
-        if self.status == SaveStatus::TabConflict {
+        if self.suspended || self.status == SaveStatus::TabConflict {
             return;
         }
         self.autosave.changed(self.now);
@@ -420,7 +425,7 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
     app.ws.device.screen = Some(screen::ScreenProfile {
         work_area: [area.min.x, area.min.y, area.width(), area.height()],
         pixel_ratio: ctx.native_pixels_per_point().filter(|ratio| ratio.is_finite() && *ratio > 0.0).unwrap_or(1.0),
-        ..screen::ScreenProfile::default()
+        ..app.ws.device.screen.clone().unwrap_or_default()
     });
     app.ws.area_known = true;
     if down {
@@ -445,6 +450,7 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
     app.ws.released = released;
     let external = app.ws.store.as_mut().is_some_and(|store| store.take_external_change());
     if external
+        && !app.ws.suspended
         && !app.ws.needs_flush()
         && let Err(error) = app.adopt_stored_workspace()
     {
@@ -455,7 +461,7 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
         app.ws.first_run_picker_open = false;
     }
     // The debounce does not store while the picker waits, so a layout settling under it is not written as a choice.
-    let storing = !app.ws.first_run_picker_open;
+    let storing = !app.ws.first_run_picker_open && !app.ws.suspended;
     if !down && storing && app.ws.autosave.due(time) {
         let _ = app.commit_workspace_now();
     }
@@ -486,12 +492,18 @@ pub fn rfc3339(unix_ms: f64) -> String {
 impl CadApp {
     /// Takes over profile storage: restores the stored workspace (or SIMPLE) and shows it.
     pub fn attach_profile_store(&mut self, mut store: Box<dyn ProfileStore>) {
-        let revision = store.read_current().as_deref().and_then(startup::stored_revision).unwrap_or(0);
+        let raw = store.read_current();
+        let revision = raw.as_deref().and_then(startup::stored_revision).unwrap_or(0);
         let (restored, unkept) = startup::open(store.as_mut());
         self.ws.known_revision = revision.max(restored.user.revision);
         let damaged = matches!(restored.fallback, Some(Fallback::Corrupt(_) | Fallback::NewerMajor(_) | Fallback::Invalid(_)));
         let kept = unkept.is_none();
         self.ws.unkept_damage = unkept;
+        self.ws.unkept_backup = match &restored.fallback {
+            None => raw.filter(|raw| startup::needs_backup(raw)),
+            Some(Fallback::RestoredSnapshot { revision, .. }) => store.read_snapshot(*revision).filter(|raw| startup::needs_backup(raw)),
+            _ => None,
+        };
         self.ws.failed_commits = 0;
         let mut notices: Vec<String> = Vec::new();
         if let Some(Fallback::RestoredSnapshot { revision, .. }) = &restored.fallback {
@@ -518,7 +530,7 @@ impl CadApp {
         self.ws.device = restored.set.device.clone().unwrap_or_default();
         self.ws.device.screen = Some(screen::ScreenProfile {
             work_area: [self.ws.area.min.x, self.ws.area.min.y, self.ws.area.width(), self.ws.area.height()],
-            ..screen::ScreenProfile::default()
+            ..self.ws.device.screen.clone().unwrap_or_default()
         });
         self.ws.user = restored.user;
         self.ws.layers = restored.layers;
@@ -536,6 +548,9 @@ impl CadApp {
         self.ws.first_run = matches!(restored.fallback, Some(Fallback::NoProfile));
         self.ws.fallback = restored.fallback;
         self.apply_workspace();
+        if self.ws.unkept_backup.is_some() && self.ws.fallback.is_none() && !self.ws.suspended {
+            let _ = self.commit_workspace(false);
+        }
         if !notices.is_empty() {
             let notice = notices.join(" ");
             self.ws.message = Some(notice.clone());
@@ -572,6 +587,9 @@ impl CadApp {
     }
 
     pub(super) fn adopt_stored_workspace(&mut self) -> Result<(), String> {
+        if self.ws.suspended {
+            return Err(commands::ROLLBACK_MESSAGE.into());
+        }
         let store = self.ws.store.take().ok_or("No workspace storage is attached")?;
         self.attach_profile_store(store);
         self.ws.drag_before = None;
@@ -607,6 +625,9 @@ impl CadApp {
     }
 
     pub(super) fn commit_workspace(&mut self, interactive: bool) -> Result<(), String> {
+        if self.ws.suspended {
+            return Err(commands::ROLLBACK_MESSAGE.into());
+        }
         observe(self, true);
         // localStorage cannot check and write atomically; IndexedDB transactions will close this race.
         self.check_workspace_revision(interactive)?;
@@ -624,7 +645,7 @@ impl CadApp {
             *saved = user.clone();
         }
         let set = ProfileSet {
-            schema_version: SCHEMA_VERSION.into(),
+            schema_version: SCHEMA_VERSION,
             active: self.ws.active.clone(),
             profiles,
             user: Some(user.clone()),
@@ -632,6 +653,7 @@ impl CadApp {
             extra: self.ws.set_extra.clone(),
         };
         let unkept_damage = &mut self.ws.unkept_damage;
+        let unkept_backup = &mut self.ws.unkept_backup;
         let written = startup::set_text(&set, &policy).and_then(|json| {
             // Never write a set the next startup would refuse: that would lose every setting.
             startup::parse_set_with(&json, &policy).map_err(|fallback| format!("it would not read back: {}", startup::describe(&fallback)))?;
@@ -639,6 +661,10 @@ impl CadApp {
                 startup::keep_copy(store.as_mut(), damaged)
                     .map_err(|error| format!("the damaged workspace could not be kept, so it is not replaced: {error}"))?;
                 *unkept_damage = None;
+            }
+            if let Some(raw) = unkept_backup.as_deref() {
+                store.keep_backup("1.0.0", raw)?;
+                *unkept_backup = None;
             }
             store.push_snapshot(user.revision, &json)?;
             store.write_current(&json)
@@ -685,8 +711,8 @@ impl CadApp {
             _ => None,
         };
         json!({
-            "status": ws.status.as_str(),
-            "label": ws.status.label(),
+            "status": if ws.suspended { "suspended" } else { ws.status.as_str() },
+            "label": if ws.suspended { "Saving suspended" } else { ws.status.label() },
             "error": error,
             "message": ws.message,
             "active": ws.active,
