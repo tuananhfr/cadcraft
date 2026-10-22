@@ -169,6 +169,7 @@ const VI_DONE: &[Section] = &[
     Section::Literals("toolbars/mod.rs"),
     Section::Literals("toolbars/render.rs"),
     Section::Literals("toolbars/menu.rs"),
+    Section::Prompts,
 ];
 
 const MARKED_UI_SOURCES: &[(&str, &str)] = &[
@@ -300,7 +301,7 @@ fn section_sources(section: Section) -> BTreeSet<String> {
                 );
             }
         }
-        Section::Prompts => {}
+        Section::Prompts => sources.extend(engine_prompt_keys()),
         Section::Ribbon => {
             for id in crate::wsprofile::presets::PRESET_IDS {
                 let profile = crate::wsprofile::presets::preset(id).unwrap();
@@ -315,6 +316,94 @@ fn section_sources(section: Section) -> BTreeSet<String> {
         sources.remove("");
     }
     sources
+}
+
+fn displayed_prompt_key(key: &str) -> bool {
+    let mut words = key.split_whitespace().peekable();
+    let placeholders_only = words.peek().is_some()
+        && words.all(|word| {
+            word.strip_prefix('{').and_then(|word| word.strip_suffix('}')).is_some_and(|name| !name.is_empty() && !name.contains(['{', '}']))
+        });
+    !key.is_empty() && !placeholders_only
+}
+
+fn prompt_source_keys(source: &str) -> BTreeSet<String> {
+    let mut keys = BTreeSet::new();
+    for marker in ["Prompt::new(", "Prompt::tf("] {
+        for rest in source.split(marker).skip(1) {
+            let argument = widget_text_argument(rest, 0).unwrap();
+            let mut rest = argument;
+            while let Some(start) = rest.find('"') {
+                let mut decoder = serde_json::Deserializer::from_str(&rest[start..]).into_iter::<String>();
+                let key = decoder.next().unwrap().unwrap();
+                rest = &rest[start + decoder.byte_offset()..];
+                if displayed_prompt_key(&key) {
+                    keys.insert(key);
+                }
+            }
+        }
+    }
+    keys
+}
+
+fn engine_prompt_keys() -> BTreeSet<String> {
+    let mut keys = BTreeSet::new();
+    let mut directories = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../engine/src")];
+    while let Some(directory) = directories.pop() {
+        let mut entries: Vec<_> = std::fs::read_dir(directory).unwrap().map(|entry| entry.unwrap().path()).collect();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                directories.push(path);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                keys.extend(prompt_source_keys(&std::fs::read_to_string(path).unwrap()));
+            }
+        }
+    }
+    let static_count = keys.len();
+    for spec in cadcraft_engine::command_specs().iter().filter(|spec| spec.interactive.is_some()) {
+        // Fresh drawings prevent commands that finish during begin from changing later prompts.
+        let mut session = Session::new();
+        session.open_drawing(cadcraft_engine::sample::default_sample(), "Sample", None);
+        if session.start(spec.id).is_ok()
+            && let Some(prompt) = session.current_prompt()
+        {
+            let key = prompt.template.map_or(prompt.message, |template| template.source.to_string());
+            if displayed_prompt_key(&key) {
+                keys.insert(key);
+            }
+        }
+        session.cancel();
+    }
+    eprintln!("Engine prompt keys: {static_count} static, {} dynamic-only, {} total", keys.len() - static_count, keys.len());
+    keys
+}
+
+#[test]
+fn prompt_source_keys_balance_arguments_and_skip_placeholder_only_templates() {
+    let source = r#"
+        Prompt::new(if flag { "First, (point)" } else { "Second [point]" }, Accept::POINT);
+        Prompt::new(["Third", "Fourth"].get(index).copied().unwrap_or(""), Accept::POINT);
+        Prompt::tf("Block \"{name}\": enter an option", vec![("name", value)], Accept::TEXT);
+        Prompt::tf("{title} {message}", args, Accept::POINT);
+        Prompt::new("", Accept::TEXT);
+    "#;
+    let expected = BTreeSet::from(["First, (point)", "Second [point]", "Third", "Fourth", "Block \"{name}\": enter an option"].map(str::to_string));
+    assert_eq!(prompt_source_keys(source), expected);
+    assert!(displayed_prompt_key("(need {axes})"));
+    assert!(displayed_prompt_key("{snap} of"));
+    assert!(!displayed_prompt_key("{title} {message}"));
+}
+
+#[test]
+fn every_engine_prompt_has_a_vietnamese_translation() {
+    assert!(VI_DONE.iter().any(|section| matches!(section, Section::Prompts)));
+    let keys = section_sources(Section::Prompts);
+    eprintln!("Vietnamese engine prompt coverage: {} keys", keys.len());
+    assert!(keys.contains("Specify first point"));
+    let catalog = catalog("vi").unwrap();
+    let missing: Vec<_> = keys.into_iter().filter(|key| !catalog.contains_key(&("", key.as_str()))).collect();
+    assert!(missing.is_empty(), "missing Vietnamese engine prompts: {missing:?}");
 }
 
 fn missing_commands_menus_tools_and_snap_labels(language: &str) -> Vec<String> {
