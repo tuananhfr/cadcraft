@@ -320,6 +320,7 @@ impl CadApp {
             "version": 1,
             "sysvars": cadcraft_engine::cmd::options::profile(&self.session),
             "fonts": cadcraft_engine::cmd::fonts::profile(),
+            "lispApproved": cadcraft_engine::lisp::trust::approved(),
             "systemCursor": self.ui.system_cursor,
             "modelBackground": color_json(self.options.model_background),
             "paperBackground": color_json(self.options.paper_background),
@@ -342,6 +343,11 @@ impl CadApp {
         }
         if let Some(fonts) = v.get("fonts") {
             cadcraft_engine::cmd::fonts::restore(fonts);
+        }
+        if let Some(list) = v.get("lispApproved").and_then(Value::as_array) {
+            cadcraft_engine::lisp::trust::set_approved(
+                list.iter().take(cadcraft_engine::lisp::trust::MAX_APPROVED).filter_map(Value::as_str).map(str::to_string).collect(),
+            );
         }
         let mut c = UiChanges::default();
         for key in ["systemCursor", "modelBackground", "paperBackground", "selectionColor", "snapMarkerSize", "timeSensitiveRightClick"] {

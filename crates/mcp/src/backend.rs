@@ -162,6 +162,12 @@ impl Backend for Remote {
     fn call(&mut self, method: &str, params: Value) -> Result<Value, String> {
         let id = self.next_id;
         self.next_id += 1;
+        let mut params = params;
+        if cadcraft_engine::lisp::trust::mcp_input()
+            && let Some(object) = params.as_object_mut()
+        {
+            object.insert("mcpInput".into(), json!(true));
+        }
         let line = json!({"id": id, "method": method, "params": params}).to_string();
         let reply = match self.roundtrip(&line) {
             Ok(r) => r,
@@ -242,6 +248,12 @@ fn state(s: &Session) -> Value {
 impl Backend for Headless {
     fn call(&mut self, method: &str, p: Value) -> Result<Value, String> {
         let s = &mut self.session;
+        if cadcraft_engine::lisp::trust::mcp_input()
+            && s.lisp_review_pending()
+            && matches!(method, "cmdline.input" | "cmdline.script" | "cmdline.key" | "ui.pointer")
+        {
+            return Err("Only the user can answer APPLOADTRUST".into());
+        }
         let str_p = |k: &str| p.get(k).and_then(Value::as_str).map(str::to_string);
         match method {
             "engine.execute" | "command" => {
@@ -355,6 +367,24 @@ impl Backend for Headless {
 mod tests {
     use super::*;
     use std::net::TcpListener;
+
+    #[test]
+    fn remote_forwards_mcp_origin() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut line = String::new();
+            BufReader::new(socket.try_clone().unwrap()).read_line(&mut line).unwrap();
+            let request: Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(request["params"]["mcpInput"], true);
+            writeln!(socket, "{}", json!({"id": request["id"], "ok": true, "result": {"prompt": "Command:"}})).unwrap();
+        });
+        let mut remote = Remote::connect(&addr).unwrap();
+        cadcraft_engine::lisp::trust::with_mcp_input(|| remote.call("cmdline.input", json!({"text": ""}))).unwrap();
+        server.join().unwrap();
+        assert!(!cadcraft_engine::lisp::trust::mcp_input());
+    }
 
     /// A server that reads one request per connection and closes without replying must not see the request twice.
     #[test]

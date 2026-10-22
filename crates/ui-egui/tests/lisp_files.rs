@@ -8,6 +8,8 @@ use cadcraft_ui_egui::{CadApp, Services};
 fn a_dropped_lisp_file_loads_and_defines_its_commands() {
     let mut app = CadApp::new(Session::new(), Services::default());
     app.open_bytes("Hello.LSP", b"(defun c:hello () (princ \"hi from lisp\") (princ))");
+    assert!(app.session.lisp_review_pending());
+    app.session.cmdline("Y").unwrap();
     assert!(app.session.log.iter().any(|l| l == "Hello.LSP successfully loaded."), "{:?}", app.session.log);
     // Still the same drawing: a LISP file isn't opened as one.
     assert_eq!(app.session.docs.len(), 1);
@@ -19,6 +21,8 @@ fn a_dropped_lisp_file_loads_and_defines_its_commands() {
 fn a_long_routine_runs_across_frames() {
     let mut app = CadApp::new(Session::new(), Services::default());
     app.open_bytes("loop.lsp", b"(setq i 0) (while (< i 2000000) (setq i (1+ i))) (princ \"done\")");
+    assert!(app.session.lisp_review_pending());
+    app.session.cmdline("Y").unwrap();
     assert!(app.session.lisp_busy(), "a slice per frame");
     let ctx = egui::Context::default();
     let mut frames = 0;
@@ -65,4 +69,30 @@ fn a_canvas_click_answers_a_routine_waiting_for_a_point() {
     let p = app.session.lisp_var("P").as_point().expect("a point");
     assert!((p[0] - target.x).abs() < 0.05 && (p[1] - target.y).abs() < 0.05, "{p:?}");
     assert!(app.session.selection().is_empty(), "the click selected nothing");
+}
+
+#[test]
+fn lisp_approval_round_trips_through_host_profile() {
+    use cadcraft_engine::lisp::trust::{approve, approved, is_approved, revoke, source_sha};
+
+    let text = "(setq profile_review 701)";
+    let sha = source_sha(text);
+    let was_approved = is_approved(&sha);
+    let mut app = CadApp::new(Session::new(), Services::default());
+    assert!(approve(&sha));
+    let saved = app.profile_json();
+    assert!(serde_json::from_str::<serde_json::Value>(&saved).unwrap()["lispApproved"].as_array().unwrap().contains(&serde_json::json!(sha)));
+    assert!(revoke(&sha));
+    app.load_profile(&saved);
+    assert!(is_approved(&sha));
+    app.open_bytes("profile-review.lsp", text.as_bytes());
+    assert!(!app.session.lisp_review_pending());
+    assert_eq!(app.session.lisp_var("PROFILE_REVIEW").as_number(), Some(701.0));
+    let before = approved();
+    app.load_profile(r#"{"lispApproved": "bad"}"#);
+    app.load_profile(r#"{"fonts": {}}"#);
+    assert_eq!(approved(), before);
+    if !was_approved {
+        revoke(&sha);
+    }
 }

@@ -167,7 +167,16 @@ fn run_case(dir: &Path) -> Result<(), String> {
         }
     }
     let from = s.log.len();
-    match s.lisp_load("routine.lsp", &routine, true) {
+    let sha = cadcraft_engine::lisp::trust::source_sha(&routine);
+    let was_approved = cadcraft_engine::lisp::trust::is_approved(&sha);
+    if !cadcraft_engine::lisp::trust::approve(&sha) {
+        return Err("could not approve the synthetic corpus routine".into());
+    }
+    let loaded = s.lisp_load("routine.lsp", &routine, true);
+    if !was_approved {
+        cadcraft_engine::lisp::trust::revoke(&sha);
+    }
+    match loaded {
         Ok(Some(Err(e))) => return Err(format!("LISP error: {e}\n{:#?}", &s.log[from..])),
         Err(e) => return Err(e.to_string()),
         _ => {}

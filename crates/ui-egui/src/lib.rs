@@ -538,7 +538,7 @@ impl CadApp {
     /// Load a LISP file: its routine runs and may wait for the user (APPLOAD typed or from the
     /// menu runs this way too).
     fn load_lisp(&mut self, name: &str, text: &str) {
-        if let Err(e) = self.session.lisp_load(name, text, false) {
+        if let Err(e) = self.session.lisp_load_interactive(name, text) {
             self.session.echo(e.to_string());
         }
     }

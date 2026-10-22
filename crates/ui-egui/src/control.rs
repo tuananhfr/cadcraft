@@ -290,6 +290,19 @@ fn key_from(name: &str) -> Option<egui::Key> {
 }
 
 pub fn handle(app: &mut CadApp, ctx: &egui::Context, req: &ControlRequest) -> Outcome {
+    if req.params.get("mcpInput").and_then(Value::as_bool) == Some(true) {
+        return cadcraft_engine::lisp::trust::with_mcp_input(|| handle_inner(app, ctx, req));
+    }
+    handle_inner(app, ctx, req)
+}
+
+fn handle_inner(app: &mut CadApp, ctx: &egui::Context, req: &ControlRequest) -> Outcome {
+    if cadcraft_engine::lisp::trust::mcp_input()
+        && app.session.lisp_review_pending()
+        && matches!(req.method.as_str(), "cmdline.input" | "cmdline.script" | "cmdline.key" | "ui.pointer")
+    {
+        return err("Only the user can answer APPLOADTRUST");
+    }
     app.command_context = ctx.clone();
     let p = &req.params;
     let s = |k: &str| p.get(k).and_then(Value::as_str);
@@ -580,6 +593,31 @@ pub fn save_screenshot(image: &egui::ColorImage, path: Option<&str>) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mcp_control_cannot_answer_lisp_review_or_approve_from_script() {
+        let mut app = CadApp::new(cadcraft_engine::Session::new(), crate::Services::default());
+        let ctx = egui::Context::default();
+        let text = "(setq remote_review 801)";
+        let sha = cadcraft_engine::lisp::trust::source_sha(text);
+        app.session.lisp_load_interactive("remote-review.lsp", text).unwrap();
+        for method in ["cmdline.input", "cmdline.script", "cmdline.key", "ui.pointer"] {
+            let (request, _) = ControlRequest::new(method, json!({"mcpInput": true, "text": "A", "key": "enter"}));
+            let Outcome::Done(reply) = handle(&mut app, &ctx, &request) else { panic!("unexpected screenshot") };
+            assert_eq!(reply["ok"], false, "{reply}");
+            assert!(reply["error"].as_str().unwrap().contains("Only the user"));
+            assert!(app.session.lisp_review_pending());
+            assert!(app.session.lisp_var("REMOTE_REVIEW").is_nil());
+        }
+        app.session.cancel();
+        let code = format!("lisptrust {}", json!({"action": "approve", "sha256": sha}));
+        let (request, _) = ControlRequest::new("cmdline.script", json!({"mcpInput": true, "text": code}));
+        let Outcome::Done(reply) = handle(&mut app, &ctx, &request) else { panic!("unexpected screenshot") };
+        assert_eq!(reply["ok"], false, "{reply}");
+        assert!(reply["error"].as_str().unwrap().contains("Only the user"));
+        assert!(!cadcraft_engine::lisp::trust::is_approved(&sha));
+        assert!(!cadcraft_engine::lisp::trust::mcp_input());
+    }
 
     #[test]
     fn render_view_fit_finds_offscreen_drawing() {

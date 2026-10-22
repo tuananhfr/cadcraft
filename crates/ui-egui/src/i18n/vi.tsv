@@ -1955,3 +1955,7 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	Drawing autosaved	Bản vẽ đã tự lưu
 	BASELINE_CHANGED	Tệp mẫu cơ sở đã thay đổi
 	AUDIT_LIMIT	Vượt giới hạn kiểm tra tệp mẫu
+	LISP file approvals	Phê duyệt tệp LISP
+	Load unreviewed LISP file {name} (sha256 {sha})?	Tải tệp LISP chưa được duyệt {name} (sha256 {sha})?
+	Always	Luôn luôn
+	{name} was not loaded	Chưa tải tệp {name}

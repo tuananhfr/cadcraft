@@ -5,10 +5,14 @@ use serde_json::{Value, json};
 
 use super::{bad, str_param};
 use crate::lisp::value::{Value as Lv, to_text};
+use crate::prompt::PromptArg;
 use crate::{Accept, CommandSpec, EngineError, Input, Interactive, Prompt, Result, Session, Step};
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
+        CommandSpec::new("lisptrust", "LISP file approvals", run_lisptrust)
+            .params("{action?: list|approve|revoke (default list), sha256?: source digest} → {approved}")
+            .noundo(),
         #[cfg(not(target_arch = "wasm32"))]
         CommandSpec::new("lispsandbox", "LISP write folders", run_lispsandbox)
             .params("{action?: list|add|remove (default list), path?: existing directory} → {roots}")
@@ -18,13 +22,37 @@ pub fn specs() -> Vec<CommandSpec> {
             .alias(&["ap"])
             .params("{path: .lsp file} | {name, data: base64 | text} → {value?, error?}")
             .noundo()
-            .interactive(|_| Ok(Box::new(ApploadM))),
+            .interactive(|_| Ok(Box::new(ApploadM::default()))),
         CommandSpec::new("lisp", "Evaluate LISP", run_lisp)
             .params(
                 "{code: LISP source, inputs?: [answers to get… calls: numbers, strings, [x,y] points]} → {value (printed as prin1), output: lines printed, error?}",
             )
             .noundo(),
     ]
+}
+
+fn run_lisptrust(s: &mut Session, p: &Value) -> Result<Value> {
+    use crate::lisp::trust;
+
+    match str_param(p, "action").unwrap_or("list") {
+        "list" => {}
+        action @ ("approve" | "revoke") => {
+            let sha = str_param(p, "sha256").ok_or_else(|| bad("lisptrust", "`sha256` is required"))?;
+            if sha.len() != 64 || !sha.bytes().all(|c| c.is_ascii_hexdigit()) {
+                return Err(bad("lisptrust", "`sha256` must be 64 hexadecimal digits"));
+            }
+            if action == "approve" {
+                if !trust::approve(sha) {
+                    return Err(bad("lisptrust", "the LISP approval list is full or unavailable"));
+                }
+            } else {
+                trust::revoke(sha);
+            }
+            s.touch();
+        }
+        _ => return Err(bad("lisptrust", "`action` must be list, approve or revoke")),
+    }
+    Ok(json!({"approved": trust::approved()}))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -113,17 +141,51 @@ fn run_lisp(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(report(s, from, r))
 }
 
-/// APPLOAD typed or chosen from the menu: asks for the file by name.
-struct ApploadM;
+/// APPLOAD keeps the reviewed bytes so a file edit cannot change what Yes authorizes.
+#[derive(Default)]
+struct ApploadM {
+    pending: Option<(String, String, String)>,
+}
 
 impl Interactive for ApploadM {
     fn name(&self) -> &'static str {
-        "APPLOAD"
+        if self.pending.is_some() { "APPLOADTRUST" } else { "APPLOAD" }
     }
     fn prompt(&self, _: &Session) -> Prompt {
-        Prompt::new("Enter name of LISP file to load", Accept::TEXT)
+        let Some((name, _, sha)) = &self.pending else { return Prompt::new("Enter name of LISP file to load", Accept::TEXT) };
+        Prompt::tf(
+            "Load unreviewed LISP file {name} (sha256 {sha})?",
+            vec![("name", PromptArg::Text(name.clone())), ("sha", PromptArg::Text(sha.get(..8).unwrap_or(sha).into()))],
+            Accept::TEXT,
+        )
+        .kw(&["Yes", "No", "Always"])
+        .default("No")
     }
     fn input(&mut self, s: &mut Session, i: Input) -> Result<Step> {
+        if let Some((name, text, sha)) = &self.pending {
+            let answer = match &i {
+                Input::Text(answer) | Input::Keyword(answer) => answer.to_ascii_lowercase(),
+                Input::Cancel | Input::Enter => "no".into(),
+                _ => return Ok(Step::Continue),
+            };
+            match answer.as_str() {
+                "y" | "yes" | "a" | "always" => {
+                    // A routine may resume after the MCP call that started it has returned.
+                    if s.lisp_running() {
+                        return Err(EngineError::Other("Only the user can answer APPLOADTRUST".into()));
+                    }
+                    if matches!(answer.as_str(), "a" | "always") && !crate::lisp::trust::approve(sha) {
+                        return Err(bad("appload", "the LISP approval list is full or unavailable"));
+                    }
+                    if let Err(error) = s.lisp_load_once(name, text, false) {
+                        s.echo(error.to_string());
+                    }
+                }
+                "n" | "no" | "" => s.echo(format!("{name} was not loaded")),
+                _ => return Ok(Step::Continue),
+            }
+            return Ok(Step::Done);
+        }
         if matches!(i, Input::Cancel | Input::Enter) {
             return Ok(Step::Cancel);
         }
@@ -134,9 +196,13 @@ impl Interactive for ApploadM {
         }
         match source(&json!({ "path": path })) {
             Ok((name, text)) => {
-                // The routine may wait for the user: it carries on after this command ends.
-                if let Err(e) = s.lisp_load(&name, &text, false) {
-                    s.echo(e.to_string());
+                let sha = crate::lisp::trust::source_sha(&text);
+                if !crate::lisp::trust::is_approved(&sha) {
+                    self.pending = Some((name, text, sha));
+                    return Ok(Step::Continue);
+                }
+                if let Err(error) = s.lisp_load(&name, &text, false) {
+                    s.echo(error.to_string());
                 }
                 Ok(Step::Done)
             }
@@ -146,5 +212,21 @@ impl Interactive for ApploadM {
             }
             Err(e) => Err(e),
         }
+    }
+}
+
+impl Session {
+    /// Dropped/browser files use the same review prompt as typed APPLOAD.
+    pub fn lisp_load_interactive(&mut self, name: &str, text: &str) -> Result<()> {
+        self.cancel();
+        let sha = crate::lisp::trust::source_sha(text);
+        if crate::lisp::trust::is_approved(&sha) {
+            return self.lisp_load(name, text, false).map(|_| ());
+        }
+        self.start("appload")?;
+        if let Some(run) = self.running.as_mut() {
+            run.machine = crate::guard::Guarded::wrap(Box::new(ApploadM { pending: Some((name.to_string(), text.to_string(), sha)) }));
+        }
+        Ok(())
     }
 }

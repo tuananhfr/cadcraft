@@ -17,6 +17,10 @@ use serde_json::{Value, json};
 
 static LOCK: Mutex<()> = Mutex::new(());
 
+fn approve_source(text: &str) {
+    assert!(lisp::trust::approve(&lisp::trust::source_sha(text)));
+}
+
 fn test_lock() -> MutexGuard<'static, ()> {
     LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
@@ -74,6 +78,7 @@ fn font_panel_docks_and_matches_dialog() {
 fn profile_import_never_runs_lisp_ux12() {
     let _guard = test_lock();
     let mut app = attached(MemoryStore::default());
+    approve_source("(setq w10_guard 42)");
     app.session.lisp_load("already-loaded.lsp", "(setq w10_guard 42)", true).unwrap();
     let files = lisp::loaded_files(&app.session);
     assert_eq!(files, ["already-loaded.lsp"]);
@@ -228,7 +233,9 @@ fn moving_unlocked_panel_keeps_locked_neighbour() {
 fn lisp_panel_lists_engine_files_and_starts_appload() {
     let _guard = test_lock();
     let mut app = attached(MemoryStore::default());
+    approve_source("(princ)");
     app.session.lisp_load("zeta.lsp", "(princ)", true).unwrap();
+    approve_source("(princ)");
     app.session.lisp_load("alpha.lsp", "(princ)", true).unwrap();
     assert_eq!(lisp::loaded_files(&app.session), ["alpha.lsp", "zeta.lsp"]);
     app.run("ui.panel.lisp", json!({})).unwrap();
@@ -456,19 +463,25 @@ fn window_menu_has_one_toolsets_entry_and_legacy_toggle_works() {
 fn loaded_files_preserve_case_and_exclude_failed_loads() {
     let _guard = test_lock();
     let mut app = attached(MemoryStore::default());
+    approve_source("(princ)");
     app.session.lisp_load("Tools/MiXeD.LSP", "(princ)", true).unwrap();
+    approve_source("(");
     assert!(app.session.lisp_load("SyntaxError.LSP", "(", true).is_err());
+    approve_source("(/ 1 0)");
     assert!(matches!(app.session.lisp_load("RuntimeError.LSP", "(/ 1 0)", true).unwrap(), Some(Err(_))));
     assert_eq!(lisp::loaded_files(&app.session), ["MiXeD.LSP"]);
+    approve_source("(getstring \"Value: \")");
     assert!(app.session.lisp_load("Later.LSP", "(getstring \"Value: \")", false).unwrap().is_none());
     assert_eq!(lisp::loaded_files(&app.session), ["MiXeD.LSP"], "waiting is not success");
     app.session.input(cadcraft_engine::Input::Text("done".into())).unwrap();
     assert_eq!(lisp::loaded_files(&app.session), ["Later.LSP", "MiXeD.LSP"]);
+    approve_source("(getstring \"Value: \")");
     assert!(app.session.lisp_load("Cancelled.LSP", "(getstring \"Value: \")", false).unwrap().is_none());
     assert_eq!(lisp::loaded_files(&app.session), ["Later.LSP", "MiXeD.LSP"], "a previous result cannot complete this pending load");
     app.session.lisp_abort("Function cancelled");
     assert_eq!(lisp::loaded_files(&app.session), ["Later.LSP", "MiXeD.LSP"]);
     app.session.lisp_eval("(defun *error* (msg) (getstring \"Handle: \"))", false, true, Vec::new()).unwrap();
+    approve_source("(/ 1 0)");
     app.session.lisp_load("HandledError.LSP", "(/ 1 0)", false).unwrap();
     app.session.input(cadcraft_engine::Input::Text("handled".into())).unwrap();
     assert_eq!(lisp::loaded_files(&app.session), ["Later.LSP", "MiXeD.LSP"]);
@@ -490,6 +503,7 @@ fn lisp_load_success_echo_follows_trailing_output() {
         ("Deferred.LSP", "(getstring \"Value: \") (princ \"deferred trailing\")", "deferred trailing", true),
     ] {
         let before = app.session.log.len();
+        approve_source(source);
         let result = app.session.lisp_load(name, source, false).unwrap();
         if pending {
             assert!(result.is_none());
@@ -513,6 +527,7 @@ fn lisp_load_button_stays_visible_with_many_files() {
     let _guard = test_lock();
     let mut app = attached(MemoryStore::default());
     for index in 0..64 {
+        approve_source("(princ)");
         app.session.lisp_load(&format!("Application-{index:02}.LSP"), "(princ)", true).unwrap();
     }
     app.run("ui.panel.lisp", json!({})).unwrap();

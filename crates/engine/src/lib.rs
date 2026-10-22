@@ -870,6 +870,7 @@ impl Session {
     /// Run a command with JSON parameters (no dialogs). Records undo when the drawing changes.
     pub fn execute(&mut self, id: &str, params: &Value) -> Result<Value> {
         let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
+        lisp::trust::check_command(self, spec.id, params)?;
         (spec.enabled)(self).map_err(|m| EngineError::Disabled(spec.id.into(), m))?;
         if let Some(why) = cmd::blocks::bedit::refused_in_editor(self, spec.id) {
             return Err(EngineError::Disabled(spec.id.into(), why));
@@ -936,6 +937,7 @@ impl Session {
 
     /// Start a command by name or alias as if typed at the command line.
     pub fn start(&mut self, name: &str) -> Result<()> {
+        lisp::trust::check_input(self)?;
         self.last_polar = None;
         let name = name.trim();
         let (transparent, name) = match name.strip_prefix('\'') {
@@ -975,6 +977,7 @@ impl Session {
                 return Ok(());
             }
         }
+        lisp::trust::check_command(self, spec.id, &Value::Null)?;
         let nested = transparent && spec.transparent && self.running.is_some() && spec.interactive.is_some();
         // Ctrl+Z / U / UNDO while a command's prompt offers its own Undo keyword (LINE, PLINE…)
         // takes back the last segment and keeps the command running, as the keyword does.
@@ -1041,6 +1044,7 @@ impl Session {
     /// command (as in AutoCAD) and points do nothing. A LISP routine waiting in a `get…`
     /// function takes the input instead; one paused in `command` carries on after it.
     pub fn input(&mut self, input: Input) -> Result<()> {
+        lisp::trust::check_input(self)?;
         if self.lisp_input(input.clone()) {
             return Ok(());
         }
@@ -1209,6 +1213,7 @@ impl Session {
         let base = if matches!(input, Some(Input::Point(_))) { self.current_prompt().and_then(|p| p.base) } else { None };
         let Some(mut run) = self.running.take() else { return Ok(()) };
         let step = match input {
+            Some(Input::Cancel) if run.machine.name() == "APPLOADTRUST" => run.machine.input(self, Input::Cancel),
             Some(Input::Cancel) => Ok(Step::Cancel),
             Some(i) => {
                 if let Input::Point(p) = &i {
@@ -1336,6 +1341,10 @@ impl Session {
     /// Cancel the running command (Esc). With no command, clears the selection. Inside a
     /// transparent command, cancels it and the command it interrupted.
     pub fn cancel(&mut self) {
+        if let Err(error) = lisp::trust::check_input(self) {
+            self.echo(error.to_string());
+            return;
+        }
         self.point_mods.clear();
         // Esc stops a LISP routine waiting for input, and the command it paused in.
         if self.lisp_waiting() {
@@ -1445,6 +1454,7 @@ impl Session {
     /// script line (see [`Session::script`]), so `MOVE L  0,0 5,5` ends the selection with the
     /// second space and `ERASE L ` with the trailing one. Input after the command ends is ignored.
     pub fn cmdline(&mut self, text: &str) -> Result<()> {
+        lisp::trust::check_input(self)?;
         let t = text.trim_end_matches(['\r', '\n']);
         // The command line types spaces literally at free-text prompts: the line is one input.
         if self.current_prompt().is_some_and(|p| p.accept.text && !p.accept.point && !p.accept.number) {
@@ -1465,6 +1475,7 @@ impl Session {
         let mut rest = line;
         let mut first = true;
         loop {
+            lisp::trust::check_input(self)?;
             if self.running.is_none() {
                 if !script && !first {
                     return Ok(());

@@ -74,6 +74,7 @@ pub const EXECUTE_IDS: &[&str] = &["appload", "load", "lisp", "script", "vbarun"
 
 // Read or write files outside the open drawing, or hand it to a device or another app.
 pub const FILE_IDS: &[&str] = &[
+    "lisptrust",
     "open",
     "qsave",
     "saveas",
@@ -111,6 +112,7 @@ pub const FILE_IDS: &[&str] = &[
 pub const EDIT_IDS: &[&str] = &["undo", "u", "redo", "mredo", "bsave", "bsaveas", "bclose", "layout.set", "ubplot.approve"];
 
 pub const LISP_IDS: &[&str] = &[
+    "lisptrust",
     "appload",
     "load",
     "lisp",

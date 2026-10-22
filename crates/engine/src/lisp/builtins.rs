@@ -1222,7 +1222,10 @@ fn load(ctx: &mut Ctx<'_>, a: Vec<Value>) -> Result<Flow, LispError> {
     let name = string(&a[0])?.to_string();
     let text = super::load_source(ctx.s, &name);
     match text {
-        Some(t) => Ok(Flow::Forms(read::read_all(&t)?)),
+        Some(t) => {
+            super::trust::check_source(&name, &t).map_err(|error| LispError::new(error.to_string()))?;
+            Ok(Flow::Forms(read::read_all(&t)?))
+        }
         None => match a.get(1) {
             Some(v) => Ok(Flow::Value(v.clone())),
             None => Err(LispError::new(format!("LOAD failed: \"{name}\""))),
