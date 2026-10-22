@@ -45,3 +45,11 @@ This branch (`tuananhfr`) is UbotCAD, the UbotBuild build of [CADCraft](https://
 ## V2.2 GĐ1A
 
 - UBPLOT selection follows AutoCAD: Shift removes, Enter finishes, Esc cancels; this replaces the spec’s “Ctrl add/remove, ESC finish”.
+
+## V3.1 i18n và registry
+
+- Added Tiếng Việt with saved locale selection, live switching, U-F ribbon terminology and glossary-checked translations. Ukrainian and Vietnamese are required for UI catalogs; Vietnamese also covers discovered engine prompts. The catalog includes Quick Plot and 31 remaining ribbon labels (1,831 rows total); native review pending (user/LPC).
+- Registry metadata exposes stable namespaced IDs, label keys, contexts, platform availability and version. Legacy command IDs remain accepted; dispatch/control results carry outcome codes. Programmatic calls retain their JSON behavior.
+- Command Palette shares accent-insensitive Vietnamese/English/alias search with Command Reference, Quick Access and Customize. Vietnamese/Latin-1 normalization and IME guards protect typing; desktop Ctrl+Shift+P opens the palette, while web uses the UI without that reserved shortcut.
+- Added temporary qps pseudo-localization and a seven-screen Vietnamese catalog-text regression at 1366×768, including Quick Plot. Plot translates the built-in Model label while preserving user layout names. Engine history, diagnostics and CLI/MCP output remain English.
+- T13 source work is complete; native/wasm tests, build gates, browser visual QA (including 200% zoom), desktop smoke and native terminology/IME review remain with the lead. No execution pass is claimed here.

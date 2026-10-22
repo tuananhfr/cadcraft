@@ -1003,9 +1003,12 @@ fn plot(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Action {
         .show(ctx, |ui| {
             egui::Grid::new("plot_target").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
                 ui.label(crate::tl!("Layout"));
-                egui::ComboBox::from_id_salt("plot_layout").selected_text(st.target.as_str()).width(190.0).show_ui(ui, |ui| {
+                // Model is a built-in space label; named layouts must retain the user's spelling.
+                let target_label = if model { crate::tl!("Model") } else { st.target.as_str() };
+                egui::ComboBox::from_id_salt("plot_layout").selected_text(target_label).width(190.0).show_ui(ui, |ui| {
                     for n in &targets {
-                        if ui.selectable_label(*n == st.target, n).clicked() && *n != st.target {
+                        let label = if n == "Model" { crate::tl!("Model") } else { n.as_str() };
+                        if ui.selectable_label(*n == st.target, label).clicked() && *n != st.target {
                             st.page = plot_page(d, n);
                             st.target = n.clone();
                         }

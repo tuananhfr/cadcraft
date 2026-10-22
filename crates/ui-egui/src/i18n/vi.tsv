@@ -1820,3 +1820,36 @@ ribbon	Output	Xuất bản
 	{n} sheets	{n} tờ
 	{sheet} · {order}	{sheet} · {order}
 	· {b} blocked · {w} warnings	· {b} bị chặn · {w} cảnh báo
+
+# Batch 13: remaining catalog rows.
+ribbon	Alignment	Tuyến
+ribbon	Annotation	Chú thích
+ribbon	Annotation Scaling	Tỉ lệ chú thích
+ribbon	Base Maps	Bản đồ nền
+ribbon	Checks	Kiểm tra
+ribbon	Cleanup	Dọn dẹp
+ribbon	Clipboard	Bộ nhớ tạm
+ribbon	Constraints	Ràng buộc
+ribbon	Data	Dữ liệu
+ribbon	Dimensions	Kích thước
+ribbon	Edit Dimension	Sửa kích thước
+ribbon	Layout Viewports	Khung nhìn bố cục
+ribbon	Leaders	Đường ghi chú
+ribbon	Manage	Quản lý
+ribbon	Markup	Đánh dấu
+ribbon	Navigate	Điều hướng
+ribbon	Page	Trang in
+ribbon	Planning and Survey	Quy hoạch và khảo sát
+ribbon	Quantities	Khối lượng
+ribbon	Reference	Tham chiếu
+ribbon	Review Markup	Duyệt đánh dấu
+ribbon	Routing	Định tuyến
+ribbon	Schedules	Bảng thống kê
+ribbon	Settings	Cài đặt
+ribbon	Stations	Lý trình
+ribbon	Structural Grid	Lưới trục kết cấu
+ribbon	Symbols	Ký hiệu
+ribbon	Take-off	Bóc khối lượng
+ribbon	Utilities	Tiện ích
+ribbon	Visibility	Hiện/ẩn
+ribbon	Walls and Openings	Tường và lỗ mở

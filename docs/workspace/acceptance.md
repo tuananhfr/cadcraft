@@ -38,6 +38,31 @@ Test paths are under `crates/ui-egui/tests/`; each reference is `test_file::test
 
 T3 Customize keyboard routing lands separately and is not implemented in this checkout: its agreed behavior sends Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y to layout history even with a focused Customize page button, lets a focused text field retain the keys, and blocks other shortcuts while a Customize widget has focus. Integration and lead verification remain pending.
 
+## V3.1 GĐ1B: registry, search and Vietnamese source inventory
+
+2026-10-22 · G1B-T13 / WP01. The identifiers below refer to UX/Workspace V3.1, independently
+of the V2.1 cases above (for example, V3.1 UX10 is localization, not tenant isolation).
+These are source assertions only: no T13 test run, native/wasm gate, trunk build, visual QA,
+desktop smoke or native terminology review was performed by this worker. All cases remain
+partial until the lead records execution evidence.
+
+Unit references below use `src/i18n/tests.rs` unless another path is given.
+
+| V3.1 case | Status | Evidence in source | Still owed |
+|---|---|---|---|
+| UX01 / WP01 Command registry | partial | Engine `tests/command_ids.rs`: `namespaced_ids_are_unique_and_stable`, `resolve_command_accepts_both_forms`, `registry_contexts_status_version`, `command_schema_doc_is_current`; UI dispatch returns outcome codes. | Lead native/wasm gate, schema/control integration verification; authenticated tenant permission enforcement remains deferred. |
+| UX08 Command search | partial | `command_palette::lop_layer_and_la_all_find_layer`, `decomposed_query_finds_layer`, `duong_thang_finds_line`, `fuzzy_and_recent_ranking`, `palette_runs_by_keyboard_and_escape_closes`, `hostile_queries_are_bounded`. The shared index serves palette, Command Reference, QAT and Customize. | Lead gate; browser/native search, keyboard and unsupported-command checks. |
+| UX10 Vietnamese interface | partial | `translations_cover_commands_menus_tools_and_snap_labels`, `every_marked_ui_literal_has_a_translation`, `translations_cover_ribbon_labels_with_context_fallback`, `every_engine_prompt_has_a_vietnamese_translation`, `vietnamese_catalog_follows_the_glossary`, `no_english_catalog_text_in_p0_screens_vi`. Ukrainian and Vietnamese UI coverage is required; only Vietnamese prompts are required. | Lead gate; 1366×768 and 1920×1080 captures, 200% zoom, desktop smoke; native review pending (user/LPC). Dynamic uncatalogued text and engine history/diagnostics remain English. |
+| TC05 Live vi/en switching | partial | `live_vietnamese_switch_preserves_drawing_command_and_saved_choice`, `user_named_ribbon_tab_is_not_translated`: command state, drawing data and user labels survive switching. | Lead test execution and native/browser switching while prompts and dialogs are open. |
+| TC06 Editor typing | partial | `ime_guard::typing_in_text_fields_never_dispatches_alias_tc06`, `vietnamese_in_mtext_editor_does_not_run_alias_h08`; `command_palette::palette_ime_enter_never_runs_a_command`. | Real Telex/VNI composition in MText, Customize, palette and command line on each platform. |
+| H06 Vietnamese font and fallback | partial | `vietnamese_ui_fonts_cover_catalog_when_shown`, `vietnamese_falls_back_to_english_without_a_covering_font`; P0 renders include Start, AUTOCAD_FAMILIAR + LINE, Customize, Fonts, Plot, Command Palette and Quick Plot. Font-dependent checks print a skip reason without a covering font. | Lead run with a covering font and without optional web fonts; native review pending. |
+| H07 Alias and IME command entry | partial | `ime_guard::ime_composition_never_dispatches_alias`, `ime_enter_during_composition_never_repeats_last_command`, `typed_aliases_dispatch_after_commit_h07`. | Real IME commit/Enter/Space sequences and native/browser QA. |
+| H08 MText and composition | partial | `ime_guard::vietnamese_in_mtext_editor_does_not_run_alias_h08`, `typing_in_text_fields_never_dispatches_alias_tc06`; Vietnamese/Latin-1 NFC input normalization tests. | Real Telex/VNI editing, caret and composed/decomposed text round-trip evidence. |
+
+`pseudo_loc::pseudo_keeps_placeholders_and_expands`, `pseudo_is_not_saved_and_hides_from_picker`
+and `pseudo_ribbon_and_dialogs_fit_1366x768` remain in place. qps layout assertions and the
+Vietnamese painted-text check do not replace browser overflow/contrast or native language review.
+
 ## Measured
 
 | Metric | Samples / SLO | Result |

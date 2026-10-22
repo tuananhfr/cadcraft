@@ -1,7 +1,7 @@
 # Interface languages
 
 Choose **Edit → Interface Language** and select **Auto (system language)**, **English**,
-**Українська**, **Português (Brasil)**, **Deutsch**, **Español**, **Čeština** (Czech), **Русский**, **Français**, **简体中文**, **Italiano**, **한국어** (Korean), **Svenska** (Swedish), or **العربية** (Arabic).
+**Українська**, **Português (Brasil)**, **Deutsch**, **Español**, **Čeština** (Czech), **Русский**, **Français**, **简体中文**, **Italiano**, **한국어** (Korean), **Svenska** (Swedish), **العربية** (Arabic), or **Tiếng Việt** (Vietnamese).
 The interface updates without restarting, including the native macOS menus.
 The choice is saved with the other interface preferences (`cadcraft.prefs`, beside the theme):
 eframe storage on the desktop, browser local storage on the web. Installations without a saved
@@ -11,7 +11,7 @@ Auto uses the first supported language in the operating system's preferred local
 browser's `navigator.languages` on the web. BCP 47 and POSIX tags select their primary language:
 `uk-UA` → `uk`, `de_AT.UTF-8` → `de`, `es-MX` → `es`, `pt_BR.UTF-8` → `pt-BR`,
 `cs-CZ` and `cs_CZ.UTF-8` → `cs`, `it-IT` and `it_CH.UTF-8` → `it`, `ko-KR` and `ko_KR.UTF-8` → `ko`,
-`sv-SE`, `sv-FI` and `sv_SE.UTF-8` → `sv`. Unsupported languages fall back to English.
+`sv-SE`, `sv-FI` and `sv_SE.UTF-8` → `sv`; `vi-VN` and `vi_VN.UTF-8` → `vi`. Unsupported languages fall back to English.
 Set `CADCRAFT_LOCALE=cs-CZ` to override the desktop's locale for a launch.
 An explicit saved language choice takes precedence over that override.
 
@@ -22,7 +22,7 @@ Automation can select the language through the existing control channel:
 ```
 
 The `ui.set` method also accepts `{"interfaceLanguage":"cs"}`. Supported values are `auto`,
-`en`, `uk`, `pt-BR`, `de`, `es`, `cs`, `ru`, `fr`, `zh`, `it`, `ko`, `sv`, and `ar`; invalid values are rejected without changing the current
+`en`, `uk`, `pt-BR`, `de`, `es`, `cs`, `ru`, `fr`, `zh`, `it`, `ko`, `sv`, `ar`, and `vi`; invalid values are rejected without changing the current
 selection. Resetting palettes keeps the language choice.
 
 ## Translation coverage
@@ -30,8 +30,29 @@ selection. Resetting palettes keeps the language choice.
 The catalogs cover command and menu labels, tool groups and tooltips, the Start page,
 file and model-space tabs, status controls, object snaps, drafting prompts, property labels,
 dialogs, and the About window's controls. The command reference can be searched by English
-command ID, English label, or translated label. Ukrainian has enforced coverage;
-missing entries in the other catalogs are reported by tests and fall back to English.
+command ID, alias, English label, or translated label. Ukrainian and Vietnamese have enforced
+coverage for commands, menus, tool sets, snaps, marked UI literals and preset ribbon labels
+(with ordinary-context fallback). Vietnamese additionally requires every discovered engine prompt;
+Ukrainian prompt coverage is not enforced. Other catalogs report gaps and fall back to English.
+
+Vietnamese has **1,831 catalog rows**, including the U-F ribbon terminology, Quick Plot and
+command prompt templates. Translations follow `vi_glossary.tsv`; **native review pending** by
+the user/LPC. The P0 regression checks catalog-backed painted text at 1366×768 on the Start
+page, AUTOCAD_FAMILIAR with LINE running, Customize, Fonts, Plot, Command Palette and Quick Plot.
+It excludes drawing names, command identifiers and English input keywords; dynamic strings
+without a catalog key remain outside that check. Native/wasm gates, browser layout QA and
+desktop smoke for this milestone are pending lead execution.
+
+Engine prompts use `Prompt::tf` / `PromptTemplate` for named arguments; the UI translates
+the template and preserves inserted user values. Literal prompts use the same catalog.
+Command registry metadata and stable namespaced IDs are documented in
+[command-ids.md](workspace/command-ids.md) and [command.schema.json](workspace/command.schema.json);
+legacy IDs remain accepted and dispatch reports outcome codes.
+
+Search accepts Vietnamese without accents (`lop`), English (`layer`) and aliases (`LA`),
+with bounded fuzzy matching. Input normalization composes Vietnamese and Latin-1 combinations;
+it is not a full Unicode NFC implementation. IME composition suppresses drafting aliases and
+empty-Enter repetition; platform Telex/VNI acceptance still needs native/browser QA.
 
 Czech has 1,202 catalog rows, covering the reference catalog and every marked UI
 literal, including Options. Four `menu` entries distinguish menu headings from object/command
@@ -78,6 +99,14 @@ catalog, the saved `ko` preference is kept but the interface falls back to Engli
 command reports that a font is needed, and the picker uses the readable label **Korean** wherever
 Hangul can't be shown. This change does not fix platform IME issues or localize engine output.
 
+Vietnamese requires a system UI font with Vietnamese glyphs on desktop, or optional Noto Sans
+from `CRAFT_FONTS_DIR` on the web. No new font assets are bundled by the translation. Without
+coverage, the saved `vi` choice is retained and the interface displays English with a reason.
+
+For layout checks, `ui.language {"lang":"qps"}`, `?lang=qps` on the web, or
+`CADCRAFT_LOCALE=qps` on desktop enables pseudo-localization. It expands display text while
+preserving placeholders and ellipses, stays out of the language picker, and is never saved.
+
 ## Adding translations
 
 The implementation follows the display-time catalog pattern used by
@@ -88,11 +117,12 @@ The implementation follows the display-time catalog pattern used by
 - `crates/ui-egui/src/i18n/*.tsv` are UTF-8 with three tab-separated columns:
   `context`, `English source`, and `translation`. Ordinary labels have an empty context.
   Optional `menu` entries translate menu headings via `i18n::menu` / `i18n::tr_menu`;
-  without one, the ordinary translation is used.
+  without one, the ordinary translation is used. `ribbon` entries use `i18n::ribbon` /
+  `i18n::tr_ribbon` with the same fallback; Vietnamese ribbon rows must use glossary terms.
 - `@plural` entries hold the language's forms for integer counts: Ukrainian `one|few|many`,
   German and Spanish `one|other`, Brazilian Portuguese `one|other` (0 and 1 are `one`),
   Czech `one|few|other` (1; 2–4; everything else, including 0, 11, 21 and 22).
-  Korean has one form (`other`) for all integer counts.
+  Korean and Vietnamese have one form (`other`) for all integer counts.
   The API takes `u64`, so fractional counts are not accepted.
 - Register a new catalog in `i18n::LANGUAGES`, add its preference variant and code/name,
   and set its integer plural rule and form count on the `Language` row.
@@ -102,9 +132,9 @@ The implementation follows the display-time catalog pattern used by
 - Windows retain explicit IDs based on their English source, and tool groups retain their
   source names as keys, so switching languages preserves their state.
 - Add a translation attribution row in `ATTRIBUTION.md`, update the language lists, and add
-  locale, plural, font-glyph and live-switch tests. Add the catalog to `REPORTED` in
-  `i18n/tests.rs`: only Ukrainian, the reference translation, is in `REQUIRED`, so adding a
-  command needs a row in one language, not in all of them.
+  locale, plural, font-glyph and live-switch tests. Add other catalogs to `REPORTED` in
+  `i18n/tests.rs`. `REQUIRED = ["uk", "vi"]`: new UI labels need both rows; new engine
+  prompts need a Vietnamese row. Keep template placeholders and English input keywords unchanged.
 - Catalogs are embedded and parsed once. Missing or malformed rows cannot crash the app;
   tests reject invalid rows, duplicate keys, changed placeholders, and mismatched ellipses.
 - `cargo test -p cadcraft-ui-egui i18n` checks menu/command/tool/snap coverage, every marked

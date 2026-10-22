@@ -80,11 +80,9 @@ fn glossary_is_valid_and_carries_the_uf_tab_table() {
     }
 }
 
-/// Ukrainian is the reference translation and must cover everything. Other languages fall back
-/// to English for what they don't cover yet; their gaps are reported, not enforced, so adding a
-/// command doesn't require a row in every language.
-const REQUIRED: &[&str] = &["uk"];
-const REPORTED: &[&str] = &["pt-BR", "de", "es", "cs", "ru", "fr", "zh", "it", "ko", "sv", "ar", "vi"];
+// Both reference catalogs must cover UI labels; engine prompts are required only in Vietnamese.
+const REQUIRED: &[&str] = &["uk", "vi"];
+const REPORTED: &[&str] = &["pt-BR", "de", "es", "cs", "ru", "fr", "zh", "it", "ko", "sv", "ar"];
 
 fn check(language: &str, what: &str, missing: Vec<String>) {
     if REQUIRED.contains(&language) {
@@ -100,79 +98,6 @@ fn translations_cover_commands_menus_tools_and_snap_labels() {
         check(language, "translations", missing_commands_menus_tools_and_snap_labels(language));
     }
 }
-
-#[derive(Clone, Copy, Debug)]
-enum Section {
-    Menus(&'static str),
-    UiCommands,
-    ToolSets,
-    Snap,
-    Literals(&'static str),
-    Prompts,
-    Ribbon,
-}
-
-const VI_DONE: &[Section] = &[
-    Section::Menus("File"),
-    Section::Menus("Edit"),
-    Section::Menus("View"),
-    Section::Menus("Insert"),
-    Section::Menus("Format"),
-    Section::Menus("Tools"),
-    Section::Menus("Draw"),
-    Section::Menus("Dimension"),
-    Section::Menus("Modify"),
-    Section::Menus("Window"),
-    Section::Menus("Help"),
-    Section::Menus(""),
-    Section::UiCommands,
-    Section::ToolSets,
-    Section::Snap,
-    Section::Literals("xrefs.rs"),
-    Section::Literals("canvas.rs"),
-    Section::Literals("chrome.rs"),
-    Section::Literals("cmdline.rs"),
-    Section::Literals("credits.rs"),
-    Section::Literals("palettes/quickcalc.rs"),
-    Section::Literals("palettes/patterns.rs"),
-    Section::Literals("dialogs.rs"),
-    Section::Literals("ubplot/dialog.rs"),
-    Section::Literals("palette/mod.rs"),
-    Section::Literals("managers.rs"),
-    Section::Literals("managers/battman.rs"),
-    Section::Literals("autosave.rs"),
-    Section::Literals("fontmgr.rs"),
-    Section::Literals("viewcube.rs"),
-    Section::Literals("hatchdlg.rs"),
-    Section::Literals("mtext_editor.rs"),
-    Section::Literals("layers.rs"),
-    Section::Literals("canvas/compare.rs"),
-    Section::Literals("canvas/blockedit.rs"),
-    Section::Literals("bedit.rs"),
-    Section::Literals("palettes.rs"),
-    Section::Literals("parametric.rs"),
-    Section::Literals("quick.rs"),
-    Section::Literals("vpscale.rs"),
-    Section::Literals("options/dialog.rs"),
-    Section::Literals("wsprofile/picker.rs"),
-    Section::Literals("wsprofile/mod.rs"),
-    Section::Literals("wsprofile/sync.rs"),
-    Section::Literals("wsprofile/conflict.rs"),
-    Section::Literals("wsprofile/tab_conflict.rs"),
-    Section::Literals("shortcuts.rs"),
-    Section::Literals("quick_access.rs"),
-    Section::Literals("ribbon/mod.rs"),
-    Section::Literals("ribbon/render.rs"),
-    Section::Literals("customize/mod.rs"),
-    Section::Literals("customize/ribbon_tab.rs"),
-    Section::Literals("customize/toolbars_tab.rs"),
-    Section::Literals("customize/keyboard_tab.rs"),
-    Section::Literals("customize/quick_access_tab.rs"),
-    Section::Literals("toolbars/mod.rs"),
-    Section::Literals("toolbars/render.rs"),
-    Section::Literals("toolbars/menu.rs"),
-    Section::Prompts,
-];
 
 const MARKED_UI_SOURCES: &[(&str, &str)] = &[
     ("xrefs.rs", include_str!("../xrefs.rs")),
@@ -220,105 +145,83 @@ const MARKED_UI_SOURCES: &[(&str, &str)] = &[
     ("toolbars/menu.rs", include_str!("../toolbars/menu.rs")),
 ];
 
-fn menu_tops() -> BTreeSet<&'static str> {
-    std::iter::once("")
-        .chain(crate::menus::MENUS.iter().copied())
-        .chain(cadcraft_engine::command_specs().iter().filter_map(|c| c.menu.first().copied()))
-        .chain(crate::menus::UI_COMMANDS.iter().filter_map(|(_, _, path, _)| path.first().copied()))
-        .collect()
+fn command_label_sources() -> BTreeSet<String> {
+    let mut sources: BTreeSet<_> = crate::menus::MENUS.iter().map(|name| (*name).to_string()).collect();
+    for command in cadcraft_engine::command_specs() {
+        sources.insert(command.label.to_string());
+        sources.extend(command.menu.iter().map(|name| (*name).to_string()));
+    }
+    for (_, label, path, _) in crate::menus::UI_COMMANDS {
+        sources.insert((*label).to_string());
+        sources.extend(path.iter().map(|name| (*name).to_string()));
+    }
+    for groups in [crate::palettes::DRAFTING, crate::palettes::MODELING] {
+        for (name, large, small) in groups {
+            sources.insert((*name).to_string());
+            sources.extend(large.iter().chain(*small).map(|(_, _, label)| (*label).to_string()));
+        }
+    }
+    sources.extend(cadcraft_engine::snap::mode::ALL.iter().map(|(_, name)| (*name).to_string()));
+    sources.remove("");
+    sources
 }
 
-fn section_sources(section: Section) -> BTreeSet<String> {
+fn marked_ui_sources(file: &str, source: &str) -> BTreeSet<String> {
     let mut sources = BTreeSet::new();
-    match section {
-        Section::Menus(top) => {
-            sources.extend(crate::menus::MENUS.iter().filter(|name| **name == top).map(|name| (*name).to_string()));
-            for c in cadcraft_engine::command_specs() {
-                if c.menu.first().copied().unwrap_or_default() == top {
-                    sources.insert(c.label.to_string());
-                    sources.extend(c.menu.iter().map(|name| (*name).to_string()));
-                }
-            }
-            for (_, label, path, _) in crate::menus::UI_COMMANDS {
-                if path.first().copied().unwrap_or_default() == top {
-                    sources.insert((*label).to_string());
-                    sources.extend(path.iter().map(|name| (*name).to_string()));
-                }
-            }
-        }
-        Section::UiCommands => {
-            for (_, label, path, _) in crate::menus::UI_COMMANDS {
-                sources.insert((*label).to_string());
-                sources.extend(path.iter().map(|name| (*name).to_string()));
-            }
-        }
-        Section::ToolSets => {
-            for groups in [crate::palettes::DRAFTING, crate::palettes::MODELING] {
-                for (name, large, small) in groups {
-                    sources.insert((*name).to_string());
-                    sources.extend(large.iter().chain(*small).map(|(_, _, label)| (*label).to_string()));
-                }
-            }
-        }
-        Section::Snap => sources.extend(cadcraft_engine::snap::mode::ALL.iter().map(|(_, name)| (*name).to_string())),
-        Section::Literals(file) => {
-            let (_, source) = MARKED_UI_SOURCES.iter().find(|(name, _)| *name == file).unwrap();
-            for marker in ["crate::tl!(", "crate::tf!("] {
-                for rest in source.split(marker).skip(1) {
-                    // These macros require a quoted literal. Use JSON's string decoding for escapes.
-                    let rest = rest.trim_start();
-                    let mut escape = false;
-                    let end = rest
-                        .char_indices()
-                        .skip(1)
-                        .find_map(|(i, c)| {
-                            if escape {
-                                escape = false;
-                                None
-                            } else if c == '\\' {
-                                escape = true;
-                                None
-                            } else if c == '"' {
-                                Some(i + 1)
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap();
-                    let key: String = serde_json::from_str(&rest[..end]).unwrap();
-                    // Coordinate axes, glyph buttons and product names are not translated.
-                    if !["X", "Y", "B", "UbotCAD"].contains(&key.as_str()) {
-                        sources.insert(key);
+    for marker in ["crate::tl!(", "crate::tf!("] {
+        for rest in source.split(marker).skip(1) {
+            // These macros require a quoted literal. Use JSON's string decoding for escapes.
+            let rest = rest.trim_start();
+            let mut escape = false;
+            let end = rest
+                .char_indices()
+                .skip(1)
+                .find_map(|(i, c)| {
+                    if escape {
+                        escape = false;
+                        None
+                    } else if c == '\\' {
+                        escape = true;
+                        None
+                    } else if c == '"' {
+                        Some(i + 1)
+                    } else {
+                        None
                     }
-                }
-            }
-            if file == "dialogs.rs" {
-                // Unit choices and shared style titles use dynamic translation to retain their source values.
-                sources.extend(
-                    crate::dialogs::LENGTH_TYPES
-                        .iter()
-                        .chain(&crate::dialogs::ANGLE_TYPES)
-                        .map(|(_, label)| *label)
-                        .chain(crate::dialogs::INSERTION_UNITS)
-                        .chain(["Text Style", "Table Style", "Multileader Style"])
-                        .map(str::to_string),
-                );
-            }
-        }
-        Section::Prompts => sources.extend(engine_prompt_keys()),
-        Section::Ribbon => {
-            for id in crate::wsprofile::presets::PRESET_IDS {
-                let profile = crate::wsprofile::presets::preset(id).unwrap();
-                for tab in profile.layout.ribbon.tabs {
-                    sources.insert(tab.label);
-                    sources.extend(tab.groups.into_iter().map(|group| group.label));
-                }
+                })
+                .unwrap();
+            let key: String = serde_json::from_str(&rest[..end]).unwrap();
+            // Coordinate axes, glyph buttons and product names are not translated.
+            if !["X", "Y", "B", "UbotCAD"].contains(&key.as_str()) {
+                sources.insert(key);
             }
         }
     }
-    if !matches!(section, Section::Literals(_)) {
-        sources.remove("");
+    if file == "dialogs.rs" {
+        // Unit choices and shared style titles use dynamic translation to retain their source values.
+        sources.extend(
+            crate::dialogs::LENGTH_TYPES
+                .iter()
+                .chain(&crate::dialogs::ANGLE_TYPES)
+                .map(|(_, label)| *label)
+                .chain(crate::dialogs::INSERTION_UNITS)
+                .chain(["Text Style", "Table Style", "Multileader Style"])
+                .map(str::to_string),
+        );
     }
+    sources
+}
+
+fn ribbon_label_sources() -> BTreeSet<String> {
+    let mut sources = BTreeSet::new();
+    for id in crate::wsprofile::presets::PRESET_IDS {
+        let profile = crate::wsprofile::presets::preset(id).unwrap();
+        for tab in profile.layout.ribbon.tabs {
+            sources.insert(tab.label);
+            sources.extend(tab.groups.into_iter().map(|group| group.label));
+        }
+    }
+    sources.remove("");
     sources
 }
 
@@ -401,8 +304,7 @@ fn prompt_source_keys_balance_arguments_and_skip_placeholder_only_templates() {
 
 #[test]
 fn every_engine_prompt_has_a_vietnamese_translation() {
-    assert!(VI_DONE.iter().any(|section| matches!(section, Section::Prompts)));
-    let keys = section_sources(Section::Prompts);
+    let keys = engine_prompt_keys();
     eprintln!("Vietnamese engine prompt coverage: {} keys", keys.len());
     assert!(keys.contains("Specify first point"));
     let catalog = catalog("vi").unwrap();
@@ -412,11 +314,7 @@ fn every_engine_prompt_has_a_vietnamese_translation() {
 
 fn missing_commands_menus_tools_and_snap_labels(language: &str) -> Vec<String> {
     let catalog = catalog(language).unwrap();
-    let mut sources = BTreeSet::new();
-    for section in menu_tops().into_iter().map(Section::Menus).chain([Section::UiCommands, Section::ToolSets, Section::Snap]) {
-        sources.extend(section_sources(section));
-    }
-    sources.into_iter().filter(|s| !catalog.contains_key(&("", s.as_str()))).collect()
+    command_label_sources().into_iter().filter(|key| !catalog.contains_key(&("", key.as_str()))).collect()
 }
 
 const WIDGET_LITERAL_FILES: &[(&str, &str)] = &[
@@ -563,84 +461,40 @@ fn missing_marked_ui_literals(language: &str) -> BTreeSet<String> {
     let catalog = catalog(language).unwrap();
     MARKED_UI_SOURCES
         .iter()
-        .flat_map(|(file, _)| section_sources(Section::Literals(file)))
+        .flat_map(|(file, source)| marked_ui_sources(file, source))
         .filter(|key| !catalog.contains_key(&("", key.as_str())))
         .collect()
 }
 
-fn missing_vi_section(section: Section) -> BTreeSet<String> {
-    let catalog = catalog("vi").unwrap();
-    let context = if matches!(section, Section::Ribbon) { "ribbon" } else { "" };
-    section_sources(section)
-        .into_iter()
-        .filter(|key| !catalog.contains_key(&(context, key.as_str())) && !catalog.contains_key(&("", key.as_str())))
-        .collect()
-}
-
 #[test]
-fn section_sources_keep_menu_and_literal_boundaries() {
-    let file = section_sources(Section::Menus("File"));
-    assert!(file.contains("File"));
-    assert!(file.contains("New Drawing..."));
-    assert!(!file.contains("Line"));
-    assert!(!file.contains("Drawing as bytes"));
-    let unplaced = section_sources(Section::Menus(""));
-    assert!(unplaced.contains("Drawing as bytes"));
-    assert!(!unplaced.contains("New Drawing..."));
-    assert!(!unplaced.contains(""));
-    assert!(section_sources(Section::Menus("Tools")).contains("Geometric Constraints"));
-    assert!(section_sources(Section::Menus("Tools")).contains("Coincident"));
-    assert!(section_sources(Section::UiCommands).contains("Calibrate 3D Mouse"));
-    assert!(section_sources(Section::ToolSets).contains("Primitives"));
-    assert!(section_sources(Section::Snap).contains("Endpoint"));
-    let xrefs = section_sources(Section::Literals("xrefs.rs"));
+fn translation_sources_include_all_ui_surfaces() {
+    let sources = command_label_sources();
+    for key in
+        ["File", "New Drawing...", "Line", "Drawing as bytes", "Geometric Constraints", "Coincident", "Calibrate 3D Mouse", "Primitives", "Endpoint"]
+    {
+        assert!(sources.contains(key), "missing translation source: {key}");
+    }
+    assert!(!sources.contains(""));
+    let (_, source) = MARKED_UI_SOURCES.iter().find(|(name, _)| *name == "xrefs.rs").unwrap();
+    let xrefs = marked_ui_sources("xrefs.rs", source);
     assert!(xrefs.contains("Attach DWG..."));
     assert!(xrefs.contains("References: {n}"));
     assert!(!xrefs.contains("New Drawing..."));
-    assert!(section_sources(Section::Ribbon).contains("Home"));
-    assert!(!missing_vi_section(Section::Ribbon).contains("Home"));
 }
 
 #[test]
-fn vietnamese_sections_are_complete() {
-    let mut missing = Vec::new();
-    for section in VI_DONE {
-        let keys = missing_vi_section(*section);
-        if !keys.is_empty() {
-            missing.push(format!("{section:?}: {keys:?}"));
-        }
-    }
-    assert!(missing.is_empty(), "missing Vietnamese section translations:\n{}", missing.join("\n"));
-}
-
-#[test]
-#[ignore]
-fn dump_missing_vi() {
-    let Some(directory) = std::env::var_os("I18N_DUMP_DIR") else {
-        eprintln!("Vietnamese catalog dump skipped: I18N_DUMP_DIR is unset");
-        return;
-    };
-    let directory = std::path::PathBuf::from(directory);
-    std::fs::create_dir_all(&directory).unwrap();
-    let sections = menu_tops()
-        .into_iter()
-        .map(Section::Menus)
-        .chain([Section::UiCommands, Section::ToolSets, Section::Snap])
-        .chain(MARKED_UI_SOURCES.iter().map(|(file, _)| Section::Literals(file)))
-        .chain([Section::Prompts, Section::Ribbon]);
-    for section in sections {
-        let name = match section {
-            Section::Menus("") => "menus-unplaced".to_string(),
-            Section::Menus(top) => format!("menus-{}", top.to_ascii_lowercase()),
-            Section::UiCommands => "ui-commands".to_string(),
-            Section::ToolSets => "tool-sets".to_string(),
-            Section::Snap => "snap".to_string(),
-            Section::Literals(file) => format!("literals-{}", file.replace(['/', '\\', '.'], "-")),
-            Section::Prompts => "prompts".to_string(),
-            Section::Ribbon => "ribbon".to_string(),
-        };
-        let rows: String = missing_vi_section(section).into_iter().map(|key| format!("\t{key}\t\n")).collect();
-        std::fs::write(directory.join(format!("vi-missing-{name}.tsv")), rows).unwrap();
+fn translations_cover_ribbon_labels_with_context_fallback() {
+    let sources = ribbon_label_sources();
+    assert!(sources.contains("Home"));
+    assert!(sources.contains("Output"));
+    for language in REQUIRED.iter().chain(REPORTED) {
+        let catalog = catalog(language).unwrap();
+        let missing = sources
+            .iter()
+            .filter(|key| !catalog.contains_key(&("ribbon", key.as_str())) && !catalog.contains_key(&("", key.as_str())))
+            .cloned()
+            .collect();
+        check(language, "ribbon translations", missing);
     }
 }
 
@@ -804,6 +658,92 @@ fn render(app: &mut CadApp, ctx: &egui::Context) -> String {
         output.textures_delta.clear();
     }
     text
+}
+
+#[test]
+fn no_english_catalog_text_in_p0_screens_vi() {
+    if !crate::theme::can_show("vi") {
+        eprintln!("Vietnamese P0 rendering skipped: no covering UI font; fallback is tested separately");
+        return;
+    }
+    let catalog = catalog("vi").unwrap();
+    let mut leaks = BTreeSet::new();
+    for (screen, dialog, heading) in [
+        ("Start page", None, "Start"),
+        ("LINE", None, "Specify first point"),
+        ("Customize", Some(crate::customize::DIALOG), "Customize Workspace..."),
+        ("Fonts", Some("fonts"), "Fonts"),
+        ("Plot", Some("plot"), "Plot"),
+        ("Command Palette", Some(crate::palette::DIALOG), "Command Palette..."),
+        ("Quick Plot", Some(crate::ubplot::DIALOG), "Quick Plot"),
+    ] {
+        let mut app = CadApp::new(Session::new(), Services::default());
+        app.skip_first_run_picker = true;
+        app.attach_profile_store(Box::new(crate::wsprofile::store::MemoryStore::default()));
+        app.run("new", json!({})).unwrap();
+        app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+        app.run("ui.language", json!({"lang": "vi"})).unwrap();
+        app.ui.in_window_menu = true;
+        app.ui.start_tab = screen == "Start page";
+        app.session.state_mut().unwrap().title = "Bản vẽ kiểm tra".into();
+        if screen == "LINE" {
+            app.start("line");
+        } else if dialog == Some(crate::ubplot::DIALOG) {
+            app.run("ubplot.scan", json!({"mode": "window", "windows": [[[0, 0], [420, 297]]], "scale": "fit"})).unwrap();
+            app.ui.dialog = dialog.map(str::to_string);
+        } else if let Some(dialog) = dialog {
+            let command = match dialog {
+                crate::customize::DIALOG => "ui.customize.open",
+                crate::palette::DIALOG => "ui.palette",
+                other => other,
+            };
+            crate::menus::activate(&mut app, command);
+        }
+        let drawing = app.session.doc().unwrap();
+        // Drawing table names remain user data even when they happen to match a catalog key.
+        let names: BTreeSet<_> = drawing
+            .layers
+            .iter()
+            .map(|entry| entry.name.clone())
+            .chain(drawing.linetypes.iter().map(|entry| entry.name.clone()))
+            .chain(drawing.text_styles.iter().map(|entry| entry.name.clone()))
+            .chain(drawing.dim_styles.iter().map(|entry| entry.name.clone()))
+            .chain(drawing.mleader_styles.iter().map(|entry| entry.name.clone()))
+            .chain(drawing.table_styles.iter().map(|entry| entry.name.clone()))
+            .chain(drawing.layouts.iter().map(|entry| entry.name.clone()))
+            .chain(drawing.blocks.keys().cloned())
+            .chain(std::iter::once(app.session.state().unwrap().title.clone()))
+            .collect();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1366.0, 768.0)).build_ui_state(
+            |ui, app: &mut CadApp| {
+                app.logic(&ui.ctx().clone());
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(5);
+        assert_eq!(h.state().language(), "vi", "{screen}");
+        assert_eq!(h.state().ui.dialog.as_deref(), dialog, "{screen}");
+        if screen == "LINE" {
+            assert_eq!(h.state().session.running.as_ref().map(|command| command.id.as_str()), Some("line"));
+        }
+        let text = painted_text(&h.output().shapes);
+        assert!(text.contains(tr("vi", heading)), "{screen}: missing translated heading {heading}: {text}");
+        for text in text.lines() {
+            let text = text.trim();
+            // Upper-case command IDs and bracketed input keywords retain the engine's spelling.
+            let identifier = text.chars().any(char::is_alphabetic) && text.chars().all(|c| !c.is_alphabetic() || c.is_uppercase());
+            if names.contains(text) || identifier || (text.starts_with('[') && text.ends_with(']')) {
+                continue;
+            }
+            for ((_, key), translation) in catalog {
+                if text == *key && key != translation {
+                    leaks.insert(format!("{screen}: {text}"));
+                }
+            }
+        }
+    }
+    assert!(leaks.is_empty(), "English catalog text in Vietnamese P0 screens:\n{}", leaks.into_iter().collect::<Vec<_>>().join("\n"));
 }
 
 #[test]
