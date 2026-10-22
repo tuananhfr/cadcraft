@@ -19,7 +19,8 @@ fn pseudo_keeps_placeholders_and_expands() {
     assert!(translated.contains("{version}"), "{translated}");
     assert!(translated.chars().count() * 5 >= source.chars().count() * 7, "{translated}");
     assert_ne!(translated, format!("[{source}]"));
-    assert!(std::ptr::eq(translated, i18n::pseudo(&source.to_string())), "cached strings reuse their allocation");
+    let copy = source.to_owned();
+    assert!(std::ptr::eq(translated, i18n::pseudo(&copy)), "cached strings reuse their allocation");
 
     let spaced = i18n::pseudo(" \tOpen {file}... …\r\n");
     assert!(spaced.starts_with(" \t["), "{spaced:?}");
