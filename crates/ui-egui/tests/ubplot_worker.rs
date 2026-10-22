@@ -10,11 +10,12 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant};
 
-use cadcraft_doc::Drawing;
+use cadcraft_doc::{Drawing, EntityKind};
 use cadcraft_engine::Session;
 use cadcraft_engine::cmd::file::{IoHooks, set_io};
-use cadcraft_engine::sheetplan::Sheet;
+use cadcraft_engine::hash::sha256_hex;
 use cadcraft_engine::sheetplan::queue::*;
+use cadcraft_engine::sheetplan::{FrameRegistry, Sheet, SheetStatus};
 use cadcraft_ui_egui::ubplot::worker::{JobPump, JobWorker, WorkerEvent};
 use cadcraft_ui_egui::{CadApp, Services};
 use egui::accesskit::Role;
@@ -46,6 +47,7 @@ impl Drop for TempDir {
 #[derive(Default)]
 struct TestRenderer {
     calls: Mutex<Vec<(ThreadId, String)>>,
+    drawing_hashes: Mutex<Vec<String>>,
     hold: AtomicBool,
     wait_for_deadline: bool,
 }
@@ -53,6 +55,7 @@ struct TestRenderer {
 impl SheetRenderer for TestRenderer {
     fn render(&self, drawing: &Drawing, sheet: &Sheet, budget: &SheetBudget) -> Result<Vec<u8>, RenderFailure> {
         self.calls.lock().unwrap().push((thread::current().id(), sheet.sheet_id.clone()));
+        self.drawing_hashes.lock().unwrap().push(sha256_hex(cadcraft_io::write_dxf(drawing).as_bytes()));
         let started = Instant::now();
         while (self.hold.load(Ordering::Relaxed) || self.wait_for_deadline) && !budget.cancel.load(Ordering::Relaxed) {
             if started.elapsed() > Duration::from_secs(10) {
@@ -74,7 +77,7 @@ impl SheetRenderer for TestRenderer {
 
 fn session(count: usize) -> Session {
     set_io(IoHooks {
-        read: |_, _| Err("no reader in this test".into()),
+        read: |bytes, name| cadcraft_io::read(bytes, name).map_err(|error| error.to_string()),
         write: |drawing, _| Ok(cadcraft_io::write_dxf(drawing).into_bytes()),
         plot: Some(|drawing, space, options| cadcraft_io::plotter::plot(drawing, space, options).map_err(|error| error.to_string())),
     });
@@ -340,4 +343,143 @@ fn typed_jobs_list_keeps_json_reply() {
     assert_eq!(result.as_array().unwrap().len(), 1);
     assert_eq!(result[0]["jobId"], id);
     assert_eq!(result[0]["status"], "QUEUED");
+}
+
+fn enqueue_folder(app: &mut CadApp, dir: &TempDir, close_drawing: bool) -> String {
+    let input = dir.0.join("input");
+    std::fs::create_dir(&input).unwrap();
+    for (name, count) in [("a", 1), ("b", 2)] {
+        let mut drawing = frames::frames_drawing(count);
+        let handles: Vec<_> = drawing.model.iter().map(|entity| entity.handle).collect();
+        for handle in handles {
+            drawing.model.modify(handle, |entity| {
+                if let EntityKind::Insert(insert) = &mut entity.kind {
+                    for attribute in &mut insert.attribs {
+                        if attribute.tag == "SHEET_NO" {
+                            attribute.text.value = format!("{name}-{}", attribute.text.value);
+                        }
+                    }
+                }
+            });
+        }
+        std::fs::write(input.join(format!("{name}.dxf")), cadcraft_io::write(&drawing, "fixture.dxf").unwrap()).unwrap();
+    }
+    let mut registry = FrameRegistry::builtin();
+    let mut template = registry.templates[0].clone();
+    template.id = "test-a3".into();
+    template.block_names = vec!["FRAME-A3".into()];
+    registry.templates.insert(0, template);
+    app.run("ubplot.templates", json!({"action": "import", "text": serde_json::to_string(&registry).unwrap()})).unwrap();
+    // Template import needs a drawing; the folder job itself must not.
+    if close_drawing {
+        app.session.execute("closeall", &json!({})).unwrap();
+        assert!(app.session.doc().is_err());
+    }
+    let response = app.run("ubplot.folder", json!({"folder": input, "out": dir.0.join("out"), "background": true})).unwrap();
+    assert_eq!(response["status"], "QUEUED");
+    response["jobId"].as_str().unwrap().to_string()
+}
+
+fn assert_folder_result(dir: &TempDir, id: &str, renderer: &TestRenderer) {
+    let done = manifest(&dir.jobs(), id);
+    assert_eq!(done.status, JobStatus::Done);
+    assert_eq!(done.sources.len(), 2);
+    let mut expected_hashes = Vec::new();
+    for (source, (name, count)) in done.sources.iter().zip([("a", 1), ("b", 2)]) {
+        let path = dir.0.join("input").join(format!("{name}.dxf"));
+        let bytes = std::fs::read(&path).unwrap();
+        assert_eq!(std::fs::canonicalize(source.path.as_deref().unwrap()).unwrap(), std::fs::canonicalize(&path).unwrap());
+        assert_eq!(source.source_hash, sha256_hex(&bytes));
+        assert_eq!(source.sheets, count);
+        let drawing = cadcraft_io::read(&bytes, "fixture.dxf").unwrap();
+        let hash = sha256_hex(cadcraft_io::write_dxf(&drawing).as_bytes());
+        expected_hashes.extend(std::iter::repeat_n(hash, count as usize));
+    }
+    assert_eq!(done.sheets.len(), 3);
+    assert!(done.sheets.iter().all(|sheet| sheet.status == SheetStatus::Done && sheet.attempts == 1));
+    assert_eq!(done.sheets.iter().map(|sheet| sheet.source_index).collect::<Vec<_>>(), [0, 1, 1]);
+    assert_eq!(done.sheets.iter().map(|sheet| sheet.sheet_id.as_str()).collect::<Vec<_>>(), ["a-KT-01", "b-KT-01", "b-KT-02"]);
+    assert_eq!(done.files.len(), 1);
+    assert_eq!(done.files[0].pages, 3);
+    assert_eq!(renderer.calls.lock().unwrap().len(), 3);
+    assert_eq!(*renderer.drawing_hashes.lock().unwrap(), expected_hashes);
+}
+
+#[test]
+fn folder_job_resumes_with_folder_loader() {
+    for without_drawing in [false, true] {
+        let dir = TempDir::new();
+        let renderer = Arc::new(TestRenderer::default());
+        let mut previous = app(7, &dir, renderer.clone());
+        let id = enqueue_folder(&mut previous, &dir, false);
+        let job = previous.session.take_queued_job().unwrap();
+        assert_eq!(job.job_id, id);
+        assert!(is_folder_job(previous.session.job_store_mut().unwrap(), &id).unwrap());
+        let store = previous.session.job_store_mut().unwrap();
+        let mut runner = JobRunner::open(job, store, 0).unwrap();
+        assert_eq!(runner.step(store, &mut FolderLoader::default(), renderer.as_ref(), &SheetBudget::desktop(), 1), StepOutcome::Worked);
+        assert_eq!(runner.progress().done, 1);
+        assert_eq!(runner.manifest().status, JobStatus::Running);
+        let completed = runner.manifest().sheets[0].clone();
+        drop(runner);
+        drop(previous);
+        let mut resumed = app(7, &dir, renderer.clone());
+        let open_hash = sha256_hex(cadcraft_io::write_dxf(resumed.session.doc().unwrap()).as_bytes());
+        if without_drawing {
+            resumed.session.execute("closeall", &json!({})).unwrap();
+            assert!(resumed.session.doc().is_err());
+        }
+        let mut h = harness(resumed);
+        h.run_steps(3);
+        assert!(h.state().job_pump.interrupted.contains(&id));
+        assert_eq!(renderer.calls.lock().unwrap().len(), 1);
+        h.get_by_role_and_label(Role::Window, "Plot Jobs").get_by_label("Resume").click();
+        h.run_steps(2);
+        drive_until(&mut h, |app| app.job_pump.manifests.get(&id).is_some_and(|manifest| manifest.status == JobStatus::Done));
+        assert_folder_result(&dir, &id, &renderer);
+        assert!(!renderer.drawing_hashes.lock().unwrap().contains(&open_hash));
+        let done = manifest(&dir.jobs(), &id);
+        assert_eq!(done.sheets[0].sha256, completed.sha256);
+        assert_eq!(done.sheets[0].finished_ms, completed.finished_ms);
+        assert!(h.state().job_pump.errors.is_empty());
+        assert!(!h.state().job_pump.interrupted.contains(&id));
+    }
+}
+
+#[test]
+fn folder_job_queues_without_an_open_drawing() {
+    let dir = TempDir::new();
+    let renderer = Arc::new(TestRenderer::default());
+    let mut app = app(7, &dir, renderer.clone());
+    let id = enqueue_folder(&mut app, &dir, true);
+    let mut h = harness(app);
+    drive_until(&mut h, |app| app.job_pump.manifests.get(&id).is_some_and(|manifest| manifest.status == JobStatus::Done));
+    assert_folder_result(&dir, &id, &renderer);
+    assert!(h.state().job_pump.errors.is_empty());
+}
+
+#[test]
+fn drawing_job_still_uses_the_open_drawing_snapshot() {
+    for resume in [false, true] {
+        let dir = TempDir::new();
+        let renderer = Arc::new(TestRenderer::default());
+        renderer.hold.store(true, Ordering::Relaxed);
+        let mut app = app(2, &dir, renderer.clone());
+        let hash = sha256_hex(cadcraft_io::write_dxf(app.session.doc().unwrap()).as_bytes());
+        let id = enqueue(&mut app, &dir, "snapshot");
+        assert!(!is_folder_job(app.session.job_store_mut().unwrap(), &id).unwrap());
+        if resume {
+            interrupt(&mut app, &dir, &id);
+            app.job_pump = JobPump::with_renderer(dir.jobs(), renderer.clone(), SheetBudget::desktop());
+            app.run("ui.ubplot.jobs", json!({"action": "resume", "jobId": id})).unwrap();
+        }
+        let mut h = harness(app);
+        drive_until(&mut h, |_| !renderer.calls.lock().unwrap().is_empty());
+        h.state_mut().session.open_drawing(frames::frames_drawing(7), "Different drawing", None);
+        renderer.hold.store(false, Ordering::Relaxed);
+        drive_until(&mut h, |app| app.job_pump.manifests.get(&id).is_some_and(|manifest| manifest.status == JobStatus::Done));
+        assert_eq!(*renderer.drawing_hashes.lock().unwrap(), [hash.clone(), hash]);
+        assert_eq!(manifest(&dir.jobs(), &id).sheets.len(), 2);
+        assert!(h.state().job_pump.errors.is_empty());
+    }
 }

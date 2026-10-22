@@ -18,6 +18,12 @@ pub use store::{JobStore, MemoryJobStore, artifact_name};
 pub use store_fs::DirJobStore;
 pub use types::*;
 
+pub(crate) const FOLDER_DEFINITION: &str = "folder.json";
+
+pub fn is_folder_job(store: &dyn JobStore, id: &str) -> Result<bool, String> {
+    Ok(store.read_artifact(id, FOLDER_DEFINITION)?.is_some())
+}
+
 #[derive(Default)]
 pub(crate) struct SessionJobs {
     pub store: Option<Box<dyn JobStore>>,
