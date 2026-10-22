@@ -397,8 +397,10 @@ fn merged_over_page_cap_errors_without_partial_file() {
             sheet
         })
         .collect();
-    let error = s.execute("ubplot.publish", &json!({"plan": plan, "output": "merged", "path": destination})).unwrap_err().to_string();
-    assert!(error.contains("1000") && error.contains("split"), "{error}");
+    // Merged output is chunked by pages_per_file, so only a page limit above the PDF cap can overflow one file.
+    let error =
+        s.execute("ubplot.publish", &json!({"plan": plan, "output": "merged", "path": destination, "pagesPerFile": 1001})).unwrap_err().to_string();
+    assert!(error.contains("pages_per_file is outside the PDF page limits"), "{error}");
     assert!(!destination.exists());
     assert!(std::fs::read_dir(&directory.0).unwrap().next().is_none(), "no partial publication should be left behind");
     PLOT_OPTIONS.with(|options| assert!(options.borrow().is_null(), "reject before rendering or writing"));
