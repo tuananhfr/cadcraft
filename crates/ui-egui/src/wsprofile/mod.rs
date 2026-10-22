@@ -20,7 +20,7 @@ pub mod validate;
 
 use serde_json::{Map, Value, json};
 
-use crate::CadApp;
+use crate::{CadApp, FileKind};
 use apply::{ApplyReport, Fingerprint};
 use autosave::Autosave;
 use history::LayoutHistory;
@@ -29,6 +29,8 @@ use presets::{PRESET_IDS, SAFE_PRESET, preset};
 use schema::{SCHEMA_VERSION, WorkspaceLayout, WorkspaceProfile};
 use startup::{FALLBACK_MESSAGE, Fallback, NOT_KEPT_MESSAGE, POLICY_MESSAGE};
 use store::{ProfileSet, ProfileStore};
+
+pub const WORKSPACE_FILE: FileKind = FileKind { label: "Workspace (JSON)", extensions: &["json"] };
 
 pub const LOCKED_MESSAGE: &str = "Locked by company policy";
 /// First wait before a failed commit is tried again; it doubles up to [`MAX_RETRY_SECS`].

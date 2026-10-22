@@ -9,7 +9,7 @@ use super::presets::preset_json;
 use super::schema::{OwnerType, ProfileStatus, WorkspaceProfile};
 use super::store::MAX_USER_PROFILES;
 use super::validate::{Issue, Mode, validate};
-use super::{LOCKED_MESSAGE, SaveStatus, observe, rfc3339, startup};
+use super::{LOCKED_MESSAGE, SaveStatus, WORKSPACE_FILE, observe, rfc3339, startup};
 use crate::CadApp;
 
 pub(super) const MAX_NAME: usize = 100;
@@ -186,7 +186,7 @@ fn export(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     let text = export_text(app)?;
     let path = match params.get("path").and_then(Value::as_str) {
         Some(path) => Some(path.to_string()),
-        None if params.is_null() => app.services.pick_save.as_ref().and_then(|pick| pick("Workspace.json")),
+        None if params.is_null() => app.services.save_file("Workspace.json", &WORKSPACE_FILE),
         None => None,
     };
     if let Some(path) = &path {
@@ -224,7 +224,7 @@ fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     let text = match (params.get("text").and_then(Value::as_str), params.get("path").and_then(Value::as_str)) {
         (Some(text), _) => text.to_string(),
         (None, Some(path)) => read_file(path)?,
-        (None, None) if params.is_null() => match app.services.pick_open.as_ref().and_then(|pick| pick()) {
+        (None, None) if params.is_null() => match app.services.open_file(&WORKSPACE_FILE) {
             Some(path) => read_file(&path)?,
             None => return Ok(Value::Null),
         },

@@ -194,11 +194,38 @@ impl Default for UiState {
     }
 }
 
+/// A kind of non-drawing file that a host dialog filters for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FileKind {
+    pub label: &'static str,
+    pub extensions: &'static [&'static str],
+}
+
 /// Host services (file pickers, clipboard) injected by the app so this crate stays portable.
 #[derive(Default)]
 pub struct Services {
     pub pick_open: Option<Box<dyn Fn() -> Option<String>>>,
     pub pick_save: Option<Box<dyn Fn(&str) -> Option<String>>>,
+    pub pick_open_kind: Option<Box<dyn Fn(&FileKind) -> Option<String>>>,
+    pub pick_save_kind: Option<Box<dyn Fn(&str, &FileKind) -> Option<String>>>,
+}
+
+impl Services {
+    /// A file of `kind` to open: the host's dialog for that kind, else its drawing dialog. `None` when cancelled.
+    pub fn open_file(&self, kind: &FileKind) -> Option<String> {
+        match &self.pick_open_kind {
+            Some(pick) => pick(kind),
+            None => self.pick_open.as_ref().and_then(|pick| pick()),
+        }
+    }
+
+    /// Where to save `name` as `kind`, chosen the same way.
+    pub fn save_file(&self, name: &str, kind: &FileKind) -> Option<String> {
+        match &self.pick_save_kind {
+            Some(pick) => pick(name, kind),
+            None => self.pick_save.as_ref().and_then(|pick| pick(name)),
+        }
+    }
 }
 
 pub struct CadApp {

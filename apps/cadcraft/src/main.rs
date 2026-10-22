@@ -27,7 +27,7 @@ mod system_animations;
 mod workspace;
 
 use cadcraft_engine::Session;
-use cadcraft_ui_egui::{CadApp, Services, i18n};
+use cadcraft_ui_egui::{CadApp, FileKind, Services, i18n};
 
 struct App {
     cad: CadApp,
@@ -162,7 +162,30 @@ fn services() -> Services {
                 .save_file()
                 .map(|p| p.to_string_lossy().to_string())
         })),
+        pick_open_kind: Some(Box::new(|kind| {
+            filters_for_kind(kind, true)
+                .iter()
+                .fold(rfd::FileDialog::new(), |d, (label, exts)| d.add_filter(i18n::t(label), exts))
+                .pick_file()
+                .map(|p| p.to_string_lossy().to_string())
+        })),
+        pick_save_kind: Some(Box::new(|name, kind| {
+            filters_for_kind(kind, false)
+                .iter()
+                .fold(rfd::FileDialog::new().set_file_name(name), |d, (label, exts)| d.add_filter(i18n::t(label), exts))
+                .save_file()
+                .map(|p| p.to_string_lossy().to_string())
+        })),
     }
+}
+
+/// Filters for a non-drawing dialog. Save lists only the kind, so macOS keeps its extension.
+fn filters_for_kind(kind: &FileKind, open: bool) -> Vec<(&'static str, &'static [&'static str])> {
+    let mut filters = vec![(kind.label, kind.extensions)];
+    if open {
+        filters.push(("All files", &["*"]));
+    }
+    filters
 }
 
 /// File types for the Save dialog, the suggested name's type first: Windows adds the first
@@ -404,7 +427,8 @@ fn main() -> eframe::Result {
 
 #[cfg(test)]
 mod tests {
-    use super::{config_dir_from, control_flag, control_port_from, filters_for_save, follow_desktop};
+    use super::{config_dir_from, control_flag, control_port_from, filters_for_kind, filters_for_save, follow_desktop};
+    use cadcraft_ui_egui::wsprofile::WORKSPACE_FILE;
     use std::ffi::OsString;
     use std::path::PathBuf;
 
@@ -426,6 +450,12 @@ mod tests {
             let exts: Vec<_> = filters_for_save(name).iter().map(|(_, e)| *e).collect();
             assert!(exts.contains(&"dwg") && exts.contains(&"dxf"), "{name}");
         }
+    }
+
+    #[test]
+    fn workspace_dialogs_offer_json_first() {
+        assert_eq!(filters_for_kind(&WORKSPACE_FILE, false), vec![("Workspace (JSON)", &["json"][..])]);
+        assert_eq!(filters_for_kind(&WORKSPACE_FILE, true), vec![("Workspace (JSON)", &["json"][..]), ("All files", &["*"][..])]);
     }
 
     #[test]
