@@ -50,7 +50,6 @@ fn preedit(text: &str) -> Event {
 #[test]
 fn ime_composition_never_dispatches_alias() {
     let mut h = harness();
-    h.event(Event::Ime(ImeEvent::Enabled));
     h.event(preedit("l"));
     h.key_press(Key::Enter);
     h.run_steps(2);
@@ -73,7 +72,6 @@ fn ime_composition_never_dispatches_alias() {
     assert!(h.state().cmd.buffer.is_empty());
 
     h.event(Event::Ime(ImeEvent::Commit("lá".into())));
-    h.event(Event::Ime(ImeEvent::Disabled));
     h.run_steps(2);
     assert_eq!(running(h.state()), None);
     assert_eq!(h.state().cmd.buffer, "lá");
@@ -87,7 +85,7 @@ fn ime_composition_never_dispatches_alias() {
     assert!(h.state().cmd.buffer.is_empty());
     assert_eq!(h.state().cmd.history.last().map(String::as_str), Some("lálớp"));
 
-    for end in [Event::Ime(ImeEvent::Disabled), preedit("")] {
+    for end in [Event::Ime(ImeEvent::Commit(String::new())), preedit("")] {
         h.event(preedit("l"));
         h.event(end);
         h.event(Event::Text("L".into()));
@@ -117,7 +115,7 @@ fn ime_enter_during_composition_never_repeats_last_command() {
     assert_eq!(running(h.state()), None);
     assert!(h.state().cmd.buffer.is_empty());
 
-    h.event(Event::Ime(ImeEvent::Disabled));
+    h.event(preedit(""));
     h.key_press(Key::Enter);
     h.run_steps(2);
     assert_eq!(running(h.state()), Some("line"));
