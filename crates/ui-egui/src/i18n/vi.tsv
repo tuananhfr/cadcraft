@@ -1764,7 +1764,6 @@ menu	Help	Trợ giúp
 
 # Merge of GĐ1A into the catalog: Quick Plot commands, prompts and xref states.
 ribbon	Output	Xuất bản
-ribbon	Quick Plot	In nhanh
 	Output	Xuất bản
 	Quick Plot	In nhanh
 	Quick Plot...	In nhanh...
