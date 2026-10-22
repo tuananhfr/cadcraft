@@ -4,7 +4,7 @@ use cadcraft_ui_egui::wsprofile::store::MemoryStore;
 use cadcraft_ui_egui::{CadApp, Services};
 use egui::{Key, Modifiers, vec2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::{NodeT, Queryable};
+use egui_kittest::kittest::Queryable;
 use serde_json::json;
 
 fn test_lock() -> std::sync::MutexGuard<'static, ()> {
