@@ -41,6 +41,18 @@ pub(crate) fn budget_plot() -> Option<BudgetPlotHook> {
     BUDGET_PLOT.get().copied()
 }
 
+pub type MergePdfHook = fn(&[&[u8]], &[String], &str) -> std::result::Result<Vec<u8>, String>;
+
+static MERGE_PDF: OnceLock<MergePdfHook> = OnceLock::new();
+
+pub fn set_merge_pdf(h: MergePdfHook) {
+    let _ = MERGE_PDF.set(h);
+}
+
+pub(crate) fn merge_pdf() -> Option<MergePdfHook> {
+    MERGE_PDF.get().copied()
+}
+
 static IO: OnceLock<IoHooks> = OnceLock::new();
 
 pub fn set_io(h: IoHooks) {

@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use cadcraft_doc::{Drawing, Space};
 use serde_json::json;
 
-use crate::cmd::file::budget_plot;
-use crate::cmd::ubplot::publish::page_for_drawing;
+use crate::cmd::file::{budget_plot, merge_pdf};
+use crate::cmd::ubplot::publish::sheet_pages_for_drawing;
 use crate::sheetplan::Sheet;
 
 #[derive(Clone, Debug)]
@@ -64,6 +64,7 @@ pub enum RenderFailure {
 
 pub trait SheetRenderer {
     fn render(&self, d: &Drawing, sheet: &Sheet, budget: &SheetBudget) -> Result<Vec<u8>, RenderFailure>;
+    fn merge(&self, parts: &[&[u8]], labels: &[String], title: &str) -> Result<Vec<u8>, RenderFailure>;
 }
 
 pub struct PdfSheetRenderer;
@@ -73,15 +74,17 @@ impl SheetRenderer for PdfSheetRenderer {
         if budget.cancel.load(Ordering::Relaxed) {
             return Err(RenderFailure::Cancelled);
         }
-        if sheet.split.as_ref().is_some_and(|split| split.approved) {
-            return Err(RenderFailure::Error("split sheets need separate page artifacts".into()));
-        }
-        let page = page_for_drawing(d, sheet).map_err(RenderFailure::Error)?;
+        let pages = sheet_pages_for_drawing(d, sheet).map_err(RenderFailure::Error)?;
         let plot = budget_plot().ok_or_else(|| RenderFailure::Error("budgeted PDF plotting is not available in this build".into()))?;
-        let options = json!({"pages": [page], "output": "pdf"});
+        let options = json!({"pages": pages, "output": "pdf"});
         let result = plot(d, &Space::Model, &options, budget.cancel.clone(), budget.max_prims)
             .map_err(|error| if error.contains("SHEET_TOO_LARGE") { RenderFailure::TooLarge(error) } else { RenderFailure::Error(error) });
         budget.check_result(result)
+    }
+
+    fn merge(&self, parts: &[&[u8]], labels: &[String], title: &str) -> Result<Vec<u8>, RenderFailure> {
+        let merge = merge_pdf().ok_or_else(|| RenderFailure::Error("PDF merging is not available in this build".into()))?;
+        merge(parts, labels, title).map_err(RenderFailure::Error)
     }
 }
 

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use cadcraft_doc::{Attrib, Block, Common, Drawing, Entity, EntityKind, HAlign, Handle, Insert, Line, LwPolyline, RawTag, Space, Text, VAlign};
 use cadcraft_engine::Session;
+use cadcraft_engine::sheetplan::queue::{JobStore, RenderFailure};
 use cadcraft_geom::{PolyVertex, Vec2, Vec3};
 
 pub fn polyline(w: f64, h: f64) -> EntityKind {
@@ -138,6 +139,9 @@ pub fn install_budget_plot() {
     cadcraft_engine::cmd::file::set_budget_plot(|d, space, options, cancel, max_prims| {
         cadcraft_io::pdf::plot_with_budget(d, space, options, Some(cancel), Some(max_prims)).map_err(|error| error.to_string())
     });
+    cadcraft_engine::cmd::file::set_merge_pdf(|parts, labels, title| {
+        cadcraft_io::pdf_merge::merge_own(parts, labels, title).map_err(|error| error.to_string())
+    });
 }
 
 #[allow(dead_code)]
@@ -151,6 +155,10 @@ impl cadcraft_engine::sheetplan::queue::SheetRenderer for FixedSheetRenderer {
         _: &cadcraft_engine::sheetplan::queue::SheetBudget,
     ) -> Result<Vec<u8>, cadcraft_engine::sheetplan::queue::RenderFailure> {
         Ok(vec![0; self.0])
+    }
+
+    fn merge(&self, parts: &[&[u8]], labels: &[String], title: &str) -> Result<Vec<u8>, cadcraft_engine::sheetplan::queue::RenderFailure> {
+        cadcraft_io::pdf_merge::merge_own(parts, labels, title).map_err(|error| RenderFailure::Error(error.to_string()))
     }
 }
 
@@ -175,6 +183,10 @@ impl cadcraft_engine::sheetplan::queue::SheetRenderer for WaitingSheetRenderer {
         }
         Err(cadcraft_engine::sheetplan::queue::RenderFailure::Cancelled)
     }
+
+    fn merge(&self, parts: &[&[u8]], labels: &[String], title: &str) -> Result<Vec<u8>, cadcraft_engine::sheetplan::queue::RenderFailure> {
+        cadcraft_io::pdf_merge::merge_own(parts, labels, title).map_err(|error| RenderFailure::Error(error.to_string()))
+    }
 }
 
 #[allow(dead_code)]
@@ -189,5 +201,167 @@ impl cadcraft_engine::sheetplan::queue::SheetRenderer for CancellingSheetRendere
     ) -> Result<Vec<u8>, cadcraft_engine::sheetplan::queue::RenderFailure> {
         budget.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         Ok(vec![0; 1024])
+    }
+
+    fn merge(&self, parts: &[&[u8]], labels: &[String], title: &str) -> Result<Vec<u8>, cadcraft_engine::sheetplan::queue::RenderFailure> {
+        cadcraft_io::pdf_merge::merge_own(parts, labels, title).map_err(|error| RenderFailure::Error(error.to_string()))
+    }
+}
+
+#[allow(dead_code)]
+pub fn queue_job(count: usize) -> (cadcraft_engine::sheetplan::queue::PrintJob, cadcraft_engine::sheetplan::queue::SnapshotLoader) {
+    use cadcraft_engine::sheetplan::queue::{DEFAULT_RETRY_LIMIT, JobSource, OutputSpec, PrintJob, SnapshotLoader};
+    use cadcraft_engine::sheetplan::{FrameRegistry, ScanRequest, build_plan};
+
+    let drawing = frames_drawing(count);
+    let hash = cadcraft_engine::hash::sha256_hex(cadcraft_io::write_dxf(&drawing).as_bytes());
+    let handles = drawing.model.iter().map(|entity| entity.handle.hex()).collect();
+    let plan = build_plan(&drawing, &ScanRequest { handles, ..Default::default() }, &FrameRegistry::builtin(), &hash).unwrap();
+    let source = JobSource { path: None, source_hash: hash.clone(), plan };
+    let output = OutputSpec { stem: "x".into(), ..Default::default() };
+    (PrintJob::new(vec![source], output, DEFAULT_RETRY_LIMIT).unwrap(), SnapshotLoader(Arc::new(drawing), hash))
+}
+
+#[allow(dead_code)]
+pub fn two_piece_split(sheet: &mut cadcraft_engine::sheetplan::Sheet) {
+    use cadcraft_engine::sheetplan::{SheetSource, SplitPlan};
+
+    let outline = match &sheet.source {
+        SheetSource::Block { outline, .. } | SheetSource::Window { outline, .. } => *outline,
+        SheetSource::Layout { .. } => panic!("test needs a rectangular frame"),
+    };
+    let [a, b, c, d] = outline;
+    let bottom = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
+    let top = [(d[0] + c[0]) * 0.5, (d[1] + c[1]) * 0.5];
+    sheet.split = Some(SplitPlan { pieces: vec![[a, bottom, top, d], [bottom, b, c, top]], overlap_mm: 0.0, approved: true });
+}
+
+#[allow(dead_code)]
+pub struct CountingRenderer {
+    pub counts: std::cell::RefCell<std::collections::BTreeMap<String, u32>>,
+    pub order: std::cell::RefCell<Vec<String>>,
+    pub flags: std::cell::RefCell<Vec<Arc<std::sync::atomic::AtomicBool>>>,
+    pub failure: Option<(String, cadcraft_engine::sheetplan::queue::RenderFailure)>,
+    pub fail_first_only: bool,
+    pub fail_merge: bool,
+    cached: std::collections::BTreeMap<usize, Vec<u8>>,
+}
+
+#[allow(dead_code)]
+impl CountingRenderer {
+    pub fn new() -> Self {
+        let drawing = frames_drawing(1);
+        let options = cadcraft_io::PdfOptions { label: Some("artifact".into()), ..Default::default() };
+        let cached = [1, 2, 4]
+            .into_iter()
+            .map(|count| {
+                let items = vec![(Space::Model, options.clone()); count];
+                (count, cadcraft_io::pdf::pdf_items(&drawing, &items, &options).unwrap())
+            })
+            .collect();
+        Self {
+            counts: Default::default(),
+            order: Default::default(),
+            flags: Default::default(),
+            failure: None,
+            fail_first_only: false,
+            fail_merge: false,
+            cached,
+        }
+    }
+
+    pub fn total(&self) -> u32 {
+        self.counts.borrow().values().sum()
+    }
+}
+
+impl Default for CountingRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl cadcraft_engine::sheetplan::queue::SheetRenderer for CountingRenderer {
+    fn render(
+        &self,
+        _: &Drawing,
+        sheet: &cadcraft_engine::sheetplan::Sheet,
+        budget: &cadcraft_engine::sheetplan::queue::SheetBudget,
+    ) -> Result<Vec<u8>, cadcraft_engine::sheetplan::queue::RenderFailure> {
+        let key = cadcraft_engine::sheetplan::ids::sheet_key(sheet);
+        let attempt = {
+            let mut counts = self.counts.borrow_mut();
+            let count = counts.entry(key).or_default();
+            *count += 1;
+            *count
+        };
+        self.order.borrow_mut().push(sheet.sheet_id.clone());
+        self.flags.borrow_mut().push(budget.cancel.clone());
+        if let Some((id, failure)) = &self.failure
+            && id == &sheet.sheet_id
+            && (!self.fail_first_only || attempt == 1)
+        {
+            return Err(failure.clone());
+        }
+        let pages = sheet.split.as_ref().filter(|split| split.approved).map_or(1, |split| split.pieces.len());
+        self.cached.get(&pages).cloned().ok_or_else(|| RenderFailure::Error("missing cached test PDF".into()))
+    }
+
+    fn merge(&self, parts: &[&[u8]], labels: &[String], title: &str) -> Result<Vec<u8>, cadcraft_engine::sheetplan::queue::RenderFailure> {
+        if self.fail_merge {
+            return Err(RenderFailure::Error("synthetic merge failure".into()));
+        }
+        cadcraft_io::pdf_merge::merge_own(parts, labels, title).map_err(|error| RenderFailure::Error(error.to_string()))
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Default)]
+pub struct RecordingJobStore {
+    pub inner: cadcraft_engine::sheetplan::queue::MemoryJobStore,
+    pub commits: usize,
+    pub deliveries: Vec<(String, Vec<u8>)>,
+    pub delivery_attempts: usize,
+    pub fail_delivery: bool,
+    pub fail_commit_after_delivery: bool,
+}
+
+impl JobStore for RecordingJobStore {
+    fn list_jobs(&self) -> Vec<String> {
+        self.inner.list_jobs()
+    }
+
+    fn read_manifest(&self, job_id: &str) -> Result<Option<String>, String> {
+        self.inner.read_manifest(job_id)
+    }
+
+    fn commit(&mut self, job_id: &str, artifacts: &[(String, Vec<u8>)], manifest_json: &str) -> Result<(), String> {
+        self.commits += 1;
+        self.inner.commit(job_id, artifacts, manifest_json)
+    }
+
+    fn read_artifact(&self, job_id: &str, name: &str) -> Result<Option<Vec<u8>>, String> {
+        self.inner.read_artifact(job_id, name)
+    }
+
+    fn delete_artifacts(&mut self, job_id: &str, names: &[String]) -> Result<(), String> {
+        self.inner.delete_artifacts(job_id, names)
+    }
+
+    fn deliver(&mut self, job: &cadcraft_engine::sheetplan::queue::PrintJob, file_name: &str, bytes: &[u8]) -> Result<String, String> {
+        self.delivery_attempts += 1;
+        if self.fail_delivery {
+            return Err("synthetic delivery failure".into());
+        }
+        let destination = self.inner.deliver(job, file_name, bytes)?;
+        self.deliveries.push((file_name.into(), bytes.into()));
+        if self.fail_commit_after_delivery {
+            self.inner.fail_writes = true;
+        }
+        Ok(destination)
+    }
+
+    fn remove_job(&mut self, job_id: &str) -> Result<(), String> {
+        self.inner.remove_job(job_id)
     }
 }
