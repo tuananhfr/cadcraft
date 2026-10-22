@@ -1873,3 +1873,8 @@
 	»	»
 	visible must be a boolean	visible має бути логічним значенням
 	At least one ribbon tab must stay visible	Принаймні одна вкладка стрічки має залишатися видимою
+
+	Move Ribbon Command	Перемістити команду стрічки
+	Ribbon commands	Команди стрічки
+	Ribbon command was not found	Команду стрічки не знайдено
+	Ribbon command is already in the destination group	Команда стрічки вже є в цільовій групі

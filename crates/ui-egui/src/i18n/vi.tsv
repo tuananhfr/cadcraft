@@ -1875,3 +1875,8 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	»	»
 	visible must be a boolean	visible phải là giá trị luận lý
 	At least one ribbon tab must stay visible	Phải giữ ít nhất một thẻ Ribbon hiển thị
+
+	Move Ribbon Command	Di chuyển lệnh trên dải băng
+	Ribbon commands	Lệnh trên dải băng
+	Ribbon command was not found	Không tìm thấy lệnh trên dải băng
+	Ribbon command is already in the destination group	Lệnh trên dải băng đã có trong nhóm đích

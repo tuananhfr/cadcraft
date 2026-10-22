@@ -56,6 +56,40 @@ fn move_item<T>(items: &mut Vec<T>, from: usize, to: usize) {
     }
 }
 
+fn move_button(tab: &mut RibbonTab, group_index: usize, params: &Value) -> Result<(), String> {
+    let to = destination(params)?;
+    let group = tab.groups.get(group_index).ok_or_else(|| crate::tl!("Ribbon group was not found").to_string())?;
+    let (from, target) = if params.get("to_group").is_some() {
+        let command = text(params, "command")?;
+        let from = group.commands.iter().position(|id| id == command.as_ref());
+        let target = text(params, "to_group")?;
+        let target = tab.groups.iter().position(|group| group.id == target.as_ref());
+        (from, target)
+    } else {
+        let from = params.get("from").and_then(Value::as_u64).and_then(|from| usize::try_from(from).ok());
+        (from, Some(group_index))
+    };
+    let from = from.filter(|from| *from < group.commands.len()).ok_or_else(|| crate::tl!("Ribbon command was not found").to_string())?;
+    let target = target.ok_or_else(|| crate::tl!("Ribbon group was not found").to_string())?;
+    if target == group_index {
+        if let Some(group) = tab.groups.get_mut(group_index) {
+            move_item(&mut group.commands, from, to);
+        }
+    } else {
+        let command = group.commands.get(from).ok_or_else(|| crate::tl!("Ribbon command was not found").to_string())?.clone();
+        if tab.groups.get(target).is_some_and(|group| group.commands.contains(&command)) {
+            return Err(crate::tl!("Ribbon command is already in the destination group").to_string());
+        }
+        if let Some(group) = tab.groups.get_mut(group_index) {
+            group.commands.remove(from);
+        }
+        if let Some(group) = tab.groups.get_mut(target) {
+            group.commands.insert(to.min(group.commands.len()), command);
+        }
+    }
+    Ok(())
+}
+
 fn fresh_id<'a>(ids: impl Iterator<Item = &'a str>) -> String {
     let ids: std::collections::BTreeSet<_> = ids.collect();
     (1..=501).map(|number| format!("custom_{number}")).find(|id| !ids.contains(id.as_str())).unwrap_or_else(|| "custom".into())
@@ -74,6 +108,7 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
             | "ui.ribbon.group.remove"
             | "ui.ribbon.button.add"
             | "ui.ribbon.button.remove"
+            | "ui.ribbon.button.move"
             | "ui.ribbon.collapse"
             | "ui.ribbon.mode"
             | "ui.ribbon.tab.visible"
@@ -157,6 +192,7 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
                             .position(|group| group.id == group_id.as_ref())
                             .ok_or_else(|| crate::tl!("Ribbon group was not found").to_string())?;
                         match command {
+                            "ui.ribbon.button.move" => move_button(tab, from, params)?,
                             "ui.ribbon.group.move" => move_item(&mut tab.groups, from, destination(params)?),
                             "ui.ribbon.group.remove" => {
                                 tab.groups.remove(from);

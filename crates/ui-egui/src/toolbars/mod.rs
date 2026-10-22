@@ -94,7 +94,7 @@ pub fn builtin_toolbar_commands(id: &str) -> Vec<&'static str> {
 
 /// What a button shows for a command id.
 #[derive(Clone, Debug)]
-pub(crate) struct Command {
+pub struct Command {
     pub label: String,
     pub icon: Option<Icon>,
     pub shortcut: Option<&'static str>,
@@ -115,7 +115,7 @@ fn known_tools() -> &'static [Tool] {
     })
 }
 
-pub(crate) fn resolve(id: &str) -> Command {
+pub fn resolve(id: &str) -> Command {
     if let Some((icon, _, label, shortcut)) = known_tools().iter().find(|tool| tool.1 == id) {
         return Command { label: (*label).to_string(), icon: Some(*icon), shortcut: *shortcut, known: true };
     }

@@ -43,6 +43,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.ribbon.group.move", "Move Ribbon Group", &[], None),
     ("ui.ribbon.button.add", "Add to Ribbon", &[], None),
     ("ui.ribbon.button.remove", "Remove from Ribbon", &[], None),
+    ("ui.ribbon.button.move", "Move Ribbon Command", &[], None),
     ("ui.ribbon.collapse", "Minimize Ribbon", &["Window", "Minimize Ribbon"], None),
     ("ui.ribbon.mode", "Ribbon Display Mode", &["View", "Ribbon", "Display Mode"], None),
     ("ui.shortcut.bind", "Assign Shortcut", &[], None),
