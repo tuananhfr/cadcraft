@@ -1,0 +1,332 @@
+# CADCraft Vietnamese CAD glossary: the terms vi.tsv must use.
+# License: MIT OR Apache-2.0 (the repository LICENSE-MIT and LICENSE-APACHE).
+# Written from CADCraft's English strings; no proprietary translations were copied.
+# UTF-8 NFC: context<TAB>English<TAB>Vietnamese<TAB>note. Context is empty, menu or ribbon.
+# status: approved 2026-10-22
+# Approved for use by the user's decision to translate without waiting for review; native review by the user and LPC is pending.
+# Ribbon tabs (U-F table, verbatim)
+ribbon	Home	Vẽ	U-F
+ribbon	Insert	Chèn	U-F
+ribbon	Annotate	Ghi chú	U-F
+ribbon	Layers	Lớp bản vẽ	U-F; also the group of the same name
+ribbon	View	Hiển thị	U-F
+ribbon	Layout	Bố cục in	U-F
+ribbon	Properties	Thuộc tính	U-F
+ribbon	Xref	Tham chiếu ngoài	U-F
+ribbon	Plot	In bản vẽ	U-F
+ribbon	Tools	Công cụ	
+ribbon	Output	Xuất bản	
+ribbon	Dimension	Ghi kích thước	same as the Dimension menu
+ribbon	Hatch	Mặt cắt	choice: the tab names the object; the command is "Tô mặt cắt"
+# Ribbon groups
+ribbon	Draw	Vẽ	
+ribbon	Modify	Hiệu chỉnh	
+ribbon	Annotation	Chú thích	
+ribbon	Annotation Scaling	Tỉ lệ chú thích	
+ribbon	Block	Khối	
+ribbon	Clipboard	Bộ nhớ tạm	
+ribbon	Utilities	Tiện ích	
+ribbon	Inquiry	Tra cứu	
+ribbon	Select	Chọn	
+ribbon	Navigate	Điều hướng	
+ribbon	Viewports	Khung nhìn	
+ribbon	Layout Viewports	Khung nhìn bố cục	
+ribbon	Layouts	Bố cục in	
+ribbon	Page	Trang in	
+ribbon	Publish	Xuất bản	
+ribbon	Sheets	Tờ bản vẽ	
+ribbon	Text	Chữ	
+ribbon	Dimensions	Kích thước	
+ribbon	Edit Dimension	Sửa kích thước	
+ribbon	Leaders	Đường ghi chú	
+ribbon	Tables	Bảng	
+ribbon	Hatch Edit	Sửa mặt cắt	
+ribbon	Markup	Đánh dấu	
+ribbon	Review Markup	Duyệt đánh dấu	
+ribbon	Reference	Tham chiếu	
+ribbon	Data	Dữ liệu	
+ribbon	Display	Hiển thị	
+ribbon	Visibility	Hiện/ẩn	
+ribbon	Settings	Cài đặt	
+ribbon	Manage	Quản lý	
+ribbon	Cleanup	Dọn dẹp	
+ribbon	Standard	Chuẩn	
+ribbon	Constraints	Ràng buộc	
+ribbon	Count	Đếm	
+ribbon	Quantities	Khối lượng	
+ribbon	Quantities and QA	Khối lượng và kiểm tra chất lượng	
+ribbon	Take-off	Bóc khối lượng	
+ribbon	Checks	Kiểm tra	
+ribbon	Symbols	Ký hiệu	
+ribbon	Schedules	Bảng thống kê	
+ribbon	Architecture	Kiến trúc	
+ribbon	Structure	Kết cấu	
+ribbon	Structural Grid	Lưới trục kết cấu	
+ribbon	Walls and Openings	Tường và lỗ mở	
+ribbon	MEP and Fire	Cơ điện và PCCC	PCCC = phòng cháy chữa cháy
+ribbon	Infrastructure	Hạ tầng	
+ribbon	Planning and Survey	Quy hoạch và khảo sát	
+ribbon	Survey	Khảo sát	
+ribbon	Base Maps	Bản đồ nền	
+ribbon	Alignment	Tuyến	road or pipe alignment
+ribbon	Routing	Định tuyến	
+ribbon	Stations	Lý trình	
+# Menu bar
+menu	File	Tệp	
+menu	Edit	Chỉnh sửa	
+menu	View	Hiển thị	
+menu	Insert	Chèn	
+menu	Format	Định dạng	
+menu	Tools	Công cụ	
+menu	Draw	Vẽ	
+menu	Dimension	Ghi kích thước	choice: the menu is the action; the object is "Kích thước"
+menu	Modify	Hiệu chỉnh	
+menu	Parametric	Tham số	
+menu	Window	Cửa sổ	
+menu	Help	Trợ giúp	
+# Draw
+	Line	Đường thẳng	
+	Polyline	Đa tuyến	
+	3D Polyline	Đa tuyến 3D	
+	Circle	Đường tròn	
+	Arc	Cung tròn	
+	Ellipse	Elip	
+	Spline	Đường spline	
+	Rectangle	Hình chữ nhật	
+	Polygon	Đa giác	
+	Point	Điểm	
+	Construction Line	Đường dựng	
+	Ray	Tia	
+	Donut	Hình vành khuyên	
+	Hatch	Tô mặt cắt	choice: plan draft said "Tô mẫu mặt cắt"; shorter for buttons
+	Gradient	Tô chuyển màu	
+	Boundary	Đường biên	
+	Region	Miền	
+	Revision Cloud	Đám mây sửa đổi	
+	Wipeout	Che nền	
+# Modify
+	Move	Di chuyển	
+	Copy	Sao chép	
+	Rotate	Xoay	
+	Scale	Tỉ lệ	choice: noun form; verb prompts say "thu phóng theo tỉ lệ"
+	Mirror	Đối xứng	
+	Stretch	Kéo giãn	
+	Offset	Dời song song	
+	Trim	Cắt xén	
+	Extend	Kéo dài	
+	Fillet	Bo góc	
+	Chamfer	Vát góc	
+	Break	Ngắt	
+	Join	Nối	
+	Array	Mảng	
+	Explode	Phá khối	
+	Erase	Xóa	B2 spelling
+	Align	Căn chỉnh	
+	Lengthen	Đổi chiều dài	
+	Match Properties	Sao chép thuộc tính	
+	Undo	Hoàn tác	
+	Redo	Làm lại	
+	Cut	Cắt	
+	Paste	Dán	
+	Select All	Chọn tất cả	
+# Annotation
+	Text	Chữ	
+	Multiline Text	Chữ nhiều dòng	
+	Single Line Text	Chữ một dòng	
+	Text Style	Kiểu chữ	
+	Dimension	Kích thước	the object; the Dimension menu is "Ghi kích thước"
+	Dimension Style	Kiểu kích thước	
+	Linear	Thẳng	dimension type
+	Aligned	Song song	dimension type
+	Angular	Góc	dimension type
+	Radius	Bán kính	
+	Diameter	Đường kính	
+	Arc Length	Chiều dài cung	
+	Baseline	Từ đường chuẩn	dimension type
+	Continue	Nối tiếp	dimension type
+	Leader	Đường ghi chú	
+	Multileader	Đường ghi chú nhiều nhánh	
+	Table	Bảng	
+	Center Mark	Dấu tâm	
+	Center Line	Đường tâm	
+	Tolerance	Dung sai	
+	Annotative	Chú thích theo tỉ lệ	
+	Annotation Scale	Tỉ lệ chú thích	
+# Blocks and attributes
+	Block	Khối	
+	Create Block	Tạo khối	
+	Insert Block	Chèn khối	
+	Block Editor	Trình sửa khối	
+	Attribute	Thuộc tính khối	
+	Define Attributes	Định nghĩa thuộc tính khối	
+	Dynamic Block	Khối động	
+	Visibility State	Trạng thái hiển thị	
+# Layers and properties
+	Layer	Lớp	
+	Layers	Lớp bản vẽ	
+	Layer Properties	Thuộc tính lớp	
+	Layer State	Trạng thái lớp	
+	Freeze	Đóng băng	
+	Thaw	Rã băng	
+	Lock	Khóa	B2 spelling
+	Unlock	Mở khóa	
+	On	Bật	
+	Off	Tắt	
+	Current	Hiện hành	
+	Color	Màu	
+	Linetype	Kiểu đường	
+	Lineweight	Độ dày nét	
+	Transparency	Độ trong suốt	
+	Properties	Thuộc tính	
+	Quick Properties	Thuộc tính nhanh	
+# View and drafting aids
+	Zoom	Thu phóng	
+	Zoom Extents	Thu phóng toàn bộ	
+	Pan	Dời màn hình	choice: keeps "dời" apart from Move ("Di chuyển")
+	Regen	Tái tạo hình	
+	Viewport	Khung nhìn	
+	Model	Mô hình	
+	Layout	Bố cục in	
+	Model Space	Không gian mô hình	
+	Paper Space	Không gian giấy	
+	Object Snap	Truy bắt điểm	
+	Object Snap Tracking	Truy bắt theo điểm	
+	Ortho	Trực giao	
+	Polar Tracking	Truy bắt cực	
+	Grid	Lưới	
+	Snap	Bước nhảy	choice: snap mode (grid step), not object snap
+	Dynamic Input	Nhập động	
+	Units	Đơn vị	
+# Plot and publish
+	Plot	In bản vẽ	
+	Page Setup	Thiết lập trang in	
+	Plot Style	Kiểu in	
+	Plot Style Table	Bảng kiểu in	
+	Plotter	Thiết bị in	
+	Paper Size	Khổ giấy	
+	Plot Scale	Tỉ lệ in	
+	Fit to Paper	Vừa khổ giấy	
+	Plot Area	Vùng in	
+	Extents	Toàn bộ	
+	Preview	Xem trước	
+	Publish	Xuất bản	
+	Batch Plot	In hàng loạt	
+	Landscape	Ngang	
+	Portrait	Dọc	
+	Margins	Lề	
+	Sheet	Tờ bản vẽ	
+	Sheet Set	Bộ tờ bản vẽ	
+	Title Block	Khung tên	
+	Frame	Khung bản vẽ	
+	Scan	Quét	
+	Preflight	Kiểm tra trước khi in	
+	Ready	Sẵn sàng	
+	Needs preview	Cần xem trước	
+	Blocked	Bị chặn	
+	Warning	Cảnh báo	
+	Exclude	Loại trừ	
+	Approve	Chấp nhận	
+# External references and fonts
+	External References	Tham chiếu ngoài	
+	Attach	Đính kèm	
+	Detach	Gỡ bỏ	
+	Reload	Tải lại	
+	Unload	Tạm gỡ	
+	Bind	Gộp vào bản vẽ	
+	Raster Image	Ảnh raster	
+	PDF Underlay	Nền PDF	
+	Fonts	Phông chữ	
+	Font substitution	Thay thế phông chữ	
+# Workspace and shell
+	Workspace	Không gian làm việc	
+	Ribbon	Ribbon	kept in English, as Vietnamese CAD users say it
+	Toolbar	Thanh công cụ	
+	Quick Access	Truy cập nhanh	
+	Palette	Bảng công cụ	
+	Command line	Dòng lệnh	
+	Command	Lệnh	
+	Command Palette	Bảng tìm lệnh	
+	Status bar	Thanh trạng thái	
+	Customize	Tùy biến	B2 spelling
+	Options	Tùy chọn	
+	Settings	Cài đặt	
+	Reset	Đặt lại	
+	Restore	Khôi phục	
+	Full Screen	Toàn màn hình	
+	Focus Mode	Chế độ tập trung	
+	Dock	Gắn cạnh	
+	Float	Thả nổi	
+	Auto-hide	Tự ẩn	
+	Panel	Bảng	
+	Tab	Thẻ	ribbon tab and browser tab
+	Dialog	Hộp thoại	
+	Search	Tìm kiếm	
+	Shortcut	Phím tắt	
+	Alias	Lệnh tắt	
+	Language	Ngôn ngữ	
+# File
+	New	Mới	
+	Open	Mở	
+	Save	Lưu	
+	Save As	Lưu thành	
+	Close	Đóng	
+	Close All	Đóng tất cả	
+	Exit	Thoát	
+	Recent Files	Tệp gần đây	
+	Template	Mẫu bản vẽ	
+	Import	Nhập	
+	Export	Xuất	
+	Drawing	Bản vẽ	
+	Recover	Phục hồi	
+	Audit	Kiểm tra lỗi	
+	Purge	Dọn dẹp	
+# Dialog buttons
+	OK	Đồng ý	
+	Cancel	Hủy	B2 spelling
+	Apply	Áp dụng	
+	Yes	Có	
+	No	Không	
+	Delete	Xóa	
+	Rename	Đổi tên	
+	Add	Thêm	
+	Remove	Bỏ	
+	Edit	Sửa	
+	Browse	Duyệt	
+	Done	Xong	
+	Next	Tiếp	
+	Back	Quay lại	
+	Help	Trợ giúp	
+# Inquiry
+	Distance	Khoảng cách	
+	Area	Diện tích	
+	Measure	Đo	
+	List	Liệt kê	
+	Count	Đếm	
+	Quantities	Khối lượng	
+# Prompt words (command keywords such as [Undo/Close] stay English, D7)
+	Specify	Chỉ định	
+	Select	Chọn	
+	Enter	Nhập	
+	Pick	Bấm chọn	
+	first point	điểm đầu	
+	next point	điểm tiếp theo	
+	second point	điểm thứ hai	
+	base point	điểm gốc	
+	opposite corner	góc đối diện	
+	objects	đối tượng	
+	 or [	 hoặc [	leading space kept
+	default	mặc định	
+	Specify first point	Chỉ định điểm đầu	
+	Specify next point	Chỉ định điểm tiếp theo	
+	Specify base point	Chỉ định điểm gốc	
+	Select objects	Chọn đối tượng	
+	Enter an option	Nhập lựa chọn	
+# Status words
+	Saved locally	Đã lưu trên máy	
+	Unsaved	Chưa lưu	
+	Save failed	Lưu thất bại	
+	Offline	Ngoại tuyến	
+	Unsupported	Không hỗ trợ	
+	Not available in this version	Chưa có trong phiên bản này	
+	Locked by company policy	Bị khóa theo chính sách công ty	
+	Changed in another tab	Đã thay đổi ở thẻ khác	
