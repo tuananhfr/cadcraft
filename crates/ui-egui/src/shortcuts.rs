@@ -80,6 +80,7 @@ pub fn defaults_for(platform: KeyPlatform) -> BTreeMap<String, String> {
         ("ui.saveas", "Ctrl+Shift+S"),
         ("qsave", "Ctrl+S"),
         ("plot", "Ctrl+P"),
+        ("ui.palette", "Ctrl+Shift+P"),
         ("selectall", "Ctrl+A"),
         ("copybase", "Ctrl+Shift+C"),
         ("copyclip", "Ctrl+C"),
@@ -135,6 +136,7 @@ pub const BROWSER_RESERVED: &[&str] = &[
     "Ctrl+R",
     "Shift+F10",
     "Ctrl+Shift+C",
+    "Ctrl+Shift+P",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]

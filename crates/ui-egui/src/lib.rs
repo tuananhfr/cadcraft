@@ -45,6 +45,7 @@ pub mod managers;
 pub mod menus;
 pub mod opening;
 pub mod options;
+pub mod palette;
 pub mod palettes;
 pub mod parametric;
 pub mod plotstyles;
@@ -293,6 +294,7 @@ pub struct CadApp {
     /// Workspace profile layers, layout undo and their storage ([`wsprofile`]).
     pub ws: wsprofile::WsState,
     pub customize: customize::State,
+    pub palette: palette::State,
 }
 
 impl CadApp {
@@ -337,6 +339,7 @@ impl CadApp {
             bedit: bedit::State::default(),
             ws: wsprofile::WsState::default(),
             customize: customize::State::default(),
+            palette: palette::State::default(),
         }
     }
 
