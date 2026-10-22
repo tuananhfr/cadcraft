@@ -62,14 +62,52 @@ The browser keeps Ctrl+L/T/W/R, Ctrl+N, Ctrl+1…9, Ctrl+E, F1/F3/F5/F6/F7/F10/F
 
 Regression sources: `web_shortcuts::web_alternates_avoid_browser_keys_h09`, `properties_and_command_line_have_web_keys`, `web_commands_keep_a_way_in`, `ctrl_z_in_customize_undoes_layout_on_both_platforms_tc19`, plus `web_keys` and `ws_ribbon::shortcut_defaults_unchanged`. These are assertions in source; native/wasm CI and real-browser shortcut checks remain for the lead.
 
-Standalone web pages request beforeunload confirmation only while an open drawing has unsaved changes. Browsers require a prior user gesture and control the prompt text; this is not crash recovery or drawing autosave. Embedded `?host=parent` mode delegates leave protection to the parent through dirty reporting. Web drawing autosave is deferred to GĐ4.
+Standalone web pages request beforeunload confirmation only while an open drawing has unsaved changes. Browsers require a prior user gesture and control the prompt text; this is not crash recovery or drawing autosave. Embedded `?host=parent` mode delegates leave protection to the parent through dirty reporting. GĐ4 adds IndexedDB drawing autosave and recovery separately; see the limits below.
 
 PUBLISH delivers one download per output file, without a zip in GĐ0. The browser may require permission for multiple downloads. PLOT, EXPORT, PDFBOOK, plotter saves and workspace export also use file delivery; embedded mode delegates delivery to its host. Workspace JSON import has a separate upload route; drawing uploads continue through `open_bytes`. DXF IMPORT still opens the file as a new drawing rather than inserting it (unchanged in GĐ0; deferred for GĐ7 review).
 
-Workspace revision checks detect a stale writer before commit, on desktop as well as web. The web listens for localStorage changes and adopts them when there are no local edits pending; otherwise commit reports a local conflict and offers a choice of layouts. This does not provide cross-tab atomicity: simultaneous check-then-write operations can still overwrite one another. GĐ4 replaces that window with an IndexedDB transaction. These local conflicts are separate from remote synchronization.
+Workspace revision checks detect a stale writer before commit, on desktop as well as web. With IndexedDB, web revision checking, current-set replacement, snapshot creation and pruning share a read/write transaction; BroadcastChannel updates the other tabs. Conflicts offer a choice of layouts through `ui.workspace.resolve`. The localStorage fallback still has a non-atomic check-then-write window. These local conflicts are separate from remote synchronization; real concurrent-tab browser QA remains pending.
 
 PDFBOOK still selects frames by the requested height. Other-height closed outlines are ignored; only requested-height frames that match no paper receive `FRAME_PAPER_MISMATCH`. Invalid coordinates/dimensions report `FRAME_OUT_OF_RANGE`; reaching the model-entity scan cap reports `FRAME_LIMIT`, which does not count as a skipped frame. These diagnostics do not establish general frame-detection parity.
 
-GĐ0 shortcut, upload, recovery and local-conflict messages have Ukrainian catalog entries. Vietnamese translations, including the recovery revision notice and the conflict choices, remain a GĐ1B handoff; no `vi.tsv` exists in this branch.
+Ukrainian and Vietnamese catalogs include workspace recovery and local-conflict messages; runtime translation and browser QA remain pending.
 
 Browser fullscreen requires a click in the application and Fullscreen API permission. Embedded iframes need `allow="fullscreen"`. If the browser refuses fullscreen, the application enters Focus mode and shows a status message. Programmatic web requests return Unsupported; desktop fullscreen uses the native viewport. Focus and fullscreen are temporary and are never saved in a workspace profile.
+
+## V3.1 GĐ4 local storage and recovery limits
+
+2026-10-23 · Source inventory; browser quota/crash QA is outstanding.
+
+Workspace profiles use IndexedDB database `cadcraft`, currently `DB_VERSION = 2` after
+adding GĐ5 `print-jobs`. Workspace data uses `workspace`, `snapshots`, `damaged` and `meta`;
+drawings use `autosave`, `autosave_index` and `instances`. Profile sets are bounded by
+`MAX_SET_BYTES` (1 MiB). Profile preload is bounded by `MAX_PRELOAD_RECORDS` (10,000) and
+`MAX_PRELOAD_BYTES` (32 MiB per store read). Open/preload timeout is
+`IDB_OPEN_TIMEOUT_MS` (3,000 ms). Failure falls back to localStorage, then a memory store
+that refuses writes. LocalStorage fallback does not provide drawing autosave.
+
+Fonts still use localStorage (3 MiB per font, 4 MiB total); larger fonts work for the
+visit only. IndexedDB profiles no longer share that localStorage quota with fonts.
+Browser persistent-storage permission is requested, but can be denied; storage can still
+be cleared by the user or browser. This is local recovery, not an external backup.
+
+Drawing autosave follows SAVETIME (0 disables it), with urgent requests on visibility
+change/pagehide; browser termination may prevent the last pending transaction completing.
+`MAX_WEB_AUTOSAVE_BYTES` is 64 MiB per drawing. Recovery skips live/own instances and
+fetches DXF bytes on demand. A recovered drawing has no source path and stays dirty until
+saved/downloaded. Drawing quota failure never evicts workspace records. Workspace quota
+recovery prunes only older valid snapshots, retains the last valid snapshot, current,
+damaged evidence and v1 backup, and retries; another quota failure reports an unsaved state.
+Real quota exhaustion, private/blocked storage, abrupt termination, two-tab contention
+and recovery after reload remain QA work; fake-backend tests are not browser evidence.
+
+Workspace safe attachment uses SIMPLE and suppresses workspace reads, writes and sync
+through `WsState`. Ending safe mode discards its edits. On the web, host IndexedDB
+open/preload and localStorage migration run before `?safe` is applied, so safe mode does
+not currently guarantee that browser storage is untouched during startup.
+
+Cloud workspace synchronization is not implemented. MemoryRemote remains a test double;
+`LayoutSave::SyncPending`, `Syncing` and `Synced` have no production transition. Local save
+labels explicitly say unsynced. Neither remote `/print-jobs/*` APIs nor tenant job services
+are implemented. Batch resume and browser download limits are in
+[plotters](../plotters.md#batch-jobs).

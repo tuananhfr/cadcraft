@@ -136,7 +136,7 @@ layout's whole sheet, or the model-space extents.
 that device's papers. `CADCraft PDF` allows 15000 mm on either side. At least 95% of
 either limit produces WARN `DEVICE_LIMIT_NEAR`; exceeding either produces BLOCK
 `DEVICE_LIMIT_EXCEEDED`. Device definitions describe capabilities; real printer
-submission, driver queries and print queues remain GĐ5 work.
+submission and driver queries remain pending. PDF batch queues are described below.
 
 An oversized long sheet can have an unapproved overlap split proposal. The short side
 must fit the device width; otherwise choose PDF. Scan and Publish never split it
@@ -161,6 +161,206 @@ rechecks capabilities and never silently selects another printer. This restricti
 to UBPLOT; the built-in PNG/SVG outputs remain available through PLOT.
 
 See [UBPLOT](ubplot.md) for paper strings, physical scale, preflight and approval details.
+
+## Batch jobs
+
+2026-10-23 · GĐ5 source inventory. Runtime gates, browser crash/quota QA and performance
+measurements remain pending. The synchronous `ubplot.publish` API retains its existing
+result; add `background: true` to queue a job from the current scan or a supplied `plan`:
+
+```json
+{"command":"ubplot.publish","params":{"background":true,"path":"set.pdf","mode":"merged","pagesPerFile":256,"retryLimit":2}}
+```
+
+The response is `{"jobId":"…","status":"QUEUED"}`. Omitting `path` uses stem `plot` and
+no output directory. `OutputSpec::default()` uses `merged`, 256 pages per file on desktop
+and 64 on web. Command `mode: "split"` selects manifest/job output mode `per_sheet`.
+Merged output is `<stem>.pdf`, or `<stem>-001.pdf`, `<stem>-002.pdf`, … for multiple groups;
+per-sheet names include sheet order and ID, plus source index for multi-source jobs.
+Approved split pieces stay together and count toward the page limit.
+
+### Manifest and resume
+
+The manifest is schema `"1.0"`, independent of workspace schema 3. This excerpt follows
+`crates/engine/tests/ubplot_queue.rs::manifest_json_has_contract_keys`, constructed with
+`PublishManifest::new(&job(), 1234)`: first sheet only, generated job/source hashes and
+source entries omitted. Unset artifact fields come from `PublishManifest::new`.
+
+```json
+{
+  "schema_version": "1.0",
+  "profile_id": null,
+  "profile_version": null,
+  "status": "QUEUED",
+  "created_ms": 1234,
+  "updated_ms": 1234,
+  "sheets": [
+    {
+      "sheet_key": "KT-01@1",
+      "source_index": 0,
+      "sheet_id": "KT-01",
+      "order": 1,
+      "status": "READY",
+      "attempts": 0,
+      "sha256": null,
+      "output_file": null,
+      "page_index": null,
+      "finished_ms": null
+    }
+  ],
+  "files": [],
+  "issues": [],
+  "skipped_files": []
+}
+```
+
+Full manifests also carry `job_id`, `source_hash`, `sources` and per-sheet `issues`.
+Each source records path/hash, sheet count and source-level issues. Job IDs are the first
+16 hex characters of SHA-256 over the source hash plus canonical settings; changing output
+settings changes the ID. The first source's sheet key is `<sheet_id>@<order>`; later sources
+prefix it with `<source_index>:`. Sheets follow source index then order. Delivered files
+record name, page count, SHA-256, `delivered_to` and `delivered_ms`; each delivered sheet's
+`page_index` is one-based within that file.
+
+- States are `QUEUED`, `RUNNING`, `CANCELLED`, `DONE`, `FAILED`. BLOCKs and unapproved WARNs
+  are refused before enqueue; audited WARN approval still uses `ubplot.approve`.
+- Resume checks the stored manifest against the job. It skips recorded delivered groups
+  and reuses `DONE` sheet artifacts when their SHA-256 matches. Missing or changed artifacts
+  for undelivered sheets become `READY` with `ARTIFACT_REBUILT`; failed sheets become ready
+  with attempts reset. Reopening a `DONE` job delivers nothing again.
+- Rendering allows the initial attempt plus `retry_limit` retries (default 2, maximum 5).
+  Exhaustion marks the sheet failed with `RENDER_FAILED`, `RENDER_TIMEOUT` or
+  `SHEET_TOO_LARGE`. A changed/unavailable source fails its pending sheets with
+  `SOURCE_CHANGED`/`SOURCE_UNAVAILABLE`; other sources can continue.
+- A group containing failed sheets is not delivered (`FILE_WITHHELD`); other groups can
+  finish. A failed merge withholds that group (`MERGE_FAILED`). The job ends `FAILED` if
+  sheets failed or manifest BLOCK issues remain. No partial group is delivered as complete.
+- Artifacts are committed before the manifest. Desktop uses exclusive `.part` files and
+  rename, publishing the manifest last; web uses one IndexedDB transaction for artifacts
+  and manifest, then waits for completion. Storage/delivery failure retries within the
+  limit, then reports `STORE_WRITE_FAILED`. The app remains usable.
+
+Delivery precedes recording its receipt. A crash in that interval can leave a delivered
+file without a recorded receipt; the manifest cannot guarantee exactly-once external
+delivery. Already recorded browser downloads are not repeated on resume, but the browser
+may require permission for multiple downloads. Removing a job removes stored progress and
+artifacts, not PDFs already delivered.
+
+### Commands and workers
+
+`ubplot.jobs` takes an `action`; all actions except `list` require `jobId`:
+
+| Action | Result / behavior |
+|---|---|
+| `list` | Array of summaries: `jobId`, status, done/failed/total and `updatedMs` |
+| `status` | One summary |
+| `manifest` | Full manifest under `manifest` |
+| `resume` | Runs the stored job synchronously and returns `manifest`; requires the same current drawing for a drawing job, or rereads files for a job with `folder.json` |
+| `cancel` | Cancels a queued job or requests cancellation of a running worker |
+| `remove` | Removes a job that is not `RUNNING` |
+
+Programmatic `resume` remains synchronous even with `background: true`; it does not open
+a dialog. The UI progress panel has its own worker resume path. Desktop renders off the UI
+thread and supports cooperative cancellation/deadlines. Interrupted jobs offer Resume or
+Discard at startup; they do not resume automatically. Web calls at most one sheet step per
+frame, waits for pending storage, and requests repaint. A single sheet cannot be preempted
+on web; exceeding its time budget adds WARN `SHEET_SLOW`. After reload, reopen the same
+source drawing/hash before choosing Resume.
+
+### Storage and limits
+
+Desktop GUI jobs use `<settings dir>/jobs/<job_id>/manifest.json`; `sheets/` holds
+`job.json` (plans/settings) and per-sheet PDFs. The settings root is the same as for
+plotter definitions above. CLI defaults to `<OUT directory>/.ubplot-jobs`, overridable
+with `--jobs-dir`. Web uses database `cadcraft`, version 2, store `print-jobs`, with
+`<job_id>/manifest` and `<job_id>/artifacts/<name>` keys. Its memory mirror is preloaded
+before use; pending writes are acknowledged only after IndexedDB completes. Without a
+persistent host store, engine jobs use memory and report `JOBS_NOT_PERSISTED`; reload
+resume is unavailable. If web IndexedDB cannot open, only that in-session store remains.
+
+| Constant / setting | Limit |
+|---|---|
+| `queue::types::MAX_JOB_SOURCES` | 5,000 sources/job |
+| `queue::types::MAX_JOB_SHEETS` | 20,000 sheets/job; also bounds queued/listed jobs |
+| `queue::types::DEFAULT_RETRY_LIMIT` / `MAX_RETRY_LIMIT` | 2 / 5 retries |
+| `queue::types::MAX_MANIFEST_BYTES` | 64 MiB manifest or stored job definition |
+| `cadcraft_doc::MAX_PLOT_PAGES` | 1,000 pages/PDF; `pages_per_file` must be 1–1,000 |
+| `cadcraft_doc::MAX_PDF_BYTES` | 512 MiB/PDF; also bounds combined merge inputs |
+| `cadcraft_doc::MAX_PAPER_MM` | 15,000 mm per paper edge |
+| `SheetBudget::desktop()` | `max_prims` 50,000,000; `max_bytes` 512 MiB; `time_ms` 300,000 |
+| `SheetBudget::web()` | `max_prims` 10,000,000; `max_bytes` 128 MiB; `time_ms` 300,000 |
+| Web `job_store::MAX_RECORDS` / `MAX_BYTES` | 50,000 preloaded records / 128 MiB; bounded writes and mirror |
+| Folder `MAX_DEPTH` / `MAX_SCAN_ENTRIES` | 32 levels / 50,000 scanned entries |
+| Folder `MAX_MODEL_ENTITIES` | 1,000,000 model entities considered for registered frames |
+| Folder `MAX_DWG_BYTES` / `MAX_DXF_BYTES` | 512 MiB DWG / 1 GiB DXF source |
+
+Primitive/output-byte budgets are memory proxies, not a per-thread RSS limit. Folder and
+CLI `pagesPerFile`/`--pages-per-file` currently accept only 1–256, default 256, even though
+the generic queue supports 1,000. Grouping keeps a sheet's approved split pieces together,
+so they can exceed the requested `pages_per_file` target; the PDF page cap still applies.
+
+### Folder mode and CLI
+
+Desktop/CLI `ubplot.folder` scans DWG/DXF names case-insensitively in relative-path order
+(lowercase byte order, original path as tie-breaker), then sheet order. It takes `folder`,
+`out`, optional `recursive` (true), `maxDepth` (16), `maxFiles` (1,000), `mode` (`merged` or
+`split`/`per_sheet`), `pagesPerFile` (256), `layouts` (false) and `background` (false).
+`out` must differ from the root; an output subtree is excluded from scanning. Links and
+Windows reparse points, empty/invalid files, read errors and scan limits appear in
+`skipped_files` with reasons. The skipped list is bounded; its final entry reports when
+further omissions are not listed. Drawings without registered frames receive
+`NO_FRAMES_FOUND`. Default Block scans require registered non-generic frame templates;
+`layouts: true` appends paper-space layouts after the registered Block sheets.
+
+A folder job has one manifest and `job.json`, plus a `folder.json` artifact containing
+JSON `true`. This is a loader marker, not a folder configuration file. Synchronous Folder
+execution and `ubplot.jobs resume` use `FolderLoader`, retaining only the current drawing
+and checking its bytes against the queued hash before render. Sources are read-only;
+output cannot overwrite a source. The desktop UI background pump currently uses a
+current-drawing snapshot loader even for Folder jobs, so use synchronous Folder mode or
+the CLI for multi-file work. Web Folder mode returns a desktop-only error.
+
+```text
+cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--templates FILE] [--layouts]
+cadcraft-cli ubplot FILE.(dwg|dxf) --out OUT.pdf [--mode merged|per-sheet] [--pages-per-file N] [--jobs-dir DIR] [--templates FILE]
+```
+
+`--templates FILE` reads strict `FrameRegistry` JSON, capped at 2 MiB
+(`MAX_TEMPLATE_BYTES`), and overrides saved templates for that run without saving the
+registry. Single-file CLI jobs also store `folder.json` so resume rereads the source.
+Repeating an unchanged command resumes the same job; delivered files retain their mtime.
+The CLI prints manifest JSON to stdout. Exit is 0 for `DONE`, 1 for a failed/cancelled job
+or execution error, and 2 for invalid arguments or an invalid template file.
+
+Source coverage includes `ubplot_queue::manifest_json_has_contract_keys`,
+`ubplot_jobs::queued_job_resumes_to_done_with_manifest`,
+`ubplot_folder::sp06_small_folder_resume`, web
+`job_store::tests::reload_resumes_without_redelivering_files` and CLI
+`ubplot_cli::cli_ubplot_rerun_resumes_and_does_not_duplicate`. These names describe source
+assertions; this documentation update did not execute them.
+
+## Printers
+
+Built-in PDF/PNG/SVG and user `.plotter.json` devices produce files. UBPLOT batch jobs
+produce PDFs; `DirJobStore::deliver` writes files and the web job store downloads them.
+No system-printer host, installed-printer enumeration or OS spool submission is wired in
+this checkout, and `ubplot.printers` is not registered. The `PrintJob.printer` field does
+not implement printing. Device limits above come from plotter definitions, not a driver
+capability query. No different printer is selected silently.
+
+The GĐ5 T12 printer capability survey is pending a user decision. Driver paper sizes,
+roll lengths, OS PDF-handler behavior and real-printer smoke evidence have not been
+established; no capability survey table or spool-success claim is available.
+
+## Benchmark
+
+No batch benchmark numbers are available. The GĐ5 T13 plan names the ignored
+`ubplot_bench::queue_bench_1000_sheets` (1,000 sheets) for an explicit release performance
+run in CI's `perf` job, along with `sp06_folder_1000_files_5000_sheets`. In this checkout,
+`crates/engine/tests/ubplot_bench.rs` is absent and
+`.github/workflows/ubotbuild-ci.yml`'s `perf` job runs workspace restore/switch/commit
+measurements only. The batch test and its CI invocation must be integrated before that
+run can be claimed. Machine, revision, timings, bytes and RSS remain unmeasured here.
 
 ## Plot transparency
 

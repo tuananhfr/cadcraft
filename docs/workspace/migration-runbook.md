@@ -15,12 +15,41 @@ On desktop, the backup is `<settings dir>/workspace/backup-v1.json`, published a
 
 For a deployment rollback, exit the v3 application, restore `backup-v1.json` as `current.json` in that workspace directory, then launch the older build. Restarting a v3 build deliberately migrates the v1 original again while retaining the same backup.
 
-In a browser, the localStorage backup key is `cadcraft.ws.backup:1.0.0`. The same command restores its exact contents to `cadcraft.ws.current` and suspends saving until restart. For a deployment rollback, close other tabs for the same origin, restore that backup value to `cadcraft.ws.current`, then open the older deployment. Keep the backup key. The subsequent IndexedDB implementation stores the backup in `meta` under `backup:1.0.0`; it must retain the old localStorage current key for one release.
+In a browser, IndexedDB database `cadcraft` stores the current set in `workspace` at key
+`current`, and the exact original in `meta` at `backup:1.0.0`. Its database version is 2
+after adding GĐ5 `print-jobs`; that database version is separate from profile schema 3.
+Migration from localStorage writes the converted set, snapshots, damaged evidence and
+backup in one transaction. Cleanup runs only after it commits, retaining
+`cadcraft.ws.current` and `cadcraft.ws.backup:1.0.0` for one release; only copied,
+unchanged snapshot/damaged keys and their indices are removed.
 
-The three pending GĐ3 fields (`ribbonMode`, `quickAccessPosition`, `density`) are documented even when this build does not expose their controls. They survive load and save. Bare legacy `ui_scale` is a read-only migration input; wire round-trip checks therefore use migrated fixture values, where the scale lives in `deviceGeometry`.
+`ui.workspace.rollback {}` restores the exact backup through the active store and
+suspends workspace writes for that session. With IndexedDB this is an asynchronous
+write; the command response is not a durable transaction acknowledgement. It does not
+copy the restored set into the legacy localStorage current key. In the localStorage
+fallback, the backup is `cadcraft.ws.backup:1.0.0` and rollback writes `cadcraft.ws.current`.
+
+For a browser deployment rollback, close all tabs for that origin before changing stored
+values or serving the older build. Keep the IndexedDB database and backup keys. An older
+build reads the retained `cadcraft.ws.current`; it sees the pre-migration layout, not later
+v3 edits. If the legacy current key is missing or must be restored, copy the exact v1
+backup text from localStorage `cadcraft.ws.backup:1.0.0`, or IndexedDB `meta` key
+`backup:1.0.0`, into localStorage `cadcraft.ws.current`, then open the older deployment.
+Do not substitute the v3 wire JSON. This operational browser rollback still needs QA.
+A later v3 deployment reads its existing IndexedDB current set; restoring only the legacy
+key does not replace that set.
+
+The GĐ3 fields `ribbonMode`, `quickAccessPosition` and `density` survive migration and subsequent saves (`ws_v3::gd3_fields_survive_v1_to_v3_and_back`). Enum values such as `tabs_only` remain snake_case. Bare legacy `ui_scale` is a read-only migration input; wire round-trip checks therefore use migrated fixture values, where the scale lives in `deviceGeometry`.
 
 Adding future migrations requires a named `Step`, a matching `CHANGELOG` row, a synthetic previous-version fixture, a stored-patch startup test and an idempotence check. `migrate_with(value, steps)` injects a table for tests; an empty table can read the original v1 profile without upgrading it. Unknown enum values still fail typed validation. Command ID renames continue to follow the engine registry through `rename_command_ids`.
 
 Stored `layoutPatch` is expanded over the current base and policy before profile migration. Changes to the patch structure itself require a raw-patch migration before that expansion; a full-profile fixture alone cannot prove that path. The tests include old `layout_patch` input with geometry and scale and verify actual startup, device ownership, backup and restart.
 
 Synthetic fixture coverage includes profiles aged 1, 3 and 5 years, the legacy-format 10-year fixture, unknown future fields and invalid/truncated JSON. These are hand-written examples, without real user data. Pre-release ws-v21 profiles that explicitly docked the command line remain docked; no migration rewrites that choice merely because the SIMPLE default now floats.
+
+Source assertions: `ws_migrate::aged_fixtures_migrate_to_v3_and_keep_the_original`,
+`rollback_restores_the_v1_original` and `backup_failure_never_commits_the_migrated_set`;
+web `idb_profile_store::tests::local_storage_set_is_copied_once`,
+`legacy_migration_keeps_the_original_and_signs_v3` and
+`cleanup_preserves_concurrent_local_storage_edits`. These tests use synthetic fixtures
+and fake storage; no migration/rollback run is claimed by this documentation update.

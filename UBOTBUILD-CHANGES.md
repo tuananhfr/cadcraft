@@ -91,3 +91,58 @@ CLI checks, builds or visual QA were run for this documentation task.
 | Independent PDF CLI checks on mixed-size and 15 m output | Pending — lead |
 | Web release build and visual QA: 1366×768, 1920×1080, 200% zoom | Pending — lead |
 | Desktop smoke: approved three-piece split and PDF inspection | Pending — lead |
+
+## V3.1 GĐ4: local persistence v3
+
+2026-10-23 · Source inventory; native/wasm gates and browser crash/quota QA remain pending.
+
+- Workspace sets and exports write numeric `schemaVersion: 3`, camelCase schema keys and
+  unchanged snake_case enum values. Canonical SHA-256 checksums cover stored sets, snapshots
+  and exports. Readers migrate 1.x profiles, retain unknown fields and keep the exact v1
+  original before replacing it. `ui.workspace.rollback` restores that original and suspends
+  workspace writes until restart; see the [migration runbook](docs/workspace/migration-runbook.md).
+- Web workspace storage preloads an in-memory mirror from IndexedDB database `cadcraft`.
+  A commit checks the stored revision and writes current, snapshot and pruning in one
+  transaction. Accepted writes remain pending until the transaction completes. Quota recovery
+  retries after pruning older valid snapshots, retaining current, the latest valid snapshot,
+  damaged evidence and the migration backup. The old localStorage current key is retained
+  for one release. IndexedDB failure falls back to localStorage, then a store that reports
+  failed saves if localStorage is unavailable.
+- A Device layer between User and Session owns interface scale, screen and layout geometry,
+  including the dock tree. Exports omit it; imports keep this device's geometry. Drawing and
+  layout save states have separate status labels; workspace changes debounce for 600 ms.
+- Workspace safe mode uses SIMPLE without workspace-store reads or writes through `WsState`:
+  desktop `--safe-mode`, web `?safe`, or `ui.workspace.safemode {on: true}`. Ending it discards
+  temporary layout edits and reloads the stored workspace. Web host preload/migration still
+  precedes safe attachment; browser storage isolation needs further QA.
+- With IndexedDB available, web dirty drawings autosave as DXF through the existing SAVETIME
+  planner, independently of profiles (64 MiB per drawing). Visibility/pagehide events request
+  urgent saves. Drawing Recovery offers stale-instance drawings; recovered drawings are dirty
+  and have no source path. `ui.recovery.status` reports drawing and workspace recovery separately.
+- `ws_sync` uses user-owned `/command_line/lines` in place of device-only `/ui_scale` for its
+  remote conflict probes; `ui_scale_is_not_synced` covers local scale retention. These are
+  MemoryRemote tests, not a cloud-sync implementation. Fonts still use localStorage; real
+  quota, multi-tab and crash evidence is outstanding. Test mappings are in
+  [acceptance](docs/workspace/acceptance.md#v31-gđ4-local-persistence-source-inventory).
+
+## Smart Plotter: batch jobs
+
+2026-10-23 · GĐ5 queue, workers, Folder mode and CLI source coverage. Runtime acceptance,
+printer capability survey and benchmark measurements remain pending.
+
+- `ubplot.publish {background: true}` queues a persisted job and returns `jobId`/`QUEUED`;
+  the default synchronous publish retains its existing result. Desktop runs a worker thread;
+  web advances at most one sheet per frame and commits progress to IndexedDB `print-jobs`.
+  Interrupted UI jobs require Resume or Discard; web resume requires the same source drawing.
+- Manifests record ordered sheet status, attempts, checksums, output file/page indices and
+  delivery destinations. Resume reuses valid completed artifacts and skips recorded deliveries;
+  missing or changed undelivered artifacts are rebuilt. Failed sheets retry within the job's
+  limit; a file group containing failures is withheld while other groups can be delivered.
+- `ubplot.jobs` lists, inspects, resumes, cancels and removes jobs. Desktop stores them under
+  `<settings dir>/jobs`; CLI defaults to `<OUT directory>/.ubplot-jobs`. Folder mode bounds
+  recursive DWG/DXF discovery, records skipped paths/reasons and rereads source hashes before
+  rendering. `folder.json` selects its file loader on resume.
+- `cadcraft-cli ubplot` accepts a drawing or `--folder`, output grouping and job-store options;
+  `--templates FILE` supplies a strict registry for that run only. Real printer submission is
+  not implemented in this checkout. See [plotters](docs/plotters.md#batch-jobs) for the manifest
+  excerpt, limits, storage and CLI syntax; no batch performance numbers are claimed.
