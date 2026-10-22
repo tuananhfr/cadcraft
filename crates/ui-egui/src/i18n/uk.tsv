@@ -16,6 +16,7 @@
 	{n} frame(s) added, {m} ignored (not frames), {t} total	Додано рамок: {n}, проігноровано (не рамки): {m}, усього: {t}
 	UBPLOT: {n} sheet(s), {b} blocked, {w} warning(s)	UBPLOT: аркушів: {n}, заблоковано: {b}, попереджень: {w}
 	Publish Plot Frames	Опублікувати аркуші рамок
+	Approve Plot Warnings	Схвалити попередження друку
 	Scan Plot Frames	Сканувати рамки для друку
 	Plot Frame Templates	Шаблони рамок для друку
 	Apply	Застосувати
