@@ -35,6 +35,43 @@ fn catalog_is_valid_and_preserves_placeholders_and_ellipses() {
     assert_eq!(tr("unknown", "Open"), "Open");
 }
 
+/// Rows of the Vietnamese glossary: (context, English, Vietnamese); the note column is for reviewers.
+fn glossary() -> Vec<(&'static str, &'static str, &'static str)> {
+    let rows = include_str!("vi_glossary.tsv").lines().map(|line| line.trim_end_matches('\r'));
+    rows.filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(|line| {
+            let cols: Vec<_> = line.split('\t').collect();
+            assert_eq!(cols.len(), 4, "glossary rows need context, English, Vietnamese and a note: {line}");
+            (cols[0], cols[1], cols[2])
+        })
+        .collect()
+}
+
+#[test]
+fn glossary_is_valid_and_carries_the_uf_tab_table() {
+    let rows = glossary();
+    assert!(rows.len() >= 140, "{}", rows.len());
+    for (en, vi) in [
+        ("Home", "Vẽ"),
+        ("Insert", "Chèn"),
+        ("Annotate", "Ghi chú"),
+        ("Layers", "Lớp bản vẽ"),
+        ("View", "Hiển thị"),
+        ("Layout", "Bố cục in"),
+        ("Properties", "Thuộc tính"),
+        ("Xref", "Tham chiếu ngoài"),
+        ("Plot", "In bản vẽ"),
+    ] {
+        assert!(rows.contains(&("ribbon", en, vi)), "{en}");
+    }
+    let mut seen = BTreeSet::new();
+    for (context, en, vi) in &rows {
+        assert!(["", "menu", "ribbon"].contains(context), "unknown context: {context}");
+        assert!(seen.insert((*context, *en)), "duplicate glossary row: {context} {en}");
+        assert!(!vi.is_empty(), "{en}");
+    }
+}
+
 /// Ukrainian is the reference translation and must cover everything. Other languages fall back
 /// to English for what they don't cover yet; their gaps are reported, not enforced, so adding a
 /// command doesn't require a row in every language.
