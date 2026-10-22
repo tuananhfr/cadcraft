@@ -45,3 +45,138 @@ menu	Help	Trợ giúp
 	Current: {color}	Hiện hành: {color}
 @plural	{n} contributor	{n} người đóng góp
 	No font covers the Vietnamese interface	Không có phông chữ hỗ trợ giao diện tiếng Việt
+
+# Batch 9a: File, Edit, View, Insert and Format menus.
+	1 Viewport	1 khung nhìn
+	2 Viewports	2 khung nhìn
+	3 Viewports	3 khung nhìn
+	4 Viewports	4 khung nhìn
+	Accessibility	Hỗ trợ tiếp cận
+	All	Tất cả
+	All Scales	Tất cả tỉ lệ
+	Animation Effects	Hiệu ứng chuyển động
+	Audit	Kiểm tra lỗi
+	Batch Publish...	Xuất bản hàng loạt...
+	Block...	Khối...
+	Change to Current Layer	Chuyển sang lớp hiện hành
+	Clear	Xóa
+	Close All	Đóng tất cả
+	Color...	Màu...
+	Copy	Sao chép
+	Copy with Base Point	Sao chép với điểm gốc
+	Current Scale Only	Chỉ tỉ lệ hiện hành
+	Cut	Cắt
+	DWG	DWG
+	DWG Reference...	Tham chiếu DWG...
+	DXF	DXF
+	Dark	Tối
+	Data Link...	Liên kết dữ liệu...
+	Default Save Format	Định dạng lưu mặc định
+	Dimension Style...	Kiểu kích thước...
+	Down	Xuống
+	Drawing Limits	Giới hạn bản vẽ
+	Drawing Recovery Manager...	Trình quản lý phục hồi bản vẽ...
+	Drawing Utilities	Tiện ích bản vẽ
+	Dynamic	Động
+	Edit	Sửa
+	Export to PDF...	Xuất sang PDF...
+	Export...	Xuất...
+	Extents	Toàn bộ
+	File	Tệp
+	Find...	Tìm...
+	Format	Định dạng
+	Freeze Layer	Đóng băng lớp
+	Import...	Nhập...
+	In	Phóng to
+	Insert	Chèn
+	Interface Theme	Giao diện sáng tối
+	Isolate Layer	Cô lập lớp
+	Layer Delete	Xóa lớp
+	Layer Match	Sao chép lớp
+	Layer Merge	Gộp lớp
+	Layer Off	Tắt lớp
+	Layer States Manager...	Trình quản lý trạng thái lớp...
+	Layer Tools	Công cụ lớp
+	Left	Trái
+	Light	Sáng
+	Linetype...	Kiểu đường...
+	Lineweight...	Độ dày nét...
+	Lock Layer	Khóa lớp
+	Make Current	Đặt làm hiện hành
+	Multileader Style...	Kiểu đường ghi chú nhiều nhánh...
+	Multiline Style...	Kiểu đường đa nét...
+	Named Views...	Khung nhìn đã đặt tên...
+	New Drawing...	Bản vẽ mới...
+	New Layout	Bố cục in mới
+	New Viewports...	Khung nhìn mới...
+	New from Template...	Tạo mới từ mẫu bản vẽ...
+	Object	Đối tượng
+	Off	Tắt
+	On	Bật
+	Open...	Mở...
+	Out	Thu nhỏ
+	Page Setup Manager...	Trình quản lý thiết lập trang in...
+	Pan	Dời màn hình
+	Pan Down	Dời màn hình xuống
+	Pan Left	Dời màn hình sang trái
+	Pan Right	Dời màn hình sang phải
+	Pan Up	Dời màn hình lên
+	Paste	Dán
+	Paste as Block	Dán thành khối
+	Paste to Original Coordinates	Dán tại tọa độ gốc
+	Plot Preview	Xem trước bản in
+	Plot Style Manager...	Trình quản lý kiểu in...
+	Plot Style...	Kiểu in...
+	Plot Styles...	Kiểu in...
+	Plotter Manager...	Trình quản lý thiết bị in...
+	Point Style...	Kiểu điểm...
+	Polygonal Viewport	Khung nhìn đa giác
+	Previous	Trước
+	Previous Layer	Lớp trước
+	Print...	In...
+	Quick Select...	Chọn nhanh...
+	Realtime	Thời gian thực
+	Recover...	Phục hồi...
+	Redo	Làm lại
+	Redraw	Vẽ lại
+	Regen	Tái tạo hình
+	Regen All	Tái tạo tất cả khung nhìn
+	Rename...	Đổi tên...
+	Right	Phải
+	Save As...	Lưu thành...
+	Save Layer State	Lưu trạng thái lớp
+	Scale List...	Danh sách tỉ lệ...
+	Select All	Chọn tất cả
+	Sheet Books to PDF...	Bộ tờ bản vẽ sang PDF...
+	Show Annotative Objects	Hiện đối tượng chú thích theo tỉ lệ
+	Show System Cursor	Hiện con trỏ hệ thống
+	Table Style...	Kiểu bảng...
+	Text Style...	Kiểu chữ...
+	UCS Icon	Biểu tượng UCS
+	Undo	Hoàn tác
+	Unisolate Layer	Bỏ cô lập lớp
+	Units...	Đơn vị...
+	Unlock Layer	Mở khóa lớp
+	Up	Lên
+	Use System Setting	Dùng cài đặt hệ thống
+	Version 2000	Phiên bản 2000
+	Version 2004	Phiên bản 2004
+	Version 2007	Phiên bản 2007
+	Version 2010	Phiên bản 2010
+	Version 2013	Phiên bản 2013
+	Version 2018	Phiên bản 2018
+	View	Hiển thị
+	ViewCube	ViewCube
+	Viewports	Khung nhìn
+	Window	Cửa sổ
+	Zoom	Thu phóng
+	Zoom All	Thu phóng tất cả
+	Zoom Dynamic	Thu phóng động
+	Zoom Extents	Thu phóng toàn bộ
+	Zoom In	Phóng to
+	Zoom Object	Thu phóng đối tượng
+	Zoom Out	Thu nhỏ
+	Zoom Previous	Thu phóng về trước
+	Zoom Realtime	Thu phóng thời gian thực
+	Zoom Window	Thu phóng theo cửa sổ
+
