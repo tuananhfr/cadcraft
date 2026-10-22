@@ -251,6 +251,7 @@ limits	cad.format.limits
 line	cad.draw.line
 linetype	cad.format.linetype
 lisp	cad.other.lisp
+lispsandbox	cad.other.lispsandbox
 list	cad.tools.list
 ltscale	cad.other.ltscale
 lwdisplay	cad.other.lwdisplay

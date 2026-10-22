@@ -79,6 +79,8 @@ pub const FILE_IDS: &[&str] = &[
     "saveas",
     "import",
     "export",
+    #[cfg(not(target_arch = "wasm32"))]
+    "lispsandbox",
     "exportpdf",
     "plot",
     "publish",
@@ -109,7 +111,13 @@ pub const FILE_IDS: &[&str] = &[
 // Not undoable (they steer or persist the session, not the drawing's undo stack) yet change state.
 pub const EDIT_IDS: &[&str] = &["undo", "u", "redo", "mredo", "bsave", "bsaveas", "bclose", "layout.set", "ubplot.approve"];
 
-pub const LISP_IDS: &[&str] = &["appload", "load", "lisp"];
+pub const LISP_IDS: &[&str] = &[
+    "appload",
+    "load",
+    "lisp",
+    #[cfg(not(target_arch = "wasm32"))]
+    "lispsandbox",
+];
 pub const XREF_IDS: &[&str] = &["xref", "-xref", "xattach", "xopen", "xbind"];
 
 fn risk_of(spec: &CommandSpec) -> RiskClass {

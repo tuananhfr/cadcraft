@@ -1,6 +1,7 @@
 mod interactive;
 mod jobs;
 pub(crate) mod publish;
+mod templates;
 
 use std::sync::OnceLock;
 
@@ -14,8 +15,8 @@ use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::ids::sha256_hex;
 use crate::sheetplan::plan::{build_plan_with_context, validate_request_value};
 use crate::sheetplan::preflight::{PreflightContext, preflight, styles_on_sheets, verdict};
-use crate::sheetplan::registry_store::{RegistryStore, open_host_registry, parse_registry, save_registry};
-use crate::sheetplan::{FrameRegistry, MAX_TEMPLATES, ScanMode, ScanRequest, Severity, SheetPlan};
+use crate::sheetplan::registry_store::{RegistryStore, open_host_registry};
+use crate::sheetplan::{FrameRegistry, ScanMode, ScanRequest, Severity, SheetPlan};
 use crate::{EngineError, Result, Session};
 
 pub type ClockHook = fn() -> u64;
@@ -72,8 +73,8 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{mode: block|window|layout|last|plan, handles?, windows?: [[[x1,y1],[x2,y2]] | [[x,y]×4]], layouts?, paper?, scale?: \"1:100\"|\"fit\", device?: name, revisions?: {sheet_id: revision}, overrides?: {sheet_key: {paper?, scale?, window?, sheetId?}}, exclude?: [sheet_key], plan? (mode plan)} → SheetPlan + summary")
             .noundo()
             .enabled(has_doc),
-        CommandSpec::new("ubplot.templates", "Plot Frame Templates", run_templates)
-            .params("{action: list|import|reset, text?} → {templates:[{id, version, versionedId, status, revision, blockNames, source, supersededBy}]}")
+        CommandSpec::new("ubplot.templates", "Plot Frame Templates", templates::run_templates)
+            .params("{action: list|import|reset|audit|verify|exportLisp, text?, path? | name+data?, sha256?, picks?, approve?} → templates, AuditReport, issues or LISP text")
             .noundo(),
     ]
 }
@@ -240,55 +241,6 @@ fn run_approve(s: &mut Session, params: &Value) -> Result<Value> {
     let result = serde_json::to_value(&plan).map_err(|error| bad(COMMAND, error.to_string()))?;
     publish::remember(s, &plan, supplied)?;
     Ok(result)
-}
-
-fn run_templates(s: &mut Session, params: &Value) -> Result<Value> {
-    validate_request_value(params).map_err(|error| bad("ubplot.templates", error))?;
-    let action = match params.get("action") {
-        None => "list",
-        Some(Value::String(action)) => action.as_str(),
-        Some(_) => return Err(bad("ubplot.templates", "action must be list, import or reset")),
-    };
-    registry_notice(s);
-    let mut notices = Vec::new();
-    let next = match action {
-        "list" => None,
-        "reset" => Some(FrameRegistry::builtin()),
-        "import" => {
-            let text = params.get("text").and_then(Value::as_str).ok_or_else(|| bad("ubplot.templates", "text is required for import"))?;
-            let (imported, notice) = parse_registry(text, true).map_err(|error| bad("ubplot.templates", error))?;
-            notices.extend(notice);
-            let merged = s.ubplot.registry.merged_with(imported);
-            // Repeated small imports must obey the same registry limits as one import.
-            let (merged, notice) = parse_registry(&save_registry(&merged), true).map_err(|error| bad("ubplot.templates", error))?;
-            notices.extend(notice);
-            Some(merged)
-        }
-        _ => return Err(bad("ubplot.templates", "action must be list, import or reset")),
-    };
-    if let Some(next) = next {
-        if let Some(store) = s.ubplot.registry_store.as_mut() {
-            store
-                .write(&save_registry(&next))
-                .map_err(|error| bad("ubplot.templates", format!("could not save frame template registry: {error}")))?;
-        }
-        s.ubplot.registry = next;
-    }
-    for notice in notices {
-        s.echo(notice);
-    }
-    let templates: Vec<_> = s
-        .ubplot
-        .registry
-        .templates
-        .iter()
-        .take(MAX_TEMPLATES)
-        .map(|template| {
-            json!({"id": template.id, "version": template.version, "versionedId": template.versioned_id(), "status": template.status,
-                "revision": template.revision, "blockNames": template.block_names, "source": template.source, "supersededBy": template.superseded_by})
-        })
-        .collect();
-    Ok(json!({"templates": templates}))
 }
 
 pub(crate) fn source_hash(s: &mut Session) -> Result<String> {

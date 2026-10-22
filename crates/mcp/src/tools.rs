@@ -112,10 +112,17 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> Result<Value,
     let r = match name {
         "command_line" => b.call("cmdline.input", a),
         "script" => b.call("cmdline.script", a),
-        "execute" => b.call(
-            "engine.execute",
-            json!({"command": a.get("command").cloned().unwrap_or(Value::Null), "params": a.get("params").cloned().unwrap_or(json!({}))}),
-        ),
+        "execute" => {
+            let command = a.get("command").and_then(Value::as_str).unwrap_or("");
+            let params = a.get("params").cloned().unwrap_or(json!({}));
+            if cadcraft_engine::cmd::find_command(command).is_some_and(|spec| spec.id == "lispsandbox")
+                && matches!(params.get("action").and_then(Value::as_str), Some("add" | "remove"))
+            {
+                Err("Only the user can change LISP write folders".into())
+            } else {
+                b.call("engine.execute", json!({"command": command, "params": params}))
+            }
+        }
         "list_commands" => b.call("engine.commands", json!({})).map(|v| {
             let f = a.get("filter").and_then(Value::as_str).map(str::to_ascii_lowercase);
             match (v, f) {

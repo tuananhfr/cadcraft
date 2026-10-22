@@ -324,6 +324,7 @@ menu	Help	Trợ giúp
 	End Object Isolation	Kết thúc cô lập đối tượng
 	Equal	Bằng nhau
 	Erase	Xóa
+	LISP write folders	Thư mục ghi LISP
 	Evaluate LISP	Thực thi LISP
 	Explode	Phá khối
 	Export Table	Xuất bảng
@@ -1982,3 +1983,5 @@ ribbon	Check	Kiểm tra
 	Replace Block	Thay thế khối
 	Select block references to replace	Chọn các tham chiếu khối cần thay thế
 	Enter replacement block name	Nhập tên khối thay thế
+	BASELINE_CHANGED	Tệp mẫu cơ sở đã thay đổi
+	AUDIT_LIMIT	Vượt giới hạn kiểm tra tệp mẫu

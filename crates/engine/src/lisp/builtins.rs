@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use super::eval::{Ctx, Flow, Special};
 use super::value::{Builtin, BuiltinKind, Sym, Value, charge_bytes, check_string_len, eq, equal, real_text, to_text};
-use super::{Env, LispError, drawing, input, read};
+use super::{Env, LispError, drawing, input, read, ubplot};
 
 type R = Result<Value, LispError>;
 
@@ -922,8 +922,15 @@ fn open(ctx: &mut Ctx<'_>, a: Vec<Value>) -> Result<Flow, LispError> {
             }
             None => return Ok(Flow::Value(Value::Nil)),
         }
-    } else if !can_write(&path) {
-        return Ok(Flow::Value(Value::Nil));
+    } else {
+        match can_write(&path) {
+            Ok(true) => {}
+            Ok(false) => return Ok(Flow::Value(Value::Nil)),
+            Err(error) => {
+                ctx.s.echo(error);
+                return Ok(Flow::Value(Value::Nil));
+            }
+        }
     }
     let id = ctx.env.next_file;
     ctx.env.next_file = ctx.env.next_file.wrapping_add(1);
@@ -935,8 +942,10 @@ fn close(ctx: &mut Ctx<'_>, a: Vec<Value>) -> Result<Flow, LispError> {
     arity(&a, 1, 1)?;
     let Value::File(id) = a[0] else { return Err(LispError::bad_arg("streamp", &a[0])) };
     let Some(f) = ctx.env.files.remove(&id) else { return Err(LispError::bad_arg("streamp", &a[0])) };
-    if f.writing {
-        write_text_file(&f.path, &f.text, f.append);
+    if f.writing
+        && let Err(error) = write_text_file(&f.path, &f.text, f.append)
+    {
+        ctx.s.echo(error);
     }
     Ok(Flow::Value(Value::Nil))
 }
@@ -975,23 +984,31 @@ pub fn read_text_file(_path: &str) -> Option<String> {
     None
 }
 #[cfg(not(target_arch = "wasm32"))]
-fn can_write(path: &str) -> bool {
-    std::path::Path::new(path).parent().is_none_or(|d| d.as_os_str().is_empty() || d.exists())
+fn can_write(path: &str) -> Result<bool, String> {
+    super::sandbox::check_write(path).map(|_| true)
 }
 #[cfg(target_arch = "wasm32")]
-fn can_write(_path: &str) -> bool {
-    false
+fn can_write(_path: &str) -> Result<bool, String> {
+    Ok(false)
 }
 #[cfg(not(target_arch = "wasm32"))]
-fn write_text_file(path: &str, text: &str, append: bool) {
+fn write_text_file(path: &str, text: &str, append: bool) -> Result<(), String> {
     use std::io::Write;
-    let f = std::fs::OpenOptions::new().create(true).write(true).append(append).truncate(!append).open(path);
-    if let Ok(mut f) = f {
-        let _ = f.write_all(text.as_bytes());
-    }
+    // Recheck at close because a stream can remain open while permissions or symlinks change.
+    let target = super::sandbox::check_write(path)?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(append)
+        .truncate(!append)
+        .open(target)
+        .map_err(|error| format!("{path}: {error}"))?;
+    file.write_all(text.as_bytes()).map_err(|error| format!("{path}: {error}"))
 }
 #[cfg(target_arch = "wasm32")]
-fn write_text_file(_path: &str, _text: &str, _append: bool) {}
+fn write_text_file(_path: &str, _text: &str, _append: bool) -> Result<(), String> {
+    Ok(())
+}
 #[cfg(not(target_arch = "wasm32"))]
 fn file_exists(path: &str) -> bool {
     std::path::Path::new(path).is_file()
@@ -1426,6 +1443,11 @@ static BUILTINS: &[Builtin] = &[
     ctx!("COMMAND", drawing::command),
     ctx!("COMMAND-S", drawing::command),
     ctx!("VL-CMDF", drawing::command),
+    ctx!("GETPROPERTYVALUE", ubplot::getpropertyvalue),
+    ctx!("UBPLOT-ATTRIBS", ubplot::attribs),
+    ctx!("UBPLOT-SCAN", ubplot::scan),
+    ctx!("UBPLOT-PUBLISH", ubplot::publish),
+    ctx!("UBPLOT-TEMPLATES", ubplot::templates),
     ctx!("GETVAR", drawing::getvar),
     ctx!("SETVAR", drawing::setvar),
     ctx!("ENTGET", drawing::entget),

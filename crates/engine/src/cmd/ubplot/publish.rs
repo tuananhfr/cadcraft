@@ -99,6 +99,14 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
             check_source(&temporary_path(destination, &plan.job_id), source)?;
         }
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    if path.is_some() && s.lisp_running() {
+        // Split names are derived from the plan and can name existing symlinks.
+        for destination in &destinations {
+            let path = destination.to_str().ok_or_else(|| bad(COMMAND, "output path is not UTF-8"))?;
+            crate::lisp::sandbox::check_write(path).map_err(|error| bad(COMMAND, error))?;
+        }
+    }
     let blocked: Vec<_> = plan.sheets.iter().filter(|sheet| sheet.status == SheetStatus::Blocked).map(sheet_key).collect();
     if output == "merged" && !blocked.is_empty() {
         remember(s, &plan, supplied)?;

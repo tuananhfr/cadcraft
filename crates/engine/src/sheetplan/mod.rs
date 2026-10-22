@@ -11,6 +11,7 @@ pub mod queue;
 pub mod registry;
 pub mod registry_store;
 pub mod split;
+pub mod template_audit;
 pub mod types;
 
 pub use detect::{FrameCandidate, detect_frames, is_frame_candidate};

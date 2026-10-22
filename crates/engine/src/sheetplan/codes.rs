@@ -37,6 +37,8 @@ pub const SOURCE_HASH_WEAK: &str = "SOURCE_HASH_WEAK";
 pub const OUTPUT_IS_SOURCE: &str = "OUTPUT_IS_SOURCE";
 pub const PLAN_STALE: &str = "PLAN_STALE";
 pub const PROFILE_LEVEL_SKIPPED: &str = "PROFILE_LEVEL_SKIPPED";
+pub const BASELINE_CHANGED: &str = "BASELINE_CHANGED";
+pub const AUDIT_LIMIT: &str = "AUDIT_LIMIT";
 pub const PLAN_INVALID: &str = "PLAN_INVALID";
 
 pub fn issue(severity: Severity, code: &str, message: impl Into<String>, sheet_id: Option<&str>) -> PreflightIssue {

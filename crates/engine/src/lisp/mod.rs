@@ -10,7 +10,10 @@ mod drawing;
 pub mod eval;
 pub mod input;
 pub mod read;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod sandbox;
 mod startup;
+mod ubplot;
 pub mod value;
 
 use std::collections::HashMap;
