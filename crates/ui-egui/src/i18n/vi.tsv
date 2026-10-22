@@ -628,3 +628,544 @@ menu	Help	Trợ giúp
 	Sweep	Quét theo đường dẫn
 	Table	Bảng
 	Torus	Hình xuyến
+
+# Batch 10: command prompts.
+	(need {axes})	(cần {axes})
+	<Offset>	<Offset>
+	>> Expression	>> Biểu thức
+	ATTSYNC block {name}?	ATTSYNC cho khối {name}?
+	Align block with object?	Căn chỉnh khối theo đối tượng?
+	Associate the hatch with the new boundary?	Liên kết mặt cắt với đường biên mới?
+	Associative dimension priority	Ưu tiên kích thước liên kết
+	Attribute {tag}: enter property to change	Thuộc tính khối {tag}: nhập thuộc tính cần đổi
+	Base point	Điểm gốc
+	Block "{name}" already exists. Redefine it?	Khối "{name}" đã tồn tại. Định nghĩa lại?
+	Block {name}: enter an option	Khối {name}: nhập lựa chọn
+	Bring to front	Đưa lên trước
+	Calculate rectangle dimensions based on	Tính kích thước hình chữ nhật dựa trên
+	Combine collinear objects that meet end to end	Gộp các đối tượng thẳng hàng nối tiếp nhau
+	Combine collinear objects that partially overlap	Gộp các đối tượng thẳng hàng chồng lấn một phần
+	Combine identical rows?	Gộp các hàng giống nhau?
+	Combine layer property changes into one undo step?	Gộp các thay đổi thuộc tính lớp vào một bước hoàn tác?
+	Combine zooms and pans into one undo step?	Gộp các lần thu phóng và dời màn hình vào một bước hoàn tác?
+	Constant?	Hằng số?
+	Create associative array	Tạo mảng liên kết
+	Drafting mode?	Chế độ vẽ?
+	Drag up to zoom in or down to zoom out; press Esc or Enter to exit	Kéo lên để phóng to hoặc xuống để thu nhỏ; nhấn Esc hoặc Enter để thoát
+	Edit attributes one at a time?	Sửa từng thuộc tính khối một?
+	Edit only attributes visible on screen?	Chỉ sửa các thuộc tính khối đang thấy trên màn hình?
+	Edit path for which xref(s)	Sửa đường dẫn cho tham chiếu ngoài nào (một hoặc nhiều)
+	Enter Trim mode option	Nhập lựa chọn chế độ cắt xén
+	Enter UNDO Auto mode	Nhập chế độ tự động của UNDO
+	Enter X scale factor, specify opposite corner	Nhập hệ số tỉ lệ X, chỉ định góc đối diện
+	Enter Y scale factor	Nhập hệ số tỉ lệ Y
+	Enter a configuration option	Nhập lựa chọn cấu hình
+	Enter a default viewport visibility option	Nhập lựa chọn hiển thị mặc định trong khung nhìn
+	Enter a fit data option	Nhập lựa chọn dữ liệu khớp
+	Enter a group description	Nhập mô tả nhóm
+	Enter a group name	Nhập tên nhóm
+	Enter a group option	Nhập lựa chọn nhóm
+	Enter a hatch option	Nhập lựa chọn mặt cắt
+	Enter a loaded linetype name	Nhập tên kiểu đường đã tải
+	Enter a name for the new plotter	Nhập tên cho thiết bị in mới
+	Enter a new name for the group	Nhập tên mới cho nhóm
+	Enter a pattern name	Nhập tên mẫu
+	Enter a plotter option	Nhập lựa chọn thiết bị in
+	Enter a plotting preference	Nhập tùy chọn in
+	Enter a projection option	Nhập lựa chọn phép chiếu
+	Enter a property to turn on or off	Nhập thuộc tính cần bật hoặc tắt
+	Enter a scale factor (nX or nXP)	Nhập hệ số tỉ lệ (nX hoặc nXP)
+	Enter a text edit mode option	Nhập lựa chọn chế độ sửa chữ
+	Enter a vertex editing option	Nhập lựa chọn sửa đỉnh
+	Enter an UNDO control option	Nhập lựa chọn điều khiển UNDO
+	Enter an implied edge extension mode	Nhập chế độ kéo dài cạnh ngầm định
+	Enter an option	Nhập lựa chọn
+	Enter an option [Add/Remove] <Add>	Nhập lựa chọn [Add/Remove] <Add>
+	Enter an option to change	Nhập lựa chọn cần đổi
+	Enter angle of xline	Nhập góc đường dựng
+	Enter angle of xline (0) or	Nhập góc đường dựng (0) hoặc
+	Enter array type	Nhập kiểu mảng
+	Enter attribute prompt	Nhập lời nhắc thuộc tính khối
+	Enter attribute tag	Nhập thẻ thuộc tính khối
+	Enter attribute tag name	Nhập tên thẻ thuộc tính khối
+	Enter attribute tag specification	Nhập mẫu thẻ thuộc tính khối
+	Enter attribute value	Nhập giá trị thuộc tính khối
+	Enter attribute value specification	Nhập mẫu giá trị thuộc tính khối
+	Enter attribute visibility setting	Nhập cài đặt hiển thị thuộc tính khối
+	Enter block name	Nhập tên khối
+	Enter block name or select a block reference [?]	Nhập tên khối hoặc chọn tham chiếu khối [?]
+	Enter block name specification	Nhập mẫu tên khối
+	Enter block names to extract	Nhập tên các khối cần trích xuất
+	Enter block(s) to list	Nhập các khối cần liệt kê
+	Enter cell style name of table style {style}	Nhập tên kiểu ô của kiểu bảng {style}
+	Enter color name or number (1-255)	Nhập tên hoặc số màu (1-255)
+	Enter column type	Nhập kiểu cột
+	Enter constraint type	Nhập kiểu ràng buộc
+	Enter continuity	Nhập tính liên tục
+	Enter datum reference {number}	Nhập tham chiếu chuẩn {number}
+	Enter default attribute value	Nhập giá trị mặc định của thuộc tính khối
+	Enter degree of spline	Nhập bậc đường spline
+	Enter delta angle	Nhập góc gia tăng
+	Enter delta length or	Nhập chiều dài gia tăng hoặc
+	Enter dependent {kind} name(s)	Nhập tên {kind} phụ thuộc (một hoặc nhiều)
+	Enter dimension text (<> = measurement)	Nhập chữ kích thước (<> = giá trị đo)
+	Enter dimension value or [name=expression]	Nhập giá trị kích thước hoặc [name=expression]
+	Enter dimension variable name to override	Nhập tên biến kích thước cần ghi đè
+	Enter file name	Nhập tên tệp
+	Enter first angle constraint	Nhập ràng buộc góc thứ nhất
+	Enter first tolerance value	Nhập giá trị dung sai thứ nhất
+	Enter fit tolerance	Nhập dung sai khớp
+	Enter geometric characteristic	Nhập đặc tính hình học
+	Enter group description	Nhập mô tả nhóm
+	Enter group name	Nhập tên nhóm
+	Enter group name(s) to list	Nhập các tên nhóm cần liệt kê
+	Enter inspection rate	Nhập tỉ lệ kiểm tra
+	Enter inspection shape	Nhập hình dạng khung kiểm tra
+	Enter justification	Nhập cách căn chữ
+	Enter justification type	Nhập kiểu căn chữ
+	Enter knot parameterization	Nhập cách tham số hóa nút
+	Enter label (press ENTER for none)	Nhập nhãn (nhấn ENTER để bỏ trống)
+	Enter layer description	Nhập mô tả lớp
+	Enter layer name	Nhập tên lớp
+	Enter layer name to make current	Nhập tên lớp cần đặt làm hiện hành
+	Enter layer name(s) to change default viewport visibility	Nhập các tên lớp cần đổi hiển thị mặc định trong khung nhìn
+	Enter layer name(s) to list	Nhập các tên lớp cần liệt kê
+	Enter layer name(s) {what}	Nhập các tên lớp {what}
+	Enter layer option for offset objects	Nhập lựa chọn lớp cho các đối tượng dời song song
+	Enter layout name for copy	Nhập tên bố cục in cho bản sao
+	Enter layout name(s) to list	Nhập các tên bố cục in cần liệt kê
+	Enter layout option	Nhập lựa chọn bố cục in
+	Enter layout to make current	Nhập bố cục in cần đặt làm hiện hành
+	Enter layout to rename	Nhập bố cục in cần đổi tên
+	Enter leader text	Nhập chữ đường ghi chú
+	Enter line spacing factor or distance	Nhập hệ số hoặc khoảng cách giãn dòng
+	Enter line spacing type	Nhập kiểu giãn dòng
+	Enter linetype(s) to load	Nhập các kiểu đường cần tải
+	Enter lineweight (0.0mm - 2.11mm)	Nhập độ dày nét (0.0mm - 2.11mm)
+	Enter magnification or height	Nhập độ phóng đại hoặc chiều cao
+	Enter maximum part height or	Nhập chiều cao tối đa của phần hoặc
+	Enter mline editing option	Nhập lựa chọn sửa đường đa nét
+	Enter mline scale	Nhập tỉ lệ đường đa nét
+	Enter mline style name or [?]	Nhập tên kiểu đường đa nét hoặc [?]
+	Enter mode	Nhập chế độ
+	Enter name for new layer (becomes the current layer)	Nhập tên lớp mới (trở thành lớp hiện hành)
+	Enter name for new scale	Nhập tên tỉ lệ mới
+	Enter name for new viewport configuration	Nhập tên cấu hình khung nhìn mới
+	Enter name list for new layer(s)	Nhập danh sách tên lớp mới (một hoặc nhiều)
+	Enter name of LISP file to load	Nhập tên tệp LISP cần tải
+	Enter name of block to insert	Nhập tên khối cần chèn
+	Enter name of block to manage	Nhập tên khối cần quản lý
+	Enter name of block to sync	Nhập tên khối cần đồng bộ
+	Enter name of drawing file to recover	Nhập tên tệp bản vẽ cần phục hồi
+	Enter name of file to {operation}	Nhập tên tệp cần {operation}
+	Enter name of layout to copy	Nhập tên bố cục in cần sao chép
+	Enter name of layout to delete	Nhập tên bố cục in cần xóa
+	Enter name of linetype file	Nhập tên tệp kiểu đường
+	Enter name of new layout	Nhập tên bố cục in mới
+	Enter name of scale to delete	Nhập tên tỉ lệ cần xóa
+	Enter name of script file	Nhập tên tệp kịch bản
+	Enter name of viewport configuration to restore	Nhập tên cấu hình khung nhìn cần khôi phục
+	Enter name(s) of new layers frozen in all viewports	Nhập tên các lớp mới đóng băng trong mọi khung nhìn
+	Enter name(s) of viewport configurations to delete	Nhập tên các cấu hình khung nhìn cần xóa
+	Enter name(s) of viewport configurations to list	Nhập tên các cấu hình khung nhìn cần liệt kê
+	Enter name(s) to purge	Nhập các tên cần dọn dẹp
+	Enter named scale to add	Nhập tỉ lệ có tên cần thêm
+	Enter named scale to delete	Nhập tỉ lệ có tên cần xóa
+	Enter new attribute value	Nhập giá trị thuộc tính khối mới
+	Enter new color	Nhập màu mới
+	Enter new default value	Nhập giá trị mặc định mới
+	Enter new dimension text	Nhập chữ kích thước mới
+	Enter new group name	Nhập tên nhóm mới
+	Enter new layer name	Nhập tên lớp mới
+	Enter new layout name	Nhập tên bố cục in mới
+	Enter new order	Nhập thứ tự mới
+	Enter new path for "{name}"	Nhập đường dẫn mới cho "{name}"
+	Enter new prompt	Nhập lời nhắc mới
+	Enter new string	Nhập chuỗi mới
+	Enter new tag	Nhập thẻ mới
+	Enter new text	Nhập chữ mới
+	Enter new value for CONSTRAINTINFER	Nhập giá trị mới cho CONSTRAINTINFER
+	Enter new value for PICKSTYLE	Nhập giá trị mới cho PICKSTYLE
+	Enter new value for dimension variable {name}	Nhập giá trị mới cho biến kích thước {name}
+	Enter new value for {name}	Nhập giá trị mới cho {name}
+	Enter new weight (current = {weight})	Nhập trọng số mới (hiện hành = {weight})
+	Enter new {kind} name	Nhập tên {kind} mới
+	Enter next line of text (empty line to finish)	Nhập dòng chữ tiếp theo (dòng trống để kết thúc)
+	Enter next point	Nhập điểm tiếp theo
+	Enter number of actions	Nhập số thao tác
+	Enter number of columns	Nhập số cột
+	Enter number of data rows	Nhập số hàng dữ liệu
+	Enter number of items along path	Nhập số phần tử dọc đường dẫn
+	Enter number of items in array	Nhập số phần tử trong mảng
+	Enter number of sides	Nhập số cạnh
+	Enter number of turns	Nhập số vòng xoắn
+	Enter object ordering option	Nhập lựa chọn thứ tự đối tượng
+	Enter object type to rename	Nhập kiểu đối tượng cần đổi tên
+	Enter obliquing angle (press ENTER for none)	Nhập góc nghiêng chữ (nhấn ENTER để bỏ trống)
+	Enter old group name	Nhập tên nhóm cũ
+	Enter old layer name	Nhập tên lớp cũ
+	Enter old {kind} name	Nhập tên {kind} cũ
+	Enter option	Nhập lựa chọn
+	Enter option [Save/Discard reference changes] <Save>	Nhập lựa chọn [Save/Discard reference changes] <Save>
+	Enter percentage length	Nhập phần trăm chiều dài
+	Enter properties to match (SELECTSIMILARMODE bit code)	Nhập các thuộc tính cần khớp (mã bit SELECTSIMILARMODE)
+	Enter scale ratio (paper units:drawing units)	Nhập tỉ lệ (đơn vị giấy:đơn vị bản vẽ)
+	Enter second angle constraint	Nhập ràng buộc góc thứ hai
+	Enter second tolerance value	Nhập giá trị dung sai thứ hai
+	Enter spline creation method	Nhập phương pháp tạo đường spline
+	Enter string to change	Nhập chuỗi cần đổi
+	Enter style name	Nhập tên kiểu
+	Enter symbol type to bind	Nhập kiểu ký hiệu cần gộp vào bản vẽ
+	Enter target layer name	Nhập tên lớp đích
+	Enter text	Nhập chữ
+	Enter text (use \P for new paragraphs)	Nhập chữ (dùng \P cho đoạn mới)
+	Enter text for cell {cell} (=formula)	Nhập chữ cho ô {cell} (=công thức)
+	Enter the drawing to compare with (an open drawing's name or a file path)	Nhập bản vẽ cần so sánh (tên bản vẽ đang mở hoặc đường dẫn tệp)
+	Enter the maximum points for leader line	Nhập số điểm tối đa cho đường ghi chú
+	Enter the number of columns	Nhập số cột
+	Enter the number of levels	Nhập số mức
+	Enter the number of operations to undo	Nhập số thao tác cần hoàn tác
+	Enter the number of rows	Nhập số hàng
+	Enter the output	Nhập đầu ra
+	Enter the paper name	Nhập tên khổ giấy
+	Enter the paper width,height in mm	Nhập chiều rộng,chiều cao giấy theo mm
+	Enter the plotter to add a paper size to	Nhập thiết bị in cần thêm khổ giấy
+	Enter the plotter to delete	Nhập thiết bị in cần xóa
+	Enter the position of the first object to move (0-{last})	Nhập vị trí đối tượng đầu tiên cần di chuyển (0-{last})
+	Enter the position to move it to (0-{last})	Nhập vị trí cần di chuyển đến (0-{last})
+	Enter tolerance location	Nhập vị trí dung sai
+	Enter transparency value (0-90)	Nhập giá trị độ trong suốt (0-90)
+	Enter trim method	Nhập phương pháp cắt xén
+	Enter twist direction of helix	Nhập chiều xoắn của đường xoắn ốc
+	Enter type of dimension editing	Nhập kiểu sửa kích thước
+	Enter type of unused objects to purge	Nhập kiểu đối tượng không dùng cần dọn dẹp
+	Enter type of value modification	Nhập kiểu sửa giá trị
+	Enter value	Nhập giá trị
+	Enter value for {tag}	Nhập giá trị cho {tag}
+	Enter variable name	Nhập tên biến
+	Enter view name to restore	Nhập tên góc nhìn cần khôi phục
+	Enter view name to save	Nhập tên góc nhìn cần lưu
+	Enter view name(s) to delete	Nhập các tên góc nhìn cần xóa
+	Enter view name(s) to list	Nhập các tên góc nhìn cần liệt kê
+	Enter viewport arrangement	Nhập cách sắp xếp khung nhìn
+	Enter viewport configuration name	Nhập tên cấu hình khung nhìn
+	Enter what to pick	Nhập mục cần bấm chọn
+	Enter xref name(s) to {op}	Nhập tên các tham chiếu ngoài cần {op}
+	Enter xref(s) to list	Nhập các tham chiếu ngoài cần liệt kê
+	Erase polyline?	Xóa đa tuyến?
+	Erase source object after offsetting?	Xóa đối tượng nguồn sau khi dời song song?
+	Erase source objects?	Xóa các đối tượng nguồn?
+	First point of mid	Điểm đầu để lấy trung điểm
+	First tracking point	Điểm truy bắt đầu tiên
+	Fix any errors detected?	Sửa các lỗi phát hiện được?
+	Get from the drawing or [Point/Distance/Angle/Intersection]	Lấy từ bản vẽ hoặc [Point/Distance/Angle/Intersection]
+	Guide crosshairs along cloud path	Dẫn con trỏ chữ thập dọc đường đám mây
+	Indicate dimension point to add	Chỉ ra điểm kích thước cần thêm
+	Indicate dimension point to remove	Chỉ ra điểm kích thước cần bỏ
+	Internal error; press Enter to end the command	Lỗi nội bộ; nhấn Enter để kết thúc lệnh
+	Invisible?	Ẩn?
+	Island detection style	Kiểu phát hiện vùng đảo
+	Isometric plane?	Mặt phẳng đẳng trục?
+	Keep associative objects	Giữ các đối tượng liên kết
+	Linetype {name} is already loaded. Reload it?	Kiểu đường {name} đã được tải. Tải lại?
+	Lock the view of viewports?	Khóa góc nhìn của các khung nhìn?
+	Next point (Press ENTER to end tracking)	Điểm tiếp theo (Nhấn ENTER để kết thúc truy bắt)
+	No mark: undo everything?	Không có dấu: hoàn tác tất cả?
+	Number of objects to move	Số đối tượng cần di chuyển
+	Object selected is not a polyline. Do you want to turn it into one?	Đối tượng đã chọn không phải đa tuyến. Chuyển thành đa tuyến?
+	Optimize segments within polylines	Tối ưu các đoạn trong đa tuyến
+	Pick a table cell	Bấm chọn ô bảng
+	Pick internal point	Bấm chọn điểm bên trong
+	Property to ignore or compare again (ignored: {properties})	Thuộc tính cần bỏ qua hoặc so sánh lại (đã bỏ qua: {properties})
+	Purge {kind} "{name}"?	Dọn dẹp {kind} "{name}"?
+	Really want layer "{name}" (the CURRENT layer) off?	Thực sự muốn tắt lớp "{name}" (lớp HIỆN HÀNH) không?
+	Red, Green, Blue	Đỏ, Lục, Lam
+	Remove objects	Bỏ đối tượng
+	Reset the scale list to the defaults?	Đặt lại danh sách tỉ lệ về mặc định?
+	Rotate arrayed items?	Xoay các phần tử trong mảng?
+	Save changes to array?	Lưu thay đổi mảng?
+	Save changes to block "{name}"?	Lưu thay đổi khối "{name}"?
+	Save layer settings with views?	Lưu cài đặt lớp cùng góc nhìn?
+	Scale objects based on alignment points?	Thu phóng theo tỉ lệ các đối tượng dựa trên điểm căn chỉnh?
+	Second point of mid	Điểm thứ hai để lấy trung điểm
+	Select 2D polyline	Chọn đa tuyến 2D
+	Select a block	Chọn khối
+	Select a closed polyline	Chọn đa tuyến khép kín
+	Select a content type	Chọn kiểu nội dung
+	Select a dimension constraint type	Chọn kiểu ràng buộc kích thước
+	Select a leader type	Chọn kiểu đường ghi chú
+	Select a line object	Chọn đối tượng đường thẳng
+	Select a multileader	Chọn đường ghi chú nhiều nhánh
+	Select a table	Chọn bảng
+	Select a viewport	Chọn khung nhìn
+	Select an annotation object	Chọn đối tượng chú thích
+	Select an item in array to replace	Chọn phần tử trong mảng cần thay thế
+	Select an object	Chọn đối tượng
+	Select an object on the layer to be frozen	Chọn đối tượng trên lớp cần đóng băng
+	Select an object on the layer to be locked	Chọn đối tượng trên lớp cần khóa
+	Select an object on the layer to be turned off	Chọn đối tượng trên lớp cần tắt
+	Select an object on the layer to be unlocked	Chọn đối tượng trên lớp cần mở khóa
+	Select an object to change or	Chọn đối tượng cần đổi hoặc
+	Select an object to measure or	Chọn đối tượng cần đo hoặc
+	Select annotative objects	Chọn các đối tượng chú thích theo tỉ lệ
+	Select arc or circle	Chọn cung tròn hoặc đường tròn
+	Select arc or polyline arc segment	Chọn cung tròn hoặc đoạn cung của đa tuyến
+	Select arc style	Chọn kiểu cung tròn
+	Select arc, circle, line	Chọn cung tròn, đường tròn, đường thẳng
+	Select array	Chọn mảng
+	Select attributes	Chọn các thuộc tính khối
+	Select base dimension	Chọn kích thước chuẩn
+	Select base point of replacement objects	Chọn điểm gốc của các đối tượng thay thế
+	Select block reference	Chọn tham chiếu khối
+	Select boundary objects (Enter finds them)	Chọn các đối tượng đường biên (Enter để tìm)
+	Select circle or arc to add center mark	Chọn đường tròn hoặc cung tròn để thêm dấu tâm
+	Select clipping object	Chọn đối tượng xén
+	Select destination object(s)	Chọn đối tượng đích (một hoặc nhiều)
+	Select dimension	Chọn kích thước
+	Select dimension to add jog	Chọn kích thước cần thêm chỗ gấp khúc
+	Select dimension to add/remove break	Chọn kích thước cần thêm/bỏ chỗ ngắt
+	Select dimensions to space	Chọn các kích thước cần giãn cách
+	Select first line	Chọn đường thẳng thứ nhất
+	Select first line or arc	Chọn đường thẳng hoặc cung tròn thứ nhất
+	Select first mline	Chọn đường đa nét thứ nhất
+	Select first object	Chọn đối tượng thứ nhất
+	Select first object or	Chọn đối tượng thứ nhất hoặc
+	Select first point	Chọn điểm đầu
+	Select geometry to dimension	Chọn hình học cần ghi kích thước
+	Select grip	Chọn điểm nắm
+	Select grip to edit array	Chọn điểm nắm để sửa mảng
+	Select group	Chọn nhóm
+	Select hatch object	Chọn đối tượng mặt cắt
+	Select item in array	Chọn phần tử trong mảng
+	Select jog to remove	Chọn chỗ gấp khúc cần bỏ
+	Select mline	Chọn đường đa nét
+	Select multileader to align to or [Options]	Chọn đường ghi chú nhiều nhánh để căn chỉnh hoặc [Options]
+	Select nested objects to copy or	Chọn các đối tượng lồng cần sao chép hoặc
+	Select new datum point	Chọn điểm chuẩn mới
+	Select object	Chọn đối tượng
+	Select object on layer to delete	Chọn đối tượng trên lớp cần xóa
+	Select object on layer to merge	Chọn đối tượng trên lớp cần gộp
+	Select object on target layer	Chọn đối tượng trên lớp đích
+	Select object to break dimension	Chọn đối tượng để ngắt kích thước
+	Select object to clip viewport	Chọn đối tượng để xén khung nhìn
+	Select object to count or [List/Spaces]	Chọn đối tượng cần đếm hoặc [List/Spaces]
+	Select object to dimension	Chọn đối tượng cần ghi kích thước
+	Select object to divide	Chọn đối tượng cần chia
+	Select object to extend or shift-select to trim	Chọn đối tượng cần kéo dài hoặc giữ Shift khi chọn để cắt xén
+	Select object to measure	Chọn đối tượng cần đo
+	Select object to offset	Chọn đối tượng cần dời song song
+	Select object to trim or shift-select to extend	Chọn đối tượng cần cắt xén hoặc giữ Shift khi chọn để kéo dài
+	Select objects	Chọn đối tượng
+	Select objects or	Chọn đối tượng hoặc
+	Select objects to add to the group	Chọn các đối tượng cần thêm vào nhóm
+	Select objects to erase or	Chọn các đối tượng cần xóa hoặc
+	Select objects to remove from the group	Chọn các đối tượng cần bỏ khỏi nhóm
+	Select path curve	Chọn đường cong dẫn
+	Select point or object	Chọn điểm hoặc đối tượng
+	Select polyline or	Chọn đa tuyến hoặc
+	Select reference	Chọn tham chiếu
+	Select reference objects	Chọn các đối tượng tham chiếu
+	Select replacement objects	Chọn các đối tượng thay thế
+	Select second line	Chọn đường thẳng thứ hai
+	Select second line or shift-select to apply corner	Chọn đường thẳng thứ hai hoặc giữ Shift khi chọn để tạo góc
+	Select second mline	Chọn đường đa nét thứ hai
+	Select second object	Chọn đối tượng thứ hai
+	Select second object or shift-select to apply corner	Chọn đối tượng thứ hai hoặc giữ Shift khi chọn để tạo góc
+	Select second point	Chọn điểm thứ hai
+	Select source object	Chọn đối tượng nguồn
+	Select spline	Chọn đường spline
+	Select symmetry line	Chọn trục đối xứng
+	Select viewport to clip	Chọn khung nhìn cần xén
+	Select viewports	Chọn các khung nhìn
+	Select xref	Chọn tham chiếu ngoài
+	Specify a fit tolerance	Chỉ định dung sai khớp
+	Specify a point	Chỉ định điểm
+	Specify a point on the spline <exit>	Chỉ định điểm trên đường spline <exit>
+	Specify a precision	Chỉ định độ chính xác
+	Specify a scale for the hatch pattern	Chỉ định tỉ lệ mẫu mặt cắt
+	Specify a second extension line origin	Chỉ định gốc đường gióng thứ hai
+	Specify an angle for the hatch pattern	Chỉ định góc mẫu mặt cắt
+	Specify angle end point	Chỉ định điểm cuối góc
+	Specify angle for dimension text	Chỉ định góc chữ kích thước
+	Specify angle of dimension line	Chỉ định góc đường kích thước
+	Specify angle of dimension text	Chỉ định góc chữ kích thước
+	Specify angle start point	Chỉ định điểm đầu góc
+	Specify angle vertex	Chỉ định đỉnh góc
+	Specify angle vertex point	Chỉ định điểm đỉnh góc
+	Specify arc length dimension location	Chỉ định vị trí kích thước chiều dài cung
+	Specify axis endpoint of ellipse	Chỉ định điểm cuối trục elip
+	Specify base diameter	Chỉ định đường kính đáy
+	Specify base point	Chỉ định điểm gốc
+	Specify base point or	Chỉ định điểm gốc hoặc
+	Specify base point or displacement (drag with the middle mouse button for realtime pan)	Chỉ định điểm gốc hoặc độ dời (kéo bằng nút chuột giữa để dời màn hình tức thời)
+	Specify base radius or	Chỉ định bán kính đáy hoặc
+	Specify block attachment	Chỉ định cách gắn khối
+	Specify center location override	Chỉ định vị trí tâm thay thế
+	Specify center of donut	Chỉ định tâm hình vành khuyên
+	Specify center of ellipse	Chỉ định tâm elip
+	Specify center of isocircle	Chỉ định tâm đường tròn đẳng trục
+	Specify center of polygon	Chỉ định tâm đa giác
+	Specify center of view box	Chỉ định tâm hộp nhìn
+	Specify center point	Chỉ định điểm tâm
+	Specify center point for circle	Chỉ định điểm tâm đường tròn
+	Specify center point of arc	Chỉ định điểm tâm cung tròn
+	Specify center point of array	Chỉ định điểm tâm mảng
+	Specify center point of base	Chỉ định điểm tâm đáy
+	Specify chamfer angle from the first line	Chỉ định góc vát từ đường thẳng thứ nhất
+	Specify chamfer length on the first line	Chỉ định chiều dài vát trên đường thẳng thứ nhất
+	Specify collected multileader location or [Vertical/Horizontal/Wrap]	Chỉ định vị trí đường ghi chú nhiều nhánh đã gom hoặc [Vertical/Horizontal/Wrap]
+	Specify column height	Chỉ định chiều cao cột
+	Specify column width	Chỉ định chiều rộng cột
+	Specify control point	Chỉ định điểm điều khiển
+	Specify control point <exit>	Chỉ định điểm điều khiển <exit>
+	Specify corner of viewport	Chỉ định góc khung nhìn
+	Specify corner of window, enter a scale factor (nX or nXP)	Chỉ định góc cửa sổ, nhập hệ số tỉ lệ (nX hoặc nXP)
+	Specify diameter of circle	Chỉ định đường kính đường tròn
+	Specify diameter of isocircle	Chỉ định đường kính đường tròn đẳng trục
+	Specify dimension arc line location	Chỉ định vị trí đường cung kích thước
+	Specify dimension line location	Chỉ định vị trí đường kích thước
+	Specify dimension line position	Chỉ định vị trí đường kích thước
+	Specify direction	Chỉ định hướng
+	Specify direction (first point)	Chỉ định hướng (điểm đầu)
+	Specify direction (second point)	Chỉ định hướng (điểm thứ hai)
+	Specify direction of chord for arc	Chỉ định hướng dây cung của cung tròn
+	Specify direction of vertex tangent	Chỉ định hướng tiếp tuyến tại đỉnh
+	Specify displacement	Chỉ định độ dời
+	Specify distance between turns	Chỉ định khoảng cách giữa các vòng xoắn
+	Specify distance to other axis	Chỉ định khoảng cách đến trục còn lại
+	Specify end point of arc	Chỉ định điểm cuối cung tròn
+	Specify end point of arc (hold Ctrl to switch direction)	Chỉ định điểm cuối cung tròn (giữ Ctrl để đổi hướng)
+	Specify end tangent	Chỉ định tiếp tuyến cuối
+	Specify ending width for next segment	Chỉ định chiều rộng cuối cho đoạn tiếp theo
+	Specify endpoint of arc	Chỉ định điểm cuối cung tròn
+	Specify endpoint of axis	Chỉ định điểm cuối trục
+	Specify endpoint of line	Chỉ định điểm cuối đường thẳng
+	Specify endpoint of the arc	Chỉ định điểm cuối cung tròn
+	Specify existing fit point <exit>	Chỉ định điểm khớp hiện có <exit>
+	Specify feature location	Chỉ định vị trí cần ghi kích thước
+	Specify first angle endpoint	Chỉ định điểm cuối cạnh góc thứ nhất
+	Specify first break point	Chỉ định điểm ngắt thứ nhất
+	Specify first constraint point	Chỉ định điểm ràng buộc thứ nhất
+	Specify first corner	Chỉ định góc thứ nhất
+	Specify first corner of the unit cell	Chỉ định góc thứ nhất của ô đơn vị
+	Specify first corner point	Chỉ định điểm góc thứ nhất
+	Specify first destination point	Chỉ định điểm đích thứ nhất
+	Specify first end point of circle's diameter	Chỉ định điểm đầu thứ nhất của đường kính đường tròn
+	Specify first endpoint of edge	Chỉ định điểm đầu thứ nhất của cạnh
+	Specify first extension line origin	Chỉ định gốc đường gióng thứ nhất
+	Specify first fence point	Chỉ định điểm đầu của đường rào chọn
+	Specify first point for arc length dimension	Chỉ định điểm đầu cho kích thước chiều dài cung
+	Specify first point of mirror line	Chỉ định điểm đầu của trục đối xứng
+	Specify first point on circle	Chỉ định điểm đầu trên đường tròn
+	Specify first point on circle: _tan to	Chỉ định điểm đầu trên đường tròn: _tan đến
+	Specify first point or [Options]	Chỉ định điểm đầu hoặc [Options]
+	Specify first source point	Chỉ định điểm nguồn thứ nhất
+	Specify fit point	Chỉ định điểm khớp
+	Specify gutter width	Chỉ định chiều rộng rãnh
+	Specify height	Chỉ định chiều cao
+	Specify helix height or	Chỉ định chiều cao đường xoắn ốc hoặc
+	Specify included angle	Chỉ định góc hợp
+	Specify insertion base point	Chỉ định điểm gốc chèn
+	Specify insertion point	Chỉ định điểm chèn
+	Specify insertion point of the table	Chỉ định điểm chèn bảng
+	Specify inside diameter of donut	Chỉ định đường kính trong hình vành khuyên
+	Specify jog location	Chỉ định vị trí gấp khúc
+	Specify jog location (or press ENTER)	Chỉ định vị trí gấp khúc (hoặc nhấn ENTER)
+	Specify leader arrowhead location	Chỉ định vị trí mũi tên đường ghi chú
+	Specify leader arrowhead location or [Remove leaders]	Chỉ định vị trí mũi tên đường ghi chú hoặc [Remove leaders]
+	Specify leader endpoint	Chỉ định điểm cuối đường ghi chú
+	Specify leader landing location	Chỉ định vị trí đoạn ngang đường ghi chú
+	Specify leaders to remove	Chỉ định các đường ghi chú cần bỏ
+	Specify leaders to remove or [Add leaders]	Chỉ định các đường ghi chú cần bỏ hoặc [Add leaders]
+	Specify length of chord	Chỉ định chiều dài dây cung
+	Specify length of line	Chỉ định chiều dài đường thẳng
+	Specify linetype name	Chỉ định tên kiểu đường
+	Specify location for new vertex	Chỉ định vị trí đỉnh mới
+	Specify location of the text	Chỉ định vị trí chữ
+	Specify minimum length of arc	Chỉ định chiều dài cung tối thiểu
+	Specify new angle	Chỉ định góc mới
+	Specify new end point	Chỉ định điểm cuối mới
+	Specify new fit point <exit>	Chỉ định điểm khớp mới <exit>
+	Specify new length	Chỉ định chiều dài mới
+	Specify new location	Chỉ định vị trí mới
+	Specify new location for dimension text	Chỉ định vị trí mới cho chữ kích thước
+	Specify new location for marked vertex	Chỉ định vị trí mới cho đỉnh đã đánh dấu
+	Specify new point on spline <exit>	Chỉ định điểm mới trên đường spline <exit>
+	Specify new width for all segments	Chỉ định chiều rộng mới cho mọi đoạn
+	Specify next fence point	Chỉ định điểm tiếp theo của đường rào chọn
+	Specify next point	Chỉ định điểm tiếp theo
+	Specify number of columns	Chỉ định số cột
+	Specify offset distance	Chỉ định khoảng cách dời song song
+	Specify offset distance or	Chỉ định khoảng cách dời song song hoặc
+	Specify opposite corner	Chỉ định góc đối diện
+	Specify other corner	Chỉ định góc còn lại
+	Specify other corner point	Chỉ định điểm góc còn lại
+	Specify other endpoint of axis	Chỉ định điểm cuối còn lại của trục
+	Specify outside diameter of donut	Chỉ định đường kính ngoài hình vành khuyên
+	Specify point	Chỉ định điểm
+	Specify point on object for first tangent of circle	Chỉ định điểm trên đối tượng cho tiếp tuyến thứ nhất của đường tròn
+	Specify point on object for second tangent of circle	Chỉ định điểm trên đối tượng cho tiếp tuyến thứ hai của đường tròn
+	Specify point on side to offset	Chỉ định điểm về phía cần dời song song
+	Specify quadrant	Chỉ định góc phần tư
+	Specify radius of arc	Chỉ định bán kính cung tròn
+	Specify radius of circle	Chỉ định bán kính đường tròn
+	Specify radius of isocircle	Chỉ định bán kính đường tròn đẳng trục
+	Specify reference angle	Chỉ định góc tham chiếu
+	Specify reference length	Chỉ định chiều dài tham chiếu
+	Specify rotation angle	Chỉ định góc xoay
+	Specify rotation angle of text	Chỉ định góc xoay chữ
+	Specify rotation angle or	Chỉ định góc xoay hoặc
+	Specify rotation around major axis	Chỉ định góc xoay quanh trục lớn
+	Specify scale factor	Chỉ định hệ số tỉ lệ
+	Specify scale factor for XYZ axes	Chỉ định hệ số tỉ lệ cho các trục XYZ
+	Specify second angle endpoint	Chỉ định điểm cuối cạnh góc thứ hai
+	Specify second break point	Chỉ định điểm ngắt thứ hai
+	Specify second constraint point	Chỉ định điểm ràng buộc thứ hai
+	Specify second destination point	Chỉ định điểm đích thứ hai
+	Specify second end point of circle's diameter	Chỉ định điểm đầu thứ hai của đường kính đường tròn
+	Specify second endpoint of edge	Chỉ định điểm đầu thứ hai của cạnh
+	Specify second extension line origin	Chỉ định gốc đường gióng thứ hai
+	Specify second point	Chỉ định điểm thứ hai
+	Specify second point for arc length dimension	Chỉ định điểm thứ hai cho kích thước chiều dài cung
+	Specify second point of mirror line	Chỉ định điểm thứ hai của trục đối xứng
+	Specify second point on arc	Chỉ định điểm thứ hai trên cung tròn
+	Specify second point on circle	Chỉ định điểm thứ hai trên đường tròn
+	Specify second point or <use first point as displacement>	Chỉ định điểm thứ hai hoặc <use first point as displacement>
+	Specify second source point	Chỉ định điểm nguồn thứ hai
+	Specify side to offset	Chỉ định phía cần dời song song
+	Specify size of view box	Chỉ định kích thước hộp nhìn
+	Specify spacing	Chỉ định khoảng cách
+	Specify start point	Chỉ định điểm bắt đầu
+	Specify start point of arc	Chỉ định điểm bắt đầu cung tròn
+	Specify start point of polyline	Chỉ định điểm bắt đầu đa tuyến
+	Specify start point of text	Chỉ định điểm bắt đầu chữ
+	Specify start tangent	Chỉ định tiếp tuyến đầu
+	Specify starting width for next segment	Chỉ định chiều rộng đầu cho đoạn tiếp theo
+	Specify temporary OTRACK point	Chỉ định điểm OTRACK tạm thời
+	Specify text height	Chỉ định chiều cao chữ
+	Specify the angle between items	Chỉ định góc giữa các phần tử
+	Specify the angle to fill (+=ccw, -=cw)	Chỉ định góc cần lấp đầy (+=ccw, -=cw)
+	Specify the incrementing elevation between rows	Chỉ định cao độ gia tăng giữa các hàng
+	Specify the new angle	Chỉ định góc mới
+	Specify the pattern origin	Chỉ định gốc mẫu
+	Specify the reference angle	Chỉ định góc tham chiếu
+	Specify the tangent direction for the start point of arc	Chỉ định hướng tiếp tuyến tại điểm đầu cung tròn
+	Specify third point on circle	Chỉ định điểm thứ ba trên đường tròn
+	Specify third source point or <continue>	Chỉ định điểm nguồn thứ ba hoặc <continue>
+	Specify through point	Chỉ định điểm đi qua
+	Specify tolerance	Chỉ định dung sai
+	Specify top diameter	Chỉ định đường kính đỉnh
+	Specify top radius or	Chỉ định bán kính đỉnh hoặc
+	Specify total angle	Chỉ định tổng góc
+	Specify total length or	Chỉ định tổng chiều dài hoặc
+	Specify total width	Chỉ định tổng chiều rộng
+	Specify width	Chỉ định chiều rộng
+	Specify {which} {unit}	Chỉ định {which} {unit}
+	Type of boundary object	Kiểu đối tượng đường biên
+	Use landing	Dùng đoạn ngang
+	Verify each name to be purged?	Xác nhận từng tên cần dọn dẹp?
+	Where should the data go?	Đưa dữ liệu đến đâu?
+	{axes} of	{axes} của
+	{mode}Select objects	{mode}Chọn đối tượng
+	{mode}Specify next point	{mode}Chỉ định điểm tiếp theo
+	{snap} of	{snap} của
