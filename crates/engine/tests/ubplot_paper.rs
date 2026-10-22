@@ -18,7 +18,8 @@ thread_local! {
 fn session(measurement: i64) -> Session {
     set_io(IoHooks {
         read: |_, _| Err("no reader in this test".into()),
-        write: |_, _| Err("no writer in this test".into()),
+        // UBPLOT scans hash the drawing through the writer.
+        write: |d, _| Ok(cadcraft_io::write_dxf(d).into_bytes()),
         plot: Some(|d, space, options| {
             PLOT_OPTIONS.with(|stored| *stored.borrow_mut() = options.clone());
             let mut options = options.clone();
