@@ -1372,6 +1372,8 @@
 	Saving…	Збереження…
 	Not saved	Не збережено
 	Could not save workspace	Не вдалося зберегти робочий простір
+	Workspace could not be read; restored the last good copy (revision {revision}). The damaged copy was kept.	Не вдалося прочитати робочий простір; відновлено останню справну копію (версія {revision}). Пошкоджену копію збережено.
+	Workspace could not be read; restored the last good copy (revision {revision}). The damaged copy could not be kept, so it is not overwritten until it can be.	Не вдалося прочитати робочий простір; відновлено останню справну копію (версія {revision}). Пошкоджену копію не вдалося зберегти, тому її не буде перезаписано, доки це не стане можливим.
 	Syncing	Синхронізація
 	Synced	Синхронізовано
 	Offline	Не в мережі

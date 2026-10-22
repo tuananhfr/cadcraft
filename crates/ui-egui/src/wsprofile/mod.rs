@@ -451,7 +451,19 @@ impl CadApp {
         self.ws.unkept_damage = unkept;
         self.ws.failed_commits = 0;
         let mut notices: Vec<String> = Vec::new();
-        if damaged {
+        if let Some(Fallback::RestoredSnapshot { revision, .. }) = &restored.fallback {
+            notices.push(if kept {
+                crate::tf!(
+                    "Workspace could not be read; restored the last good copy (revision {revision}). The damaged copy was kept.",
+                    revision = revision
+                )
+            } else {
+                crate::tf!(
+                    "Workspace could not be read; restored the last good copy (revision {revision}). The damaged copy could not be kept, so it is not overwritten until it can be.",
+                    revision = revision
+                )
+            });
+        } else if damaged {
             notices.push(if kept { FALLBACK_MESSAGE.into() } else { NOT_KEPT_MESSAGE.into() });
         }
         if let Some(problem) = store.read_policy().and_then(|raw| startup::policy_problem(&raw)) {
@@ -469,6 +481,9 @@ impl CadApp {
         self.ws.set_extra = restored.set.extra;
         self.ws.history.clear();
         self.ws.autosave.clear();
+        if matches!(restored.fallback, Some(Fallback::RestoredSnapshot { .. })) {
+            self.ws.autosave.changed(self.ws.now);
+        }
         self.ws.status = if restored.fallback.is_none() { SaveStatus::SavedLocally } else { SaveStatus::Unsaved };
         self.ws.first_run = matches!(restored.fallback, Some(Fallback::NoProfile));
         self.ws.fallback = restored.fallback;
@@ -573,7 +588,12 @@ impl CadApp {
             Fallback::Corrupt(_) => "corrupt",
             Fallback::NewerMajor(_) => "newer_major",
             Fallback::Invalid(_) => "invalid",
+            Fallback::RestoredSnapshot { .. } => "restored_snapshot",
         });
+        let restored_revision = match &ws.fallback {
+            Some(Fallback::RestoredSnapshot { revision, .. }) => Some(*revision),
+            _ => None,
+        };
         let error = match &ws.status {
             SaveStatus::Failed(error) => Some(error.clone()),
             _ => None,
@@ -589,6 +609,7 @@ impl CadApp {
             "pending": ws.autosave.pending(),
             "persisted": ws.store.is_some(),
             "fallback": fallback,
+            "restored_revision": restored_revision,
             "undo": ws.history.undo_len(),
             "redo": ws.history.redo_len(),
             "snapshots": ws.store.as_ref().map(|store| store.snapshots()).unwrap_or_default(),

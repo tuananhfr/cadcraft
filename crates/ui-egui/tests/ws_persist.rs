@@ -9,7 +9,7 @@ use cadcraft_ui_egui::wsprofile::SaveStatus;
 use cadcraft_ui_egui::wsprofile::merge::Level;
 use cadcraft_ui_egui::wsprofile::presets::{PRESET_IDS, preset};
 use cadcraft_ui_egui::wsprofile::schema::{Dock, OwnerType, ProfileStatus, WorkspaceProfile};
-use cadcraft_ui_egui::wsprofile::startup::{FALLBACK_MESSAGE, Fallback, parse_set};
+use cadcraft_ui_egui::wsprofile::startup::{FALLBACK_MESSAGE, Fallback, RESTORED_MESSAGE, parse_set};
 use cadcraft_ui_egui::wsprofile::store::{CORRUPT_SNAPSHOT, MAX_USER_PROFILES, MemoryStore, ProfileSet, ProfileStore};
 use cadcraft_ui_egui::wsprofile::validate::{Mode, validate};
 use cadcraft_ui_egui::{CadApp, Services};
@@ -206,6 +206,108 @@ fn corrupt_store_falls_back_ux15() {
     assert!(matches!(app.ws.fallback, Some(Fallback::Invalid(_))), "{:?}", app.ws.fallback);
     assert_eq!(shared.damaged(), vec![invalid.into_bytes()]);
     assert_eq!(app.ws.effective.layout, preset("SIMPLE").unwrap().layout);
+}
+
+fn three_committed_revisions() -> Shared {
+    let shared = Shared::new(MemoryStore::default());
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
+    app.attach_profile_store(Box::new(shared.clone()));
+    for (revision, lines) in [(1, 5), (2, 6), (3, 7)] {
+        run(&mut app, "ui.cmdline.lines", json!({"lines": lines}));
+        app.commit_workspace_now().unwrap();
+        assert_eq!(app.ws.user.revision, revision);
+    }
+    shared
+}
+
+fn reattach(shared: &Shared) -> CadApp {
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.skip_first_run_picker = true;
+    app.attach_profile_store(Box::new(shared.clone()));
+    app
+}
+
+#[test]
+fn corrupt_current_restores_last_valid_snapshot() {
+    let _aliases = alias_lock();
+    let shared = three_committed_revisions();
+    let damaged = "{\"schema_version\":";
+    shared.0.borrow_mut().current = Some(damaged.into());
+    let mut app = reattach(&shared);
+    assert!(matches!(app.ws.fallback, Some(Fallback::RestoredSnapshot { revision: 3, ref reason }) if !reason.is_empty()));
+    assert_eq!(app.ws.user.revision, 3);
+    assert_eq!(app.ws.user.layout.command_line.lines, 7);
+    assert_eq!(app.ui.history_lines, 7);
+    assert_eq!(shared.damaged(), vec![damaged.as_bytes().to_vec()]);
+    assert_eq!(store(&app).read_current().as_deref(), Some(damaged), "startup waits for a commit before replacing current");
+    let message = RESTORED_MESSAGE.replace("{revision}", "3");
+    assert_eq!(app.ws.message.as_deref(), Some(message.as_str()));
+    assert_eq!(app.status.as_ref().map(|(text, _)| text.as_str()), Some(message.as_str()));
+    assert!(app.ws.autosave.pending(), "the restored set must replace the damaged current on the next save");
+    assert_eq!(app.ws.status, SaveStatus::Unsaved);
+    let status = run(&mut app, "ui.workspace.status", json!({}));
+    assert_eq!(status["fallback"], json!("restored_snapshot"));
+    assert_eq!(status["restored_revision"], json!(3));
+}
+
+#[test]
+fn corrupt_snapshot_is_skipped_for_an_older_one() {
+    let _aliases = alias_lock();
+    let shared = three_committed_revisions();
+    {
+        let mut store = shared.0.borrow_mut();
+        store.current = Some("{\"schema_version\":".into());
+        store.snapshot_map.insert(3, "{".into());
+    }
+    let app = reattach(&shared);
+    assert!(matches!(app.ws.fallback, Some(Fallback::RestoredSnapshot { revision: 2, .. })));
+    assert_eq!(app.ws.user.revision, 2);
+    assert_eq!(app.ws.user.layout.command_line.lines, 6);
+    assert_eq!(app.ui.history_lines, 6);
+    assert!(app.ws.message.as_ref().is_some_and(|message| message.contains("revision 2")));
+    assert_eq!(store(&app).read_snapshot(3).as_deref(), Some("{"), "startup keeps the unusable snapshot");
+}
+
+#[test]
+fn newer_major_still_falls_back_to_simple() {
+    let _aliases = alias_lock();
+    let shared = three_committed_revisions();
+    let mut newer: Value = serde_json::from_str(&shared.read_current().unwrap()).unwrap();
+    newer["schema_version"] = json!("2.0.0");
+    let damaged = newer.to_string();
+    shared.0.borrow_mut().current = Some(damaged.clone());
+    let app = reattach(&shared);
+    assert_eq!(app.ws.fallback, Some(Fallback::NewerMajor("2.0.0".into())));
+    assert_eq!(app.ws.user.base_id.as_deref(), Some("SIMPLE"));
+    assert_eq!(app.ws.effective.layout, preset("SIMPLE").unwrap().layout);
+    assert_eq!(shared.damaged(), vec![damaged.into_bytes()]);
+    assert!(!app.ws.autosave.pending());
+    assert_eq!(app.workspace_status()["fallback"], json!("newer_major"));
+    assert_eq!(app.workspace_status()["restored_revision"], Value::Null);
+}
+
+#[test]
+fn restored_snapshot_is_rewritten_on_next_commit() {
+    let _aliases = alias_lock();
+    let shared = three_committed_revisions();
+    let damaged = "{\"schema_version\":";
+    shared.0.borrow_mut().current = Some(damaged.into());
+    let mut app = reattach(&shared);
+    assert!(matches!(app.ws.fallback, Some(Fallback::RestoredSnapshot { revision: 3, .. })));
+    assert!(app.ws.autosave.pending());
+    run(&mut app, "ui.cmdline.lines", json!({"lines": 8}));
+    app.commit_workspace_now().unwrap();
+    let user = current_set(&app).user.unwrap();
+    assert_eq!(user.revision, 4);
+    assert_eq!(user.layout.command_line.lines, 8);
+    assert_eq!(store(&app).read_snapshot(4), store(&app).read_current());
+    assert_eq!(app.ws.status, SaveStatus::SavedLocally);
+    assert!(!app.ws.autosave.pending());
+    assert_eq!(shared.damaged(), vec![damaged.as_bytes().to_vec()]);
+    let app = reattach(&shared);
+    assert!(app.ws.fallback.is_none());
+    assert_eq!(app.ui.history_lines, 8);
 }
 
 #[test]
