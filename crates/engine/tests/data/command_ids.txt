@@ -398,6 +398,7 @@ ubplot.approve
 ubplot.folder
 ubplot.jobs
 ubplot.publish
+ubplot.report
 ubplot.scan
 ubplot.templates
 undo

@@ -74,6 +74,9 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{plan?: SheetPlan (default: the last plan), output?: merged|split (merged), path?: file (merged) or file whose stem names split files, title?, background?: false} → {plan, files: [{path?|name, sheets: [sheet_key], bytes, sha256, data?}], failed: [{sheetKey, issues}]}; background:true accepts mode?, pagesPerFile?, retryLimit? and returns {jobId, status: QUEUED}")
             .noundo()
             .enabled(has_doc),
+        CommandSpec::new("ubplot.report", "Plot Sheet Report", templates::run_report)
+            .params("{plan: SheetPlan, format?: json|csv (json)} → {rows: [{order, sheet_id, revision, frame_template_id, status, issue_codes}]} or {text: UTF-8 CSV with BOM}")
+            .noundo(),
         CommandSpec::new("ubplot.scan", "Scan Plot Frames", run_scan)
             .params("{mode: block|window|layout|last|plan, handles?, windows?: [[[x1,y1],[x2,y2]] | [[x,y]×4]], layouts?, paper?, scale?: \"1:100\"|\"fit\", device?: name, revisions?: {sheet_id: revision}, overrides?: {sheet_key: {paper?, scale?, window?, sheetId?}}, exclude?: [sheet_key], plan? (mode plan)} → SheetPlan + summary")
             .noundo()
