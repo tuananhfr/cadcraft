@@ -1856,34 +1856,34 @@ ribbon	Walls and Openings	Tường và lỗ mở
 
 # GĐ3 Task 11: web keys.
 	The browser uses this key; choose another shortcut	Trình duyệt dùng phím này; hãy chọn phím tắt khác
-	Aliases	Bí danh
-	Assign Alias	Gán bí danh
-	Remove Alias	Xóa bí danh
-	Reset Aliases	Đặt lại bí danh
-	Export Aliases...	Xuất bí danh...
-	Import Aliases...	Nhập bí danh...
-	Aliases (JSON)	Bí danh (JSON)
-	Use letters A–Z, digits 0–9, _ or - for aliases	Dùng chữ cái A–Z, chữ số 0–9, _ hoặc - cho bí danh
-	Alias cannot be empty	Bí danh không được để trống
-	Alias must be at most 16 characters	Bí danh có tối đa 16 ký tự
-	{command} is a command name and cannot be an alias	{command} là tên lệnh và không thể dùng làm bí danh
-	Alias already runs {command}; confirm to replace	Bí danh đã chạy lệnh {command}; hãy xác nhận để thay thế
-	Too many aliases	Quá nhiều bí danh
+	Aliases	Lệnh tắt
+	Assign Alias	Gán lệnh tắt
+	Remove Alias	Xóa lệnh tắt
+	Reset Aliases	Đặt lại lệnh tắt
+	Export Aliases...	Xuất lệnh tắt...
+	Import Aliases...	Nhập lệnh tắt...
+	Aliases (JSON)	Lệnh tắt (JSON)
+	Use letters A–Z, digits 0–9, _ or - for aliases	Dùng chữ cái A–Z, chữ số 0–9, _ hoặc - cho lệnh tắt
+	Alias cannot be empty	Lệnh tắt không được để trống
+	Alias must be at most 16 characters	Lệnh tắt có tối đa 16 ký tự
+	{command} is a command name and cannot be an alias	{command} là tên lệnh và không thể dùng làm lệnh tắt
+	Alias already runs {command}; confirm to replace	Lệnh tắt đã chạy lệnh {command}; hãy xác nhận để thay thế
+	Too many aliases	Quá nhiều lệnh tắt
 	{key} is required	Cần có {key}
-	Paste alias JSON to import in the browser	Dán JSON bí danh để nhập trong trình duyệt
-	Alias file is too large	Tệp bí danh quá lớn
-	Paste alias JSON to import	Dán JSON bí danh để nhập
+	Paste alias JSON to import in the browser	Dán JSON lệnh tắt để nhập trong trình duyệt
+	Alias file is too large	Tệp lệnh tắt quá lớn
+	Paste alias JSON to import	Dán JSON lệnh tắt để nhập
 	Expected an aliases object	Cần một đối tượng aliases
 	Expected a command name	Cần tên lệnh
 	{imported} imported, {skipped} skipped	Đã nhập {imported}, đã bỏ qua {skipped}
-	Filter aliases	Lọc bí danh
-	Alias	Bí danh
+	Filter aliases	Lọc lệnh tắt
+	Alias	Lệnh tắt
 	Command	Lệnh
 	Source	Nguồn
 	User	Người dùng
 	Built-in	Có sẵn
-	Alias command	Lệnh của bí danh
-	Import Alias File...	Nhập tệp bí danh...
-	Import Aliases	Nhập bí danh
-	Replace Alias?	Thay thế bí danh?
-	Replace Alias	Thay thế bí danh
+	Alias command	Lệnh mà lệnh tắt chạy
+	Import Alias File...	Nhập tệp lệnh tắt...
+	Import Aliases	Nhập lệnh tắt
+	Replace Alias?	Thay thế lệnh tắt?
+	Replace Alias	Thay thế lệnh tắt
