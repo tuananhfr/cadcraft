@@ -1,0 +1,137 @@
+name: UbotCAD desktop installers
+
+on:
+  push:
+    tags: ["ubotcad-v*"]
+    branches: ["installers/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ubotcad-desktop-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CRAFT_FONTS_REF: b7dfde98c6d9d5db761c405732f9ef6d58bec192
+  CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+  CADCRAFT_REQUIRE_WINRES: "1"
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 150
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out craft-fonts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: tuananhfr/craft-fonts
+          ref: ${{ env.CRAFT_FONTS_REF }}
+          path: craft-fonts
+      - name: Install Rust (stable)
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Validate package version and tag
+        id: version
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(cargo pkgid -p cadcraft | sed 's/.*[#@]//')
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$TAG" != "ubotcad-v$version" ]; then
+            echo "::error::Tag must be exactly ubotcad-v$version (got $TAG)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "CADCRAFT_VERSION=$version" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: ubotcad-desktop-windows
+      - name: Install WiX
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          wix extension add -g WixToolset.UI.wixext/5.0.2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package unsigned Windows installers
+        run: pwsh packaging/windows/package.ps1 -Arch x64
+      - name: Collect Windows installers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path artifacts | Out-Null
+          Copy-Item "dist/release/UbotCAD-$env:CADCRAFT_VERSION-windows-x64.msi" artifacts/UbotCAD-windows-x64.msi
+          Copy-Item "dist/release/UbotCAD-$env:CADCRAFT_VERSION-windows-x64-portable.zip" artifacts/UbotCAD-windows-x64-portable.zip
+      - name: Test Windows installation and uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = (Resolve-Path 'artifacts/UbotCAD-windows-x64.msi').Path
+          $log = Join-Path $PWD 'install.log'
+          $folder = Join-Path $env:ProgramFiles 'UbotCAD'
+          try {
+            $install = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /l*v `"$log`"" -Wait -PassThru
+            if ($install.ExitCode -ne 0) { throw "MSI install failed with exit code $($install.ExitCode)" }
+            if (-not (Test-Path (Join-Path $folder 'cadcraft.exe') -PathType Leaf)) { throw 'Installed cadcraft.exe is missing' }
+            $programs = [Environment]::GetFolderPath([Environment+SpecialFolder]::CommonPrograms)
+            if (-not (Test-Path (Join-Path $programs 'UbotCAD.lnk') -PathType Leaf)) { throw 'UbotCAD Start-menu shortcut is missing' }
+            $cli = Join-Path $folder 'cadcraft-cli.exe'
+            if (Test-Path $cli -PathType Leaf) {
+              & $cli --version
+              if ($LASTEXITCODE -ne 0) { throw "Installed CLI failed with exit code $LASTEXITCODE" }
+            } else {
+              Write-Output 'Skipping CLI smoke test: cadcraft-cli.exe is not installed'
+            }
+          } finally {
+            $uninstall = Start-Process msiexec.exe -ArgumentList "/x `"$msi`" /qn" -Wait -PassThru
+            if ($uninstall.ExitCode -ne 0) { throw "MSI uninstall failed with exit code $($uninstall.ExitCode)" }
+            if (Test-Path $folder) { throw "Install folder remains after uninstall: $folder" }
+          }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ubotcad-desktop-install-log
+          path: install.log
+          if-no-files-found: warn
+          retention-days: 14
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ubotcad-desktop-windows
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ubotcad-v')
+    needs: windows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ubotcad-desktop-windows
+          path: artifacts
+      - name: Publish installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.windows.outputs.version }}
+        run: |
+          cd artifacts
+          sha256sum -- UbotCAD-windows-x64.msi UbotCAD-windows-x64-portable.zip > SHA256SUMS.txt
+          cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+          - Windows 10/11 64-bit: tải `UbotCAD-windows-x64.msi` để cài đặt, hoặc `UbotCAD-windows-x64-portable.zip` để giải nén và chạy ngay.
+          - Bộ cài chưa được ký số. Nếu Windows hiện «Windows đã bảo vệ máy tính của bạn», bấm «Thông tin thêm» rồi «Vẫn chạy».
+          - Dùng ngay trên trình duyệt: https://ubotbuild.com/cad/
+          NOTES
+          gh release create "$TAG" --verify-tag --latest --title "UbotCAD $VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" ./*

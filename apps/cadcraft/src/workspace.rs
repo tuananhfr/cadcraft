@@ -106,9 +106,9 @@ fn config_dir_from(platform: &str, get: impl Fn(&str) -> Option<OsString>) -> Op
     }
     let nonempty = |key| get(key).filter(|value| !value.is_empty()).map(PathBuf::from);
     match platform {
-        "macos" => nonempty("HOME").map(|home| home.join("Library/Application Support/CADCraft")),
-        "windows" => nonempty("APPDATA").map(|root| root.join("CADCraft")),
-        _ => nonempty("XDG_CONFIG_HOME").map(|root| root.join("cadcraft")).or_else(|| nonempty("HOME").map(|home| home.join(".config/cadcraft"))),
+        "macos" => nonempty("HOME").map(|home| home.join("Library/Application Support/UbotCAD")),
+        "windows" => nonempty("APPDATA").map(|root| root.join("UbotCAD")),
+        _ => nonempty("XDG_CONFIG_HOME").map(|root| root.join("ubotcad")).or_else(|| nonempty("HOME").map(|home| home.join(".config/ubotcad"))),
     }
 }
 
@@ -159,7 +159,21 @@ mod tests {
         }
         assert_eq!(
             config_dir_from("linux", |key| (key == "XDG_CONFIG_HOME").then(|| OsString::from("/config"))),
-            Some(PathBuf::from("/config/cadcraft"))
+            Some(PathBuf::from("/config/ubotcad"))
+        );
+        for platform in ["linux", "freebsd"] {
+            assert_eq!(
+                config_dir_from(platform, |key| (key == "HOME").then(|| OsString::from("/home/u"))),
+                Some(PathBuf::from("/home/u/.config/ubotcad"))
+            );
+        }
+        assert_eq!(
+            config_dir_from("macos", |key| (key == "HOME").then(|| OsString::from("/Users/u"))),
+            Some(PathBuf::from("/Users/u/Library/Application Support/UbotCAD"))
+        );
+        assert_eq!(
+            config_dir_from("windows", |key| (key == "APPDATA").then(|| OsString::from(r"C:\Users\u\AppData\Roaming"))),
+            Some(PathBuf::from(r"C:\Users\u\AppData\Roaming").join("UbotCAD"))
         );
         assert_eq!(config_dir_from("macos", |_| None), None);
     }
