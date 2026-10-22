@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use super::{LastPlan, bad, io, source_hash};
 use crate::cmd::file::base64_encode;
-use crate::sheetplan::approval::{issues, refresh_status, validate_approvals};
+use crate::sheetplan::approval::{carry_over, issues, merge_audit, refresh_status, validate_approvals, validate_issue_approvals};
 use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::ids::{sha256_hex, sheet_key};
 use crate::sheetplan::paper::sheet_margins;
@@ -35,6 +35,16 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
             s.ubplot.last.as_ref().filter(|last| last.doc_uid == uid).ok_or_else(|| bad(COMMAND, "no previous UBPLOT plan"))?.plan.clone()
         }
     };
+    let uid = s.state()?.uid;
+    if let Some(last) = s.ubplot.last.as_ref().filter(|last| last.doc_uid == uid) {
+        plan.audit = merge_audit(&last.plan.audit, &plan.audit).map_err(|error| bad(COMMAND, error))?;
+    }
+    validate_issue_approvals(&plan).map_err(|error| bad(COMMAND, error))?;
+    let previous = plan.clone();
+    let device = plan.device.as_deref().and_then(crate::cmd::plotters::find_device);
+    let missing = plan.device.is_some() && device.is_none();
+    crate::sheetplan::preflight::check_devices(&mut plan, device.as_ref(), missing, cfg!(target_arch = "wasm32"));
+    carry_over(&previous, &mut plan);
     validate_approvals(&plan).map_err(|error| bad(COMMAND, error))?;
     let warnings: BTreeSet<_> = issues(&plan)
         .filter(|(_, issue)| issue.severity == Severity::Warn && !issue.approved_by_user)
@@ -53,7 +63,14 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
         return Err(bad(COMMAND, "PLAN_INVALID: job_id is not safe for a temporary file name"));
     }
     plan.sheets.sort_by_key(|sheet| sheet.order);
-    if output == "merged" && plan.sheets.len() > MAX_PAGES {
+    let page_count = plan
+        .sheets
+        .iter()
+        .try_fold(0_usize, |total, sheet| {
+            total.checked_add(sheet.split.as_ref().filter(|split| split.approved).map_or(1, |split| split.pieces.len()))
+        })
+        .ok_or_else(|| bad(COMMAND, "page count overflow"))?;
+    if output == "merged" && page_count > MAX_PAGES {
         return Err(bad(COMMAND, format!("at most {MAX_PAGES} pages fit in merged output; publish it in parts (split)")));
     }
     #[cfg(target_arch = "wasm32")]
@@ -90,12 +107,9 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     let plot = io().and_then(|hooks| hooks.plot).ok_or_else(|| bad(COMMAND, "PDF plotting is not available in this build"))?;
     let mut files = Vec::new();
     if output == "merged" {
-        let rendered = plan
-            .sheets
-            .iter()
-            .map(|sheet| page(s, sheet))
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .and_then(|pages| plot(s.doc().map_err(|error| error.to_string())?, &Space::Model, &options(pages, title)));
+        let rendered = plan.sheets.iter().map(|sheet| sheet_pages(s, sheet)).collect::<std::result::Result<Vec<_>, _>>().and_then(|pages| {
+            plot(s.doc().map_err(|error| error.to_string())?, &Space::Model, &options(pages.into_iter().flatten().collect(), title))
+        });
         let result = rendered.and_then(|bytes| finish(&destinations, 0, path.is_some(), &plan.job_id, &plan.sheets, &bytes));
         match result {
             Ok(file) => {
@@ -117,8 +131,8 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
             if sheet.status == SheetStatus::Blocked {
                 continue;
             }
-            let result = page(s, sheet)
-                .and_then(|page| plot(s.doc().map_err(|error| error.to_string())?, &Space::Model, &options(vec![page], title)))
+            let result = sheet_pages(s, sheet)
+                .and_then(|pages| plot(s.doc().map_err(|error| error.to_string())?, &Space::Model, &options(pages, title)))
                 .and_then(|bytes| finish(&destinations, index, path.is_some(), &plan.job_id, std::slice::from_ref(sheet), &bytes));
             match result {
                 Ok(file) => {
@@ -172,6 +186,40 @@ pub(super) fn remember(s: &mut Session, plan: &SheetPlan, supplied: Option<&Valu
         s.ubplot.last = Some(LastPlan { doc_uid: uid, revision, request, plan: plan.clone() });
     }
     Ok(())
+}
+
+fn sheet_pages(s: &Session, sheet: &Sheet) -> std::result::Result<Vec<Value>, String> {
+    let Some(split) = sheet.split.as_ref().filter(|split| split.approved) else {
+        return page(s, sheet).map(|page| vec![page]);
+    };
+    let (_, [width, height], scale) = crate::sheetplan::split::frame(sheet).ok_or_else(|| "split needs a rectangular outline".to_string())?;
+    let mut pages = Vec::with_capacity(split.pieces.len());
+    for (index, outline) in split.pieces.iter().enumerate() {
+        let mut piece = sheet.clone();
+        match &mut piece.source {
+            SheetSource::Block { outline: source, .. } | SheetSource::Window { outline: source, .. } => *source = *outline,
+            SheetSource::Layout { .. } => return Err("layout splits are not available; choose PDF".into()),
+        }
+        let [a, b, c, _] = outline.map(|[x, y]| cadcraft_geom::Vec2::new(x, y));
+        let (piece_width, piece_height) = ((b - a).len() * scale, (c - b).len() * scale);
+        piece.paper_mm = [piece_width, piece_height];
+        piece.landscape = piece_width > piece_height;
+        piece.plot_scale = PlotScale::Ratio { paper_mm: scale, drawing_units: 1.0 };
+        piece.sheet_id = format!("{} ({}/{})", sheet.sheet_id, index.saturating_add(1), split.pieces.len());
+        let mut value = page(s, &piece)?;
+        let seams = if width >= height {
+            [index > 0, false, index.saturating_add(1) < split.pieces.len(), false]
+        } else {
+            [false, index > 0, false, index.saturating_add(1) < split.pieces.len()]
+        };
+        let object = value.as_object_mut().ok_or_else(|| "page must be an object".to_string())?;
+        // Each piece is an exact crop; inherited roll margins would clip its seam-area geometry.
+        object.insert("margins".into(), json!([0.0; 4]));
+        object.insert("seams".into(), json!(seams));
+        object.insert("seamOverlapMm".into(), json!(split.overlap_mm));
+        pages.push(value);
+    }
+    Ok(pages)
 }
 
 fn page(s: &Session, sheet: &Sheet) -> std::result::Result<Value, String> {

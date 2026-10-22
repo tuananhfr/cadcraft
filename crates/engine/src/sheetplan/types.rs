@@ -13,6 +13,8 @@ pub struct SheetPlan {
     pub schema_version: String,
     pub job_id: String,
     pub source_hash: String,
+    #[serde(default)]
+    pub device: Option<String>,
     pub sheets: Vec<Sheet>,
     #[serde(default)]
     pub issues: Vec<PreflightIssue>,
@@ -31,6 +33,14 @@ pub struct AuditEntry {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct SplitPlan {
+    pub pieces: Vec<[[f64; 2]; 4]>,
+    pub overlap_mm: f64,
+    #[serde(default)]
+    pub approved: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Sheet {
     pub sheet_id: String,
     pub order: u32,
@@ -46,6 +56,8 @@ pub struct Sheet {
     pub scale_label: Option<String>,
     #[serde(default)]
     pub paper_name: Option<String>,
+    #[serde(default)]
+    pub split: Option<SplitPlan>,
     pub status: SheetStatus,
     #[serde(default)]
     pub issues: Vec<PreflightIssue>,
@@ -181,6 +193,8 @@ struct PlanHeader {
     #[serde(default)]
     source_hash: String,
     #[serde(default)]
+    device: Option<String>,
+    #[serde(default)]
     issues: Vec<PreflightIssue>,
 }
 
@@ -203,6 +217,8 @@ struct SheetInput {
     scale_label: Option<String>,
     #[serde(default)]
     paper_name: Option<String>,
+    #[serde(default)]
+    split: Option<SplitPlan>,
     status: SheetStatus,
     #[serde(default)]
     issues: Vec<PreflightIssue>,
@@ -243,6 +259,7 @@ fn parse(v: &Value) -> Result<SheetPlan, String> {
         schema_version: header.schema_version,
         job_id: header.job_id,
         source_hash: header.source_hash,
+        device: header.device,
         sheets,
         issues: header.issues,
         audit: header.audit,
@@ -289,7 +306,24 @@ pub(crate) fn validate_input_size(v: &Value) -> Result<(), String> {
 }
 
 fn parse_sheet(v: &Value) -> Result<Sheet, String> {
+    if v.get("split")
+        .and_then(|split| split.get("pieces"))
+        .and_then(Value::as_array)
+        .is_some_and(|pieces| pieces.len() > cadcraft_doc::MAX_PLOT_PAGES)
+    {
+        return Err("split piece count exceeds the page cap".into());
+    }
     let input = SheetInput::deserialize(v).map_err(|error| error.to_string())?;
+    if let Some(split) = &input.split {
+        if !split.overlap_mm.is_finite() || !(0.0..=200.0).contains(&split.overlap_mm) || split.pieces.len() < 2 {
+            return Err("split requires at least two pieces and overlap within 0..=200 mm".into());
+        }
+        for outline in &split.pieces {
+            if super::outline::rect_of(&super::outline::points(outline)).is_none() {
+                return Err("split pieces must be finite rectangles".into());
+            }
+        }
+    }
     if input.order == 0 {
         return Err("sheet order must be at least 1".into());
     }
@@ -335,6 +369,7 @@ fn parse_sheet(v: &Value) -> Result<Sheet, String> {
         plot_scale: input.plot_scale,
         scale_label: input.scale_label,
         paper_name: input.paper_name,
+        split: input.split,
         status,
         issues: input.issues,
         attributes: input.attributes,

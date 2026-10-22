@@ -261,7 +261,7 @@ fn hostile_approvals() {
         json!({"plan": plan, "approvals": vec![item.clone(); 10_001], "by": "user"}),
         json!({"plan": plan, "approvals": [{"sheetKey": "unknown", "code": codes::FRAME_OVERLAP}], "by": "user"}),
         json!({"plan": plan, "approvals": [{"sheetKey": key, "code": "unknown"}], "by": "user"}),
-        json!({"plan": plan, "approvals": [item], "split": [], "by": "user"}),
+        json!({"plan": plan, "approvals": [item], "split": {}, "by": "user"}),
         json!({"plan": plan, "approvals": "wrong type", "by": "user"}),
     ] {
         assert!(s.execute("ubplot.approve", &params).is_err(), "{params}");

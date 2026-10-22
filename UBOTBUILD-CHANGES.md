@@ -48,6 +48,9 @@ This branch (`tuananhfr`) is UbotCAD, the UbotBuild build of [CADCraft](https://
 
 ## V2.2 GĐ2
 
+- UBPLOT accepts a device name and checks its paper limits: near-limit sheets warn, oversized sheets block with an optional overlap split proposal. Unknown devices, and non-PDF devices on the web, fall back to PDF after `DEVICE_UNAVAILABLE` approval.
+- Explicit split approval is atomic with WARN approvals and appends a geometry/device-bound audit record. Approved pieces preserve scale and rotation, publish in sheet/piece order with numbered labels, and carry dashed 0.25 mm overlap seams and 10 mm end ticks. Unapproved splits never print; short sides beyond the device width stay blocked and suggest PDF.
+
 - `ubplot.approve` atomically approves WARN issues for users or named agents and appends fingerprinted audit records with host-provided timestamps. BLOCK, INFO and PASS cannot be approved. Rescans preserve unchanged approvals and audit history; changed issue messages require new approval. Publishing rejects forged flags and unapproved warnings with `BLOCK_NOT_APPROVABLE`, `APPROVAL_WITHOUT_AUDIT` or `WARN_NOT_APPROVED`; there is no bypass.
 
 - UBPLOT preflight reports missing/fallback fonts as plan-level WARN and explicit font mappings as INFO, restricted to styles used on the planned sheets. Cached `last` scans refresh process-wide font settings. Font reporting through FONTS keeps its existing JSON output.

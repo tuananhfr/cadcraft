@@ -90,7 +90,7 @@ pub fn approve(plan: &mut SheetPlan, items: &[(String, String)], by: &str, at_ms
     Ok(count)
 }
 
-pub fn validate_approvals(plan: &SheetPlan) -> Result<(), String> {
+pub(crate) fn validate_issue_approvals(plan: &SheetPlan) -> Result<(), String> {
     if plan.audit.len() > MAX_AUDIT_ENTRIES {
         return Err(format!("audit count exceeds {MAX_AUDIT_ENTRIES}"));
     }
@@ -103,6 +103,17 @@ pub fn validate_approvals(plan: &SheetPlan) -> Result<(), String> {
         let fingerprint = fingerprint(issue, &key);
         if !audit.contains(&(key.as_str(), issue.code.as_str(), fingerprint.as_str())) {
             return Err(format!("APPROVAL_WITHOUT_AUDIT: {key}:{}", issue.code));
+        }
+    }
+    Ok(())
+}
+
+pub fn validate_approvals(plan: &SheetPlan) -> Result<(), String> {
+    validate_issue_approvals(plan)?;
+    let device = plan.device.as_deref().and_then(crate::cmd::plotters::find_device);
+    for sheet in &plan.sheets {
+        if sheet.split.as_ref().is_some_and(|split| split.approved) && !super::split::split_approved(sheet, &plan.audit, device.as_ref()) {
+            return Err(format!("APPROVAL_WITHOUT_AUDIT: {}:split", sheet_key(sheet)));
         }
     }
     Ok(())
@@ -132,6 +143,17 @@ pub fn carry_over(old: &SheetPlan, new: &mut SheetPlan) {
         })
         .collect();
     new.audit.clone_from(&old.audit);
+    let device = new.device.as_deref().and_then(crate::cmd::plotters::find_device);
+    for sheet in &mut new.sheets {
+        if let Some(previous) = old.sheets.iter().find(|previous| sheet_key(previous) == sheet_key(sheet)) {
+            let mut candidate = sheet.clone();
+            candidate.split.clone_from(&previous.split);
+            if old.device == new.device && super::split::split_approved(&candidate, &new.audit, device.as_ref()) {
+                sheet.split = candidate.split;
+                sheet.issues.retain(|issue| issue.code != super::codes::DEVICE_LIMIT_EXCEEDED);
+            }
+        }
+    }
     for issue in &mut new.issues {
         issue.approved_by_user = issue.severity == Severity::Warn && approved.contains(&("*".into(), issue.code.clone(), fingerprint(issue, "*")));
     }
@@ -158,4 +180,58 @@ pub(crate) fn refresh_status(plan: &mut SheetPlan) {
             }
         };
     }
+}
+
+pub fn approve_with_splits(
+    plan: &mut SheetPlan,
+    items: &[(String, String)],
+    splits: &[(String, Option<f64>)],
+    by: &str,
+    at_ms: u64,
+) -> Result<usize, String> {
+    use super::codes;
+    use super::split::{DEFAULT_OVERLAP_MM, device_limits, propose_split, split_fingerprint};
+
+    if items.len().saturating_add(splits.len()) > MAX_APPROVALS {
+        return Err(format!("at most {MAX_APPROVALS} approvals are allowed"));
+    }
+    if cfg!(target_arch = "wasm32") && !splits.is_empty() {
+        return Err("printer splits are only available in the desktop app; choose PDF".into());
+    }
+    // Stage both kinds together so a bad overlap or WARN target cannot leave a partial approval.
+    let mut candidate = plan.clone();
+    let mut count = approve(&mut candidate, items, by, at_ms)?;
+    let device = candidate.device.as_deref().and_then(crate::cmd::plotters::find_device);
+    let limits = device.as_ref().and_then(device_limits);
+    let mut seen = BTreeSet::new();
+    for (key, overlap) in splits {
+        if !seen.insert(key) {
+            return Err(format!("duplicate split sheetKey: {key}"));
+        }
+        let sheet = candidate.sheets.iter_mut().find(|sheet| sheet_key(sheet) == *key).ok_or_else(|| format!("unknown sheetKey: {key}"))?;
+        if sheet.split.is_none() {
+            return Err(format!("no split proposal for {key}; choose PDF"));
+        }
+        let (long, short) = limits.ok_or_else(|| "the requested device is unavailable; choose PDF".to_string())?;
+        let mut split = propose_split(sheet, long, short, overlap.unwrap_or(DEFAULT_OVERLAP_MM))
+            .ok_or_else(|| format!("cannot split {key}; overlap must be 0..=200 mm and the short side must fit; choose PDF"))?;
+        split.approved = true;
+        sheet.split = Some(split);
+        if candidate.audit.len() >= MAX_AUDIT_ENTRIES {
+            return Err(format!("audit count exceeds {MAX_AUDIT_ENTRIES}"));
+        }
+        candidate.audit.push(AuditEntry {
+            at_ms,
+            by: by.into(),
+            action: "split".into(),
+            sheet_key: key.clone(),
+            code: codes::DEVICE_LIMIT_EXCEEDED.into(),
+            fingerprint: split_fingerprint(sheet, device.as_ref()),
+        });
+        sheet.issues.retain(|issue| issue.code != codes::DEVICE_LIMIT_EXCEEDED);
+        count = count.saturating_add(1);
+    }
+    refresh_status(&mut candidate);
+    *plan = candidate;
+    Ok(count)
 }

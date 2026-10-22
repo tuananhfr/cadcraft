@@ -114,7 +114,7 @@ Approve warnings before publishing:
 array of `{sheetKey, code}` items and `by`. It returns the updated SheetPlan and
 stores it as `last`. Sheet keys are `sheet_id@order`; plan-level issues use `"*"`.
 Only WARN is approvable. BLOCK, INFO, PASS, unknown sheets/codes or an invalid `by`
-reject the whole request without changing the plan. Split approval is not available yet.
+reject the whole request without changing the plan. Device splits are approved explicitly through the optional `split` array.
 `by` must be `"user"` or `"agent:<name>"` with a non-empty name, and 1–64 characters
 in total. A call accepts at most 10,000 items; a plan holds at most 100,000 audit entries.
 Repeated items are deduplicated within a call; multiple issues with the same key/code
@@ -141,6 +141,7 @@ The result is `{plan, files, failed}`. Each file has `name`, `sheets` (sheet key
 or base64 `data` when `path` was omitted. Failed entries have `sheetKey` and `issues`.
 The returned plan and the last stored plan carry `DONE`, `BLOCKED`, or `FAILED` statuses.
 Sheets always print by numeric `order`, with their sheet ids as PDF page labels.
+Approved split pieces follow in piece order, labelled `{sheet_id} ({i}/{n})`.
 
 Block and window pages use their exact rectangle outlines, including rotation and
 mirroring. Blocks print in their owning model or layout space. Paper size and landscape
@@ -182,8 +183,8 @@ Issue codes:
 
 | Severity | Codes |
 | --- | --- |
-| BLOCK | `FRAME_AMBIGUOUS`, `FRAME_NOT_FOUND`, `FRAME_MINSERT`, `PAPER_TOO_SMALL`, `PAPER_TOO_LARGE`, `SCALE_PAPER_MISMATCH`, `RENDER_FAILED`, `XREF_MISSING`, `XREF_SCAN_LIMIT` |
-| WARN | `FRAME_DUPLICATE`, `FRAME_OVERLAP`, `FRAME_NESTED`, `FRAME_MIRRORED`, `FRAME_NONUNIFORM`, `XREF_UNLOADED`, `FONT_FALLBACK`, `FONT_MISSING`, `SHEET_ID_DUPLICATE`, `REVISION_OLD`, `TEMPLATE_SUPERSEDED` |
+| BLOCK | `FRAME_AMBIGUOUS`, `FRAME_NOT_FOUND`, `FRAME_MINSERT`, `PAPER_TOO_SMALL`, `PAPER_TOO_LARGE`, `SCALE_PAPER_MISMATCH`, `RENDER_FAILED`, `XREF_MISSING`, `XREF_SCAN_LIMIT`, `DEVICE_LIMIT_EXCEEDED` |
+| WARN | `FRAME_DUPLICATE`, `FRAME_OVERLAP`, `FRAME_NESTED`, `FRAME_MIRRORED`, `FRAME_NONUNIFORM`, `XREF_UNLOADED`, `FONT_FALLBACK`, `FONT_MISSING`, `SHEET_ID_DUPLICATE`, `REVISION_OLD`, `TEMPLATE_SUPERSEDED`, `DEVICE_LIMIT_NEAR`, `DEVICE_UNAVAILABLE` |
 | INFO | `PAPER_CUSTOM`, `SCALE_NOT_SET`, `UNITS_ASSUMED`, `HANDLE_DUPLICATE`, `SHEET_EXCLUDED`, `SOURCE_HASH_WEAK`, `XREF_MISSING_OUTSIDE`, `FONT_MAPPED`, `REVISION_NEWER`, `PLOT_STYLE`, `FILE_RENAMED` |
 
 Publish validates approval flags before rendering or writing. A flagged BLOCK returns
@@ -195,3 +196,38 @@ warnings under `*`. There is no bypass flag; both merged and split output requir
 Command errors include `PLAN_STALE` (drawing changed since scan), `PLAN_INVALID`
 (invalid or unresolved plan), and `OUTPUT_IS_SOURCE` (output would overwrite the source).
 Job queues, resume, real printers and folder publishing are later phases.
+
+Device limits and approved splits:
+
+`ubplot.scan` accepts `device: "A1 Plotter"`, resolved through PLOTTERMANAGER.
+The optional `SheetPlan.device` retains that request when a plan is supplied later.
+Limits are the greatest short and long sides among the device's paper sizes;
+the built-in `CADCraft PDF` supports both sides up to 15000 mm. Paper reaching
+95% of either limit reports WARN `DEVICE_LIMIT_NEAR`. Exceeding either limit
+reports BLOCK `DEVICE_LIMIT_EXCEEDED` and, when possible, an unapproved
+`sheet.split` proposal. The short side must fit; otherwise choose PDF.
+
+```json
+{"command":"ubplot.approve","params":{"split":[{"sheetKey":"S-001@1","overlapMm":20}],"by":"user"}}
+```
+
+`overlapMm` defaults to 20 mm and accepts 0–200 mm. A long edge L is divided into
+`ceil((L - overlap) / (max_long - overlap))` equal pieces in the outline's frame.
+WARN approvals and split approvals in one call succeed atomically. Split approval
+appends an audit entry with `action: "split"`, binding the sheet geometry, paper,
+scale, device limits and overlap. Only an approved split with matching audit is
+published; changed inputs require approval again. Unchanged rescans retain approval
+and the append-only audit. Layouts without an outline cannot be split; choose PDF.
+Each piece is an exact borderless PDF crop, preserving its geometry without inherited
+roll margins clipping the overlap. The page cap includes all resulting pieces. With `output: "split"`, each original
+sheet produces one PDF containing all its approved pieces.
+
+Split PDF pages show 0.25 mm dashed seam lines at their overlap edges and two
+10 mm end ticks. JSON PDF `pages` items accept `seams: [left,bottom,right,top]`
+and optional `seamOverlapMm` (20 mm by default). Pages without seams retain their
+previous bytes.
+
+An unknown or removed device produces WARN `DEVICE_UNAVAILABLE` and falls back to
+PDF after warning approval. Web contexts treat every device except `CADCraft PDF`
+as unavailable and produce no device BLOCK or split proposal. Publishing rechecks
+capabilities so a removed device cannot silently use an old split or another printer.

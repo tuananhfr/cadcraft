@@ -104,6 +104,8 @@ pub struct PdfOptions {
     pub frame: Option<PlotFrame>,
     /// Page label, replacing the space name.
     pub label: Option<String>,
+    pub seams: Option<[bool; 4]>,
+    pub seam_overlap_mm: Option<f64>,
     /// Drawing layers become PDF layers (optional content groups). Default on.
     pub layers: bool,
     /// With `layers`: objects on layers that are off are included on PDF layers that start
@@ -146,6 +148,8 @@ impl Default for PdfOptions {
             window: None,
             frame: None,
             label: None,
+            seams: None,
+            seam_overlap_mm: None,
             layers: true,
             include_off_layers: false,
             links: Vec::new(),
@@ -189,6 +193,11 @@ impl PdfOptions {
             window: window(v.get("window")),
             frame: v.get("outline").and_then(|v| PlotFrame::from_outline(v).ok()),
             label: v.get("label").and_then(Value::as_str).map(str::to_string),
+            seams: v.get("seams").and_then(|value| {
+                let [left, bottom, right, top] = value.as_array()?.as_slice() else { return None };
+                Some([left.as_bool()?, bottom.as_bool()?, right.as_bool()?, top.as_bool()?])
+            }),
+            seam_overlap_mm: num("seamOverlapMm").filter(|value| (0.0..=200.0).contains(value)),
             margins: margins(v.get("margins")),
             page_margins: false,
             hyperlinks: v.get("hyperlinks").and_then(Value::as_bool).unwrap_or(true),
@@ -288,6 +297,7 @@ pub fn plot(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>> {
                 let mut po = PdfOptions::from_json(&serde_json::json!({
                     "paper": pg.get("paper"), "landscape": pg.get("landscape"), "scale": pg.get("scale"), "fit": pg.get("fit"),
                     "width": pg.get("width"), "height": pg.get("height"), "label": pg.get("label"),
+                    "seams": pg.get("seams"), "seamOverlapMm": pg.get("seamOverlapMm"),
                     "plotStyleTable": opts.get("plotStyleTable"), "lineweights": opts.get("lineweights"),
                     "margins": pg.get("margins").or_else(|| opts.get("margins")), "text": opts.get("text"),
                 }));
@@ -489,6 +499,8 @@ struct SheetPage {
     links: Vec<(Bounds2, String)>,
     /// Page label: the layout name.
     label: String,
+    seams: Option<[bool; 4]>,
+    seam_overlap_mm: f64,
 }
 
 /// Plot one space.
@@ -554,7 +566,18 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
         }
     }
     let links = links(&list, &map, &clip_pt, links_to, user_unit);
-    Ok(SheetPage { media, user_unit, list, map, clip_pt, layers, links, label: o.label.clone().unwrap_or_else(|| sheet_name(space)) })
+    Ok(SheetPage {
+        media,
+        user_unit,
+        list,
+        map,
+        clip_pt,
+        layers,
+        links,
+        label: o.label.clone().unwrap_or_else(|| sheet_name(space)),
+        seams: o.seams,
+        seam_overlap_mm: o.seam_overlap_mm.unwrap_or(20.0),
+    })
 }
 
 /// Source and destination origins for the shared model-space PDF/PNG placement behavior.
@@ -1000,6 +1023,55 @@ fn check_pdf_size(bytes: usize, page: usize) -> Result<()> {
     Ok(())
 }
 
+fn seam_marks(c: &mut String, page: &SheetPage) {
+    let Some(edges) = page.seams.filter(|edges| edges.iter().any(|edge| *edge)) else { return };
+    let k = PT_PER_MM / page.user_unit;
+    let overlap = page.seam_overlap_mm * k;
+    let bounds = page.clip_pt;
+    let x0 = bounds.min.x;
+    let y0 = bounds.min.y;
+    let x1 = bounds.max.x;
+    let y1 = bounds.max.y;
+    let [left, bottom, right, top] = edges;
+    let line = |c: &mut String, a: Vec2, b: Vec2| {
+        pt(c, a);
+        c.push_str(" m ");
+        pt(c, b);
+        c.push_str(" l S\n");
+    };
+    c.push_str("q\n0 G\n");
+    num(c, 0.25 * k);
+    c.push_str(" w\n");
+    for (enabled, a, b, vertical) in [
+        (left, Vec2::new((x0 + overlap).min(x1), y0), Vec2::new((x0 + overlap).min(x1), y1), true),
+        (bottom, Vec2::new(x0, (y0 + overlap).min(y1)), Vec2::new(x1, (y0 + overlap).min(y1)), false),
+        (right, Vec2::new((x1 - overlap).max(x0), y0), Vec2::new((x1 - overlap).max(x0), y1), true),
+        (top, Vec2::new(x0, (y1 - overlap).max(y0)), Vec2::new(x1, (y1 - overlap).max(y0)), false),
+    ] {
+        if !enabled {
+            continue;
+        }
+        c.push('[');
+        num(c, 3.0 * k);
+        c.push(' ');
+        num(c, 2.0 * k);
+        c.push_str("] 0 d\n");
+        line(c, a, b);
+        c.push_str("[] 0 d\n");
+        for end in [a, b] {
+            let (from, to) = if vertical {
+                let start = (end.x - 5.0 * k).max(x0).min((x1 - 10.0 * k).max(x0));
+                (Vec2::new(start, end.y), Vec2::new((start + 10.0 * k).min(x1), end.y))
+            } else {
+                let start = (end.y - 5.0 * k).max(y0).min((y1 - 10.0 * k).max(y0));
+                (Vec2::new(end.x, start), Vec2::new(end.x, (start + 10.0 * k).min(y1)))
+            };
+            line(c, from, to);
+        }
+    }
+    c.push_str("Q\n");
+}
+
 fn assemble(d: &Drawing, pages: impl ExactSizeIterator<Item = Result<SheetPage>>, mut fonts: fonts::Fonts, o: &PdfOptions) -> Result<Vec<u8>> {
     let page_count = pages.len();
     let mut title = o.title.clone();
@@ -1024,7 +1096,8 @@ fn assemble(d: &Drawing, pages: impl ExactSizeIterator<Item = Result<SheetPage>>
         }
         let page = objs.reserve();
         let texts = fonts.texts(&p.list);
-        let (marks, alphas) = content_stream(&p.list, &p.map, &p.clip_pt, &p.layers, &texts, p.user_unit);
+        let (mut marks, alphas) = content_stream(&p.list, &p.map, &p.clip_pt, &p.layers, &texts, p.user_unit);
+        seam_marks(&mut marks, &p);
         let content = objs.add(stream(marks.as_bytes(), o.compress, ""));
         drop(marks);
         let mut used: Vec<usize> = texts.values().map(|(f, _)| *f).collect();

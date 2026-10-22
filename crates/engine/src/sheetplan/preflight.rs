@@ -59,6 +59,9 @@ fn owned(code: &str) -> bool {
             | codes::TEMPLATE_SUPERSEDED
             | codes::PLOT_STYLE
             | codes::FILE_RENAMED
+            | codes::DEVICE_LIMIT_NEAR
+            | codes::DEVICE_LIMIT_EXCEEDED
+            | codes::DEVICE_UNAVAILABLE
     )
 }
 
@@ -116,8 +119,67 @@ pub fn preflight(d: &Drawing, plan: &mut SheetPlan, ctx: &PreflightContext<'_>) 
             }
         }
     }
+    check_devices(plan, ctx.device, ctx.device_missing, ctx.web);
     check_metadata(d, plan, ctx);
     refresh_status(plan);
+}
+
+pub(crate) fn check_devices(plan: &mut SheetPlan, device: Option<&cadcraft_doc::PlotterConfig>, missing: bool, web: bool) {
+    use super::split::{DEFAULT_OVERLAP_MM, device_limits, propose_split, split_approved};
+
+    if plan.device.is_none() {
+        plan.device = device.map(|device| device.name.clone());
+    }
+    let resolved = plan.device.as_deref().and_then(crate::cmd::plotters::find_device);
+    let device = device.or(resolved.as_ref());
+    let requested = plan.device.is_some() || device.is_some() || missing;
+    let pdf = device.is_some_and(|device| device.name.eq_ignore_ascii_case("CADCraft PDF"));
+    let unavailable = requested && (missing || device.is_none() || (web && !pdf));
+    let limits = device.and_then(device_limits);
+    plan.issues.retain(|entry| !matches!(entry.code.as_str(), codes::DEVICE_LIMIT_NEAR | codes::DEVICE_LIMIT_EXCEEDED | codes::DEVICE_UNAVAILABLE));
+    for sheet in &mut plan.sheets {
+        sheet
+            .issues
+            .retain(|entry| !matches!(entry.code.as_str(), codes::DEVICE_LIMIT_NEAR | codes::DEVICE_LIMIT_EXCEEDED | codes::DEVICE_UNAVAILABLE));
+        if unavailable || (requested && limits.is_none()) {
+            sheet.split = None;
+            let message = if web {
+                "Printer devices are only available in the desktop app; plotting to PDF."
+            } else {
+                "The requested device is unavailable; plotting to PDF."
+            };
+            sheet.issues.push(issue(Severity::Warn, codes::DEVICE_UNAVAILABLE, message, Some(&sheet.sheet_id)));
+            continue;
+        }
+        let Some((max_long, max_short)) = limits else {
+            sheet.split = None;
+            continue;
+        };
+        let [a, b] = sheet.paper_mm;
+        if a.max(b) > max_long || a.min(b) > max_short {
+            if split_approved(sheet, &plan.audit, device) {
+                continue;
+            }
+            let overlap = sheet.split.as_ref().map_or(DEFAULT_OVERLAP_MM, |split| split.overlap_mm);
+            sheet.split = propose_split(sheet, max_long, max_short, overlap);
+            sheet.issues.push(issue(
+                Severity::Block,
+                codes::DEVICE_LIMIT_EXCEEDED,
+                format!("Paper {} x {} mm exceeds device limits {max_short} x {max_long} mm; approve a split or choose PDF.", a.min(b), a.max(b)),
+                Some(&sheet.sheet_id),
+            ));
+        } else {
+            sheet.split = None;
+            if a.max(b) >= max_long * 0.95 || a.min(b) >= max_short * 0.95 {
+                sheet.issues.push(issue(
+                    Severity::Warn,
+                    codes::DEVICE_LIMIT_NEAR,
+                    format!("Paper {} x {} mm is at least 95% of device limits {max_short} x {max_long} mm.", a.min(b), a.max(b)),
+                    Some(&sheet.sheet_id),
+                ));
+            }
+        }
+    }
 }
 
 pub fn rev_cmp(mut a: &str, mut b: &str) -> Ordering {

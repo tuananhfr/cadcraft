@@ -105,3 +105,48 @@ fn bench_thousand_dense_pages() {
     assert_eq!(pdf_probe::pages(&bytes).len(), 1000);
     assert!(bytes.len() <= cadcraft_doc::MAX_PDF_BYTES);
 }
+
+#[test]
+fn seams_draw_dashed_overlap_edges() {
+    let d = Drawing::new_metric();
+    let mut page = serde_json::json!({
+        "window": [[0, 0], [297, 210]], "width": 297, "height": 210,
+        "landscape": true, "scale": 1, "fit": false, "margins": [0, 0, 0, 0], "label": "Seam test"
+    });
+    let render = |page: &serde_json::Value| {
+        cadcraft_io::plotter::plot(&d, &Space::Model, &serde_json::json!({"output": "pdf", "compress": false, "pages": [page]})).unwrap()
+    };
+    let baseline = render(&page);
+    page["seams"] = serde_json::json!([false, false, false, false]);
+    assert_eq!(render(&page), baseline);
+    page["seams"] = serde_json::json!([false, false, true, false]);
+    let bytes = render(&page);
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(text.contains("[8.504 5.669] 0 d"), "{text}");
+    assert!(text.contains("0.709 w"));
+    let paths: Vec<Vec<f64>> = text
+        .lines()
+        .filter_map(|line| {
+            let values: Vec<_> = line.split_whitespace().collect();
+            if values.len() == 7 && values[2] == "m" && values[5] == "l" && values[6] == "S" {
+                Some([values[0], values[1], values[3], values[4]].into_iter().map(|value| value.parse().unwrap()).collect())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(paths.len(), 3, "one seam and two ticks");
+    let right = (297.0 - 20.0) * 72.0 / 25.4;
+    assert!((paths[0][0] - right).abs() < 0.001);
+    assert!((paths[0][2] - right).abs() < 0.001);
+    assert!(paths[0][1].abs() < 0.001);
+    assert!((paths[0][3] - 210.0 * 72.0 / 25.4).abs() < 0.001);
+    for tick in &paths[1..] {
+        assert!((tick[2] - tick[0] - 10.0 * 72.0 / 25.4).abs() < 0.001);
+        assert_eq!(tick[1], tick[3]);
+    }
+    page["seamOverlapMm"] = serde_json::json!(40);
+    let custom = render(&page);
+    assert_ne!(custom, bytes);
+    assert_eq!(pdf_probe::pages(&custom)[0].media_box, pdf_probe::pages(&bytes)[0].media_box);
+}

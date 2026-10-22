@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use super::file::io;
 use super::{CommandSpec, has_doc};
-use crate::sheetplan::approval::{MAX_APPROVALS, approve, carry_over, merge_audit};
+use crate::sheetplan::approval::{MAX_APPROVALS, approve_with_splits, carry_over, merge_audit};
 use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::ids::sha256_hex;
 use crate::sheetplan::plan::{build_plan_with_context, validate_request_value};
@@ -53,7 +53,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .noundo()
             .interactive(|_| Ok(Box::new(interactive::UbplotM::default()))),
         CommandSpec::new("ubplot.approve", "Approve Plot Warnings", run_approve)
-            .params("{plan?: SheetPlan (default: the last plan), approvals: [{sheetKey, code}], by: user|agent:<name>} → SheetPlan; only WARN is approvable; split is not available yet")
+            .params("{plan?: SheetPlan (default: the last plan), approvals?: [{sheetKey, code}], split?: [{sheetKey, overlapMm?}], by: user|agent:<name>} → SheetPlan; WARN approvals and explicit device splits are atomic")
             .noundo()
             .enabled(has_doc),
         CommandSpec::new("ubplot.publish", "Publish Plot Frames", publish::run_publish)
@@ -61,7 +61,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .noundo()
             .enabled(has_doc),
         CommandSpec::new("ubplot.scan", "Scan Plot Frames", run_scan)
-            .params("{mode: block|window|layout|last|plan, handles?, windows?: [[[x1,y1],[x2,y2]] | [[x,y]×4]], layouts?, paper?, scale?: \"1:100\"|\"fit\", revisions?: {sheet_id: revision}, overrides?: {sheet_key: {paper?, scale?, window?, sheetId?}}, exclude?: [sheet_key], plan? (mode plan)} → SheetPlan + summary")
+            .params("{mode: block|window|layout|last|plan, handles?, windows?: [[[x1,y1],[x2,y2]] | [[x,y]×4]], layouts?, paper?, scale?: \"1:100\"|\"fit\", device?: name, revisions?: {sheet_id: revision}, overrides?: {sheet_key: {paper?, scale?, window?, sheetId?}}, exclude?: [sheet_key], plan? (mode plan)} → SheetPlan + summary")
             .noundo()
             .enabled(has_doc),
         CommandSpec::new("ubplot.templates", "Plot Frame Templates", run_templates)
@@ -96,14 +96,17 @@ pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
     } else {
         (incoming, None, false)
     };
+    let device_name = request.device.as_deref().or_else(|| reused.as_ref().and_then(|plan| plan.device.as_deref()));
+    let device = device_name.and_then(super::plotters::find_device);
+    let device_missing = device_name.is_some() && device.is_none();
     let mut plan = if let Some(plan) = reused {
         plan
     } else {
         let hash = source_hash(s)?;
         let ctx = PreflightContext {
             registry: &s.ubplot.registry,
-            device: None,
-            device_missing: false,
+            device: device.as_ref(),
+            device_missing,
             revisions: &request.revisions,
             fonts: &[],
             web: cfg!(target_arch = "wasm32"),
@@ -123,8 +126,8 @@ pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
         .collect();
     let ctx = PreflightContext {
         registry: &s.ubplot.registry,
-        device: None,
-        device_missing: false,
+        device: device.as_ref(),
+        device_missing,
         revisions: &request.revisions,
         fonts: &fonts,
         web: cfg!(target_arch = "wasm32"),
@@ -170,13 +173,34 @@ fn plan_result(plan: &SheetPlan, rescanned: bool) -> Result<Value> {
 fn run_approve(s: &mut Session, params: &Value) -> Result<Value> {
     const COMMAND: &str = "ubplot.approve";
     validate_request_value(params).map_err(|error| bad(COMMAND, error))?;
-    if params.get("split").is_some() {
-        return Err(bad(COMMAND, "split approval is not available yet"));
-    }
     let by = params.get("by").and_then(Value::as_str).ok_or_else(|| bad(COMMAND, "by must be user or agent:<name>"))?;
-    let input = params.get("approvals").and_then(Value::as_array).ok_or_else(|| bad(COMMAND, "approvals must be an array"))?;
-    if input.len() > MAX_APPROVALS {
+    let input = match params.get("approvals") {
+        Some(value) => value.as_array().ok_or_else(|| bad(COMMAND, "approvals must be an array"))?.as_slice(),
+        None => &[],
+    };
+    let split_input = match params.get("split") {
+        Some(value) => value.as_array().ok_or_else(|| bad(COMMAND, "split must be an array"))?.as_slice(),
+        None => &[],
+    };
+    if params.get("approvals").is_none() && params.get("split").is_none() {
+        return Err(bad(COMMAND, "approvals or split must be an array"));
+    }
+    if input.len().saturating_add(split_input.len()) > MAX_APPROVALS {
         return Err(bad(COMMAND, format!("at most {MAX_APPROVALS} approvals are allowed")));
+    }
+    let mut splits = Vec::with_capacity(split_input.len());
+    for item in split_input {
+        let key = item.get("sheetKey").and_then(Value::as_str).ok_or_else(|| bad(COMMAND, "sheetKey must be a string"))?;
+        let overlap = item
+            .get("overlapMm")
+            .map(|value| {
+                value
+                    .as_f64()
+                    .filter(|value| value.is_finite() && (0.0..=200.0).contains(value))
+                    .ok_or_else(|| bad(COMMAND, "overlapMm must be 0..=200 mm"))
+            })
+            .transpose()?;
+        splits.push((key.to_string(), overlap));
     }
     let mut items = Vec::with_capacity(input.len());
     for item in input {
@@ -192,8 +216,12 @@ fn run_approve(s: &mut Session, params: &Value) -> Result<Value> {
             s.ubplot.last.as_ref().filter(|last| last.doc_uid == uid).ok_or_else(|| bad(COMMAND, "no previous UBPLOT plan"))?.plan.clone()
         }
     };
+    let uid = s.state()?.uid;
+    if let Some(last) = s.ubplot.last.as_ref().filter(|last| last.doc_uid == uid) {
+        plan.audit = merge_audit(&last.plan.audit, &plan.audit).map_err(|error| bad(COMMAND, error))?;
+    }
     let at_ms = CLOCK.get().map_or(0, |clock| clock());
-    approve(&mut plan, &items, by, at_ms).map_err(|error| bad(COMMAND, error))?;
+    approve_with_splits(&mut plan, &items, &splits, by, at_ms).map_err(|error| bad(COMMAND, error))?;
     let result = serde_json::to_value(&plan).map_err(|error| bad(COMMAND, error.to_string()))?;
     publish::remember(s, &plan, supplied)?;
     Ok(result)

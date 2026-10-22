@@ -50,6 +50,8 @@ pub struct ScanRequest {
     #[serde(default)]
     pub scale: Option<String>,
     #[serde(default)]
+    pub device: Option<String>,
+    #[serde(default)]
     pub overrides: BTreeMap<String, SheetOverride>,
     #[serde(default)]
     pub exclude: Vec<String>,
@@ -75,10 +77,11 @@ pub(crate) fn validate_request_value(value: &Value) -> Result<(), String> {
 }
 
 pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_hash: &str) -> Result<SheetPlan, String> {
+    let device = req.device.as_deref().and_then(crate::cmd::plotters::find_device);
     let ctx = PreflightContext {
         registry: reg,
-        device: None,
-        device_missing: false,
+        device: device.as_ref(),
+        device_missing: req.device.is_some() && device.is_none(),
         revisions: &req.revisions,
         fonts: &[],
         web: cfg!(target_arch = "wasm32"),
@@ -114,6 +117,7 @@ pub(crate) fn build_plan_with_context(d: &Drawing, req: &ScanRequest, ctx: &Pref
         schema_version: SHEETPLAN_SCHEMA.into(),
         job_id: job_id(source_hash, &request),
         source_hash: source_hash.into(),
+        device: req.device.clone(),
         sheets: Vec::new(),
         issues: Vec::new(),
         audit: Vec::new(),
@@ -193,6 +197,7 @@ pub(crate) fn build_plan_with_context(d: &Drawing, req: &ScanRequest, ctx: &Pref
         ScanMode::Plan => {
             let input = req.plan.as_ref().ok_or_else(|| "PLAN_INVALID: plan is required".to_string())?;
             let mut supplied = super::parse_plan(input)?;
+            plan.device = req.device.clone().or_else(|| supplied.device.clone());
             let handles = supplied
                 .sheets
                 .iter()
@@ -422,6 +427,7 @@ fn empty_sheet(order: u32, source: SheetSource) -> Sheet {
         plot_scale: PlotScale::Fit,
         scale_label: None,
         paper_name: paper_size("A3").map(|paper| paper.name.into()),
+        split: None,
         status: SheetStatus::NeedsPreview,
         issues: Vec::new(),
         attributes: BTreeMap::new(),

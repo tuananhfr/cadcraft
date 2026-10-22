@@ -7,6 +7,7 @@ pub mod paper;
 pub mod plan;
 pub mod preflight;
 pub mod registry;
+pub mod split;
 pub mod types;
 
 pub use detect::{FrameCandidate, detect_frames, is_frame_candidate};
