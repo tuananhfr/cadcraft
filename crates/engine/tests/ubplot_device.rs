@@ -30,7 +30,10 @@ fn setup() -> Session {
             s.execute("plottermanager", &json!({"action": "set", "name": "A1 Plotter", "removePaper": paper["name"]})).unwrap();
         }
     });
-    Session::new()
+    let mut s = Session::new();
+    // Fixtures are in millimetres; the default drawing is in inches, which UBPLOT now scales physically.
+    s.doc_mut().unwrap().header.set_i64("INSUNITS", 4);
+    s
 }
 
 fn scan(s: &mut Session, width: f64, height: f64, device: &str) -> SheetPlan {
