@@ -27,106 +27,128 @@ pub(super) fn show(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State) {
     if !tabs.iter().any(|tab| tab.id == state.tab) {
         state.tab = tabs.first().map(|tab| tab.id.clone()).unwrap_or_default();
     }
-    ui.label(crate::tl!("Ribbon tabs"));
-    egui::ScrollArea::vertical().id_salt("tabs").max_height(90.0).show(ui, |ui| {
-        for tab in &tabs {
-            if row(ui, tab.id == state.tab, crate::ribbon::render::tab_label(tab)) {
-                state.tab = tab.id.clone();
-                state.group.clear();
-                state.ribbon_index = None;
-            }
-        }
-    });
-    let response = edit(ui, &mut state.label, crate::tl!("Tab or group name"));
-    if std::mem::take(&mut state.focus_label) {
-        response.request_focus();
-    }
-    ui.horizontal(|ui| {
-        if ui.button(crate::tl!("Add Tab")).clicked() {
-            let label = if state.label.trim().is_empty() { crate::tl!("New Tab").to_string() } else { state.label.clone() };
-            if let Some(value) = run(app, "ui.ribbon.tab.add", json!({"label": label}), state) {
-                state.tab = value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default().into();
-                state.label.clear();
-            }
-        }
-        if ui.button(crate::tl!("Rename Tab")).clicked() {
-            if state.label.trim().is_empty() {
-                state.label = tabs.iter().find(|tab| tab.id == state.tab).map(|tab| tab.label.clone()).unwrap_or_default();
-                state.focus_label = true;
-            } else {
-                let _ = run(app, "ui.ribbon.tab.rename", json!({"tab": state.tab, "label": state.label}), state);
-            }
-        }
-        if ui.button(crate::tl!("Remove Tab")).clicked() {
-            let _ = run(app, "ui.ribbon.tab.remove", json!({"tab": state.tab}), state);
-        }
-        let movable: Vec<_> = tabs.iter().filter(|tab| tab.contextual.is_none()).collect();
-        if let Some(at) = movable.iter().position(|tab| tab.id == state.tab) {
-            if ui.add_enabled(at > 0, egui::Button::new(crate::tl!("Tab Up"))).clicked() {
-                let _ = run(app, "ui.ribbon.tab.move", json!({"tab": state.tab, "to": at.saturating_sub(1)}), state);
-            }
-            if ui.add_enabled(at + 1 < movable.len(), egui::Button::new(crate::tl!("Tab Down"))).clicked() {
-                let _ = run(app, "ui.ribbon.tab.move", json!({"tab": state.tab, "to": at + 1}), state);
-            }
-        }
-    });
     let selected_tab = tabs.iter().find(|tab| tab.id == state.tab);
     let groups = selected_tab.map(|tab| tab.groups.clone()).unwrap_or_default();
     if !groups.iter().any(|group| group.id == state.group) {
         state.group = groups.first().map(|group| group.id.clone()).unwrap_or_default();
     }
-    ui.label(crate::tl!("Ribbon groups"));
-    egui::ScrollArea::vertical().id_salt("groups").max_height(80.0).show(ui, |ui| {
-        for group in &groups {
-            let label = selected_tab.map_or(group.label.as_str(), |tab| crate::ribbon::render::group_label(tab, group));
-            let (zone, dropped) = ui.dnd_drop_zone::<RibbonDrag, _>(egui::Frame::NONE, |ui| row(ui, group.id == state.group, label));
-            if zone.inner {
-                state.group = group.id.clone();
-                state.ribbon_index = None;
+    let columns = if ui.available_width() >= 960.0 { 4.0 } else { 2.0 };
+    let width = (ui.available_width() - ui.spacing().item_spacing.x * (columns - 1.0)) / columns;
+    ui.with_layout(egui::Layout::left_to_right(egui::Align::Min).with_main_wrap(true), |ui| {
+        ui.allocate_ui_with_layout(egui::vec2(width, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+            ui.label(crate::tl!("Ribbon tabs"));
+            egui::ScrollArea::vertical()
+                .id_salt("tabs")
+                .min_scrolled_height(state.list_height)
+                .max_height(state.list_height)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    for tab in &tabs {
+                        if row(ui, tab.id == state.tab, crate::ribbon::render::tab_label(tab)) {
+                            state.tab = tab.id.clone();
+                            state.group.clear();
+                            state.ribbon_index = None;
+                        }
+                    }
+                });
+            let response = edit(ui, &mut state.label, crate::tl!("Tab or group name"));
+            if std::mem::take(&mut state.focus_label) {
+                response.request_focus();
             }
-            if let Some(payload) = zone.response.dnd_hover_payload::<RibbonDrag>()
-                && payload.tab == state.tab
-            {
-                marker(ui, zone.response.rect, true);
+            ui.horizontal_wrapped(|ui| {
+                if ui.button(crate::tl!("Add Tab")).clicked() {
+                    let label = if state.label.trim().is_empty() { crate::tl!("New Tab").to_string() } else { state.label.clone() };
+                    if let Some(value) = run(app, "ui.ribbon.tab.add", json!({"label": label}), state) {
+                        state.tab = value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default().into();
+                        state.label.clear();
+                    }
+                }
+                if ui.button(crate::tl!("Rename Tab")).clicked() {
+                    if state.label.trim().is_empty() {
+                        state.label = tabs.iter().find(|tab| tab.id == state.tab).map(|tab| tab.label.clone()).unwrap_or_default();
+                        state.focus_label = true;
+                    } else {
+                        let _ = run(app, "ui.ribbon.tab.rename", json!({"tab": state.tab, "label": state.label}), state);
+                    }
+                }
+                if ui.button(crate::tl!("Remove Tab")).clicked() {
+                    let _ = run(app, "ui.ribbon.tab.remove", json!({"tab": state.tab}), state);
+                }
+                let movable: Vec<_> = tabs.iter().filter(|tab| tab.contextual.is_none()).collect();
+                if let Some(at) = movable.iter().position(|tab| tab.id == state.tab) {
+                    if ui.add_enabled(at > 0, egui::Button::new(crate::tl!("Tab Up"))).clicked() {
+                        let _ = run(app, "ui.ribbon.tab.move", json!({"tab": state.tab, "to": at.saturating_sub(1)}), state);
+                    }
+                    if ui.add_enabled(at + 1 < movable.len(), egui::Button::new(crate::tl!("Tab Down"))).clicked() {
+                        let _ = run(app, "ui.ribbon.tab.move", json!({"tab": state.tab, "to": at + 1}), state);
+                    }
+                }
+            });
+        });
+        ui.allocate_ui_with_layout(egui::vec2(width, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+            ui.label(crate::tl!("Ribbon groups"));
+            egui::ScrollArea::vertical()
+                .id_salt("groups")
+                .min_scrolled_height(state.list_height)
+                .max_height(state.list_height)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    for group in &groups {
+                        let label = selected_tab.map_or(group.label.as_str(), |tab| crate::ribbon::render::group_label(tab, group));
+                        let (zone, dropped) = ui.dnd_drop_zone::<RibbonDrag, _>(egui::Frame::NONE, |ui| row(ui, group.id == state.group, label));
+                        if zone.inner {
+                            state.group = group.id.clone();
+                            state.ribbon_index = None;
+                        }
+                        if let Some(payload) = zone.response.dnd_hover_payload::<RibbonDrag>()
+                            && payload.tab == state.tab
+                        {
+                            marker(ui, zone.response.rect, true);
+                        }
+                        if let Some(payload) = dropped {
+                            drop_command(app, state, &payload, &group.id, group.commands.len());
+                        }
+                    }
+                });
+            ui.horizontal_wrapped(|ui| {
+                if ui.button(crate::tl!("Add Group")).clicked() {
+                    let label = if state.label.trim().is_empty() { crate::tl!("New Group").to_string() } else { state.label.clone() };
+                    let _ = run(app, "ui.ribbon.group.add", json!({"tab": state.tab, "label": label}), state);
+                }
+                if ui.button(crate::tl!("Rename Group")).clicked() {
+                    let _ = run(app, "ui.ribbon.group.rename", json!({"tab": state.tab, "group": state.group, "label": state.label}), state);
+                }
+                if ui.button(crate::tl!("Remove Group")).clicked() {
+                    let _ = run(app, "ui.ribbon.group.remove", json!({"tab": state.tab, "group": state.group}), state);
+                }
+                if let Some(at) = groups.iter().position(|group| group.id == state.group) {
+                    if ui.add_enabled(at > 0, egui::Button::new(crate::tl!("Group Up"))).clicked() {
+                        let _ = run(app, "ui.ribbon.group.move", json!({"tab": state.tab, "group": state.group, "to": at.saturating_sub(1)}), state);
+                    }
+                    if ui.add_enabled(at + 1 < groups.len(), egui::Button::new(crate::tl!("Group Down"))).clicked() {
+                        let _ = run(app, "ui.ribbon.group.move", json!({"tab": state.tab, "group": state.group, "to": at + 1}), state);
+                    }
+                }
+            });
+        });
+        ui.allocate_ui_with_layout(egui::vec2(width, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+            if let Some(group) = groups.iter().find(|group| group.id == state.group) {
+                command_rows(app, ui, state, group);
             }
-            if let Some(payload) = dropped {
-                drop_command(app, state, &payload, &group.id, group.commands.len());
-            }
-        }
+        });
+        ui.allocate_ui_with_layout(egui::vec2(width, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+            commands(app, ui, state);
+            ui.horizontal_wrapped(|ui| {
+                if ui.button(crate::tl!("Add Command")).clicked() {
+                    let _ = run(app, "ui.ribbon.button.add", json!({"tab": state.tab, "group": state.group, "id": state.command}), state);
+                }
+                if ui.button(crate::tl!("Remove Command")).clicked() {
+                    let _ = run(app, "ui.ribbon.button.remove", json!({"tab": state.tab, "group": state.group, "id": state.command}), state);
+                }
+            });
+        });
     });
-    ui.horizontal(|ui| {
-        if ui.button(crate::tl!("Add Group")).clicked() {
-            let label = if state.label.trim().is_empty() { crate::tl!("New Group").to_string() } else { state.label.clone() };
-            let _ = run(app, "ui.ribbon.group.add", json!({"tab": state.tab, "label": label}), state);
-        }
-        if ui.button(crate::tl!("Rename Group")).clicked() {
-            let _ = run(app, "ui.ribbon.group.rename", json!({"tab": state.tab, "group": state.group, "label": state.label}), state);
-        }
-        if ui.button(crate::tl!("Remove Group")).clicked() {
-            let _ = run(app, "ui.ribbon.group.remove", json!({"tab": state.tab, "group": state.group}), state);
-        }
-        if let Some(at) = groups.iter().position(|group| group.id == state.group) {
-            if ui.add_enabled(at > 0, egui::Button::new(crate::tl!("Group Up"))).clicked() {
-                let _ = run(app, "ui.ribbon.group.move", json!({"tab": state.tab, "group": state.group, "to": at.saturating_sub(1)}), state);
-            }
-            if ui.add_enabled(at + 1 < groups.len(), egui::Button::new(crate::tl!("Group Down"))).clicked() {
-                let _ = run(app, "ui.ribbon.group.move", json!({"tab": state.tab, "group": state.group, "to": at + 1}), state);
-            }
-        }
-    });
-    if let Some(group) = groups.iter().find(|group| group.id == state.group) {
-        command_rows(app, ui, state, group);
-    }
     state.ribbon_drag_active = egui::DragAndDrop::has_payload_of_type::<RibbonDrag>(ui.ctx());
-    commands(app, ui, state);
-    ui.horizontal(|ui| {
-        if ui.button(crate::tl!("Add Command")).clicked() {
-            let _ = run(app, "ui.ribbon.button.add", json!({"tab": state.tab, "group": state.group, "id": state.command}), state);
-        }
-        if ui.button(crate::tl!("Remove Command")).clicked() {
-            let _ = run(app, "ui.ribbon.button.remove", json!({"tab": state.tab, "group": state.group, "id": state.command}), state);
-        }
-    });
 }
 
 fn marker(ui: &egui::Ui, rect: egui::Rect, before: bool) {
@@ -175,8 +197,11 @@ fn command_rows(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State, group: &
     ui.label(crate::tl!("Ribbon commands"));
     let focus = state.ribbon_focus.take();
     let mut movement = None;
-    // The outer scrolling page can leave no height; keep this list usable for multi-row drags.
-    let scroll = egui::ScrollArea::vertical().id_salt(("ribbon_commands", &state.tab, &state.group)).min_scrolled_height(160.0).max_height(160.0);
+    let scroll = egui::ScrollArea::vertical()
+        .id_salt(("ribbon_commands", &state.tab, &state.group))
+        .min_scrolled_height(state.list_height)
+        .max_height(state.list_height)
+        .auto_shrink([false, false]);
     scroll.show(ui, |ui| {
         for (index, command) in group.commands.iter().enumerate() {
             let payload = RibbonDrag { tab: state.tab.clone(), group: state.group.clone(), index };
@@ -186,6 +211,7 @@ fn command_rows(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State, group: &
                     let resolved = crate::toolbars::resolve(command);
                     let response = ui.add(
                         egui::Button::selectable(state.ribbon_index == Some(index), crate::i18n::t(&resolved.label))
+                            .truncate()
                             .sense(egui::Sense::click_and_drag()),
                     );
                     response.dnd_set_drag_payload(payload);
@@ -239,7 +265,7 @@ fn command_rows(app: &mut CadApp, ui: &mut egui::Ui, state: &mut State, group: &
             }
         }
     });
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         let selected = state.ribbon_index.filter(|index| *index < group.commands.len());
         if ui.add_enabled(selected.is_some_and(|index| index > 0), egui::Button::new(crate::tl!("Up"))).clicked()
             && let Some(index) = selected

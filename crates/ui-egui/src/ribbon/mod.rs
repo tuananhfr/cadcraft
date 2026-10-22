@@ -147,6 +147,16 @@ fn toolbar_to_ribbon(app: &mut CadApp, params: &Value) -> Result<Value, String> 
 }
 
 pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<Result<Value, String>> {
+    let mode = match command {
+        "ui.ribbon.mode.expanded" => Some("expanded"),
+        "ui.ribbon.mode.compact" => Some("compact"),
+        "ui.ribbon.mode.tabs_only" => Some("tabs_only"),
+        "ui.ribbon.mode.hidden" => Some("hidden"),
+        _ => None,
+    };
+    if let Some(mode) = mode {
+        return route(app, "ui.ribbon.mode", &json!({"mode": mode}));
+    }
     if command == "ui.toolbar.to_ribbon" {
         return Some(toolbar_to_ribbon(app, params));
     }

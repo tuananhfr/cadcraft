@@ -391,8 +391,13 @@ fn compact_mode_shows_icon_buttons_with_tooltips() {
                 button_nth(&h, &label, nth).scroll_to_me();
                 h.run_steps(3);
                 let item = button_nth(&h, &label, nth);
-                assert!(item.rect().width() <= 25.0, "{label} uses a square icon button");
-                assert!((item.rect().width() - item.rect().height()).abs() <= 0.5, "{label} uses a square icon button");
+                if item.rect().width() > item.rect().height() + 1.0 {
+                    assert!(item.rect().width() > item.rect().height(), "{label} has room for text");
+                    assert!(button_paints_text(&h, &label, item.rect()), "{label} paints its label");
+                } else {
+                    assert!(item.rect().width() <= 25.0, "{label} uses a square icon button");
+                    assert!((item.rect().width() - item.rect().height()).abs() <= 0.5, "{label} uses a square icon button");
+                }
                 let before_hover = h.query_all_by_label(&label).count();
                 item.hover();
                 h.run_steps(6);
@@ -668,4 +673,78 @@ fn ribbon_tab_visibility_rejects_invalid_params_and_respects_lock() {
     assert_eq!(app.run("ui.ribbon.tab.visible", json!({"tab": "home", "visible": false})).unwrap_err(), LOCKED_MESSAGE);
     assert_eq!(app.ws.user.layout, before);
     assert_eq!(app.ws.history.undo_len(), steps);
+}
+
+fn button_paints_text(h: &Harness<'_, CadApp>, label: &str, rect: Rect) -> bool {
+    fn contains(shape: &egui::epaint::Shape, label: &str, rect: Rect) -> bool {
+        match shape {
+            egui::epaint::Shape::Text(text) => text.galley.job.text == label && rect.contains(text.pos),
+            egui::epaint::Shape::Vec(shapes) => shapes.iter().any(|shape| contains(shape, label, rect)),
+            _ => false,
+        }
+    }
+    h.output().shapes.iter().any(|shape| contains(&shape.shape, label, rect))
+}
+
+#[test]
+fn view_menu_selects_each_ribbon_mode_without_parameters() {
+    let _guard = test_lock();
+    for (id, label, mode) in [
+        ("ui.ribbon.mode.expanded", "Expanded", RibbonMode::Expanded),
+        ("ui.ribbon.mode.compact", "Compact", RibbonMode::Compact),
+        ("ui.ribbon.mode.tabs_only", "Tabs Only", RibbonMode::TabsOnly),
+        ("ui.ribbon.mode.hidden", "Hidden", RibbonMode::Hidden),
+    ] {
+        let mut h = harness(familiar("expanded"));
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "View").click();
+        h.run_steps(3);
+        h.get_by_label("Ribbon ⏵").click();
+        h.run_steps(3);
+        h.get_by_label("Display Mode ⏵").click();
+        h.run_steps(3);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, label).click();
+        h.run_steps(3);
+        assert_eq!(h.state().ws.effective.layout.ribbon.effective_mode(), mode);
+        assert!(!h.state().session.state().unwrap().is_dirty());
+        let restored = restarted(h.state_mut());
+        assert_eq!(restored.ws.effective.layout.ribbon.effective_mode(), mode);
+        for language in ["uk", "vi"] {
+            assert_ne!(cadcraft_ui_egui::i18n::tr(language, label), label, "{id}: {language}");
+        }
+    }
+    let policy = json!({"layers": [{"level": "company", "patch": {}, "locks": ["/ribbon/mode"]}]});
+    let mut app = attached(MemoryStore { policy: Some(policy.to_string()), ..MemoryStore::default() });
+    let before = app.ws.user.layout.clone();
+    assert_eq!(app.run("ui.ribbon.mode.compact", json!({})).unwrap_err(), LOCKED_MESSAGE);
+    assert_eq!(app.ws.user.layout, before);
+}
+
+#[test]
+fn compact_iconless_commands_paint_readable_text_with_hover_labels() {
+    let _guard = test_lock();
+    for density in ["normal", "comfortable"] {
+        let mut app = familiar("compact");
+        app.run("ui.density", json!({"density": density})).unwrap();
+        let tab = app.run("ui.ribbon.tab.add", json!({"label": "Text buttons"})).unwrap()["id"].as_str().unwrap().to_string();
+        let group = app.run("ui.ribbon.group.add", json!({"tab": tab, "label": "Text"})).unwrap()["id"].as_str().unwrap().to_string();
+        for id in ["attsync", "battman", "blockreplace", "ui.ribbon.mode"] {
+            assert!(cadcraft_ui_egui::toolbars::resolve(id).icon.is_none());
+            app.run("ui.ribbon.button.add", json!({"tab": tab, "group": group, "id": id})).unwrap();
+        }
+        let mut h = harness(app);
+        select_ribbon_tab(&mut h, "Text buttons");
+        for id in ["attsync", "battman", "blockreplace", "ui.ribbon.mode"] {
+            let label = command_label(id);
+            let item = button_nth(&h, &label, 0);
+            inside(h.ctx.content_rect(), item.rect());
+            assert!(item.rect().width() > item.rect().height(), "{density}: {id}");
+            assert!(button_paints_text(&h, &label, item.rect()), "{density}: {id}");
+            let before = h.query_all_by_label(&label).count();
+            item.hover();
+            h.run_steps(6);
+            assert!(h.query_all_by_label(&label).count() > before, "{density}: {id} has a full tooltip");
+            h.hover_at(egui::pos2(1000.0, 650.0));
+            h.run_steps(3);
+        }
+    }
 }

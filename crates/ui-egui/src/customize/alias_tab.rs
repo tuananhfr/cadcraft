@@ -211,7 +211,6 @@ pub(super) struct State {
 }
 
 pub(super) fn show(app: &mut CadApp, ui: &mut egui::Ui, state: &mut super::State) {
-    edit(ui, &mut state.aliases.query, crate::tl!("Filter aliases"));
     let index = crate::palette::index::SearchIndex::build(app.language(), &crate::shortcuts::active(app));
     let matching: BTreeSet<_> =
         index.search(&state.aliases.query, &[], &[], 50).iter().filter_map(|hit| index.entry(hit).map(|entry| entry.id)).collect();
@@ -223,79 +222,91 @@ pub(super) fn show(app: &mut CadApp, ui: &mut egui::Ui, state: &mut super::State
     for (alias, command) in app.ws.effective.layout.aliases.iter().take(MAX_ALIASES) {
         rows.insert(alias.to_ascii_uppercase(), (command.clone(), true));
     }
-    egui::ScrollArea::vertical().id_salt("aliases_table").max_height(120.0).show(ui, |ui| {
-        egui::Grid::new("aliases_grid").striped(true).show(ui, |ui| {
-            ui.label(crate::tl!("Alias"));
-            ui.label(crate::tl!("Command"));
-            ui.label(crate::tl!("Source"));
-            ui.end_row();
-            for (alias, (command, user)) in rows {
-                if !query.is_empty() && !alias.contains(&query) && !matching.contains(command.as_str()) {
-                    continue;
+    ui.columns(2, |columns| {
+        if let Some(ui) = columns.get_mut(0) {
+            edit(ui, &mut state.aliases.query, crate::tl!("Filter aliases"));
+            egui::ScrollArea::vertical()
+                .id_salt("aliases_table")
+                .min_scrolled_height(state.list_height)
+                .max_height(state.list_height)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    egui::Grid::new("aliases_grid").striped(true).show(ui, |ui| {
+                        ui.label(crate::tl!("Alias"));
+                        ui.label(crate::tl!("Command"));
+                        ui.label(crate::tl!("Source"));
+                        ui.end_row();
+                        for (alias, (command, user)) in rows {
+                            if !query.is_empty() && !alias.contains(&query) && !matching.contains(command.as_str()) {
+                                continue;
+                            }
+                            if super::row(ui, state.aliases.alias == alias, &alias) {
+                                state.aliases.alias = alias;
+                                state.aliases.command = command.clone();
+                            }
+                            let label = find_command(&command).map_or(command.as_str(), |spec| spec.label);
+                            ui.label(format!("{} ({command})", crate::i18n::t(label)));
+                            ui.label(if user { crate::tl!("User") } else { crate::tl!("Built-in") });
+                            ui.end_row();
+                        }
+                    });
+                });
+        }
+        if let Some(ui) = columns.get_mut(1) {
+            let alias = edit(ui, &mut state.aliases.alias, crate::tl!("Alias"));
+            let command = edit(ui, &mut state.aliases.command, crate::tl!("Alias command"));
+            let enter = (alias.has_focus() || command.has_focus() || alias.lost_focus() || command.lost_focus())
+                && !state.ime_composing
+                && ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
+            let add = ui.button(crate::tl!("Assign Alias")).clicked();
+            if add || enter {
+                let alias = state.aliases.alias.clone();
+                let command = state.aliases.command.clone();
+                let issues = check_alias(&app.ws.effective.layout, &alias, &command);
+                if !issues.is_empty() && issues.iter().all(AliasIssue::needs_confirmation) {
+                    state.aliases.pending = Some((alias, command));
+                } else {
+                    let _ = run(app, "ui.alias.set", json!({"alias": alias, "command": command}), state);
                 }
-                if super::row(ui, state.aliases.alias == alias, &alias) {
-                    state.aliases.alias = alias;
-                    state.aliases.command = command.clone();
-                }
-                let label = find_command(&command).map_or(command.as_str(), |spec| spec.label);
-                ui.label(format!("{} ({command})", crate::i18n::t(label)));
-                ui.label(if user { crate::tl!("User") } else { crate::tl!("Built-in") });
-                ui.end_row();
             }
-        });
-    });
-    let alias = edit(ui, &mut state.aliases.alias, crate::tl!("Alias"));
-    let command = edit(ui, &mut state.aliases.command, crate::tl!("Alias command"));
-    let enter = (alias.has_focus() || command.has_focus() || alias.lost_focus() || command.lost_focus())
-        && !state.ime_composing
-        && ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
-    let add = ui.button(crate::tl!("Assign Alias")).clicked();
-    if add || enter {
-        let alias = state.aliases.alias.clone();
-        let command = state.aliases.command.clone();
-        let issues = check_alias(&app.ws.effective.layout, &alias, &command);
-        if !issues.is_empty() && issues.iter().all(AliasIssue::needs_confirmation) {
-            state.aliases.pending = Some((alias, command));
-        } else {
-            let _ = run(app, "ui.alias.set", json!({"alias": alias, "command": command}), state);
-        }
-    }
-    ui.horizontal(|ui| {
-        if ui.button(crate::tl!("Remove Alias")).clicked() {
-            let _ = run(app, "ui.alias.remove", json!({"alias": state.aliases.alias}), state);
-        }
-        if ui.button(crate::tl!("Reset Aliases")).clicked() {
-            let _ = run(app, "ui.alias.reset", json!({}), state);
-        }
-        if ui.button(crate::tl!("Export Aliases...")).clicked() {
-            let _ = run(app, "ui.alias.export", Value::Null, state);
-        }
-    });
-    if (app.services.pick_open.is_some() || app.services.pick_open_kind.is_some())
-        && ui.button(crate::tl!("Import Alias File...")).clicked()
-        && let Some(result) = run(app, "ui.alias.import", Value::Null, state)
-    {
-        state.aliases.notice = result.get("message").and_then(Value::as_str).map(str::to_string);
-    }
-    ui.collapsing(crate::tl!("Import Aliases..."), |ui| {
-        ui.label(crate::tl!("Paste alias JSON to import"));
-        ui.add(egui::TextEdit::multiline(&mut state.aliases.text).char_limit(MAX_BYTES).desired_rows(3));
-        if ui.button(crate::tl!("Import Aliases")).clicked()
-            && let Some(result) = run(app, "ui.alias.import", json!({"text": state.aliases.text}), state)
-        {
-            state.aliases.notice = result.get("message").and_then(Value::as_str).map(str::to_string);
+            ui.horizontal_wrapped(|ui| {
+                if ui.button(crate::tl!("Remove Alias")).clicked() {
+                    let _ = run(app, "ui.alias.remove", json!({"alias": state.aliases.alias}), state);
+                }
+                if ui.button(crate::tl!("Reset Aliases")).clicked() {
+                    let _ = run(app, "ui.alias.reset", json!({}), state);
+                }
+                if ui.button(crate::tl!("Export Aliases...")).clicked() {
+                    let _ = run(app, "ui.alias.export", Value::Null, state);
+                }
+            });
+            if (app.services.pick_open.is_some() || app.services.pick_open_kind.is_some())
+                && ui.button(crate::tl!("Import Alias File...")).clicked()
+                && let Some(result) = run(app, "ui.alias.import", Value::Null, state)
+            {
+                state.aliases.notice = result.get("message").and_then(Value::as_str).map(str::to_string);
+            }
+            ui.collapsing(crate::tl!("Import Aliases..."), |ui| {
+                ui.label(crate::tl!("Paste alias JSON to import"));
+                ui.add(egui::TextEdit::multiline(&mut state.aliases.text).char_limit(MAX_BYTES).desired_rows(3));
+                if ui.button(crate::tl!("Import Aliases")).clicked()
+                    && let Some(result) = run(app, "ui.alias.import", json!({"text": state.aliases.text}), state)
+                {
+                    state.aliases.notice = result.get("message").and_then(Value::as_str).map(str::to_string);
+                }
+            });
+            if let Some(notice) = &state.aliases.notice {
+                ui.label(notice);
+            }
         }
     });
-    if let Some(notice) = &state.aliases.notice {
-        ui.label(notice);
-    }
     if let Some((alias, command)) = state.aliases.pending.clone() {
         egui::Modal::new(egui::Id::new("confirm_alias")).show(ui.ctx(), |ui| {
             ui.label(crate::tl!("Replace Alias?"));
             for issue in check_alias(&app.ws.effective.layout, &alias, &command) {
                 ui.label(issue.message());
             }
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.button(crate::tl!("Replace Alias")).clicked() {
                     let _ = run(app, "ui.alias.set", json!({"alias": alias, "command": command, "confirm": true}), state);
                     state.aliases.pending = None;

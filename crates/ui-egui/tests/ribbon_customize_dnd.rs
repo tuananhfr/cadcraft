@@ -405,3 +405,88 @@ fn ribbon_button_move_clamps_destination_and_ignores_noop() {
     assert_eq!(app.ws.user.layout, before);
     assert_eq!(app.ws.history.undo_len(), steps);
 }
+
+fn assert_row_visible(h: &Harness<'_, CadApp>, node: &egui_kittest::Node<'_>) {
+    fn painted(shape: &egui::Shape, label: &str, rect: egui::Rect) -> bool {
+        match shape {
+            egui::Shape::Text(text) => text.galley.text() == label && rect.contains(text.pos),
+            egui::Shape::Vec(shapes) => shapes.iter().any(|shape| painted(shape, label, rect)),
+            _ => false,
+        }
+    }
+    let rect = node.rect();
+    let label = node.accesskit_node().label().unwrap();
+    assert!(h.ctx.content_rect().contains_rect(rect), "{label}: {rect:?}");
+    assert!(
+        h.output().shapes.iter().any(|shape| shape.clip_rect.expand(0.5).contains_rect(rect) && painted(&shape.shape, &label, rect)),
+        "{label} is clipped: {rect:?}"
+    );
+}
+
+#[test]
+fn customize_lists_show_at_least_five_rows_at_normal_and_comfortable_density() {
+    let _guard = test_lock();
+    for density in ["normal", "comfortable"] {
+        let mut app = familiar();
+        app.run("options", json!({"interfaceLanguage": "en", "animations": "off"})).unwrap();
+        app.run("ui.density", json!({"density": density})).unwrap();
+        let pins = ["line", "circle", "rectang", "move", "copy"];
+        app.run("ui.workspace.set", json!({"pointer": "/quick_access", "value": pins})).unwrap();
+        let mut h = harness(app);
+        let screen = h.ctx.content_rect();
+        let before = h.state().ws.user.layout.clone();
+        for label in ["Ribbon tabs", "Ribbon groups", "Ribbon commands", "Find command", "Close"] {
+            let rect = h.query_all_by_label(label).next().unwrap().rect();
+            assert!(screen.contains_rect(rect), "{density}: {label} {rect:?}");
+        }
+        for id in commands(h.state(), "draw").iter().take(5) {
+            on_command(&h, id, |node| assert_row_visible(&h, node));
+        }
+        let library: Vec<_> = h
+            .query_all_by_role(egui::accesskit::Role::Button)
+            .filter(|node| node.accesskit_node().label().is_some_and(|label| label.ends_with(')')))
+            .take(5)
+            .collect();
+        assert_eq!(library.len(), 5);
+        for node in library {
+            assert_row_visible(&h, &node);
+        }
+        h.get_by_label("Quick Access").click();
+        h.run_steps(4);
+        for id in pins {
+            let label = toolbars::resolve(id).label;
+            assert_row_visible(&h, &h.get_by_role_and_label(egui::accesskit::Role::Button, &label));
+        }
+        h.get_by_label("Aliases").click();
+        h.run_steps(4);
+        let aliases: std::collections::BTreeSet<_> = cadcraft_engine::command_specs()
+            .iter()
+            .flat_map(|spec| spec.aliases.iter().map(|alias| alias.to_ascii_uppercase()))
+            .collect();
+        for alias in aliases.iter().take(5) {
+            assert_row_visible(&h, &h.get_by_role_and_label(egui::accesskit::Role::Button, alias));
+        }
+        assert_eq!(h.state().ws.user.layout, before);
+        assert!(!h.state().session.state().unwrap().is_dirty());
+    }
+}
+
+#[test]
+fn customize_short_screen_keeps_close_and_scrolled_commands_reachable() {
+    let _guard = test_lock();
+    let mut app = familiar();
+    app.run("options", json!({"interfaceLanguage": "en", "animations": "off"})).unwrap();
+    app.run("ui.density", json!({"density": "comfortable"})).unwrap();
+    let mut h = harness(app);
+    h.set_size(vec2(683.0, 384.0));
+    h.run_steps(5);
+    for id in commands(h.state(), "draw") {
+        on_command(&h, &id, |node| node.scroll_to_me());
+        h.run_steps(5);
+        on_command(&h, &id, |node| assert!(h.ctx.content_rect().contains_rect(node.rect()), "{id}"));
+    }
+    assert!(h.ctx.content_rect().contains_rect(h.get_by_label("Close").rect()));
+    h.get_by_label("Close").click();
+    h.run_steps(3);
+    assert!(h.state().ui.dialog.is_none());
+}

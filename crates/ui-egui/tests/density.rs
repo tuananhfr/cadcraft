@@ -319,3 +319,64 @@ fn options_display_changes_density_through_the_command() {
     assert_eq!(h.state().ui.dialog.as_deref(), Some("options:display"));
     assert!(!h.state().session.state().unwrap().is_dirty());
 }
+
+#[test]
+fn compact_overflow_buttons_reach_every_command_with_keyboard_at_both_scales() {
+    let _guard = test_lock();
+    for density in ["compact", "normal", "comfortable"] {
+        for ppp in [1.0, 2.0] {
+            let mut app = attached(MemoryStore::default());
+            app.run("ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"})).unwrap();
+            app.run("ui.ribbon.mode", json!({"mode": "compact"})).unwrap();
+            app.run("ui.density", json!({"density": density})).unwrap();
+            for id in ["ui.toggle.cmdline", "ui.toggle.filetabs", "ui.toggle.statusbar", "ui.toggle.menubar"] {
+                app.run(id, json!({"on": false})).unwrap();
+            }
+            let bars: Vec<_> = app.ws.effective.layout.toolbars.iter().map(|bar| bar.id.clone()).collect();
+            for id in bars {
+                app.run("ui.toolbar.hide", json!({"id": id})).unwrap();
+            }
+            let mut h = harness(app, ppp);
+            let screen = h.ctx.content_rect();
+            assert_eq!(ribbon::render::rendered_mode(h.state(), screen.height()), cadcraft_ui_egui::wsprofile::schema::RibbonMode::Compact);
+            for tab in ribbon::visible_tabs(h.state()) {
+                select_ribbon_tab(&mut h, &tab.label);
+                let expected: Vec<_> = tab.groups.iter().flat_map(|group| &group.commands).collect();
+                let mut reached = std::collections::BTreeSet::new();
+                for _ in 0..expected.len().saturating_add(1) {
+                    let row = panel(&h, "cc_ribbon").unwrap();
+                    let previous = h.get_by_label("Previous ribbon groups").rect();
+                    let next = h.get_by_label("Next ribbon groups").rect();
+                    inside(screen, previous, "Previous ribbon groups");
+                    inside(screen, next, "Next ribbon groups");
+                    for id in &expected {
+                        let source = cadcraft_engine::find_command(id)
+                            .map(|spec| spec.label)
+                            .or_else(|| cadcraft_ui_egui::menus::UI_COMMANDS.iter().find(|entry| entry.0 == id.as_str()).map(|entry| entry.1))
+                            .unwrap();
+                        let label = cadcraft_ui_egui::i18n::t(source).to_string();
+                        if h.query_all_by_role_and_label(Role::Button, &label).any(|node| {
+                            let rect = node.rect();
+                            row.contains_rect(rect) && rect.left() >= previous.right() && rect.right() <= next.left()
+                        }) {
+                            reached.insert((**id).clone());
+                        }
+                    }
+                    if h.get_by_label("Next ribbon groups").accesskit_node().is_disabled() {
+                        break;
+                    }
+                    h.get_by_label("Next ribbon groups").focus();
+                    h.run_steps(2);
+                    h.key_press(egui::Key::Enter);
+                    h.run_steps(4);
+                }
+                assert!(expected.iter().all(|id| reached.contains(id.as_str())), "{density}/{ppp}/{}: {reached:?}", tab.id);
+                h.get_by_label("Previous ribbon groups").focus();
+                h.run_steps(2);
+                h.key_press(egui::Key::Space);
+                h.run_steps(4);
+            }
+            assert!(!h.state().session.state().unwrap().is_dirty());
+        }
+    }
+}

@@ -406,22 +406,50 @@ pub(crate) fn flyout(ui: &mut egui::Ui, app: &mut CadApp, tab: usize) {
 
 fn compact_groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
     let metrics = metrics(app.ws.effective.layout.density);
+    let state_id = Id::new(("cc_ribbon_compact_scroll", &tab.id));
+    let mut offset: f32 = ui.ctx().data(|data| data.get_temp(state_id)).unwrap_or_default();
+    let gap = ui.spacing().item_spacing.x;
+    let width = (ui.available_width() - 2.0 * (metrics.scroll_width + gap)).max(1.0);
+    let step = (width - COMPACT_TEXT_WIDTH).max(1.0);
     ui.add_space(GROUP_PADDING);
-    egui::ScrollArea::horizontal().id_salt((&tab.id, "compact")).max_height(metrics.button_height).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            for (index, group) in tab.groups.iter().enumerate() {
-                if index > 0 {
-                    ui.separator();
-                }
-                ui.push_id((&tab.id, &group.id), |ui| {
-                    ui.horizontal(|ui| {
-                        for id in &group.commands {
-                            button(app, ui, tab, group, id, ButtonStyle::Compact);
-                        }
-                    });
-                });
-            }
-        });
+    ui.horizontal(|ui| {
+        if scroll_button(ui, "‹", crate::tl!("Previous ribbon groups"), offset > 0.5).clicked() {
+            offset = (offset - step).max(0.0);
+        }
+        let scroll = ui
+            .allocate_ui_with_layout(vec2(width, metrics.button_height), Layout::left_to_right(Align::Center), |ui| {
+                egui::ScrollArea::horizontal()
+                    .id_salt((&tab.id, "compact"))
+                    .horizontal_scroll_offset(offset)
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                    .auto_shrink([false, false])
+                    .max_width(width)
+                    .max_height(metrics.button_height)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            for (index, group) in tab.groups.iter().enumerate() {
+                                if index > 0 {
+                                    ui.separator();
+                                }
+                                ui.push_id((&tab.id, &group.id), |ui| {
+                                    ui.horizontal(|ui| {
+                                        for id in &group.commands {
+                                            button(app, ui, tab, group, id, ButtonStyle::Compact);
+                                        }
+                                    });
+                                });
+                            }
+                        });
+                    })
+            })
+            .inner;
+        offset = scroll.state.offset.x;
+        let max_offset = (scroll.content_size.x - scroll.inner_rect.width()).max(0.0);
+        if scroll_button(ui, "›", crate::tl!("Next ribbon groups"), offset < max_offset - 0.5).clicked() {
+            offset = (offset + step).min(max_offset);
+            ui.ctx().request_repaint();
+        }
+        ui.ctx().data_mut(|data| data.insert_temp(state_id, offset));
     });
 }
 
@@ -439,6 +467,7 @@ fn scroll_button(ui: &mut egui::Ui, glyph: &str, label: &str, enabled: bool) -> 
 }
 
 const MAX_TEXT_WIDTH: f32 = 160.0;
+const COMPACT_TEXT_WIDTH: f32 = 120.0;
 const COLUMN_GAP: f32 = 6.0;
 const ROW_GAP: f32 = 4.0;
 const ROWS: usize = 3;
@@ -634,9 +663,7 @@ fn button(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGr
         let enabled = command.known && cadcraft_engine::find_command(id).is_none_or(|spec| (spec.enabled)(&app.session).is_ok());
         let response = ui
             .add_enabled_ui(enabled, |ui| {
-                if matches!(style, ButtonStyle::Compact) {
-                    crate::icons::button(ui, command.icon.unwrap_or(crate::icons::Icon::Help), metrics.button_height, &label, false)
-                } else if matches!(style, ButtonStyle::Expanded)
+                if matches!(style, ButtonStyle::Compact | ButtonStyle::Expanded)
                     && let Some(icon) = command.icon
                 {
                     crate::icons::button(ui, icon, metrics.button_height, &label, false)
@@ -644,6 +671,8 @@ fn button(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGr
                     ui.add_sized(
                         if matches!(style, ButtonStyle::Expanded) {
                             vec2(ui.available_width().min(MAX_TEXT_WIDTH), metrics.button_height)
+                        } else if matches!(style, ButtonStyle::Compact) {
+                            vec2(COMPACT_TEXT_WIDTH, metrics.button_height)
                         } else {
                             vec2(140.0, metrics.button_height)
                         },
