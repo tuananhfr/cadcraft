@@ -308,8 +308,9 @@ fn mcp_cannot_approve_lisp() {
     assert!(backend.borrow().session.lisp_review_pending());
     assert!(backend.borrow().session.lisp_var("MCP_REVIEW").is_nil());
     backend.borrow_mut().session.cancel();
-    refused(&mut server, "script", json!({"text": format!("appload \"{}\" A", path.display())}));
-    assert!(backend.borrow().session.lisp_review_pending());
+    // The file prompt takes the rest of the line, so a same-line answer never reaches the review.
+    tool(&mut server, "script", json!({"text": format!("appload \"{}\" A", path.display())}));
+    assert!(!backend.borrow().session.lisp_review_pending());
     assert!(backend.borrow().session.lisp_var("MCP_REVIEW").is_nil());
     assert!(!is_approved(&sha));
     backend.borrow_mut().session.cancel();
