@@ -8,6 +8,8 @@ use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
+pub mod fold;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Preference {
     #[default]
