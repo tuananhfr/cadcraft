@@ -1534,3 +1534,5 @@
 	Auto-hide needs a dock edge	Для автоматичного приховування потрібен край закріплення
 	Panel placement is missing	Розташування панелі відсутнє
 	Show {panel}	Показати {panel}
+	Workspace import: {name} is larger than {limit} bytes	Імпорт робочого простору: {name} перевищує {limit} байтів
+	Workspace import: the file is not UTF-8 text	Імпорт робочого простору: файл не є текстом у кодуванні UTF-8

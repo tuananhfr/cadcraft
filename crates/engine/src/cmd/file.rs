@@ -73,6 +73,39 @@ pub fn deliver() -> Option<DeliverHook> {
     DELIVER.get().copied()
 }
 
+/// Name and MIME type used to deliver a file where there is no file system.
+pub fn web_file_target(path: &str) -> (String, &'static str) {
+    let name = path.rsplit(['/', '\\']).next().filter(|name| !name.is_empty()).unwrap_or("file").to_string();
+    let extension = std::path::Path::new(&name).extension().map(|ext| ext.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    let mime = match extension.as_str() {
+        "pdf" => "application/pdf",
+        "png" => "image/png",
+        "svg" => "image/svg+xml",
+        "json" => "application/json",
+        "dxf" => "application/dxf",
+        "dwg" => "image/vnd.dwg",
+        _ => "application/octet-stream",
+    };
+    (name, mime)
+}
+
+/// Write atomically to `path`, or deliver the bytes to the user when there is no file system.
+pub fn store_file(cmd: &str, path: &str, bytes: &[u8]) -> Result<()> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let tmp = format!("{path}.cadcraft-tmp");
+        std::fs::write(&tmp, bytes).map_err(|e| bad(cmd, format!("{path}: {e}")))?;
+        std::fs::rename(&tmp, path).map_err(|e| bad(cmd, format!("{path}: {e}")))?;
+        Ok(())
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let (name, mime) = web_file_target(path);
+        let deliver = deliver().ok_or_else(|| bad(cmd, "paths are not available on the web; omit `path` to get the file as base64 `data`"))?;
+        deliver(&name, mime, bytes).map_err(|e| bad(cmd, format!("{name}: {e}")))
+    }
+}
+
 /// How a drawing file is written: its version (`None`: the drawing's own, `$ACADVER`) and
 /// binary instead of ASCII DXF.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -634,6 +667,54 @@ mod tests {
     use serde_json::json;
 
     use crate::Session;
+
+    #[test]
+    fn web_file_target_names_and_types() {
+        for (path, name, mime) in [
+            ("C:/x/plan.pdf", "plan.pdf", "application/pdf"),
+            ("a/b.PNG", "b.PNG", "image/png"),
+            ("w.json", "w.json", "application/json"),
+            ("d.dxf", "d.dxf", "application/dxf"),
+            ("a/d.svg", "d.svg", "image/svg+xml"),
+            ("d.dwg", "d.dwg", "image/vnd.dwg"),
+            ("C:\\x\\plan.pdf", "plan.pdf", "application/pdf"),
+            ("noext", "noext", "application/octet-stream"),
+            ("unknown.bin", "unknown.bin", "application/octet-stream"),
+            ("", "file", "application/octet-stream"),
+        ] {
+            assert_eq!(super::web_file_target(path), (name.to_string(), mime), "{path}");
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn store_file_writes_atomically_and_keeps_old_on_failure() {
+        let dir = std::env::temp_dir().join(format!("cadcraft-store-file-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("plan.pdf");
+        let path = path.to_str().unwrap();
+        let tmp = format!("{path}.cadcraft-tmp");
+
+        super::store_file("plot", path, b"old PDF").unwrap();
+        assert_eq!(std::fs::read(path).unwrap(), b"old PDF");
+        assert!(!std::path::Path::new(&tmp).exists());
+        super::store_file("plot", path, b"new PDF").unwrap();
+        assert_eq!(std::fs::read(path).unwrap(), b"new PDF");
+        assert!(!std::path::Path::new(&tmp).exists());
+
+        std::fs::create_dir(&tmp).unwrap();
+        let error = super::store_file("plot", path, b"partial PDF").unwrap_err().to_string();
+        assert!(error.contains("plot"), "{error}");
+        assert_eq!(std::fs::read(path).unwrap(), b"new PDF");
+        std::fs::remove_dir(&tmp).unwrap();
+
+        let missing = dir.join("missing").join("plan.pdf");
+        let error = super::store_file("export", missing.to_str().unwrap(), b"PDF").unwrap_err().to_string();
+        assert!(error.contains("export"), "{error}");
+        assert!(!missing.exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     fn active_title(s: &Session) -> String {
         s.state().unwrap().title.clone()

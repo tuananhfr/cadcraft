@@ -30,10 +30,12 @@ pub fn route(app: &mut CadApp, id: &str) -> Result<Value, String> {
                 None => Ok(Value::Null),
             }
         }
-        "publish" => {
-            let Some(pick) = app.services.pick_save.as_ref() else { return no_picker(app, "PUBLISH", "publish {}") };
+        "publish" | "pdfbook" => {
+            let Some(pick) = app.services.pick_save.as_ref() else {
+                return no_picker(app, &id.to_ascii_uppercase(), &format!("{id} {{}}"));
+            };
             match pick(&format!("{stem}.pdf")) {
-                Some(path) => app.run("publish", json!({ "path": path })),
+                Some(path) => app.run(id, json!({ "path": path })),
                 None => Ok(Value::Null),
             }
         }
@@ -179,6 +181,19 @@ mod tests {
             ..Services::default()
         };
         (CadApp::new(Session::new(), services), asked)
+    }
+
+    #[test]
+    fn pdfbook_asks_for_a_pdf_only_when_started_interactively() {
+        let (mut app, asked) = app();
+        app.start("pdfbook");
+        app.cmdline("PDFBOOK");
+        assert_eq!(*asked.borrow(), ["Drawing1.pdf", "Drawing1.pdf"]);
+        assert!(app.ui.dialog.is_none());
+
+        let _ = app.run("pdfbook", json!({}));
+        assert_eq!(asked.borrow().len(), 2, "JSON calls never open a file dialog");
+        assert!(app.ui.dialog.is_none());
     }
 
     #[test]
