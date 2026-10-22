@@ -1,6 +1,6 @@
 # Where CADCraft falls short of AutoCAD
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-21 · **Change:** minor (workspace client and SHX source inventory; acceptance pending) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-22 · **Change:** minor (GĐ0 release-blocker source inventory; acceptance pending) · **Target:** Autodesk AutoCAD 2027
 
 Every known shortfall, one row each, ranked within each section by user impact. This is the work
 list: agents pick from here (top of a section first), and remove or update a row in the same PR
@@ -113,14 +113,14 @@ Detail: [localization-parity.md](localization-parity.md).
 | S1 | No CI runs `cargo xtask ci` on pull requests (only packaging lint and release builds) | `.github/workflows/` | 2–3 |
 | S2 | ~~`cargo fmt --check` fails on main~~ fixed on main (8fceaaf) | — | 0 |
 | S3 | 40 open PRs, many community bug fixes awaiting review | `gh pr list` | 10–20 |
-| S4 | Open correctness issues: extents union far-apart geometry (#166), lines not visible mid-command (#44), browser plot shows raw PDF bytes (#134) (closing a tab and browser saves fixed, #76, #133) | issues | 4–6 |
+| S4 | Open correctness issues: extents union far-apart geometry (#166), lines not visible mid-command (#44). Browser plot file delivery (#134) done in GĐ0 source; release validation pending (closing a tab and browser saves fixed, #76, #133) | issues; `cmd/file.rs::store_file`, `cmd/layout.rs::run_plot` | 4–6 |
 | S5 | No smoke test of every command through the UI (PR #42 proposes one) | — | 6–10 |
 
 ## Platforms
 
 | # | Gap | Est. |
 |---|---|---|
-| P1 | Web build: plot shows raw PDF bytes (#134), no DWG (File > Open and save downloads fixed, #55, #133) | 3–5 |
+| P1 | Web build: replacement browser-safe shortcuts await GĐ3; drawing autosave awaits GĐ4; DXF IMPORT still opens a new drawing rather than inserting (unchanged in GĐ0). Plot downloads (#134) done in GĐ0 source; release validation pending. DWG open/save is supported (File > Open and save downloads fixed, #55, #133). See [web limits](workspace/limitations.md#v22v31-gđ0-web-limits). | 3–5 |
 | P2 | Windows and Linux get little runtime testing; Linux Mint mouse delay (#25); Windows magnifier (#39) | 6–10 |
 | P3 | macOS file associations: opening `.dxf` from Finder fails (#158) | 1–2 |
 
@@ -145,6 +145,7 @@ Detail: [localization-parity.md](localization-parity.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-22 | minor | GĐ0: browser plot file delivery (#134) marked done in source; S4/P1 narrowed, obsolete no-DWG platform claim removed; browser key gap, beforeunload limits, non-atomic workspace writes and DXF IMPORT deferral recorded in workspace docs. Lead release gates and QA remain pending. |
 | 2026-10-21 | minor | V2.1 workspace/ribbon/toolbar client inventory (U12) and SHX shapes/unifont/codepage support (FF8); acceptance evidence and remaining scope in `workspace/acceptance.md` |
 | 2026-10-12 | minor | Object transparency (entity, ByLayer, ByBlock) is drawn: on screen (TRANSPARENCYDISPLAY, on by default), in PNG/SVG exports, and in plots when the page setup's "Plot transparency" is on (PDF alpha, PNG blending, SVG opacity; PLOTTRANSPARENCYOVERRIDE): F14 narrowed |
 | 2026-10-12 | minor | Hatch and Gradient dialog (HATCH, GRADIENT; HPDLGMODE) and Hatch Edit dialog (HATCHEDIT, right-click, double-click a hatch): F13 narrowed to Preview, Inherit Properties and boundary add/remove in edit mode |

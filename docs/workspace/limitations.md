@@ -33,3 +33,36 @@ router inside the window follows the new bindings. Refreshing the native acceler
 A workspace whose pending changes cannot be saved (storage full or refused, or a damaged set that could not be
 kept) cannot be left for another workspace, so its changes are not lost silently; the error stays on screen and
 the save is retried. Reset to the preset is the way out.
+
+## V2.2/V3.1 GĐ0 web limits
+
+2026-10-22 · Implementation inventory; browser QA and release acceptance remain pending.
+
+Browser-reserved keys are removed from web defaults and saved-profile dispatch, refused by the shortcut editor and hidden from menu hints. The following desktop defaults have no replacement web default until GĐ3 (accepted for GĐ0):
+
+| Command / control | Removed web default |
+|---|---|
+| New drawing (`new`) | Ctrl+N |
+| Copy with base point (`copybase`) | Ctrl+Shift+C |
+| Properties (`ui.panel.properties`) | Ctrl+1 |
+| Tool Sets (`ui.toggle.toolsets`) | Ctrl+3 |
+| Command line (`ui.toggle.cmdline`) | Ctrl+9 |
+| Command reference (`ui.dialog.commands`) | F1 |
+| Object snap (`osnap`) | F3 |
+| Isoplane (`isoplane`) | F5, Ctrl+E |
+| Grid (`grid`) | F7 |
+| Polar tracking (`polar`) | F10 |
+| Object snap tracking (`otrack`) | F11 |
+| Dynamic input (`dynmode`) | F12 |
+
+These commands remain reachable through menus, command line or the relevant status-bar controls. Ctrl+L/T/W/R and the other entries in `shortcuts::BROWSER_RESERVED`, including Shift+F10, cannot be bound on the web. F8 (Ortho) and F9 (Snap) are retained. Desktop keeps its existing defaults.
+
+Standalone web pages request beforeunload confirmation only while an open drawing has unsaved changes. Browsers require a prior user gesture and control the prompt text; this is not crash recovery or drawing autosave. Embedded `?host=parent` mode delegates leave protection to the parent through dirty reporting. Web drawing autosave is deferred to GĐ4.
+
+PUBLISH delivers one download per output file, without a zip in GĐ0. The browser may require permission for multiple downloads. PLOT, EXPORT, PDFBOOK, plotter saves and workspace export also use file delivery; embedded mode delegates delivery to its host. Workspace JSON import has a separate upload route; drawing uploads continue through `open_bytes`. DXF IMPORT still opens the file as a new drawing rather than inserting it (unchanged in GĐ0; deferred for GĐ7 review).
+
+Workspace revision checks detect a stale writer before commit, on desktop as well as web. The web listens for localStorage changes and adopts them when there are no local edits pending; otherwise commit reports a local conflict and offers a choice of layouts. This does not provide cross-tab atomicity: simultaneous check-then-write operations can still overwrite one another. GĐ4 replaces that window with an IndexedDB transaction. These local conflicts are separate from remote synchronization.
+
+PDFBOOK still selects frames by the requested height. Other-height closed outlines are ignored; only requested-height frames that match no paper receive `FRAME_PAPER_MISMATCH`. Invalid coordinates/dimensions report `FRAME_OUT_OF_RANGE`; reaching the model-entity scan cap reports `FRAME_LIMIT`, which does not count as a skipped frame. These diagnostics do not establish general frame-detection parity.
+
+GĐ0 shortcut, upload, recovery and local-conflict messages have Ukrainian catalog entries. Vietnamese translations, including the recovery revision notice and the conflict choices, remain a GĐ1B handoff; no `vi.tsv` exists in this branch.
