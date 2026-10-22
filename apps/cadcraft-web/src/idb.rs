@@ -225,7 +225,7 @@ impl IdbStore {
     }
 
     async fn preload_bounded(&self, store: &str, limit: usize, max_bytes: usize) -> Result<Vec<(String, Vec<u8>)>, IdbError> {
-        let reject_truncated = store == "print-jobs";
+        let reject_truncated = matches!(store, "print-jobs" | "print-profiles" | "registry");
         let transaction = self.db.transaction_with_str(store).map_err(js_error)?;
         let request = transaction.object_store(store).map_err(js_error)?.open_cursor().map_err(js_error)?;
         let records = Rc::new(RefCell::new(Vec::new()));

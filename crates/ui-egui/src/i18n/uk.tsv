@@ -2008,3 +2008,4 @@ ribbon	Check	Перевірка
 	Enter replacement block name	Введіть назву блока для заміни
 	BASELINE_CHANGED	Базовий файл шаблону змінено
 	AUDIT_LIMIT	Перевищено ліміт аудиту шаблону
+	Template changes last for this visit	Зміни шаблонів діють лише протягом цього відвідування

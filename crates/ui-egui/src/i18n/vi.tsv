@@ -2012,3 +2012,4 @@ ribbon	Check	Kiểm tra
 	Enter replacement block name	Nhập tên khối thay thế
 	BASELINE_CHANGED	Tệp mẫu cơ sở đã thay đổi
 	AUDIT_LIMIT	Vượt giới hạn kiểm tra tệp mẫu
+	Template changes last for this visit	Các thay đổi mẫu bản vẽ chỉ được giữ trong phiên truy cập này

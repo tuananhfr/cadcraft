@@ -21,6 +21,7 @@ mod leave_guard;
 #[cfg(target_arch = "wasm32")]
 mod web {
     use cadcraft_engine::Session;
+    use cadcraft_engine::sheetplan::profile::MemoryPrintProfileStore;
     use cadcraft_ui_egui::{CadApp, Services};
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -44,6 +45,7 @@ mod web {
         Option<crate::fullscreen::WebFullscreen>,
         pub(crate) egui::Context,
         #[allow(dead_code)] Option<FlushListeners>,
+        Vec<crate::persistent_kv::BrowserWriter>,
     );
 
     impl eframe::App for Shell {
@@ -59,6 +61,19 @@ mod web {
             self.4.frame(&mut app);
             app.system_animations = self.3.as_ref().map(|reduced| !reduced.matches());
             app.logic(ctx);
+            for writer in &mut self.9 {
+                match writer.poll() {
+                    Ok(true) => {}
+                    Ok(false) => ctx.request_repaint_after(std::time::Duration::from_millis(16)),
+                    Err(error) => {
+                        if writer.store_name() == "registry" {
+                            app.session.set_frame_registry_store(Box::new(crate::registry_store::IdbRegistryStore::new(writer.cache())));
+                        }
+                        app.session.echo(error.clone());
+                        app.set_status(error);
+                    }
+                }
+            }
             if let Some(guard) = &self.5 {
                 guard.set(app.has_unsaved_drawings());
             }
@@ -210,6 +225,11 @@ mod web {
             }
             let profile_store = crate::idb_profile_store::open().await;
             let job_store = crate::job_store::BrowserKv::open().await;
+            let print_profile_store = crate::persistent_kv::BrowserWriter::open("print-profiles").await;
+            let registry_store = crate::persistent_kv::BrowserWriter::open("registry").await.and_then(|(kv, writer)| {
+                crate::registry_store::install_host(kv)?;
+                Ok(writer)
+            });
             let result = eframe::WebRunner::new()
                 .start(
                     canvas,
@@ -282,9 +302,31 @@ mod web {
                         if query_param("lang").as_deref() == Some("qps") {
                             let _ = app.run("ui.language", serde_json::json!({"lang": "qps"}));
                         }
-                        app.session.set_print_profile_store(Box::new(cadcraft_engine::sheetplan::profile::MemoryPrintProfileStore::default()));
-                        app.session.echo("Print settings last for this visit");
-                        app.set_status(cadcraft_ui_egui::tl!("Print settings last for this visit"));
+                        let mut print_writers = Vec::new();
+                        let mut print_notices = Vec::new();
+                        match print_profile_store {
+                            Ok((kv, writer)) => {
+                                app.session.set_print_profile_store(Box::new(crate::print_profile_store::IdbPrintProfileStore::new(kv)));
+                                print_writers.push(writer);
+                            }
+                            Err(error) => {
+                                log::warn!("print profiles: IndexedDB unavailable: {error}");
+                                app.session.set_print_profile_store(Box::new(MemoryPrintProfileStore::default()));
+                                app.session.echo("Print settings last for this visit");
+                                print_notices.push(cadcraft_ui_egui::tl!("Print settings last for this visit"));
+                            }
+                        }
+                        match registry_store {
+                            Ok(writer) => print_writers.push(writer),
+                            Err(error) => {
+                                log::warn!("frame templates: IndexedDB unavailable: {error}");
+                                app.session.echo("Template changes last for this visit");
+                                print_notices.push(cadcraft_ui_egui::tl!("Template changes last for this visit"));
+                            }
+                        }
+                        if !print_notices.is_empty() {
+                            app.set_status(print_notices.join(" "));
+                        }
                         // `?cpu`: no render state for the app, so the canvas draws with egui shapes.
                         if !crate::wants_cpu(&query())
                             && let Some(rs) = &cc.wgpu_render_state
@@ -327,7 +369,8 @@ mod web {
                         }
                         let app = Rc::new(RefCell::new(app));
                         let flush_listeners = flush_when_leaving(&app, &cc.egui_ctx);
-                        let mut shell = Shell(app, inbox, host, reduced_motion, fonts, leave_guard, None, cc.egui_ctx.clone(), flush_listeners);
+                        let mut shell =
+                            Shell(app, inbox, host, reduced_motion, fonts, leave_guard, None, cc.egui_ctx.clone(), flush_listeners, print_writers);
                         let fullscreen = match crate::fullscreen::install(&shell) {
                             Ok(fullscreen) => fullscreen,
                             Err(error) => {
@@ -377,7 +420,13 @@ mod idb_schema;
 #[cfg(any(target_arch = "wasm32", test))]
 pub mod job_store;
 #[cfg(any(target_arch = "wasm32", test))]
+mod persistent_kv;
+#[cfg(any(target_arch = "wasm32", test))]
+mod print_profile_store;
+#[cfg(any(target_arch = "wasm32", test))]
 mod profile_store;
+#[cfg(any(target_arch = "wasm32", test))]
+mod registry_store;
 #[cfg(target_arch = "wasm32")]
 mod upload;
 #[cfg(any(target_arch = "wasm32", test))]
