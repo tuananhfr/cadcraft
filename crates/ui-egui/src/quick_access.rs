@@ -4,6 +4,24 @@ use serde_json::{Value, json};
 
 use crate::CadApp;
 use crate::cmdline::Suggestion;
+use crate::wsprofile::schema::{Density, QuickAccessPosition};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuickAccessRow {
+    TitleBar,
+    OwnRowAboveRibbon,
+    OwnRowBelowRibbon,
+}
+
+pub fn quick_access_row(app: &CadApp) -> QuickAccessRow {
+    match app.ws.effective.layout.quick_access_position {
+        QuickAccessPosition::TitleBar if !app.ui.in_window_menu => QuickAccessRow::TitleBar,
+        QuickAccessPosition::TitleBar | QuickAccessPosition::AboveRibbon => QuickAccessRow::OwnRowAboveRibbon,
+        QuickAccessPosition::BelowRibbon => QuickAccessRow::OwnRowBelowRibbon,
+    }
+}
+
+struct DragItem(String);
 
 pub fn search(app: &CadApp, prefix: &str) -> Vec<Suggestion> {
     if prefix.is_empty() || prefix.contains(char::is_whitespace) {
@@ -24,6 +42,21 @@ pub fn search(app: &CadApp, prefix: &str) -> Vec<Suggestion> {
 }
 
 pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<Result<Value, String>> {
+    if command == "ui.quickaccess.position" {
+        return Some((|| {
+            let position = match params.get("position").and_then(Value::as_str) {
+                Some("title_bar") => QuickAccessPosition::TitleBar,
+                Some("above_ribbon") => QuickAccessPosition::AboveRibbon,
+                Some("below_ribbon") => QuickAccessPosition::BelowRibbon,
+                _ => return Err(crate::tl!("position must be title_bar, above_ribbon or below_ribbon").to_string()),
+            };
+            let changed = crate::wsprofile::edit_layout(app, |layout| {
+                layout.quick_access_position = position;
+                Ok(())
+            })?;
+            Ok(json!({"position": position, "changed": changed}))
+        })());
+    }
     if !matches!(command, "ui.quickaccess.pin" | "ui.quickaccess.unpin" | "ui.quickaccess.move" | "ui.favorite.add" | "ui.favorite.remove") {
         return None;
     }
@@ -61,11 +94,13 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
     })())
 }
 
-fn button(app: &mut CadApp, ui: &mut egui::Ui, id: &str) {
+fn button(app: &mut CadApp, ui: &mut egui::Ui, id: &str) -> egui::Response {
     let command = crate::toolbars::resolve(id);
+    let density = app.ws.effective.layout.density;
+    let comfortable = density == Density::Comfortable;
+    let size = if comfortable { 32.0 } else { 18.0 };
     if !command.known {
-        ui.add_enabled(false, egui::Button::new(crate::toolbars::placeholder_label(&command)));
-        return;
+        return ui.add_enabled(false, egui::Button::new(crate::toolbars::placeholder_label(&command)).min_size(egui::vec2(size, size)));
     }
     let label = crate::i18n::t(&command.label);
     let label = match command.shortcut {
@@ -75,7 +110,13 @@ fn button(app: &mut CadApp, ui: &mut egui::Ui, id: &str) {
     let enabled = cadcraft_engine::find_command(id).is_none_or(|spec| (spec.enabled)(&app.session).is_ok());
     let response = ui
         .add_enabled_ui(enabled, |ui| {
-            if let Some(icon) = command.icon { crate::icons::button(ui, icon, 18.0, &label, false) } else { ui.small_button(&label) }
+            if let Some(icon) = command.icon {
+                crate::icons::button(ui, icon, size, &label, false)
+            } else if density != Density::Normal {
+                ui.add(egui::Button::new(&label).min_size(egui::vec2(size, size)))
+            } else {
+                ui.small_button(&label)
+            }
         })
         .inner;
     if response.clicked() {
@@ -95,6 +136,65 @@ fn button(app: &mut CadApp, ui: &mut egui::Ui, id: &str) {
             }
             ui.close();
         }
+        ui.separator();
+        position_menu(app, ui);
+    });
+    response
+}
+
+pub(crate) fn pin_menu(ui: &mut egui::Ui, pinned: bool, id: &str) -> Option<(&'static str, Value)> {
+    let (label, command) = if pinned {
+        (crate::tl!("Remove from Quick Access"), "ui.quickaccess.unpin")
+    } else {
+        (crate::tl!("Add to Quick Access"), "ui.quickaccess.pin")
+    };
+    if ui.button(label).clicked() {
+        ui.close();
+        Some((command, json!({"id": id})))
+    } else {
+        None
+    }
+}
+
+fn position_menu(app: &mut CadApp, ui: &mut egui::Ui) {
+    let below = quick_access_row(app) == QuickAccessRow::OwnRowBelowRibbon;
+    let label = if below { crate::tl!("Show Above the Ribbon") } else { crate::tl!("Show Below the Ribbon") };
+    if ui.button(label).clicked() {
+        let position = if below { "above_ribbon" } else { "below_ribbon" };
+        if let Err(error) = app.run("ui.quickaccess.position", json!({"position": position})) {
+            app.set_status(error);
+        }
+        ui.close();
+    }
+}
+
+fn item(app: &mut CadApp, ui: &mut egui::Ui, id: &str, at: usize, count: usize) {
+    // Explicit identity keeps focus on the command when its position changes.
+    ui.scope_builder(egui::UiBuilder::new().id(ui.id().with(id)), |ui| {
+        // `dnd_drag_source` puts a drag-only widget on top of the button, which swallows its clicks.
+        let response = button(app, ui, id).interact(egui::Sense::drag());
+        response.dnd_set_drag_payload(DragItem(id.to_string()));
+        if let Some(payload) = response.dnd_release_payload::<DragItem>()
+            && let Err(error) = app.run("ui.quickaccess.move", json!({"id": payload.0, "to": at}))
+        {
+            app.set_status(error);
+        }
+        if response.has_focus() && !app.cmd.ime_composing() && !ui.ctx().text_edit_focused() {
+            let to = if ui.input_mut(|input| input.consume_key(egui::Modifiers::ALT, egui::Key::ArrowLeft)) {
+                Some(at.saturating_sub(1))
+            } else if ui.input_mut(|input| input.consume_key(egui::Modifiers::ALT, egui::Key::ArrowRight)) {
+                Some(at.saturating_add(1).min(count.saturating_sub(1)))
+            } else {
+                None
+            };
+            if let Some(to) = to {
+                if let Err(error) = app.run("ui.quickaccess.move", json!({"id": id, "to": to})) {
+                    app.set_status(error);
+                }
+                response.request_focus();
+                ui.memory_mut(|memory| memory.move_focus(egui::FocusDirection::None));
+            }
+        }
     });
 }
 
@@ -105,13 +205,13 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
     }
     ui.push_id("quick_access", |ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
-        for id in items.iter().take(5) {
-            ui.push_id(id, |ui| button(app, ui, id));
+        for (at, id) in items.iter().take(5).enumerate() {
+            item(app, ui, id, at, items.len());
         }
         if items.len() > 5 {
             ui.menu_button(crate::tl!("More Quick Access commands"), |ui| {
-                for id in items.iter().skip(5) {
-                    ui.push_id(id, |ui| button(app, ui, id));
+                for (at, id) in items.iter().enumerate().skip(5) {
+                    item(app, ui, id, at, items.len());
                 }
             });
         }

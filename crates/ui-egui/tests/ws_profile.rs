@@ -6,7 +6,7 @@ use cadcraft_engine::{Session, command_specs};
 use cadcraft_ui_egui::docking::Panel;
 use cadcraft_ui_egui::menus::UI_COMMANDS;
 use cadcraft_ui_egui::wsprofile::presets::{PRESET_IDS, SAFE_PRESET, preset, preset_json};
-use cadcraft_ui_egui::wsprofile::schema::{Dock, OwnerType, PanelMode, ProfileStatus, SCHEMA_VERSION, WorkspaceLayout, WorkspaceProfile};
+use cadcraft_ui_egui::wsprofile::schema::{Dock, OwnerType, PanelMode, ProfileStatus, RibbonMode, SCHEMA_VERSION, WorkspaceLayout, WorkspaceProfile};
 use cadcraft_ui_egui::wsprofile::store::MemoryStore;
 use cadcraft_ui_egui::wsprofile::validate::{Issue, Mode, validate};
 use cadcraft_ui_egui::{CadApp, Services};
@@ -293,16 +293,118 @@ fn command_line_cannot_dock_to_a_side() {
 }
 
 #[test]
-fn ribbon_presets_carry_the_eight_standard_tabs() {
+fn ribbon_presets_carry_the_expected_tabs() {
     for id in PRESET_IDS.iter().filter(|id| **id != "SIMPLE") {
         let ribbon = preset(id).unwrap().layout.ribbon;
         assert!(ribbon.visible, "{id}");
         let standard: Vec<&str> = ribbon.tabs.iter().filter(|tab| tab.contextual.is_none()).map(|tab| tab.label.as_str()).collect();
-        assert_eq!(standard, ["Home", "Insert", "Annotate", "Layers", "View", "Layout", "Tools", "Output"], "{id}");
+        let expected: &[&str] = if *id == "CAD_MANAGER" {
+            &["Home", "Standards", "Fonts", "Xref", "Plot"]
+        } else {
+            &["Home", "Insert", "Annotate", "Layers", "View", "Layout", "Tools", "Output"]
+        };
+        assert_eq!(standard, expected, "{id}");
         let contextual: Vec<&str> = ribbon.tabs.iter().filter_map(|tab| tab.contextual.as_deref()).collect();
         assert_eq!(contextual, ["dimension", "hatch", "block"], "{id}");
         assert!(ribbon.tabs.iter().all(|tab| !tab.groups.is_empty() && tab.groups.iter().all(|group| !group.commands.is_empty())), "{id}");
     }
+}
+
+#[test]
+fn cad_manager_preset_uses_only_real_commands() {
+    let raw = preset_json("CAD_MANAGER").unwrap();
+    for mode in [Mode::Local, Mode::Import] {
+        validate(raw, mode).unwrap();
+    }
+    let profile = preset("CAD_MANAGER").unwrap();
+    let layout = &profile.layout;
+    assert_eq!(profile.name, "CAD Manager");
+    assert_eq!(layout.ribbon.effective_mode(), RibbonMode::Expanded);
+    let tabs: Vec<_> = layout.ribbon.tabs.iter().filter(|tab| tab.contextual.is_none()).collect();
+    assert_eq!(tabs.iter().map(|tab| tab.label.as_str()).collect::<Vec<_>>(), ["Home", "Standards", "Fonts", "Xref", "Plot"]);
+    for (label, commands) in [
+        ("Standards", vec!["style", "dimstyle", "layer", "purge", "audit"]),
+        ("Fonts", vec!["fonts", "style"]),
+        ("Xref", vec!["xref", "xattach"]),
+        ("Plot", vec!["plot", "publish", "pagesetup"]),
+    ] {
+        let tab = tabs.iter().find(|tab| tab.label == label).unwrap();
+        assert!(tab.visible);
+        assert_eq!(tab.groups.iter().flat_map(|group| group.commands.iter().map(String::as_str)).collect::<Vec<_>>(), commands, "{label}");
+    }
+    for command in profile_commands(&profile) {
+        assert!(cadcraft_ui_egui::toolbars::is_known(command), "unknown CAD Manager command: {command}");
+    }
+    assert_eq!(layout.panels.iter().map(|panel| panel.id.as_str()).collect::<Vec<_>>(), ["layers", "externalReferences", "fonts"]);
+    assert!(layout.panels.iter().all(|panel| panel.visible && panel.mode == PanelMode::Dock && panel.side == Some(Dock::Right)));
+    assert!(!layout.ribbon.tabs.iter().any(|tab| tab.label == "Sheet Set"));
+}
+
+#[test]
+fn minimal_preset_is_tabs_only_with_canvas() {
+    let profile = preset("MINIMAL").unwrap();
+    let layout = &profile.layout;
+    assert_eq!(profile.name, "Minimal");
+    assert_eq!(layout.ribbon.mode, Some(RibbonMode::TabsOnly));
+    assert!(layout.ribbon.visible && layout.ribbon.collapsed);
+    assert!(layout.panels.is_empty() && layout.toolbars.is_empty());
+    assert!(!layout.toolsets.visible);
+    assert!(layout.quick_access.is_empty());
+    assert!(layout.command_line.visible && layout.command_line.dock == Dock::Floating);
+    assert!(layout.status_bar.visible);
+    for command in profile_commands(&profile) {
+        assert!(cadcraft_ui_egui::toolbars::is_known(command), "unknown Minimal command: {command}");
+    }
+    let mut app = first_run_app(true);
+    app.run("new", json!({})).unwrap();
+    app.run("ui.workspace.select", json!({"id": "MINIMAL"})).unwrap();
+    app.ui.start_tab = false;
+    app.integrated_titlebar = true;
+    let mut harness = Harness::builder().with_size(vec2(1366.0, 768.0)).build_ui_state(
+        |ui, app: &mut CadApp| {
+            app.logic(&ui.ctx().clone());
+            app.ui(ui);
+        },
+        app,
+    );
+    harness.run_steps(5);
+    let app = harness.state();
+    assert_eq!(app.ws.effective.layout.ribbon.effective_mode(), RibbonMode::TabsOnly);
+    assert_eq!(cadcraft_ui_egui::ribbon::render::rendered_mode(app, 768.0), RibbonMode::TabsOnly);
+    assert!(app.ui.docking.layout.contains(&Panel::Canvas));
+    assert!(!app.ui.show_palettes && !app.ui.show_toolsets && !app.ui.show_toolbar);
+    assert!(app.ui.show_command_line && app.ui.show_status_bar);
+    let canvas = app.canvas.rect.unwrap();
+    assert!(canvas.height() >= 0.80 * 768.0, "{canvas:?}");
+}
+
+#[test]
+fn simple_preset_is_unchanged_and_still_safe() {
+    // Git checkouts can use LF or CRLF; both hashes pin the original bytes.
+    const SIMPLE_SHA256_LF: &str = "888120d04b0ed6669791816349223ec402e0cab574e3d73f1d5bf5853ba38072";
+    const SIMPLE_SHA256_CRLF: &str = "cb5849ac9c34d062b256fc8429f40d7ffd778ef1e999b0269f2ce3c38b950cb3";
+    assert_eq!(SAFE_PRESET, "SIMPLE");
+    let hash = cadcraft_engine::hash::sha256_hex(include_bytes!("../src/wsprofile/presets/SIMPLE.json"));
+    assert!([SIMPLE_SHA256_LF, SIMPLE_SHA256_CRLF].contains(&hash.as_str()), "SIMPLE.json changed: {hash}");
+    assert!(PRESET_IDS.contains(&SAFE_PRESET));
+    assert_eq!(WorkspaceLayout::default(), preset(SAFE_PRESET).unwrap().layout);
+    validate(preset_json(SAFE_PRESET).unwrap(), Mode::Local).unwrap();
+}
+
+#[test]
+fn presets_offer_the_vietnamese_names() {
+    let mut app = first_run_app(false);
+    app.run("options", json!({"interfaceLanguage": "vi"})).unwrap();
+    let mut harness = shell(app);
+    harness.get_by_label("Tối giản");
+    harness.get_by_label("Quản lý CAD");
+    harness.get_by_label("Tối giản").scroll_to_me();
+    harness.run_steps(4);
+    harness.get_by_label("Tối giản").click();
+    harness.run_steps(4);
+    assert_eq!(harness.state().ws.active, "MINIMAL");
+    assert_eq!(stored_active(harness.state()), "MINIMAL");
+    assert_eq!(harness.state().ui.dialog, None);
 }
 
 /// The ids of the shipped Standard tool bar, so the preset cannot drift from it.
@@ -441,6 +543,14 @@ fn schema_doc_lists_every_field() {
     assert_eq!(schema["properties"]["schemaVersion"]["const"], SCHEMA_VERSION);
     let default = serde_json::to_value(WorkspaceProfile::default()).unwrap();
     assert_documented(&schema, &schema, &cadcraft_ui_egui::wsprofile::wire::to_wire(&default), "");
+    for mode in [RibbonMode::Expanded, RibbonMode::Compact, RibbonMode::TabsOnly, RibbonMode::Hidden] {
+        let mut profile = WorkspaceProfile::default();
+        profile.layout.ribbon.set_mode(mode);
+        let value = cadcraft_ui_egui::wsprofile::wire::to_wire(&serde_json::to_value(&profile).unwrap());
+        assert_documented(&schema, &schema, &value, "");
+        let modes = schema["$defs"]["ribbon"]["properties"]["ribbonMode"]["enum"].as_array().unwrap();
+        assert!(modes.contains(&value["layout"]["ribbon"]["ribbonMode"]));
+    }
     for id in PRESET_IDS {
         let value = serde_json::to_value(preset(id).unwrap()).unwrap();
         assert_documented(&schema, &schema, &cadcraft_ui_egui::wsprofile::wire::to_wire(&value), &format!("{id}:"));
@@ -532,6 +642,8 @@ fn picker_lists_every_preset_and_a_row_selects_it() {
         "Infrastructure",
         "Quantity Survey and QA",
         "Sheets and Publishing",
+        "CAD Manager",
+        "Minimal",
     ] {
         harness.get_by_label(name);
     }
@@ -565,6 +677,8 @@ fn picker_escape_selects_simple() {
 #[test]
 fn picker_closed_with_its_button_selects_simple() {
     let mut harness = shell(first_run_app(false));
+    // The eleven-row picker keeps growing for a few frames; click its close button once it has settled.
+    harness.run_steps(6);
     harness.get_by_label("Close window").click();
     harness.run_steps(4);
     assert_eq!(harness.state().ui.dialog, None);

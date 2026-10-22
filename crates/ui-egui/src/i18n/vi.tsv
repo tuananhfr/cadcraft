@@ -1857,6 +1857,47 @@ ribbon	Utilities	Tiện ích
 ribbon	Visibility	Hiện/ẩn
 ribbon	Walls and Openings	Tường và lỗ mở
 
+# GĐ3 Task 1: ribbon display modes.
+	Ribbon Display Mode	Chế độ hiển thị Ribbon
+	Display Mode	Chế độ hiển thị
+	mode must be expanded, compact, tabs_only or hidden	mode phải là expanded, compact, tabs_only hoặc hidden
+
+# GĐ3 Task 2: ribbon modes rendering.
+	Show ribbon	Hiện Ribbon
+
+# GĐ3 Task 3: ribbon tabs and context menu.
+	Show or Hide Ribbon Tab	Hiện hoặc ẩn thẻ Ribbon
+	Reset Ribbon	Đặt lại Ribbon
+	Customize Ribbon…	Tùy biến Ribbon…
+	Hide Tab	Ẩn thẻ
+	Show Tabs	Hiện thẻ
+	Expanded	Mở rộng
+	Compact	Thu gọn
+	Tabs Only	Chỉ thẻ
+	Hidden	Ẩn
+	»	»
+	visible must be a boolean	visible phải là giá trị luận lý
+	At least one ribbon tab must stay visible	Phải giữ ít nhất một thẻ Ribbon hiển thị
+
+	Move Ribbon Command	Di chuyển lệnh trên dải băng
+	Ribbon commands	Lệnh trên dải băng
+	Ribbon command was not found	Không tìm thấy lệnh trên dải băng
+	Ribbon command is already in the destination group	Lệnh trên dải băng đã có trong nhóm đích
+	Quick Access Position	Vị trí Truy cập nhanh
+	position must be title_bar, above_ribbon or below_ribbon	vị trí phải là title_bar, above_ribbon hoặc below_ribbon
+	Show Below the Ribbon	Hiện bên dưới Ribbon
+	Show Above the Ribbon	Hiện bên trên Ribbon
+	Interface density	Mật độ giao diện
+	Comfortable	Rộng rãi
+	density must be compact, normal or comfortable	density phải là compact, normal hoặc comfortable
+	Convert Toolbar to Ribbon Group	Chuyển thanh công cụ thành nhóm Ribbon
+	Show the ribbon before adding a toolbar group	Hiện Ribbon trước khi thêm nhóm thanh công cụ
+	Toolbar was not found	Không tìm thấy thanh công cụ
+	The toolbar is locked; unlock it first	Thanh công cụ đã bị khóa; hãy mở khóa trước
+	Too many ribbon groups or toolbar commands	Quá nhiều nhóm Ribbon hoặc lệnh trên thanh công cụ
+	Skipped unknown toolbar commands: {commands}	Đã bỏ qua các lệnh thanh công cụ không xác định: {commands}
+	Drop to add as a ribbon group	Thả để thêm thành nhóm Ribbon
+	Use ui.toolbar.to_ribbon to convert a toolbar	Dùng ui.toolbar.to_ribbon để chuyển thanh công cụ
 # GĐ3 Task 11: web keys.
 	The browser uses this key; choose another shortcut	Trình duyệt dùng phím này; hãy chọn phím tắt khác
 # GĐ3 Task 7: dock clamp.
@@ -2012,3 +2053,9 @@ ribbon	Check	Kiểm tra
 	Enter replacement block name	Nhập tên khối thay thế
 	BASELINE_CHANGED	Tệp mẫu cơ sở đã thay đổi
 	AUDIT_LIMIT	Vượt giới hạn kiểm tra tệp mẫu
+	CAD Manager	Quản lý CAD
+	Minimal	Tối giản
+	Standards, fonts, external references and plotting.	Tiêu chuẩn, phông chữ, tham chiếu ngoài và in bản vẽ.
+	Ribbon tabs, canvas and a floating command line.	Thẻ dải băng, vùng vẽ và dòng lệnh nổi.
+ribbon	Standards	Tiêu chuẩn
+ribbon	Fonts	Phông chữ

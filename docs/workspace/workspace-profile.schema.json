@@ -50,8 +50,8 @@
         "favorites": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/commandId"}},
         "toolsets": {"$ref": "#/$defs/toolSets"},
         "view": {"$ref": "#/$defs/view"},
-        "quickAccessPosition": {"type": "string", "description": "Pending GĐ3 field: quick_access_position, for example below."},
-        "density": {"type": "string", "description": "Pending GĐ3 field: density, for example comfortable."}
+        "quickAccessPosition": {"enum": ["title_bar", "above_ribbon", "below_ribbon"], "default": "title_bar", "description": "Where the Quick Access toolbar sits. title_bar falls back to its own row above the ribbon while the menu bar is in the window."},
+        "density": {"enum": ["compact", "normal", "comfortable"], "default": "normal", "description": "Interface density: control sizes and spacing. comfortable makes every ribbon, Quick Access, toolbar and file-tab button at least 32 points."}
       },
       "additionalProperties": true
     },
@@ -61,7 +61,7 @@
         "visible": {"type": "boolean"},
         "collapsed": {"type": "boolean"},
         "tabs": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/ribbonTab"}},
-        "ribbonMode": {"type": "string", "description": "Pending GĐ3 field: ribbon.mode. Enum values, for example tabs_only, keep snake_case."}
+        "ribbonMode": {"enum": ["expanded", "compact", "tabs_only", "hidden", null], "description": "When absent or null, uses visible/collapsed legacy flags. Enum values keep snake_case."}
       }
     },
     "ribbonTab": {

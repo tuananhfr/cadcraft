@@ -122,14 +122,43 @@ impl Default for RibbonTab {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RibbonMode {
+    #[default]
+    Expanded,
+    Compact,
+    TabsOnly,
+    Hidden,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Ribbon {
     pub visible: bool,
     pub collapsed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<RibbonMode>,
     pub tabs: Vec<RibbonTab>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+impl Ribbon {
+    pub fn effective_mode(&self) -> RibbonMode {
+        match self.mode {
+            Some(mode) => mode,
+            None if !self.visible => RibbonMode::Hidden,
+            None if self.collapsed => RibbonMode::TabsOnly,
+            None => RibbonMode::Expanded,
+        }
+    }
+
+    pub fn set_mode(&mut self, mode: RibbonMode) {
+        self.mode = Some(mode);
+        self.visible = mode != RibbonMode::Hidden;
+        self.collapsed = mode == RibbonMode::TabsOnly;
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -313,6 +342,25 @@ impl Default for ViewState {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QuickAccessPosition {
+    #[default]
+    TitleBar,
+    AboveRibbon,
+    BelowRibbon,
+}
+
+/// Interface density: control sizes and spacing ([`Density::metrics`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Density {
+    Compact,
+    #[default]
+    Normal,
+    Comfortable,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WorkspaceLayout {
@@ -323,6 +371,10 @@ pub struct WorkspaceLayout {
     pub dock_tree: Option<Value>,
     pub command_line: CommandLineState,
     pub quick_access: Vec<String>,
+    #[serde(default)]
+    pub quick_access_position: QuickAccessPosition,
+    #[serde(default)]
+    pub density: Density,
     pub status_bar: StatusBarState,
     pub shortcuts: BTreeMap<String, String>,
     pub aliases: BTreeMap<String, String>,
@@ -390,6 +442,8 @@ impl Default for WorkspaceLayout {
             dock_tree: None,
             command_line: CommandLineState::default(),
             quick_access: Vec::new(),
+            quick_access_position: QuickAccessPosition::default(),
+            density: Density::default(),
             status_bar: StatusBarState::default(),
             shortcuts: BTreeMap::new(),
             aliases: BTreeMap::new(),

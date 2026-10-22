@@ -4,7 +4,7 @@ use cadcraft_engine::Session;
 use cadcraft_ui_egui::{CadApp, Services};
 use egui::{Key, Modifiers, vec2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 
 fn harness() -> Harness<'static, CadApp> {
     let mut app = CadApp::new(Session::default(), Services::default());
@@ -38,7 +38,14 @@ fn toolbar_tab_and_shift_tab_skip_title_drag_and_activate_once() {
     let mut h = harness();
     h.key_press(Key::Tab);
     h.run_steps(2);
-    assert!(h.get_by_label("Standard toolbar grip").is_focused(), "the title drag region is not a keyboard control; the grip is the first stop");
+    let focused: Vec<_> = h
+        .query_all_by(|node| node.is_focused())
+        .map(|node| format!("{:?} {:?}", node.accesskit_node().role(), node.accesskit_node().label()))
+        .collect();
+    assert!(
+        h.get_by_label("Standard toolbar grip").is_focused(),
+        "the title drag region is not a keyboard control; the grip is the first stop; focused: {focused:?}"
+    );
     h.key_press(Key::Tab);
     h.run_steps(2);
     assert!(h.get_by_label("New Drawing (⌘N)").is_focused());

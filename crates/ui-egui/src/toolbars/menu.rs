@@ -45,7 +45,13 @@ pub(super) fn context_menu(
     let mut chosen: Option<(&'static str, Value)> = None;
     let movable = !policy_locked && !bar.locked;
     let id = bar.id.as_str();
+    let command_id = anchor.ctx.data(|data| data.get_temp::<String>(anchor.id.with("command")));
     egui::Popup::menu(anchor).id(anchor.id.with("menu")).open_memory(open).show(|ui| {
+        if let Some(command_id) = command_id.as_deref() {
+            let pinned = app.ws.effective.layout.quick_access.iter().any(|id| id == command_id);
+            chosen = crate::quick_access::pin_menu(ui, pinned, command_id);
+            ui.separator();
+        }
         let hide = ui.add_enabled(!policy_locked, egui::Button::new(crate::tl!("Hide")));
         if focus_first && !policy_locked {
             hide.request_focus();

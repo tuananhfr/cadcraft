@@ -4,6 +4,7 @@
 use serde_json::{Value, json};
 
 use crate::CadApp;
+use crate::wsprofile::schema::{Density, RibbonMode};
 
 /// The top-level menus, in order.
 pub const MENUS: &[&str] = &["File", "Edit", "View", "Insert", "Format", "Tools", "Draw", "Dimension", "Modify", "Window", "Help"];
@@ -23,6 +24,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.spacemouse", "3D Mouse...", &["Tools", "3D Mouse..."], None),
     ("ui.spacemouse.calibrate", "Calibrate 3D Mouse", &[], None),
     ("ui.spacemouse.navigate", "3D Mouse Navigation", &[], None),
+    ("ui.density", "Interface density", &[], None),
     ("ui.dock", "Arrange Panel", &[], None),
     ("ui.panel.autohide", "Auto-hide", &[], None),
     ("ui.panel.pin", "Pin panel", &[], None),
@@ -40,6 +42,8 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.ribbon.tab.add", "Add Ribbon Tab", &[], None),
     ("ui.ribbon.tab.rename", "Rename Ribbon Tab", &[], None),
     ("ui.ribbon.tab.remove", "Remove Ribbon Tab", &[], None),
+    ("ui.ribbon.tab.visible", "Show or Hide Ribbon Tab", &[], None),
+    ("ui.ribbon.reset", "Reset Ribbon", &[], None),
     ("ui.ribbon.tab.move", "Move Ribbon Tab", &[], None),
     ("ui.ribbon.group.add", "Add Ribbon Group", &[], None),
     ("ui.ribbon.group.rename", "Rename Ribbon Group", &[], None),
@@ -47,7 +51,9 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.ribbon.group.move", "Move Ribbon Group", &[], None),
     ("ui.ribbon.button.add", "Add to Ribbon", &[], None),
     ("ui.ribbon.button.remove", "Remove from Ribbon", &[], None),
+    ("ui.ribbon.button.move", "Move Ribbon Command", &[], None),
     ("ui.ribbon.collapse", "Minimize Ribbon", &["Window", "Minimize Ribbon"], None),
+    ("ui.ribbon.mode", "Ribbon Display Mode", &["View", "Ribbon", "Display Mode"], None),
     ("ui.alias.set", "Assign Alias", &[], None),
     ("ui.alias.remove", "Remove Alias", &[], None),
     ("ui.alias.reset", "Reset Aliases", &[], None),
@@ -58,6 +64,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.quickaccess.pin", "Add to Quick Access", &[], None),
     ("ui.quickaccess.unpin", "Remove from Quick Access", &[], None),
     ("ui.quickaccess.move", "Move Quick Access Item", &[], None),
+    ("ui.quickaccess.position", "Quick Access Position", &[], None),
     ("ui.favorite.add", "Add Favorite", &[], None),
     ("ui.favorite.remove", "Remove Favorite", &[], None),
     ("ui.toolbar.hide", "Hide Toolbar", &[], None),
@@ -67,6 +74,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.toolbar.dock", "Dock Toolbar", &[], None),
     ("ui.toolbar.float", "Float Toolbar", &[], None),
     ("ui.toolbar.move", "Move Toolbar", &[], None),
+    ("ui.toolbar.to_ribbon", "Convert Toolbar to Ribbon Group", &[], None),
     ("ui.workspace.select", "Select Workspace", &[], None),
     ("ui.workspace.reset", "Reset Workspace", &[], None),
     ("ui.workspace.saveas", "Save Workspace As...", &[], None),
@@ -167,6 +175,21 @@ pub fn run_ui_command(app: &mut CadApp, id: &str, params: &Value) -> Option<Resu
 }
 
 fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
+    if id == "ui.density" {
+        return Some((|| {
+            let density = match params.get("density").and_then(Value::as_str) {
+                Some("compact") => Density::Compact,
+                Some("normal") => Density::Normal,
+                Some("comfortable") => Density::Comfortable,
+                _ => return Err(crate::tl!("density must be compact, normal or comfortable").to_string()),
+            };
+            let changed = crate::wsprofile::edit_layout(app, |layout| {
+                layout.density = density;
+                Ok(())
+            })?;
+            Ok(json!({"density": density, "changed": changed}))
+        })());
+    }
     if let Some(result) = crate::autohide::route(app, id, params) {
         return Some(result);
     }
@@ -752,18 +775,20 @@ fn entry_ui_with_ribbon(ui: &mut egui::Ui, e: &Entry, clicked: &mut Option<Strin
 pub fn menu_bar(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = crate::theme::Tokens::get();
     let tree = tree(app);
+    let collapsed = app.ws.effective.layout.ribbon.effective_mode() == RibbonMode::TabsOnly;
     let mut clicked = None;
-    egui::Panel::top("cc_menubar").exact_size(22.0).frame(egui::Frame::NONE.fill(t.chrome_dark).inner_margin(egui::Margin::symmetric(6, 0))).show(
+    // Menu names are buttons of the density's interact height; Normal keeps the original 22 pt bar.
+    let height = app.ws.effective.layout.density.metrics().interact_height + 2.0;
+    egui::Panel::top("cc_menubar").exact_size(height).frame(egui::Frame::NONE.fill(t.chrome_dark).inner_margin(egui::Margin::symmetric(6, 0))).show(
         ui,
         |ui| {
-            // Zoom can leave less room than the menu names and Quick Access need together.
+            // Zoom can leave less room than the menu names need.
             egui::ScrollArea::horizontal().id_salt("cc_menubar_scroll").auto_shrink([false, false]).show(ui, |ui| {
                 egui::MenuBar::new().ui(ui, |ui| {
-                    crate::chrome::quick_access(app, ui);
                     for (name, entries) in &tree {
                         ui.menu_button(crate::i18n::menu(name), |ui| {
                             for e in entries {
-                                entry_ui_with_ribbon(ui, e, &mut clicked, Some(app.ws.effective.layout.ribbon.collapsed));
+                                entry_ui_with_ribbon(ui, e, &mut clicked, Some(collapsed));
                             }
                         });
                     }
@@ -795,6 +820,7 @@ pub fn activate(app: &mut CadApp, id: &str) {
 pub fn shortcuts(app: &mut CadApp, ctx: &egui::Context) {
     crate::clipboard::mirror(app, ctx);
     crate::toolbars::claim_menu_key(ctx);
+    crate::ribbon::render::claim_menu_key(app, ctx);
     let customize = app.ui.dialog.as_deref() == Some(crate::customize::DIALOG);
     // Customize keeps focus on its page buttons, so only a focused text field there owns the undo keys.
     let focused = ctx.egui_wants_keyboard_input();

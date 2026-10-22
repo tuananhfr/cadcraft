@@ -161,6 +161,7 @@ pub fn toolsets(app: &mut CadApp, ui: &mut egui::Ui) {
         }
         let body = Rect::from_min_max(pos2(r.left(), r.top() + tab_h), r.max);
         let mut clicked: Option<&'static str> = None;
+        let mut quick_access_action = None;
         let mut toggle_group = None;
         let mut tool_visible: Option<(String, bool)> = None;
         let mut restore: Vec<String> = Vec::new();
@@ -220,9 +221,14 @@ pub fn toolsets(app: &mut CadApp, ui: &mut egui::Ui) {
                                         continue;
                                     }
                                     ui.add_enabled_ui(command_known(cmd), |ui| {
-                                        if icons::button(ui, *icon, 40.0, tip, false).clicked() {
+                                        let response = icons::button(ui, *icon, 40.0, tip, false);
+                                        if response.clicked() {
                                             clicked = Some(cmd);
                                         }
+                                        response.context_menu(|ui| {
+                                            let pinned = app.ws.effective.layout.quick_access.iter().any(|id| id.as_str() == *cmd);
+                                            quick_access_action = crate::quick_access::pin_menu(ui, pinned, cmd);
+                                        });
                                     });
                                 }
                             });
@@ -236,9 +242,14 @@ pub fn toolsets(app: &mut CadApp, ui: &mut egui::Ui) {
                                 ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
                                 for (icon, cmd, tip) in row.iter() {
                                     ui.add_enabled_ui(command_known(cmd), |ui| {
-                                        if icons::button(ui, *icon, 23.0, tip, false).clicked() {
+                                        let response = icons::button(ui, *icon, 23.0, tip, false);
+                                        if response.clicked() {
                                             clicked = Some(cmd);
                                         }
+                                        response.context_menu(|ui| {
+                                            let pinned = app.ws.effective.layout.quick_access.iter().any(|id| id.as_str() == *cmd);
+                                            quick_access_action = crate::quick_access::pin_menu(ui, pinned, cmd);
+                                        });
                                     });
                                 }
                             });
@@ -250,6 +261,11 @@ pub fn toolsets(app: &mut CadApp, ui: &mut egui::Ui) {
                 }
             });
         });
+        if let Some((command, params)) = quick_access_action
+            && let Err(error) = app.run(command, params)
+        {
+            app.set_status(error);
+        }
         if let Some((cmd, shown)) = tool_visible {
             if shown {
                 app.ui.hidden_tools.retain(|h| h != &cmd);
@@ -344,11 +360,11 @@ pub fn right_palettes(app: &mut CadApp, ui: &mut egui::Ui) {
 pub(crate) fn layers_section(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
     section_header(ui, "Layers");
-    // Layer tools row.
+    // Wraps so every layer tool stays reachable in a narrow palette (683-point screens, compact density).
     let mut cmd = None;
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.add_space(8.0);
-        ui.spacing_mut().item_spacing = vec2(3.0, 0.0);
+        ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
         for (icon, c, tip) in [
             (Icon::LayerProps, "ui.dialog.layers", "Layer Properties"),
             (Icon::MakeCurrent, "laymcur", "Make Object's Layer Current"),

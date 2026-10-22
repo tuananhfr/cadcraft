@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 
 use crate::CadApp;
-use crate::wsprofile::schema::{RibbonGroup, RibbonTab};
+use crate::wsprofile::schema::{RibbonGroup, RibbonMode, RibbonTab, WorkspaceLayout};
 
 pub mod contextual;
 pub mod render;
@@ -56,12 +56,100 @@ fn move_item<T>(items: &mut Vec<T>, from: usize, to: usize) {
     }
 }
 
+fn move_button(tab: &mut RibbonTab, group_index: usize, params: &Value) -> Result<(), String> {
+    let to = destination(params)?;
+    let group = tab.groups.get(group_index).ok_or_else(|| crate::tl!("Ribbon group was not found").to_string())?;
+    let (from, target) = if params.get("to_group").is_some() {
+        let command = text(params, "command")?;
+        let from = group.commands.iter().position(|id| id == command.as_ref());
+        let target = text(params, "to_group")?;
+        let target = tab.groups.iter().position(|group| group.id == target.as_ref());
+        (from, target)
+    } else {
+        let from = params.get("from").and_then(Value::as_u64).and_then(|from| usize::try_from(from).ok());
+        (from, Some(group_index))
+    };
+    let from = from.filter(|from| *from < group.commands.len()).ok_or_else(|| crate::tl!("Ribbon command was not found").to_string())?;
+    let target = target.ok_or_else(|| crate::tl!("Ribbon group was not found").to_string())?;
+    if target == group_index {
+        if let Some(group) = tab.groups.get_mut(group_index) {
+            move_item(&mut group.commands, from, to);
+        }
+    } else {
+        let command = group.commands.get(from).ok_or_else(|| crate::tl!("Ribbon command was not found").to_string())?.clone();
+        if tab.groups.get(target).is_some_and(|group| group.commands.contains(&command)) {
+            return Err(crate::tl!("Ribbon command is already in the destination group").to_string());
+        }
+        if let Some(group) = tab.groups.get_mut(group_index) {
+            group.commands.remove(from);
+        }
+        if let Some(group) = tab.groups.get_mut(target) {
+            group.commands.insert(to.min(group.commands.len()), command);
+        }
+    }
+    Ok(())
+}
+
 fn fresh_id<'a>(ids: impl Iterator<Item = &'a str>) -> String {
     let ids: std::collections::BTreeSet<_> = ids.collect();
     (1..=501).map(|number| format!("custom_{number}")).find(|id| !ids.contains(id.as_str())).unwrap_or_else(|| "custom".into())
 }
 
+/// Conversion keeps toolbar data available for layout undo and for showing the bar again.
+pub fn convert_toolbar_to_group(layout: &mut WorkspaceLayout, toolbar: &str, tab: &str) -> Result<String, String> {
+    if layout.ribbon.effective_mode() == RibbonMode::Hidden {
+        return Err(crate::tl!("Show the ribbon before adding a toolbar group").to_string());
+    }
+    let bar = layout.toolbars.iter_mut().find(|bar| bar.id == toolbar).ok_or_else(|| crate::tl!("Toolbar was not found").to_string())?;
+    if bar.locked {
+        return Err(crate::tl!("The toolbar is locked; unlock it first").to_string());
+    }
+    let tab = layout
+        .ribbon
+        .tabs
+        .iter_mut()
+        .find(|held| held.id == tab && held.visible)
+        .ok_or_else(|| crate::tl!("Ribbon tab was not found").to_string())?;
+    if tab.groups.len() >= crate::wsprofile::validate::MAX_ARRAY || bar.commands.len() > crate::wsprofile::validate::MAX_ARRAY {
+        return Err(crate::tl!("Too many ribbon groups or toolbar commands").to_string());
+    }
+    let id = fresh_id(tab.groups.iter().map(|group| group.id.as_str()));
+    let commands = bar.commands.iter().filter(|id| crate::toolbars::is_known(id)).cloned().collect();
+    tab.groups.push(RibbonGroup { id: id.clone(), label: bar.label.clone(), commands, ..RibbonGroup::default() });
+    bar.visible = false;
+    Ok(id)
+}
+
+fn toolbar_to_ribbon(app: &mut CadApp, params: &Value) -> Result<Value, String> {
+    let toolbar = text(params, "toolbar")?;
+    let tab = text(params, "tab")?;
+    let skipped: Vec<_> = app
+        .ws
+        .user
+        .layout
+        .toolbars
+        .iter()
+        .find(|bar| bar.id == toolbar.as_ref())
+        .into_iter()
+        .flat_map(|bar| bar.commands.iter().take(crate::wsprofile::validate::MAX_ARRAY))
+        .filter(|id| !crate::toolbars::is_known(id))
+        .cloned()
+        .collect();
+    let mut created = String::new();
+    let changed = crate::wsprofile::edit_layout(app, |layout| {
+        created = convert_toolbar_to_group(layout, toolbar.as_ref(), tab.as_ref())?;
+        Ok(())
+    })?;
+    if !skipped.is_empty() {
+        app.set_status(crate::tf!("Skipped unknown toolbar commands: {commands}", commands = skipped.join(", ")));
+    }
+    Ok(json!({"changed": changed, "id": created, "skipped": skipped}))
+}
+
 pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<Result<Value, String>> {
+    if command == "ui.toolbar.to_ribbon" {
+        return Some(toolbar_to_ribbon(app, params));
+    }
     if !matches!(
         command,
         "ui.ribbon.tab.add"
@@ -74,15 +162,32 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
             | "ui.ribbon.group.remove"
             | "ui.ribbon.button.add"
             | "ui.ribbon.button.remove"
+            | "ui.ribbon.button.move"
             | "ui.ribbon.collapse"
+            | "ui.ribbon.mode"
+            | "ui.ribbon.tab.visible"
+            | "ui.ribbon.reset"
     ) {
         return None;
+    }
+    if command == "ui.ribbon.reset" {
+        return Some(crate::wsprofile::reset_ribbon(app).map(|changed| json!({"changed": changed})));
     }
     Some((|| {
         let mut ribbon = app.ws.effective.layout.ribbon.clone();
         let mut created = None;
-        if command == "ui.ribbon.collapse" {
-            ribbon.collapsed = params.get("collapsed").and_then(Value::as_bool).unwrap_or(!ribbon.collapsed);
+        if command == "ui.ribbon.mode" {
+            let mode = match params.get("mode").and_then(Value::as_str) {
+                Some("expanded") => RibbonMode::Expanded,
+                Some("compact") => RibbonMode::Compact,
+                Some("tabs_only") => RibbonMode::TabsOnly,
+                Some("hidden") => RibbonMode::Hidden,
+                _ => return Err(crate::tl!("mode must be expanded, compact, tabs_only or hidden").to_string()),
+            };
+            ribbon.set_mode(mode);
+        } else if command == "ui.ribbon.collapse" {
+            let collapsed = params.get("collapsed").and_then(Value::as_bool).unwrap_or(ribbon.effective_mode() != RibbonMode::TabsOnly);
+            ribbon.set_mode(if collapsed { RibbonMode::TabsOnly } else { RibbonMode::Expanded });
         } else if command == "ui.ribbon.tab.add" {
             let label = text(params, "label")?;
             let id = fresh_id(ribbon.tabs.iter().map(|tab| tab.id.as_str()));
@@ -101,7 +206,16 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
             let tab_id = text(params, "tab")?;
             let from =
                 ribbon.tabs.iter().position(|tab| tab.id == tab_id.as_ref()).ok_or_else(|| crate::tl!("Ribbon tab was not found").to_string())?;
-            if command == "ui.ribbon.tab.remove" {
+            if command == "ui.ribbon.tab.visible" {
+                let visible = params.get("visible").and_then(Value::as_bool).ok_or_else(|| crate::tl!("visible must be a boolean").to_string())?;
+                // Contextual tabs can disappear with selection, so keep a persistent tab available.
+                if !visible && !ribbon.tabs.iter().any(|tab| tab.id != tab_id.as_ref() && tab.visible && tab.contextual.is_none()) {
+                    return Err(crate::tl!("At least one ribbon tab must stay visible").to_string());
+                }
+                if let Some(tab) = ribbon.tabs.get_mut(from) {
+                    tab.visible = visible;
+                }
+            } else if command == "ui.ribbon.tab.remove" {
                 ribbon.tabs.remove(from);
             } else if command == "ui.ribbon.tab.move" {
                 let mut tabs: Vec<_> = ribbon.tabs.iter().filter(|tab| tab.contextual.is_none()).cloned().collect();
@@ -132,6 +246,7 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
                             .position(|group| group.id == group_id.as_ref())
                             .ok_or_else(|| crate::tl!("Ribbon group was not found").to_string())?;
                         match command {
+                            "ui.ribbon.button.move" => move_button(tab, from, params)?,
                             "ui.ribbon.group.move" => move_item(&mut tab.groups, from, destination(params)?),
                             "ui.ribbon.group.remove" => {
                                 tab.groups.remove(from);

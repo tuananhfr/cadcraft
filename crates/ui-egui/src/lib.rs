@@ -672,6 +672,7 @@ impl CadApp {
             self.shown_theme = Some(shown);
             self.shown_follows_system = follows_system;
         }
+        theme::apply_density(ctx, self.ws.effective.layout.density);
         // Resolved every frame too, so a System choice follows the OS setting live.
         let animate = self.shows_animations();
         if self.shown_animations != Some(animate) {
@@ -750,9 +751,11 @@ impl CadApp {
         if self.ui.in_window_menu && !focus::hides(self, focus::Chrome::MenuBar) {
             menus::menu_bar(self, ui);
         }
+        chrome::quick_access(self, ui, quick_access::QuickAccessRow::OwnRowAboveRibbon);
         if !focus::hides(self, focus::Chrome::Ribbon) {
             ribbon::render::show(self, ui);
         }
+        chrome::quick_access(self, ui, quick_access::QuickAccessRow::OwnRowBelowRibbon);
         if self.ui.show_status_bar && !focus::hides(self, focus::Chrome::StatusBar) {
             chrome::status_bar(self, ui);
         }

@@ -366,6 +366,14 @@ pub(crate) fn edit_layout(app: &mut CadApp, change: impl FnOnce(&mut WorkspaceLa
     Ok(true)
 }
 
+pub(crate) fn reset_ribbon(app: &mut CadApp) -> Result<bool, String> {
+    let ribbon = app.ws.below_user().ribbon;
+    edit_layout(app, |layout| {
+        layout.ribbon = ribbon;
+        Ok(())
+    })
+}
+
 pub(crate) fn apply_aliases(app: &CadApp) {
     let aliases: Vec<_> = app.ws.effective.layout.aliases.iter().map(|(alias, command)| (alias.clone(), command.clone())).collect();
     cadcraft_engine::cmd::file::pgp::set_aliases(&aliases);

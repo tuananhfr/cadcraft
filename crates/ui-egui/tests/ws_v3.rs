@@ -135,13 +135,13 @@ fn gd3_fields_survive_v1_to_v3_and_back() {
     use cadcraft_ui_egui::wsprofile::migrate::migrate;
     use cadcraft_ui_egui::wsprofile::wire::{from_wire, to_wire};
     let old = json!({"schema_version": "1.0.0", "layout": {
-        "ribbon": {"mode": "tabs_only"}, "quick_access_position": "below", "density": "comfortable"
+        "ribbon": {"mode": "tabs_only"}, "quick_access_position": "below_ribbon", "density": "comfortable"
     }});
     let migrated = migrate(old).unwrap().value;
     let wire = to_wire(&migrated);
     assert_eq!(wire["schemaVersion"], 3);
     assert_eq!(wire["layout"]["ribbon"]["ribbonMode"], "tabs_only");
-    assert_eq!(wire["layout"]["quickAccessPosition"], "below");
+    assert_eq!(wire["layout"]["quickAccessPosition"], "below_ribbon");
     assert_eq!(wire["layout"]["density"], "comfortable");
     assert_eq!(from_wire(&wire), migrated);
 
@@ -154,7 +154,7 @@ fn gd3_fields_survive_v1_to_v3_and_back() {
     let saved = parse_set(&raw).unwrap().user.unwrap();
     let layout = serde_json::to_value(saved.layout).unwrap();
     assert_eq!(layout["ribbon"]["mode"], "tabs_only");
-    assert_eq!(layout["quick_access_position"], "below");
+    assert_eq!(layout["quick_access_position"], "below_ribbon");
     assert_eq!(layout["density"], "comfortable");
 }
 

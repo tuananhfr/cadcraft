@@ -12,6 +12,85 @@ use std::cell::Cell;
 use egui::{Color32, FontFamily, FontId, Theme, Visuals};
 use serde::{Deserialize, Serialize};
 
+use crate::wsprofile::schema::Density;
+
+/// Control sizes and spacing of one interface density, in points.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Metrics {
+    pub interact_height: f32,
+    pub button_padding: egui::Vec2,
+    pub item_spacing: egui::Vec2,
+    pub ribbon_button: f32,
+    pub toolbar_button: f32,
+    pub tab_height: f32,
+}
+
+impl Density {
+    pub fn metrics(self) -> Metrics {
+        match self {
+            Density::Compact => Metrics {
+                interact_height: 18.0,
+                button_padding: egui::vec2(4.0, 2.0),
+                item_spacing: egui::vec2(4.0, 2.0),
+                ribbon_button: 20.0,
+                toolbar_button: 20.0,
+                tab_height: 24.0,
+            },
+            Density::Normal => Metrics {
+                interact_height: 20.0,
+                button_padding: egui::vec2(6.0, 3.0),
+                item_spacing: egui::vec2(6.0, 4.0),
+                ribbon_button: 24.0,
+                toolbar_button: 24.0,
+                tab_height: 28.0,
+            },
+            Density::Comfortable => Metrics {
+                interact_height: 32.0,
+                button_padding: egui::vec2(8.0, 6.0),
+                item_spacing: egui::vec2(8.0, 6.0),
+                ribbon_button: 32.0,
+                toolbar_button: 32.0,
+                tab_height: 36.0,
+            },
+        }
+    }
+}
+
+const DENSITY_ID: &str = "cc_density";
+
+/// The density [`apply_density`] last installed in `ctx`.
+pub fn density(ctx: &egui::Context) -> Density {
+    ctx.data(|data| data.get_temp(egui::Id::new(DENSITY_ID))).unwrap_or_default()
+}
+
+/// Installs `density`'s spacing in the styles of both themes.
+pub fn apply_density(ctx: &egui::Context, density: Density) {
+    let id = egui::Id::new(DENSITY_ID);
+    if ctx.data(|data| data.get_temp::<Density>(id)) == Some(density) {
+        return;
+    }
+    let metrics = density.metrics();
+    ctx.data_mut(|data| data.insert_temp(id, density));
+    ctx.all_styles_mut(|style| {
+        style.spacing.item_spacing = metrics.item_spacing;
+        style.spacing.button_padding = metrics.button_padding;
+        style.spacing.interact_size.y = metrics.interact_height;
+    });
+}
+
+/// WCAG 2.x contrast ratio (1 to 21) of two opaque sRGB colours.
+pub fn contrast_ratio(a: Color32, b: Color32) -> f32 {
+    let luminance = |color: Color32| {
+        let linear = |channel: u8| {
+            let srgb = f32::from(channel) / 255.0;
+            if srgb <= 0.04045 { srgb / 12.92 } else { ((srgb + 0.055) / 1.055).powf(2.4) }
+        };
+        0.2126 * linear(color.r()) + 0.7152 * linear(color.g()) + 0.0722 * linear(color.b())
+    };
+    let (a, b) = (luminance(a), luminance(b));
+    (a.max(b) + 0.05) / (a.min(b) + 0.05)
+}
+
 /// The interface theme the user chose.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -141,12 +220,12 @@ impl Tokens {
         axis_x: Color32::from_rgb(0x56, 0x28, 0x29),
         axis_y: Color32::from_rgb(0x28, 0x4a, 0x2e),
         text: Color32::from_rgb(0xd7, 0xdb, 0xe0),
-        text_dim: Color32::from_rgb(0xa3, 0xaa, 0xb4),
-        text_faint: Color32::from_rgb(0x87, 0x8d, 0x96),
+        text_dim: Color32::from_rgb(0xaa, 0xb1, 0xbb),
+        text_faint: Color32::from_rgb(0xab, 0xb1, 0xba),
         icon: Color32::from_rgb(0xcf, 0xd4, 0xdb),
         icon_accent: Color32::from_rgb(0x4f, 0xa3, 0xf7),
         icon_point: Color32::from_rgb(0xf0, 0x7a, 0x3a),
-        accent: Color32::from_rgb(0x3d, 0x8b, 0xfd),
+        accent: Color32::from_rgb(0x3f, 0x8d, 0xff),
         selection: Color32::from_rgb(0x4a, 0x8f, 0xff),
         hover: Color32::from_rgb(0x9c, 0xc6, 0xff),
         grip: Color32::from_rgb(0x2f, 0x6b, 0xff),
@@ -186,11 +265,11 @@ impl Tokens {
         border: Color32::from_rgb(0xb3, 0xba, 0xc4),
         text: Color32::from_rgb(0x1d, 0x23, 0x2b),
         text_dim: Color32::from_rgb(0x47, 0x50, 0x5c),
-        text_faint: Color32::from_rgb(0x62, 0x6a, 0x76),
+        text_faint: Color32::from_rgb(0x57, 0x5f, 0x6b),
         icon: Color32::from_rgb(0x34, 0x3c, 0x48),
         icon_accent: Color32::from_rgb(0x1b, 0x6f, 0xd6),
         icon_point: Color32::from_rgb(0xd3, 0x5a, 0x1c),
-        accent: Color32::from_rgb(0x2f, 0x7c, 0xf6),
+        accent: Color32::from_rgb(0x28, 0x75, 0xef),
         cmd_bg: Color32::from_rgba_unmultiplied_const(0xf9, 0xfa, 0xfb, 0xf0),
         toggle_on: Color32::from_rgb(0x2f, 0x7c, 0xf6),
         field: Color32::from_rgb(0xff, 0xff, 0xff),
@@ -695,6 +774,8 @@ fn visuals(theme: Theme) -> Visuals {
     v.widgets.active.bg_fill = t.accent;
     v.widgets.active.weak_bg_fill = t.accent;
     v.selection.bg_fill = t.select_bg;
+    // egui's default fades the text with alpha, which falls below WCAG AA on the chrome.
+    v.weak_text_color = Some(t.text_dim);
     v.window_stroke = egui::Stroke::new(1.0, t.border);
     let shadow = Color32::from_black_alpha(if theme == Theme::Dark { 90 } else { 40 });
     v.popup_shadow = egui::epaint::Shadow { offset: [0, 4], blur: 12, spread: 0, color: shadow };
@@ -714,14 +795,12 @@ pub fn apply(ctx: &egui::Context, theme: Theme, follow_system: bool) {
     // window appearance (winit then stops reporting OS changes) and the app would never follow again.
     ctx.set_theme(if follow_system { egui::ThemePreference::System } else { egui::ThemePreference::from(theme) });
     ctx.all_styles_mut(|s| {
-        s.spacing.item_spacing = egui::vec2(6.0, 4.0);
-        s.spacing.button_padding = egui::vec2(6.0, 3.0);
-        s.spacing.interact_size.y = 20.0;
         s.text_styles.insert(egui::TextStyle::Body, body());
         s.text_styles.insert(egui::TextStyle::Button, body());
         s.text_styles.insert(egui::TextStyle::Small, small());
         s.text_styles.insert(egui::TextStyle::Monospace, mono());
     });
+    apply_density(ctx, density(ctx));
 }
 
 #[cfg(test)]

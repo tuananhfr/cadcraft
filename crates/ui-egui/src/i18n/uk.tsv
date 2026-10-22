@@ -1856,6 +1856,47 @@
 	A4	A4
 	A5	A5
 
+# GĐ3 Task 1: ribbon display modes.
+	Ribbon Display Mode	Режим відображення стрічки
+	Display Mode	Режим відображення
+	mode must be expanded, compact, tabs_only or hidden	mode має бути expanded, compact, tabs_only або hidden
+
+# GĐ3 Task 2: ribbon modes rendering.
+	Show ribbon	Показати стрічку
+
+# GĐ3 Task 3: ribbon tabs and context menu.
+	Show or Hide Ribbon Tab	Показати або приховати вкладку стрічки
+	Reset Ribbon	Скинути стрічку
+	Customize Ribbon…	Налаштувати стрічку…
+	Hide Tab	Приховати вкладку
+	Show Tabs	Показати вкладки
+	Expanded	Розгорнута
+	Compact	Компактна
+	Tabs Only	Лише вкладки
+	Hidden	Прихована
+	»	»
+	visible must be a boolean	visible має бути логічним значенням
+	At least one ribbon tab must stay visible	Принаймні одна вкладка стрічки має залишатися видимою
+
+	Move Ribbon Command	Перемістити команду стрічки
+	Ribbon commands	Команди стрічки
+	Ribbon command was not found	Команду стрічки не знайдено
+	Ribbon command is already in the destination group	Команда стрічки вже є в цільовій групі
+	Quick Access Position	Розташування швидкого доступу
+	position must be title_bar, above_ribbon or below_ribbon	Розташування має бути title_bar, above_ribbon або below_ribbon
+	Show Below the Ribbon	Показати під стрічкою
+	Show Above the Ribbon	Показати над стрічкою
+	Interface density	Щільність інтерфейсу
+	Comfortable	Зручна
+	density must be compact, normal or comfortable	density має бути compact, normal або comfortable
+	Convert Toolbar to Ribbon Group	Перетворити панель інструментів на групу стрічки
+	Show the ribbon before adding a toolbar group	Покажіть стрічку перед додаванням групи панелі інструментів
+	Toolbar was not found	Панель інструментів не знайдено
+	The toolbar is locked; unlock it first	Панель інструментів заблоковано; спочатку розблокуйте її
+	Too many ribbon groups or toolbar commands	Забагато груп стрічки або команд панелі інструментів
+	Skipped unknown toolbar commands: {commands}	Пропущено невідомі команди панелі інструментів: {commands}
+	Drop to add as a ribbon group	Відпустіть, щоб додати як групу стрічки
+	Use ui.toolbar.to_ribbon to convert a toolbar	Використайте ui.toolbar.to_ribbon для перетворення панелі інструментів
 # GĐ3 Task 11: web keys.
 	The browser uses this key; choose another shortcut	Браузер використовує це сполучення клавіш; виберіть інше
 # GĐ3 Task 7: dock clamp.
@@ -2008,3 +2049,11 @@ ribbon	Check	Перевірка
 	Enter replacement block name	Введіть назву блока для заміни
 	BASELINE_CHANGED	Базовий файл шаблону змінено
 	AUDIT_LIMIT	Перевищено ліміт аудиту шаблону
+	CAD Manager	CAD-менеджер
+	Minimal	Мінімальний
+	Standards, fonts, external references and plotting.	Стандарти, шрифти, зовнішні посилання та друк.
+	Ribbon tabs, canvas and a floating command line.	Вкладки стрічки, полотно та плаваючий командний рядок.
+ribbon	Standards	Стандарти
+ribbon	Fonts	Шрифти
+ribbon	Xref	Зовнішні посилання
+ribbon	Plot	Друк креслення

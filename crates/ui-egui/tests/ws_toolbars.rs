@@ -595,3 +595,151 @@ fn escape_on_toolbar_focus_cancels_command() {
     assert!(h.state().session.running.is_none());
     assert!(h.state().cmd.buffer.is_empty(), "Escape reaches the command line's existing handler");
 }
+
+#[test]
+fn dropping_a_toolbar_on_the_ribbon_creates_a_group() {
+    for mode in ["expanded", "compact", "tabs_only"] {
+        let mut app = attached(MemoryStore::default());
+        run(&mut app, "ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"}));
+        run(&mut app, "ui.ribbon.mode", json!({"mode": mode}));
+        run(&mut app, "ui.toolbar.show", json!({"id": "draw"}));
+        let original = bar(&app, "draw");
+        let groups = app.ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.id == "home").unwrap().groups.clone();
+        let mut h = harness(app);
+        h.get_by_role_and_label(egui::accesskit::Role::Tab, "Insert").click();
+        h.run_steps(3);
+        h.key_press(Key::Escape);
+        h.run_steps(3);
+        let from = grip(&h, "Draw");
+        let to = h.get_by_role_and_label(egui::accesskit::Role::Tab, "Home").rect().center();
+        drag(&mut h, from, to, false);
+        assert!(
+            matches!(&h.state().ws.toolbar_drag, DragPhase::Dragging { target: Some(DropTarget::Ribbon { tab }), .. } if tab == "home"),
+            "{mode}"
+        );
+        assert!(bar(h.state(), "draw").visible, "conversion waits for release");
+        h.drop_at(to);
+        h.run_steps(4);
+        let home = h.state().ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.id == "home").unwrap();
+        assert_eq!(home.groups.len(), groups.len() + 1, "{mode}");
+        assert_eq!(&home.groups[..groups.len()], groups.as_slice());
+        let group = home.groups.last().unwrap();
+        assert_eq!(group.label, original.label);
+        assert_eq!(group.commands, original.commands);
+        assert!(!groups.iter().any(|held| held.id == group.id));
+        assert!(!bar(h.state(), "draw").visible);
+        assert_eq!(bar(h.state(), "draw").commands, original.commands);
+        assert_eq!(h.state().ws.status, SaveStatus::SavedLocally);
+        let restored = restarted(h.state());
+        assert_eq!(restored.ws.effective.layout.ribbon, h.state().ws.effective.layout.ribbon);
+        assert!(!bar(&restored, "draw").visible);
+    }
+}
+
+#[test]
+fn toolbar_to_ribbon_is_one_layout_undo_step() {
+    let mut app = attached(MemoryStore::default());
+    run(&mut app, "ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"}));
+    run(&mut app, "ui.toolbar.show", json!({"id": "draw"}));
+    run(&mut app, "line", json!({"points": [[0, 0], [10, 0]]}));
+    let drawing = app.session.doc().unwrap().clone();
+    let mut h = harness(app);
+    let layout = h.state().ws.user.layout.clone();
+    let steps = h.state().ws.history.undo_len();
+    let from = grip(&h, "Draw");
+    let to = h.get_by_role_and_label(egui::accesskit::Role::Tab, "Home").rect().center();
+    drag(&mut h, from, to, true);
+    assert_eq!(h.state().ws.history.undo_len(), steps + 1);
+    let converted = h.state().ws.user.layout.clone();
+    assert_ne!(converted, layout);
+    run(h.state_mut(), "ui.layout.undo", json!({}));
+    assert_eq!(h.state().ws.user.layout, layout);
+    assert!(bar(h.state(), "draw").visible);
+    assert_eq!(*h.state().session.doc().unwrap(), drawing);
+    run(h.state_mut(), "ui.layout.redo", json!({}));
+    assert_eq!(h.state().ws.user.layout, converted);
+    assert_eq!(*h.state().session.doc().unwrap(), drawing);
+}
+
+#[test]
+fn hidden_ribbon_is_not_a_drop_target() {
+    let mut app = attached(MemoryStore::default());
+    run(&mut app, "ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"}));
+    run(&mut app, "ui.toolbar.show", json!({"id": "draw"}));
+    let mut h = harness(app);
+    let former_ribbon = h.get_by_role_and_label(egui::accesskit::Role::Tab, "Home").rect().center();
+    run(h.state_mut(), "ui.ribbon.mode", json!({"mode": "hidden"}));
+    h.run_steps(4);
+    let ribbon = h.state().ws.effective.layout.ribbon.clone();
+    let before = h.state().ws.user.layout.clone();
+    let steps = h.state().ws.history.undo_len();
+    assert!(h.state_mut().run("ui.toolbar.to_ribbon", json!({"toolbar": "draw", "tab": "home"})).is_err());
+    assert_eq!(h.state().ws.user.layout, before);
+    assert_eq!(h.state().ws.history.undo_len(), steps);
+    let from = grip(&h, "Draw");
+    drag(&mut h, from, former_ribbon, false);
+    assert!(matches!(&h.state().ws.toolbar_drag, DragPhase::Dragging { target: Some(target), .. } if !matches!(target, DropTarget::Ribbon { .. })));
+    h.drop_at(former_ribbon);
+    h.run_steps(4);
+    assert_eq!(h.state().ws.effective.layout.ribbon, ribbon);
+    assert!(bar(h.state(), "draw").visible);
+}
+
+#[test]
+fn toolbar_to_ribbon_reports_unknown_commands_and_keeps_source_data() {
+    let mut app = attached(MemoryStore::default());
+    run(&mut app, "ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"}));
+    run(
+        &mut app,
+        "ui.workspace.set",
+        json!({"pointer": "/toolbars/legacy", "value": {
+            "label": "Legacy", "commands": ["sheetset", "line", "missing.command", "circle"]
+        }}),
+    );
+    let source = bar(&app, "legacy");
+    let mut layout = app.ws.user.layout.clone();
+    let group_id = cadcraft_ui_egui::ribbon::convert_toolbar_to_group(&mut layout, "legacy", "home").unwrap();
+    let result = run(&mut app, "ui.toolbar.to_ribbon", json!({"toolbar": "legacy", "tab": "home"}));
+    assert_eq!(result["id"], group_id);
+    assert_eq!(result["skipped"], json!(["sheetset", "missing.command"]));
+    assert_eq!(app.ws.user.layout, layout);
+    let group = app.ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.id == "home").unwrap().groups.last().unwrap();
+    assert_eq!(group.label, "Legacy");
+    assert_eq!(group.commands, ["line", "circle"]);
+    assert_eq!(bar(&app, "legacy").commands, source.commands);
+    let status = &app.status.as_ref().unwrap().0;
+    assert!(status.contains("sheetset") && status.contains("missing.command"), "{status}");
+    assert!(cadcraft_ui_egui::menus::is_ui_command("ui.toolbar.to_ribbon"));
+}
+
+#[test]
+fn toolbar_to_ribbon_rejects_invalid_targets_and_policy_locks_atomically() {
+    for lock in ["/toolbars/draw", "/ribbon"] {
+        let policy = json!({"layers": [{"level": "company", "patch": {
+            "toolbars": [{"id": "draw", "label": "Draw", "commands": ["line", "circle"]}],
+            "ribbon": {"visible": true, "tabs": [{"id": "home", "label": "Home"}]}
+        }, "locks": [lock]}]});
+        let mut app = attached(MemoryStore { policy: Some(policy.to_string()), ..MemoryStore::default() });
+        run(&mut app, "ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"}));
+        let layout = app.ws.user.layout.clone();
+        let steps = app.ws.history.undo_len();
+        let error = app.run("ui.toolbar.to_ribbon", json!({"toolbar": "draw", "tab": "home"})).unwrap_err();
+        assert!(error.contains("Locked by company policy"), "{lock}: {error}");
+        assert_eq!(app.ws.user.layout, layout);
+        assert_eq!(app.ws.history.undo_len(), steps);
+    }
+    let mut app = attached(MemoryStore::default());
+    run(&mut app, "ui.workspace.select", json!({"id": "AUTOCAD_FAMILIAR"}));
+    run(&mut app, "ui.toolbar.show", json!({"id": "draw"}));
+    for params in [json!({}), json!({"toolbar": "missing", "tab": "home"}), json!({"toolbar": "draw", "tab": "missing"})] {
+        let layout = app.ws.user.layout.clone();
+        let steps = app.ws.history.undo_len();
+        assert!(app.run("ui.toolbar.to_ribbon", params).is_err());
+        assert_eq!(app.ws.user.layout, layout);
+        assert_eq!(app.ws.history.undo_len(), steps);
+    }
+    run(&mut app, "ui.toolbar.lock", json!({"id": "draw"}));
+    let layout = app.ws.user.layout.clone();
+    assert!(app.run("ui.toolbar.to_ribbon", json!({"toolbar": "draw", "tab": "home"})).unwrap_err().contains("locked"));
+    assert_eq!(app.ws.user.layout, layout);
+}

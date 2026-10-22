@@ -807,7 +807,11 @@ fn ribbon_home_text_buttons_show_full_labels_at_1920() {
             .query_all_by_role(egui::accesskit::Role::Button)
             .filter(|node| node.accesskit_node().label().as_deref() == Some(label) && node.rect().top() >= 28.0)
             .collect();
-        assert!(!buttons.is_empty(), "{id} must be expanded with its full accessible label {label}");
+        assert!(
+            !buttons.is_empty(),
+            "{id} must be expanded with its full accessible label {label}; buttons: {:?}",
+            h.query_all_by_role(egui::accesskit::Role::Button).map(|node| (node.accesskit_node().label(), node.rect())).collect::<Vec<_>>()
+        );
         // Another command with an icon may share the label (Clipboard "Copy" next to Modify "Copy").
         let needed = text_width + 2.0 * style.spacing.button_padding.x;
         assert!(
