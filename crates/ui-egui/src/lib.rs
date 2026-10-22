@@ -624,6 +624,7 @@ impl CadApp {
             self.shown_theme = Some(shown);
             self.shown_follows_system = follows_system;
         }
+        theme::apply_density(ctx, self.ws.effective.layout.density);
         // Resolved every frame too, so a System choice follows the OS setting live.
         let animate = self.shows_animations();
         if self.shown_animations != Some(animate) {

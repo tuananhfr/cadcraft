@@ -5,7 +5,7 @@ use serde_json::json;
 
 use crate::CadApp;
 use crate::theme::Tokens;
-use crate::wsprofile::schema::{RibbonGroup, RibbonMode, RibbonTab};
+use crate::wsprofile::schema::{Density, RibbonGroup, RibbonMode, RibbonTab};
 
 fn preset_tabs() -> &'static [RibbonTab] {
     static TABS: std::sync::OnceLock<Vec<RibbonTab>> = std::sync::OnceLock::new();
@@ -32,6 +32,7 @@ pub(crate) fn group_label<'a>(tab: &RibbonTab, group: &'a RibbonGroup) -> &'a st
 }
 
 pub fn rendered_mode(app: &CadApp, available_height: f32) -> RibbonMode {
+    let metrics = metrics(app.ws.effective.layout.density);
     let preferred = app.ws.effective.layout.ribbon.effective_mode();
     if matches!(preferred, RibbonMode::Hidden | RibbonMode::TabsOnly) {
         return preferred;
@@ -46,14 +47,14 @@ pub fn rendered_mode(app: &CadApp, available_height: f32) -> RibbonMode {
         reserved += crate::chrome::STATUS_BAR_HEIGHT;
     }
     if app.ui.show_file_tabs {
-        reserved += crate::chrome::FILE_TABS_HEIGHT;
+        reserved += crate::chrome::file_tabs_height(app.ws.effective.layout.density);
     }
     if app.ui.show_command_line && app.ws.effective.layout.command_line.dock != crate::wsprofile::schema::Dock::Floating {
         reserved += crate::cmdline::docked_height(app, available_height);
     }
-    if preferred == RibbonMode::Expanded && available_height >= EXPANDED_HEIGHT + reserved {
+    if preferred == RibbonMode::Expanded && available_height >= metrics.expanded_height + reserved {
         RibbonMode::Expanded
-    } else if available_height >= COMPACT_HEIGHT + reserved {
+    } else if available_height >= metrics.compact_height + reserved {
         RibbonMode::Compact
     } else {
         RibbonMode::TabsOnly
@@ -61,6 +62,7 @@ pub fn rendered_mode(app: &CadApp, available_height: f32) -> RibbonMode {
 }
 
 pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
+    let metrics = metrics(app.ws.effective.layout.density);
     let mode = rendered_mode(app, ui.available_height());
     let popup_id = Id::new("cc_ribbon_flyout");
     if mode != RibbonMode::TabsOnly {
@@ -74,9 +76,9 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         active = tabs.first().map(|tab| tab.id.clone()).unwrap_or_default();
     }
     let height = match mode {
-        RibbonMode::Expanded => EXPANDED_HEIGHT,
-        RibbonMode::Compact => COMPACT_HEIGHT,
-        RibbonMode::TabsOnly => TAB_HEIGHT,
+        RibbonMode::Expanded => metrics.expanded_height,
+        RibbonMode::Compact => metrics.compact_height,
+        RibbonMode::TabsOnly => metrics.tab_height,
         RibbonMode::Hidden => 6.0,
     };
     egui::Panel::top("cc_ribbon").exact_size(height).frame(egui::Frame::NONE.fill(Tokens::get().chrome)).show(ui, |ui| {
@@ -88,7 +90,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         let background = ui.interact(ui.max_rect(), ui.id().with("ribbon_context"), egui::Sense::click());
         ui.ctx().data_mut(|data| data.insert_temp(state_id, active.clone()));
         let mut open = None;
-        ui.allocate_ui_with_layout(vec2(ui.available_width(), TAB_HEIGHT), Layout::left_to_right(Align::Center), |ui| {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), metrics.tab_height), Layout::left_to_right(Align::Center), |ui| {
             if let Some(index) = tab_strip(ui, app, &(0..tabs.len()).collect::<Vec<_>>())
                 && let Some(tab) = tabs.get(index)
             {
@@ -214,16 +216,20 @@ pub(crate) fn claim_menu_key(app: &CadApp, ctx: &egui::Context) {
 }
 
 fn tab_strip(ui: &mut egui::Ui, app: &mut CadApp, tabs: &[usize]) -> Option<usize> {
+    let metrics = metrics(app.ws.effective.layout.density);
     let visible = super::visible_tabs(app);
     let active: String = ui.ctx().data(|data| data.get_temp(Id::new("cc_ribbon_active"))).unwrap_or_default();
     let font = egui::TextStyle::Button.resolve(ui.style());
     let gap = ui.spacing().item_spacing.x;
     let padding = ui.spacing().button_padding.x * 2.0;
-    let width = |label: &str| ui.painter().layout_no_wrap(label.to_string(), font.clone(), Tokens::get().text).size().x + padding;
+    let width = |label: &str| {
+        let width = ui.painter().layout_no_wrap(label.to_string(), font.clone(), Tokens::get().text).size().x + padding;
+        if app.ws.effective.layout.density == Density::Comfortable { width.max(32.0) } else { width }
+    };
     let widths: Vec<_> = tabs.iter().filter_map(|index| visible.get(*index).map(|tab| (*index, width(tab_label(tab))))).collect();
     let available = ui.available_width().max(0.0);
     let overflow = widths.iter().map(|(_, width)| width + gap).sum::<f32>() - gap > available;
-    let budget = (available - if overflow { width(crate::tl!("»")).max(TAB_HEIGHT) + gap } else { 0.0 }).max(0.0);
+    let budget = (available - if overflow { width(crate::tl!("»")).max(metrics.tab_height) + gap } else { 0.0 }).max(0.0);
     let selected = visible.iter().position(|tab| tab.id == active);
     let mut shown = Vec::new();
     let mut remaining = budget;
@@ -245,7 +251,7 @@ fn tab_strip(ui: &mut egui::Ui, app: &mut CadApp, tabs: &[usize]) -> Option<usiz
         let Some(tab) = visible.get(*index).filter(|_| shown.contains(index)) else { continue };
         let response = ui
             .push_id(&tab.id, |ui| {
-                ui.add_sized(vec2(width.min(budget), TAB_HEIGHT), egui::Button::selectable(active == tab.id, tab_label(tab)).truncate())
+                ui.add_sized(vec2(width.min(budget), metrics.tab_height), egui::Button::selectable(active == tab.id, tab_label(tab)).truncate())
             })
             .inner;
         crate::icons::describe_control(ui, &response, tab_label(tab), Some(active == tab.id), true);
@@ -260,7 +266,14 @@ fn tab_strip(ui: &mut egui::Ui, app: &mut CadApp, tabs: &[usize]) -> Option<usiz
         ribbon_context_menu(ui, app, &response, Some(&tab.id));
     }
     if overflow {
-        ui.menu_button(crate::tl!("»"), |ui| {
+        egui::containers::menu::MenuButton::from_button(
+            egui::Button::new(crate::tl!("»")).min_size(if app.ws.effective.layout.density == Density::Comfortable {
+                vec2(32.0, metrics.tab_height)
+            } else {
+                egui::Vec2::ZERO
+            }),
+        )
+        .ui(ui, |ui| {
             egui::ScrollArea::vertical().max_height(ui.ctx().content_rect().height() * 0.75).show(ui, |ui| {
                 for index in tabs.iter().filter(|index| !shown.contains(index)) {
                     let Some(tab) = visible.get(*index) else { continue };
@@ -362,8 +375,9 @@ pub(crate) fn flyout(ui: &mut egui::Ui, app: &mut CadApp, tab: usize) {
 }
 
 fn compact_groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
+    let metrics = metrics(app.ws.effective.layout.density);
     ui.add_space(GROUP_PADDING);
-    egui::ScrollArea::horizontal().id_salt((&tab.id, "compact")).max_height(BUTTON_HEIGHT).show(ui, |ui| {
+    egui::ScrollArea::horizontal().id_salt((&tab.id, "compact")).max_height(metrics.button_height).show(ui, |ui| {
         ui.horizontal(|ui| {
             for (index, group) in tab.groups.iter().enumerate() {
                 if index > 0 {
@@ -388,28 +402,51 @@ fn run(app: &mut CadApp, command: &str, params: serde_json::Value) {
 }
 
 fn scroll_button(ui: &mut egui::Ui, glyph: &str, label: &str, enabled: bool) -> egui::Response {
-    let response = ui.add_enabled_ui(enabled, |ui| ui.add_sized(vec2(SCROLL_WIDTH, BUTTON_HEIGHT), egui::Button::new(glyph))).inner;
+    let metrics = metrics(crate::theme::density(ui.ctx()));
+    let response = ui.add_enabled_ui(enabled, |ui| ui.add_sized(vec2(metrics.scroll_width, metrics.button_height), egui::Button::new(glyph))).inner;
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
     response.on_hover_text(label)
 }
 
-const TAB_HEIGHT: f32 = 28.0;
-const BUTTON_HEIGHT: f32 = 24.0;
-const COLUMN_WIDTH: f32 = 28.0;
 const MAX_TEXT_WIDTH: f32 = 160.0;
 const COLUMN_GAP: f32 = 6.0;
 const ROW_GAP: f32 = 4.0;
 const ROWS: usize = 3;
-const COLUMNS_HEIGHT: f32 = ROWS as f32 * BUTTON_HEIGHT + (ROWS - 1) as f32 * ROW_GAP;
 const LABEL_HEIGHT: f32 = 18.0;
-const GROUP_HEIGHT: f32 = COLUMNS_HEIGHT + ROW_GAP + LABEL_HEIGHT;
 const GROUP_PADDING: f32 = 6.0;
-pub const COMPACT_HEIGHT: f32 = TAB_HEIGHT + BUTTON_HEIGHT + 2.0 * GROUP_PADDING;
-const EXPANDED_HEIGHT: f32 = TAB_HEIGHT + GROUP_HEIGHT + 2.0 * GROUP_PADDING;
+/// Normal density's height remains available to existing geometry clients.
+pub const COMPACT_HEIGHT: f32 = 64.0;
+
+struct RibbonMetrics {
+    tab_height: f32,
+    button_height: f32,
+    column_width: f32,
+    columns_height: f32,
+    group_height: f32,
+    compact_height: f32,
+    expanded_height: f32,
+    scroll_width: f32,
+}
+
+fn metrics(density: Density) -> RibbonMetrics {
+    let metrics = density.metrics();
+    let columns_height = ROWS as f32 * metrics.ribbon_button + (ROWS - 1) as f32 * ROW_GAP;
+    let group_height = columns_height + ROW_GAP + LABEL_HEIGHT;
+    RibbonMetrics {
+        tab_height: metrics.tab_height,
+        button_height: metrics.ribbon_button,
+        column_width: (metrics.ribbon_button + 4.0).max(28.0),
+        columns_height,
+        group_height,
+        compact_height: metrics.tab_height + metrics.ribbon_button + 2.0 * GROUP_PADDING,
+        expanded_height: metrics.tab_height + group_height + 2.0 * GROUP_PADDING,
+        scroll_width: metrics.ribbon_button.max(24.0),
+    }
+}
+
 const GROUP_GAP: f32 = 8.0;
 const MIN_GROUP_WIDTH: f32 = 90.0;
 const COMPACT_WIDTH: f32 = 76.0;
-const SCROLL_WIDTH: f32 = 24.0;
 
 fn resolve(id: &str) -> crate::toolbars::Command {
     let mut command = crate::toolbars::resolve(id);
@@ -424,12 +461,13 @@ fn label(command: &crate::toolbars::Command) -> String {
 }
 
 fn column_widths(ui: &egui::Ui, group: &RibbonGroup) -> Vec<f32> {
+    let metrics = metrics(crate::theme::density(ui.ctx()));
     let font = egui::TextStyle::Button.resolve(ui.style());
     group
         .commands
         .chunks(ROWS)
         .map(|commands| {
-            commands.iter().fold(COLUMN_WIDTH, |width, id| {
+            commands.iter().fold(metrics.column_width, |width, id| {
                 let command = resolve(id);
                 if command.icon.is_some() {
                     return width;
@@ -447,6 +485,7 @@ fn group_width(columns: &[f32]) -> f32 {
 }
 
 fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
+    let metrics = metrics(app.ws.effective.layout.density);
     let available = ui.available_width().max(0.0);
     let columns: Vec<_> = tab.groups.iter().map(|group| column_widths(ui, group)).collect();
     let widths: Vec<_> = columns.iter().map(|columns| group_width(columns)).collect();
@@ -473,7 +512,7 @@ fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
         if scroll && scroll_button(ui, "‹", crate::tl!("Previous ribbon groups"), start > 0).clicked() {
             start = start.saturating_sub(1);
         }
-        let mut remaining = (available - if scroll { 2.0 * (SCROLL_WIDTH + GROUP_GAP) } else { 0.0 }).max(0.0);
+        let mut remaining = (available - if scroll { 2.0 * (metrics.scroll_width + GROUP_GAP) } else { 0.0 }).max(0.0);
         let mut end = start;
         for (index, group) in tab.groups.iter().enumerate().skip(start) {
             let compact = collapsed.get(index).copied().unwrap_or(true);
@@ -482,13 +521,13 @@ fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
                 break;
             }
             ui.push_id((&tab.id, &group.id), |ui| {
-                let (rect, _) = ui.allocate_exact_size(vec2(width, GROUP_HEIGHT), egui::Sense::hover());
+                let (rect, _) = ui.allocate_exact_size(vec2(width, metrics.group_height), egui::Sense::hover());
                 ui.scope_builder(egui::UiBuilder::new().max_rect(rect).layout(Layout::top_down(Align::Min)), |ui| {
-                    ui.set_min_size(vec2(width, GROUP_HEIGHT));
+                    ui.set_min_size(vec2(width, metrics.group_height));
                     ui.spacing_mut().item_spacing.y = ROW_GAP;
                     if compact {
                         egui::containers::menu::MenuButton::from_button(
-                            egui::Button::new(group_label(tab, group)).truncate().min_size(vec2(COMPACT_WIDTH, BUTTON_HEIGHT)),
+                            egui::Button::new(group_label(tab, group)).truncate().min_size(vec2(COMPACT_WIDTH, metrics.button_height)),
                         )
                         .ui(ui, |ui| {
                             for id in &group.commands {
@@ -511,17 +550,18 @@ fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
 }
 
 fn expanded_group(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGroup, columns: &[f32], width: f32) {
+    let metrics = metrics(app.ws.effective.layout.density);
     ui.push_id((&tab.id, &group.id), |ui| {
-        ui.allocate_ui_with_layout(vec2(width, GROUP_HEIGHT), Layout::top_down(Align::Min), |ui| {
+        ui.allocate_ui_with_layout(vec2(width, metrics.group_height), Layout::top_down(Align::Min), |ui| {
             ui.spacing_mut().item_spacing.y = ROW_GAP;
-            let (rect, _) = ui.allocate_exact_size(vec2(width, COLUMNS_HEIGHT), egui::Sense::hover());
+            let (rect, _) = ui.allocate_exact_size(vec2(width, metrics.columns_height), egui::Sense::hover());
             let mut left = rect.left() + GROUP_PADDING;
             for (column, commands) in group.commands.chunks(ROWS).enumerate() {
-                let column_width = columns.get(column).copied().unwrap_or(COLUMN_WIDTH);
-                let rect = egui::Rect::from_min_size(egui::pos2(left, rect.top()), vec2(column_width, COLUMNS_HEIGHT));
+                let column_width = columns.get(column).copied().unwrap_or(metrics.column_width);
+                let rect = egui::Rect::from_min_size(egui::pos2(left, rect.top()), vec2(column_width, metrics.columns_height));
                 left += column_width + COLUMN_GAP;
                 ui.scope_builder(egui::UiBuilder::new().max_rect(rect).layout(Layout::top_down(Align::Min)), |ui| {
-                    ui.set_min_size(vec2(column_width, COLUMNS_HEIGHT));
+                    ui.set_min_size(vec2(column_width, metrics.columns_height));
                     for id in commands {
                         button(app, ui, tab, group, id, ButtonStyle::Expanded);
                     }
@@ -540,6 +580,7 @@ enum ButtonStyle {
 }
 
 fn button(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGroup, id: &str, style: ButtonStyle) {
+    let metrics = metrics(app.ws.effective.layout.density);
     ui.push_id(id, |ui| {
         let command = resolve(id);
         let label = label(&command);
@@ -547,17 +588,17 @@ fn button(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGr
         let response = ui
             .add_enabled_ui(enabled, |ui| {
                 if matches!(style, ButtonStyle::Compact) {
-                    crate::icons::button(ui, command.icon.unwrap_or(crate::icons::Icon::Help), BUTTON_HEIGHT, &label, false)
+                    crate::icons::button(ui, command.icon.unwrap_or(crate::icons::Icon::Help), metrics.button_height, &label, false)
                 } else if matches!(style, ButtonStyle::Expanded)
                     && let Some(icon) = command.icon
                 {
-                    crate::icons::button(ui, icon, BUTTON_HEIGHT, &label, false)
+                    crate::icons::button(ui, icon, metrics.button_height, &label, false)
                 } else {
                     ui.add_sized(
                         if matches!(style, ButtonStyle::Expanded) {
-                            vec2(ui.available_width().min(MAX_TEXT_WIDTH), BUTTON_HEIGHT)
+                            vec2(ui.available_width().min(MAX_TEXT_WIDTH), metrics.button_height)
                         } else {
-                            vec2(140.0, BUTTON_HEIGHT)
+                            vec2(140.0, metrics.button_height)
                         },
                         egui::Button::new(label.as_str()).truncate(),
                     )

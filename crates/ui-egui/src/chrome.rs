@@ -7,19 +7,27 @@ use crate::CadApp;
 use crate::icons::{self, Icon};
 use crate::quick_access::{QuickAccessRow, quick_access_row};
 use crate::theme::Tokens;
-use crate::wsprofile::schema::Dock;
+use crate::wsprofile::schema::{Density, Dock};
 
 pub mod annoscale;
 
 pub(crate) const FILE_TABS_HEIGHT: f32 = 26.0;
 pub(crate) const STATUS_BAR_HEIGHT: f32 = 26.0;
 
+pub(crate) fn file_tabs_height(density: Density) -> f32 {
+    match density {
+        Density::Compact => 24.0,
+        Density::Normal => FILE_TABS_HEIGHT,
+        Density::Comfortable => 40.0,
+    }
+}
+
 pub(crate) fn quick_access(app: &mut CadApp, ui: &mut egui::Ui, row: QuickAccessRow) {
     if quick_access_row(app) != row || app.ws.effective.layout.quick_access.is_empty() {
         return;
     }
     egui::Panel::top("cc_quick_access_row")
-        .exact_size(28.0)
+        .exact_size(if app.ws.effective.layout.density == Density::Comfortable { 40.0 } else { 28.0 })
         .frame(egui::Frame::NONE.fill(Tokens::get().chrome).inner_margin(egui::Margin::symmetric(6, 4)))
         .show(ui, |ui| {
             egui::ScrollArea::horizontal().id_salt("cc_quick_access_scroll").show(ui, |ui| {
@@ -53,9 +61,10 @@ fn title_left(left: f32, width: f32, text_w: f32) -> f32 {
 pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
     let ribbon_hidden = app.ws.effective.layout.ribbon.effective_mode() == crate::wsprofile::schema::RibbonMode::Hidden;
+    let title_height = if app.ws.effective.layout.density == Density::Comfortable { 40.0 } else { MAC_TITLE_BAR };
     let qat_in_title = quick_access_row(app) == QuickAccessRow::TitleBar && !app.ws.effective.layout.quick_access.is_empty();
     if app.integrated_titlebar || ribbon_hidden || qat_in_title {
-        egui::Panel::top("cc_title_toolbar").exact_size(MAC_TITLE_BAR).show_separator_line(false).frame(egui::Frame::NONE.fill(t.chrome)).show(
+        egui::Panel::top("cc_title_toolbar").exact_size(title_height).show_separator_line(false).frame(egui::Frame::NONE.fill(t.chrome)).show(
             ui,
             |ui| {
                 let r = ui.max_rect();
@@ -79,7 +88,7 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
                 let galley = ui.painter().layout_no_wrap(title, egui::FontId::proportional(13.0), t.text_dim);
                 let title_width = galley.size().x;
                 // Allow dragging the window by the title row.
-                let tr = Rect::from_min_size(r.min, vec2((title_right - r.left()).max(0.0), MAC_TITLE_BAR));
+                let tr = Rect::from_min_size(r.min, vec2((title_right - r.left()).max(0.0), title_height));
                 let resp = ui.interact(tr, ui.id().with("titledrag"), Sense::CLICK | Sense::DRAG);
                 if resp.drag_started() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
@@ -101,7 +110,7 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
                 }
                 let x = title_left(r.left(), r.width(), title_width).max(content_left);
                 if x + title_width <= title_right {
-                    ui.painter().galley(pos2(x, r.top() + (MAC_TITLE_BAR - galley.size().y) / 2.0), galley, t.text_dim);
+                    ui.painter().galley(pos2(x, r.top() + (title_height - galley.size().y) / 2.0), galley, t.text_dim);
                 }
             },
         );
@@ -112,13 +121,17 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
 /// File tabs: switcher, "+", Start, open drawings.
 pub fn file_tabs(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
-    egui::Panel::top("cc_file_tabs").exact_size(FILE_TABS_HEIGHT).frame(egui::Frame::NONE.fill(t.chrome_dark)).show(ui, |ui| {
+    let density = app.ws.effective.layout.density;
+    let comfortable = density == Density::Comfortable;
+    let target = if comfortable { 32.0 } else { 18.0 };
+    let height = file_tabs_height(density);
+    egui::Panel::top("cc_file_tabs").exact_size(height).frame(egui::Frame::NONE.fill(t.chrome_dark)).show(ui, |ui| {
         let r = ui.max_rect();
         let mut x = r.left() + 4.0;
-        let ib = Rect::from_min_size(pos2(x, r.top() + 4.0), vec2(18.0, 18.0));
+        let ib = Rect::from_min_size(pos2(x, r.top() + 4.0), vec2(target, target));
         icons::paint(ui.painter(), ib.shrink(1.0), Icon::Switcher, false);
-        x += 24.0;
-        let plus = Rect::from_min_size(pos2(x, r.top() + 4.0), vec2(18.0, 18.0));
+        x += target + 6.0;
+        let plus = Rect::from_min_size(pos2(x, r.top() + 4.0), vec2(target, target));
         let presp = ui.interact(plus, ui.id().with("tab+"), Sense::click());
         icons::paint(ui.painter(), plus.shrink(2.0), Icon::Plus, false);
         icons::describe_control(ui, &presp, "New Drawing", None, false);
@@ -126,7 +139,7 @@ pub fn file_tabs(app: &mut CadApp, ui: &mut egui::Ui) {
             app.start("new");
             app.ui.start_tab = false;
         }
-        x += 24.0;
+        x += target + 6.0;
         // `label` is the drawing's name; `dirty` adds the unsaved-changes mark, kept visible when a
         // long name is cut short.
         let mut tab =
@@ -147,7 +160,7 @@ pub fn file_tabs(app: &mut CadApp, ui: &mut egui::Ui) {
                 // The name ends in "…" when it doesn't fit before the close button (#513).
                 let color = if active { t.text } else { t.text_dim };
                 let mark = if dirty { "*" } else { "" };
-                let text_w = (w - 8.0 - if closable { 24.0 } else { 8.0 }).max(0.0);
+                let text_w = (w - 8.0 - if closable { if comfortable { 44.0 } else { 24.0 } } else { 8.0 }).max(0.0);
                 let mark_w = ui.painter().layout_no_wrap(mark.to_string(), crate::theme::body(), color).size().x;
                 let (galley, cut) = elided(ui.painter(), label, crate::theme::body(), color, text_w - mark_w);
                 let pos = pos2(tr.left() + 8.0, tr.center().y - galley.size().y / 2.0);
@@ -159,9 +172,14 @@ pub fn file_tabs(app: &mut CadApp, ui: &mut egui::Ui) {
                 let resp = if cut { resp.on_hover_text(format!("{label}{mark}")) } else { resp };
                 let mut close = false;
                 if closable && (active || resp.hovered()) {
-                    let cr = Rect::from_center_size(pos2(tr.right() - 11.0, tr.center().y), vec2(12.0, 12.0));
+                    let size = match density {
+                        Density::Compact => 18.0,
+                        Density::Normal => 12.0,
+                        Density::Comfortable => 32.0,
+                    };
+                    let cr = Rect::from_center_size(pos2(tr.right() - size / 2.0 - 5.0, tr.center().y), vec2(size, size));
                     let cresp = ui.interact(cr, id.with("x"), Sense::click());
-                    icons::paint(ui.painter(), cr, Icon::Close, false);
+                    icons::paint(ui.painter(), cr.shrink(if comfortable { 8.0 } else { 0.0 }), Icon::Close, false);
                     icons::describe_control(ui, &cresp, &format!("Close {label}"), None, false);
                     close = cresp.clicked();
                 }

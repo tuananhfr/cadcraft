@@ -4,7 +4,7 @@
 use serde_json::{Value, json};
 
 use crate::CadApp;
-use crate::wsprofile::schema::RibbonMode;
+use crate::wsprofile::schema::{Density, RibbonMode};
 
 /// The top-level menus, in order.
 pub const MENUS: &[&str] = &["File", "Edit", "View", "Insert", "Format", "Tools", "Draw", "Dimension", "Modify", "Window", "Help"];
@@ -19,6 +19,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.spacemouse", "3D Mouse...", &["Tools", "3D Mouse..."], None),
     ("ui.spacemouse.calibrate", "Calibrate 3D Mouse", &[], None),
     ("ui.spacemouse.navigate", "3D Mouse Navigation", &[], None),
+    ("ui.density", "Interface density", &[], None),
     ("ui.dock", "Arrange Panel", &[], None),
     ("ui.panel.autohide", "Auto-hide", &[], None),
     ("ui.panel.pin", "Pin panel", &[], None),
@@ -147,6 +148,21 @@ pub fn run_ui_command(app: &mut CadApp, id: &str, params: &Value) -> Option<Resu
 }
 
 fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
+    if id == "ui.density" {
+        return Some((|| {
+            let density = match params.get("density").and_then(Value::as_str) {
+                Some("compact") => Density::Compact,
+                Some("normal") => Density::Normal,
+                Some("comfortable") => Density::Comfortable,
+                _ => return Err(crate::tl!("density must be compact, normal or comfortable").to_string()),
+            };
+            let changed = crate::wsprofile::edit_layout(app, |layout| {
+                layout.density = density;
+                Ok(())
+            })?;
+            Ok(json!({"density": density, "changed": changed}))
+        })());
+    }
     if let Some(result) = crate::autohide::route(app, id, params) {
         return Some(result);
     }

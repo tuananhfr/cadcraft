@@ -1882,3 +1882,6 @@
 	position must be title_bar, above_ribbon or below_ribbon	Розташування має бути title_bar, above_ribbon або below_ribbon
 	Show Below the Ribbon	Показати під стрічкою
 	Show Above the Ribbon	Показати над стрічкою
+	Interface density	Щільність інтерфейсу
+	Comfortable	Зручна
+	density must be compact, normal or comfortable	density має бути compact, normal або comfortable

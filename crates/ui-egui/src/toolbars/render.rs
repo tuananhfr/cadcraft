@@ -9,17 +9,25 @@ use super::{Command, docked, drag, placeholder_label, resolve};
 use crate::CadApp;
 use crate::icons;
 use crate::theme::Tokens;
-use crate::wsprofile::schema::{Dock, ToolbarState};
+use crate::wsprofile::schema::{Density, Dock, ToolbarState};
 use crate::wsprofile::screen::from_ratio;
 
-/// Thickness of one tool bar row.
-pub(super) const BAR: f32 = 34.0;
+pub(super) fn bar_height(density: Density) -> f32 {
+    button_size(density) + 8.0
+}
+
+fn button_size(density: Density) -> f32 {
+    // Normal preserves the custom toolbar's original 26-point buttons.
+    density.metrics().toolbar_button + if density == Density::Normal { 2.0 } else { 0.0 }
+}
+
+fn overflow_size(density: Density) -> f32 {
+    (button_size(density) + 4.0).max(density.metrics().interact_height)
+}
+
 /// Points of a floating bar that stay inside the window.
 pub(super) const MIN_VISIBLE: f32 = 24.0;
-const BUTTON: f32 = 26.0;
-const STEP: f32 = BUTTON + 6.0;
 const GROUP_GAP: f32 = 24.0;
-const OVERFLOW: f32 = 30.0;
 const GRIP: f32 = 10.0;
 const BAR_GAP: f32 = 8.0;
 const BUILDING: &str = "cc_toolbar_geometry_building";
@@ -118,34 +126,42 @@ fn groups_of(bar: &ToolbarState) -> Vec<Group> {
     vec![bar.commands.iter().map(|id| (id.clone(), resolve(id))).collect()]
 }
 
-fn group_width(buttons: usize) -> f32 {
-    buttons as f32 * STEP - (STEP - BUTTON)
+fn group_width(buttons: usize, density: Density) -> f32 {
+    buttons as f32 * (button_size(density) + 6.0) - 6.0
 }
 
-fn grip_width(bar: &ToolbarState) -> f32 {
-    if bar.locked { 0.0 } else { GRIP }
+fn grip_width(bar: &ToolbarState, density: Density) -> f32 {
+    if bar.locked {
+        0.0
+    } else {
+        match density {
+            Density::Compact => 18.0,
+            Density::Normal => GRIP,
+            Density::Comfortable => 32.0,
+        }
+    }
 }
 
 /// How much of a bar's main axis `fit` uses, grip included.
-fn extent(bar: &ToolbarState, fit: &ToolbarFit) -> f32 {
+fn extent(bar: &ToolbarState, fit: &ToolbarFit, density: Density) -> f32 {
     let shown: Vec<f32> = fit.shown.iter().map(|(_, width)| *width).collect();
     let shown_total = shown.iter().sum::<f32>() + GROUP_GAP * shown.len().saturating_sub(1) as f32;
     let tail = match (fit.overflow.is_empty(), shown.is_empty()) {
         (true, _) => 0.0,
-        (false, true) => OVERFLOW,
-        (false, false) => GROUP_GAP + OVERFLOW,
+        (false, true) => overflow_size(density),
+        (false, false) => GROUP_GAP + overflow_size(density),
     };
-    grip_width(bar) + shown_total + tail
+    grip_width(bar, density) + shown_total + tail
 }
 
-fn fitted(bar: &ToolbarState, groups: &[Group], available: f32) -> ToolbarFit {
-    let widths: Vec<f32> = groups.iter().map(|group| group_width(group.len())).collect();
-    let room = (available - grip_width(bar)).max(0.0);
+fn fitted(bar: &ToolbarState, groups: &[Group], available: f32, density: Density) -> ToolbarFit {
+    let widths: Vec<f32> = groups.iter().map(|group| group_width(group.len(), density)).collect();
+    let room = (available - grip_width(bar, density)).max(0.0);
     // Too narrow even for the overflow button: it alone stands for every group.
-    fit_toolbar(&widths, room, GROUP_GAP, OVERFLOW).unwrap_or_else(|| ToolbarFit {
+    fit_toolbar(&widths, room, GROUP_GAP, overflow_size(density)).unwrap_or_else(|| ToolbarFit {
         shown: Vec::new(),
         overflow: (0..groups.len()).collect(),
-        overflow_width: OVERFLOW,
+        overflow_width: overflow_size(density),
     })
 }
 
@@ -204,11 +220,14 @@ fn placeholder_button(ui: &mut egui::Ui, rect: Rect, id: Id, command: &Command) 
 
 /// Draws `bar` in `band` from `start` (along the bar's axis) up to `end`; returns the extent it used.
 fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect, axis: Axis, start: f32, end: f32) -> f32 {
+    let density = app.ws.effective.layout.density;
+    let button = button_size(density);
+    let height = bar_height(density);
     let t = Tokens::get();
     let groups = groups_of(bar);
-    let fit = fitted(bar, &groups, (end - start).max(0.0));
-    let used = extent(bar, &fit);
-    let bar_rect = along(axis, band, start, 0.0, used, BAR);
+    let fit = fitted(bar, &groups, (end - start).max(0.0), density);
+    let used = extent(bar, &fit, density);
+    let bar_rect = along(axis, band, start, 0.0, used, height);
     let owner = ui.id().with(("toolbar", &bar.id));
     let mac = ui.ctx().os().is_mac();
     let being_dragged = matches!(&app.ws.toolbar_drag, drag::DragPhase::Dragging { id, .. } if *id == bar.id);
@@ -225,7 +244,8 @@ fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect,
     }
 
     if !bar.locked {
-        let grip_rect = along(axis, band, start, 5.0, GRIP, BAR - 10.0);
+        let grip_height = if density == Density::Normal { 24.0 } else { button };
+        let grip_rect = along(axis, band, start, (height - grip_height) / 2.0, grip_width(bar, density), grip_height);
         let grip_id = owner.with("grip");
         let grip = ui.interact(grip_rect, grip_id, Sense::click_and_drag());
         let color = if grip.hovered() || grip.has_focus() { t.text } else { t.text_dim };
@@ -249,11 +269,11 @@ fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect,
 
     let mut clicked: Option<String> = None;
     let mut secondary_command = None;
-    let mut cursor = grip_width(bar);
+    let mut cursor = grip_width(bar, density);
     for (shown, (index, width)) in fit.shown.iter().enumerate() {
         let Some(group) = groups.get(*index) else { continue };
         for (position, (command_id, command)) in group.iter().enumerate() {
-            let rect = along(axis, band, start + cursor + position as f32 * STEP, (BAR - BUTTON) / 2.0, BUTTON, BUTTON);
+            let rect = along(axis, band, start + cursor + position as f32 * (button + 6.0), (height - button) / 2.0, button, button);
             let id = owner.with(("button", *index, position));
             if command.known {
                 building(ui.ctx(), |geometry| geometry.stops.push((id, owner)));
@@ -271,7 +291,7 @@ fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect,
         cursor += width + if shown + 1 < fit.shown.len() || !fit.overflow.is_empty() { GROUP_GAP } else { 0.0 };
     }
     if !fit.overflow.is_empty() {
-        let rect = along(axis, band, start + cursor, (BAR - BUTTON) / 2.0, fit.overflow_width, BUTTON);
+        let rect = along(axis, band, start + cursor, (height - button) / 2.0, fit.overflow_width, button);
         building(ui.ctx(), |geometry| geometry.stops.push((owner.with("more"), owner)));
         let response = ui.interact(rect, owner.with("more"), Sense::click());
         if response.hovered() {
@@ -350,13 +370,14 @@ fn distinct_rows(bars: &[ToolbarState]) -> Vec<u32> {
 }
 
 /// Row `position` counted from the outer edge: rows fill toward the drawing.
-fn row_band(dock: Dock, panel: Rect, position: usize) -> Rect {
-    let offset = position as f32 * BAR;
+fn row_band(dock: Dock, panel: Rect, position: usize, density: Density) -> Rect {
+    let height = bar_height(density);
+    let offset = position as f32 * height;
     match dock {
-        Dock::Top => Rect::from_min_size(pos2(panel.left(), panel.top() + offset), vec2(panel.width(), BAR)),
-        Dock::Bottom => Rect::from_min_size(pos2(panel.left(), panel.bottom() - offset - BAR), vec2(panel.width(), BAR)),
-        Dock::Left => Rect::from_min_size(pos2(panel.left() + offset, panel.top()), vec2(BAR, panel.height())),
-        Dock::Right | Dock::Floating => Rect::from_min_size(pos2(panel.right() - offset - BAR, panel.top()), vec2(BAR, panel.height())),
+        Dock::Top => Rect::from_min_size(pos2(panel.left(), panel.top() + offset), vec2(panel.width(), height)),
+        Dock::Bottom => Rect::from_min_size(pos2(panel.left(), panel.bottom() - offset - height), vec2(panel.width(), height)),
+        Dock::Left => Rect::from_min_size(pos2(panel.left() + offset, panel.top()), vec2(height, panel.height())),
+        Dock::Right | Dock::Floating => Rect::from_min_size(pos2(panel.right() - offset - height, panel.top()), vec2(height, panel.height())),
     }
 }
 
@@ -370,7 +391,7 @@ fn flat_edge(dock: Dock, free: Rect) -> Rect {
 }
 
 pub(crate) fn docked_height(app: &CadApp, dock: Dock) -> f32 {
-    distinct_rows(&visible_docked(app, dock)).len() as f32 * BAR
+    distinct_rows(&visible_docked(app, dock)).len() as f32 * bar_height(app.ws.effective.layout.density)
 }
 
 /// The tool bars docked to `dock`, in a panel as thick as its rows.
@@ -395,10 +416,11 @@ pub fn show_docked(ui: &mut egui::Ui, app: &mut CadApp, dock: Dock) {
         Dock::Right | Dock::Floating => egui::Panel::right("cc_toolbars_right"),
     };
     let axis = if matches!(dock, Dock::Top | Dock::Bottom) { Axis::Horizontal } else { Axis::Vertical };
-    let area = panel.exact_size(rows.len() as f32 * BAR).frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |ui| {
+    let height = rows.len() as f32 * bar_height(app.ws.effective.layout.density);
+    let area = panel.exact_size(height).frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |ui| {
         let panel_rect = ui.max_rect();
         for (position, row) in rows.iter().enumerate() {
-            let band = row_band(dock, panel_rect, position);
+            let band = row_band(dock, panel_rect, position, app.ws.effective.layout.density);
             building(ui.ctx(), |geometry| geometry.rows.push(RowRect { dock, row: *row, rect: band }));
             let end = match axis {
                 Axis::Horizontal => band.width() - 12.0,
@@ -426,8 +448,12 @@ pub fn show_docked(ui: &mut egui::Ui, app: &mut CadApp, dock: Dock) {
 
 /// Places the floating bar at its stored ratios, clamped entirely inside the content area.
 pub fn floating_rect(bar: &ToolbarState, content: Rect) -> Rect {
-    let fit = fitted(bar, &groups_of(bar), 100_000.0);
-    let size = vec2(extent(bar, &fit).max(GRIP), BAR);
+    floating_rect_for_density(bar, content, Density::Normal)
+}
+
+pub fn floating_rect_for_density(bar: &ToolbarState, content: Rect, density: Density) -> Rect {
+    let fit = fitted(bar, &groups_of(bar), 100_000.0, density);
+    let size = vec2(extent(bar, &fit, density).max(GRIP), bar_height(density));
     from_ratio([bar.x_ratio, bar.y_ratio, size.x / content.width(), size.y / content.height()], content, MIN_VISIBLE)
 }
 
@@ -438,7 +464,7 @@ pub fn show_floating(ctx: &egui::Context, app: &mut CadApp) {
     let t = Tokens::get();
     if content.is_positive() {
         for bar in &bars {
-            let rect = floating_rect(bar, content);
+            let rect = floating_rect_for_density(bar, content, app.ws.effective.layout.density);
             egui::Area::new(Id::new(("cc_toolbar_float", &bar.id)))
                 .fixed_pos(rect.min)
                 .order(egui::Order::Middle)
@@ -456,6 +482,6 @@ pub fn show_floating(ctx: &egui::Context, app: &mut CadApp) {
 }
 
 /// Size of the bar `id` as drawn this frame, for the drag preview.
-pub(super) fn drawn_size(geometry: &Geometry, id: &str) -> Vec2 {
-    geometry.bars.iter().find(|bar| bar.id == id).map_or(vec2(160.0, BAR), |bar| bar.rect.size())
+pub(super) fn drawn_size(geometry: &Geometry, id: &str, density: Density) -> Vec2 {
+    geometry.bars.iter().find(|bar| bar.id == id).map_or(vec2(160.0, bar_height(density)), |bar| bar.rect.size())
 }

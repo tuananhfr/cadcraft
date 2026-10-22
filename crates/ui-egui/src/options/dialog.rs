@@ -10,6 +10,7 @@ use serde_json::{Map, Value, json};
 use crate::CadApp;
 use crate::animation::AnimationPref;
 use crate::theme::{ThemePref, Tokens};
+use crate::wsprofile::schema::Density;
 
 /// The tabs: (id in the dialog name, label).
 pub(super) const TABS: [(&str, &str); 6] = [
@@ -135,7 +136,7 @@ fn preview_square(ui: &mut egui::Ui, side: f32, color: Color32) {
     p.rect_stroke(egui::Rect::from_center_size(rect.center(), vec2(side, side)), 0.0, Stroke::new(2.0, color), egui::StrokeKind::Middle);
 }
 
-fn display(app: &CadApp, ui: &mut egui::Ui, changes: &mut Map<String, Value>) {
+fn display(app: &mut CadApp, ui: &mut egui::Ui, changes: &mut Map<String, Value>) {
     grid(ui, "options_display", |ui| {
         ui.label(crate::tl!("Interface theme"));
         let mut theme = app.ui.theme;
@@ -146,6 +147,25 @@ fn display(app: &CadApp, ui: &mut egui::Ui, changes: &mut Map<String, Value>) {
         });
         if theme != app.ui.theme {
             changes.insert("theme".into(), json!(theme.as_str()));
+        }
+        ui.end_row();
+
+        ui.label(crate::tl!("Interface density"));
+        let mut density = app.ws.effective.layout.density;
+        let density_label = |density| match density {
+            Density::Compact => crate::tl!("Compact"),
+            Density::Normal => crate::tl!("Normal"),
+            Density::Comfortable => crate::tl!("Comfortable"),
+        };
+        egui::ComboBox::from_id_salt("options_density").selected_text(density_label(density)).show_ui(ui, |ui| {
+            for value in [Density::Compact, Density::Normal, Density::Comfortable] {
+                ui.selectable_value(&mut density, value, density_label(value));
+            }
+        });
+        if density != app.ws.effective.layout.density
+            && let Err(error) = app.run("ui.density", json!({"density": density}))
+        {
+            app.set_status(error);
         }
         ui.end_row();
 

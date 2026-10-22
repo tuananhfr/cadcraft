@@ -1884,3 +1884,6 @@ ribbon	Walls and Openings	Tường và lỗ mở
 	position must be title_bar, above_ribbon or below_ribbon	vị trí phải là title_bar, above_ribbon hoặc below_ribbon
 	Show Below the Ribbon	Hiện bên dưới Ribbon
 	Show Above the Ribbon	Hiện bên trên Ribbon
+	Interface density	Mật độ giao diện
+	Comfortable	Rộng rãi
+	density must be compact, normal or comfortable	density phải là compact, normal hoặc comfortable

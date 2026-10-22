@@ -3,7 +3,7 @@ use std::sync::{Mutex, MutexGuard};
 use cadcraft_engine::Session;
 use cadcraft_ui_egui::quick_access::{self, QuickAccessRow, quick_access_row};
 use cadcraft_ui_egui::wsprofile::LOCKED_MESSAGE;
-use cadcraft_ui_egui::wsprofile::schema::{QuickAccessPosition, WorkspaceLayout};
+use cadcraft_ui_egui::wsprofile::schema::{Density, QuickAccessPosition, WorkspaceLayout};
 use cadcraft_ui_egui::wsprofile::store::MemoryStore;
 use cadcraft_ui_egui::{CadApp, Services};
 use egui::{Id, Key, Modifiers, Rect, vec2};
@@ -172,17 +172,26 @@ fn qat_survives_theme_and_density_changes_tc18() {
     let _guard = test_lock();
     let mut h = harness(pinned(), true);
     let before = h.state().ws.effective.layout.quick_access.clone();
-    for theme in ["light", "dark", "light"] {
-        h.state_mut().run("ui.theme", json!({"theme": theme})).unwrap();
-        h.run_steps(5);
-        assert_eq!(h.state().ws.effective.layout.quick_access, before);
-        assert_eq!(h.state().shown_theme(), if theme == "light" { egui::Theme::Light } else { egui::Theme::Dark });
-        let line = h.query_all_by_label("Line").next().unwrap().rect();
-        let circle = h.query_all_by_label("Circle").next().unwrap().rect();
-        let plot = qat_rect(&h);
-        assert!(line.right() <= circle.left() && circle.right() <= plot.left());
+    for density in ["normal", "comfortable"] {
+        h.state_mut().run("ui.density", json!({"density": density})).unwrap();
+        for theme in ["light", "dark", "light"] {
+            h.state_mut().run("ui.theme", json!({"theme": theme})).unwrap();
+            h.run_steps(5);
+            assert_eq!(h.state().ws.effective.layout.quick_access, before);
+            assert_eq!(h.state().shown_theme(), if theme == "light" { egui::Theme::Light } else { egui::Theme::Dark });
+            let line = h.query_all_by_label("Line").next().unwrap().rect();
+            let circle = h.query_all_by_label("Circle").next().unwrap().rect();
+            let plot = qat_rect(&h);
+            assert!(line.right() <= circle.left() && circle.right() <= plot.left());
+            if density == "comfortable" {
+                assert_eq!(h.state().ws.effective.layout.density, Density::Comfortable);
+                for rect in [line, circle, plot] {
+                    assert!(rect.width() >= 32.0 && rect.height() >= 32.0);
+                    assert!(h.ctx.content_rect().contains_rect(rect));
+                }
+            }
+        }
     }
-    // TODO(Task 10): Re-run at Comfortable density when the density setting exists.
 }
 
 #[test]

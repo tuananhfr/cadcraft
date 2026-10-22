@@ -304,6 +304,15 @@ pub enum QuickAccessPosition {
     BelowRibbon,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Density {
+    Compact,
+    #[default]
+    Normal,
+    Comfortable,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WorkspaceLayout {
@@ -316,6 +325,8 @@ pub struct WorkspaceLayout {
     pub quick_access: Vec<String>,
     #[serde(default)]
     pub quick_access_position: QuickAccessPosition,
+    #[serde(default)]
+    pub density: Density,
     pub status_bar: StatusBarState,
     pub shortcuts: BTreeMap<String, String>,
     pub aliases: BTreeMap<String, String>,
@@ -384,6 +395,7 @@ impl Default for WorkspaceLayout {
             command_line: CommandLineState::default(),
             quick_access: Vec::new(),
             quick_access_position: QuickAccessPosition::default(),
+            density: Density::default(),
             status_bar: StatusBarState::default(),
             shortcuts: BTreeMap::new(),
             aliases: BTreeMap::new(),

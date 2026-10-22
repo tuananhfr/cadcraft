@@ -3,7 +3,7 @@
 
 use egui::{Key, Modifiers, Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 
-use super::render::{self, BAR, Geometry};
+use super::render::{self, Geometry};
 use crate::CadApp;
 use crate::theme::Tokens;
 use crate::wsprofile::LOCKED_MESSAGE;
@@ -222,9 +222,10 @@ fn paint_preview(ctx: &egui::Context, target: &DropTarget, moving: &str, toolbar
     let t = Tokens::get();
     let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("cc_toolbar_preview")));
     let stroke = Stroke::new(2.0, t.accent);
+    let height = render::bar_height(crate::theme::density(ctx));
     match target {
         DropTarget::Float { pos_ratio } => {
-            let size = render::drawn_size(geometry, moving);
+            let size = render::drawn_size(geometry, moving, crate::theme::density(ctx));
             let min = pos2(content.left() + pos_ratio[0] * content.width(), content.top() + pos_ratio[1] * content.height());
             let rect = Rect::from_min_size(min, size).intersect(content);
             painter.rect_stroke(rect, 3.0, stroke, StrokeKind::Inside);
@@ -234,10 +235,10 @@ fn paint_preview(ctx: &egui::Context, target: &DropTarget, moving: &str, toolbar
             let band = geometry.rows.iter().find(|held| held.dock == *dock && held.row == *row).map(|held| held.rect).or_else(|| {
                 let edge = render::edge_index(*dock).and_then(|i| geometry.edges.get(i)).copied()?;
                 let inward = match dock {
-                    Dock::Top => vec2(0.0, BAR),
-                    Dock::Bottom => vec2(0.0, -BAR),
-                    Dock::Left => vec2(BAR, 0.0),
-                    Dock::Right | Dock::Floating => vec2(-BAR, 0.0),
+                    Dock::Top => vec2(0.0, height),
+                    Dock::Bottom => vec2(0.0, -height),
+                    Dock::Left => vec2(height, 0.0),
+                    Dock::Right | Dock::Floating => vec2(-height, 0.0),
                 };
                 let inner = geometry.rows.iter().filter(|held| held.dock == *dock).map(|held| held.rect).fold(edge, |all, rect| all.union(rect));
                 let new_row = match dock {

@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use crate::CadApp;
 use crate::cmdline::Suggestion;
-use crate::wsprofile::schema::QuickAccessPosition;
+use crate::wsprofile::schema::{Density, QuickAccessPosition};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum QuickAccessRow {
@@ -96,8 +96,11 @@ pub(crate) fn route(app: &mut CadApp, command: &str, params: &Value) -> Option<R
 
 fn button(app: &mut CadApp, ui: &mut egui::Ui, id: &str) -> egui::Response {
     let command = crate::toolbars::resolve(id);
+    let density = app.ws.effective.layout.density;
+    let comfortable = density == Density::Comfortable;
+    let size = if comfortable { 32.0 } else { 18.0 };
     if !command.known {
-        return ui.add_enabled(false, egui::Button::new(crate::toolbars::placeholder_label(&command)));
+        return ui.add_enabled(false, egui::Button::new(crate::toolbars::placeholder_label(&command)).min_size(egui::vec2(size, size)));
     }
     let label = crate::i18n::t(&command.label);
     let label = match command.shortcut {
@@ -107,7 +110,13 @@ fn button(app: &mut CadApp, ui: &mut egui::Ui, id: &str) -> egui::Response {
     let enabled = cadcraft_engine::find_command(id).is_none_or(|spec| (spec.enabled)(&app.session).is_ok());
     let response = ui
         .add_enabled_ui(enabled, |ui| {
-            if let Some(icon) = command.icon { crate::icons::button(ui, icon, 18.0, &label, false) } else { ui.small_button(&label) }
+            if let Some(icon) = command.icon {
+                crate::icons::button(ui, icon, size, &label, false)
+            } else if density != Density::Normal {
+                ui.add(egui::Button::new(&label).min_size(egui::vec2(size, size)))
+            } else {
+                ui.small_button(&label)
+            }
         })
         .inner;
     if response.clicked() {
