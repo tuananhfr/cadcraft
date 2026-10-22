@@ -2,6 +2,7 @@ mod dialog;
 mod exceptions;
 pub mod jobs_panel;
 pub(crate) mod overlay;
+pub(crate) mod profile_dialog;
 mod split;
 pub mod worker;
 
@@ -25,6 +26,10 @@ const PICKING: &str = "ubplot_picking_window";
 pub(crate) fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
     if let Some(result) = jobs_panel::route(app, id, params) {
         return Some(result);
+    }
+    if id == "ui.ubplot.profile" {
+        app.ui.dialog = Some(profile_dialog::DIALOG.into());
+        return Some(Ok(Value::Null));
     }
     if !matches!(id, "ubplot" | "ubp") || !params.is_null() {
         return None;

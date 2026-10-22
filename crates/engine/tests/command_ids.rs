@@ -42,6 +42,7 @@ fn render_doc(reg: &[CommandMeta]) -> String {
          All UI-only ids are listed in `ui-command-ids.md`.\n\n\
          Status describes desktop; commands requiring `xref` are unsupported on web.\n\n\
          UI-only focus/fullscreen/safe-mode and plot jobs ids: `ui.fullscreen`, `ui.focusmode`, `cleanscreenon`, `cleanscreenoff`, `ui.workspace.safemode`, `ui.ubplot.jobs` (registered in `ui-egui::menus::UI_COMMANDS`).\n\n\
+         UI-only print profile dialog: `ui.ubplot.profile` (registered in `ui-egui::menus::UI_COMMANDS`).\n\n\
          UI-only recovery status: `ui.recovery.status` (registered in `ui-egui::menus::UI_COMMANDS`).\n\n\
          | stable_id | namespaced_id | category | contexts | status | risk | aliases |\n| --- | --- | --- | --- | --- | --- | --- |\n",
     );

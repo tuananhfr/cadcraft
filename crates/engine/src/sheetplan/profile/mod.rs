@@ -43,7 +43,7 @@ impl crate::Session {
         self.write_print_profile(&doc)
     }
 
-    fn load_print_profile_doc(&mut self, level: ProfileLevel, id: &str) -> Option<ProfileDoc> {
+    pub(crate) fn load_print_profile_doc(&mut self, level: ProfileLevel, id: &str) -> Option<ProfileDoc> {
         let (doc, notice) = load_doc(self.print_profile_store.as_mut(), level, id);
         if let Some(notice) = notice
             && !self.log.contains(&notice)
@@ -78,4 +78,17 @@ impl crate::Session {
         }
         profile
     }
+}
+
+pub(crate) fn output_name(pattern: &str, stem: &str, sheet: &crate::sheetplan::Sheet, part: usize) -> std::result::Result<String, String> {
+    naming_tokens(pattern)?;
+    let safe_id: String = sheet.sheet_id.chars().take(64).map(|ch| if ch.is_ascii_alphanumeric() || ch == '-' { ch } else { '-' }).collect();
+    let name = pattern
+        .replace("{stem}", stem)
+        .replace("{sheet_id}", &safe_id)
+        .replace("{order}", &sheet.order.to_string())
+        .replace("{part}", &part.to_string());
+    let name = if name.to_ascii_lowercase().ends_with(".pdf") { name } else { format!("{name}.pdf") };
+    crate::sheetplan::queue::store::validate_name(&name)?;
+    Ok(name)
 }

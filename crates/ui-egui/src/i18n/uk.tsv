@@ -2073,3 +2073,36 @@ ribbon	Plot	Друк креслення
 	{name} was not loaded	Файл {name} не завантажено
 	Enter name of LISP file to load	Введіть ім’я файлу LISP для завантаження
 	Template changes last for this visit	Зміни шаблонів діють лише протягом цього відвідування
+	Print Profile	Профіль друку
+	Profile…	Профіль…
+	Edit level	Рівень редагування
+	From level	З рівня
+	Platform	Платформа
+	Project	Проєкт
+	Sheet Set	Комплект аркушів
+	Drawing	Креслення
+	Device	Пристрій
+	Printer	Принтер
+	Paper	Папір
+	Sheet order	Порядок аркушів
+	Frame templates	Шаблони рамок
+	Naming	Іменування
+	Output mode	Режим виведення
+	Pages per file	Сторінок у файлі
+	PDF layers	Шари PDF
+	Text as geometry	Текст як геометрія
+	Lineweights	Товщини ліній
+	Retry limit	Ліміт повторів
+	Reviewed	Перевірено
+	Unreviewed	Не перевірено
+	Allowed folders…	Дозволені теки…
+	Recent LISP edits	Останні зміни LISP
+	No LISP edits in this session	У цьому сеансі немає змін LISP
+	No allowed folders	Немає дозволених тек
+	Folder path	Шлях до теки
+	LISP cannot write files in the browser	LISP не може записувати файли в браузері
+	Time (Unix ms): {time}	Час (Unix мс): {time}
+	Created: {n}	Створено: {n}
+	Modified: {n}	Змінено: {n}
+	Deleted: {n}	Видалено: {n}
+	Undo: {label}	Скасування: {label}

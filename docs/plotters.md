@@ -381,3 +381,62 @@ have no bit for the option, so it isn't saved in DXF or DWG files.
 
 On screen, `TRANSPARENCYDISPLAY` (on by default; the status bar's Transparency button) shows
 transparency; PNG and SVG exports of a drawing always draw it.
+
+## Print profiles
+
+UBPLOT resolves settings in this order, with later levels overriding unlocked values:
+Platform → Company → Project → SheetSet → Drawing → User. Platform is built in.
+The current host chain loads Company/User `default`, the active drawing's profile,
+and its optional `project_id`. SheetSet exists in the schema but has no host binding yet.
+Profiles are separate settings documents, never drawing data or bytes written into DWG.
+
+Locks are JSON Pointers such as `/device`; a later level cannot change a locked field
+or replace/delete its ancestor. Invalid level patches are skipped as a whole with
+INFO `PROFILE_LEVEL_SKIPPED`. Effective results include per-field origins, lock owners
+and a 16-character settings version. Company locks are local policy, not a security
+boundary against someone who can change the settings store.
+
+`ubplot.profile` supports `effective`/`explain`, `get`, `set`/`unset`, `lock`/`unlock`,
+`import` and `export`. Set/unset accept User, Drawing or Project; locks are managed at
+Company. Imports contain a profile document. For example:
+
+```json
+{"command":"ubplot.profile","params":{"action":"set","level":"user","key":"naming","value":"{stem}-{sheet_id}"}}
+```
+
+Naming accepts `{stem}`, `{sheet_id}`, `{order}` and `{part}`. Scan/publish explicit
+parameters and imported profiles obey locks too. The Print Profile dialog shows origins
+and disables locked editors; JSON calls never open it. MCP and LISP cannot change
+Company policy. Other MCP profile changes still obey inherited locks.
+
+Desktop stores schema-1 documents under `<settings>/print-profiles/<level>/`, with
+atomic replacement and a last-good copy. Invalid/future documents are preserved when
+possible and recovery reports a notice; without a valid backup the level is skipped.
+The web host currently uses memory and reports **Print settings last for this visit**.
+Profile documents are limited to 256 KiB, depth 32 and 256 locks per level.
+Unavailable devices use the existing PDF fallback with WARN `DEVICE_UNAVAILABLE`.
+
+## Templates and baseline import
+
+`ubplot.templates` lists versioned frame templates. Registry schema `"2"` stores
+`id@version`, Draft/Approved/Superseded status, source filename/SHA-256/import time,
+and a successor link. Legacy schema `"1"`/`"1.0"` migrates with a notice. Matching uses
+approved templates, preferring the highest matching version of the selected id.
+Older versions remain addressable; sheets using a superseded version warn
+`TEMPLATE_SUPERSEDED`. The desktop host persists the registry separately from drawings.
+
+`ubplot.templates {action: "audit", path}` reads a template without rewriting it;
+web callers can supply `{name, data}` (base64) instead. Reports contain source hash,
+units, blocks/attribute definitions, candidate closed outlines and frame rules,
+layouts and missing fonts. Baseline import requires `action: "import"`, the same
+source, the audited `sha256`, explicit `picks` and `approve: true`. Each pick provides
+`block`, `template_id`, `sheet_id_tags`, `revision_tags` and `revision`.
+Unchanged id/source pairs are retained. Changed sources add a version and supersede
+prior active versions without deleting them. Template input is capped at 64 MiB,
+10,000 blocks and 200,000 scanned entities; the registry has at most 1000 templates.
+Ordinary JSON registry import is also supported and merges by id/version.
+
+`verify` reports registry issues; `exportLisp` returns approved template definitions.
+`ubplot.report {plan, format: "json"|"csv"}` reports sheet revisions, template ids,
+status and issue codes; CSV includes a UTF-8 BOM. LPC fixture and AutoCAD round-trip
+validation remain external QA, not guarantees made by an imported baseline.

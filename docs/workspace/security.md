@@ -21,9 +21,9 @@ sandbox or protection against a caller that can rewrite local settings.
 
 MCP may list approvals and write folders, but only the user can approve/revoke
 source or change write folders. `USER_ONLY_COMMANDS` and the shared
-`USER_ONLY_ACTION_RULES` hook govern these permissions; the latter is the extension
-point for future Company-level profile rules. Both headless and remote MCP calls
-carry their origin into dispatch, including nested JSON commands, aliases and
+`USER_ONLY_ACTION_RULES` hook govern these permissions; Company print-profile
+mutations are also refused, including imports and default Company lock/unlock
+actions. Both headless and remote MCP calls carry their origin into dispatch, including nested JSON commands, aliases and
 each input within a script. No MCP input can answer or cancel a pending
 `APPLOADTRUST` prompt. LISP routines also cannot grant themselves permissions.
 
@@ -49,6 +49,22 @@ application policy, not an OS sandbox: path checks cannot prevent another proces
 from replacing directories or symlinks between validation and the filesystem call.
 Direct local `lisp {code}` callers already have control-channel/CLI authority;
 ordinary JSON commands outside a running LISP routine keep their existing paths.
+
+Only net entity changes are audited. The session ring retains 1000 records; `lispaudit`
+returns newest first, defaults to 20 and caps requests at 1000. Records contain time,
+source SHA-256 when known, entity counts, up to 50 command ids and the undo label.
+The panel shows the latest 20. Desktop writes `<settings>/logs/lisp-audit.jsonl`,
+rotating before the next record would exceed 5 MiB, with three backups. Web audit
+records last only for the session. Logs are local and editable, not a security ledger.
+
+Print-profile Company locks apply to later levels and UBPLOT parameter overrides,
+including LISP calls. Company policy is local policy, not a security boundary:
+someone controlling the local store can change it. MCP cannot change Company policy
+or LISP permissions. Print profiles accept at most 256 KiB, depth 32 and 256 locks per
+level; template registries have at most 1000 templates and 2 MiB JSON. Template audits
+accept at most 64 MiB, 10,000 blocks and 200,000 entities. The LISP approval cap is 256
+hashes (smaller than the draft plan's 4096 to fit host preferences), write roots are
+capped at 64, and file reads retain a 64 MiB limit.
 
 This is the W12 client threat model and proposed server contract (WP02/WP06),
 not evidence of deployed server security. The `/api/v1/cad-workspaces` prefix in

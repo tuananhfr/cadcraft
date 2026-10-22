@@ -50,7 +50,7 @@ impl Session {
             // Startup files don't ask for input: they run to the end. Errors are shown.
             match self.lisp_eval(&text, false, true, Vec::new()) {
                 Ok(Some(Ok(_))) => {
-                    self.lisp.loaded_files.insert(super::file_key(name), name.to_string());
+                    self.lisp.loaded_files.insert(super::file_key(name), super::audit::Source::loaded(name, &text));
                 }
                 Err(e) => self.echo(format!("{name}: {e}")),
                 _ => {}

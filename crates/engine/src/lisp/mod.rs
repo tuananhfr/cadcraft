@@ -118,7 +118,7 @@ pub struct LispState {
     active: bool,
     /// Files loaded by APPLOAD, by name, for `(load name)` where there is no file system.
     files: HashMap<String, String>,
-    loaded_files: HashMap<String, String>,
+    loaded_files: HashMap<String, audit::Source>,
     /// Where startup files are read from (see `startup.rs`).
     support_dir: Option<std::path::PathBuf>,
     /// Drawings that had their startup files.
@@ -619,9 +619,14 @@ pub(crate) use drawing::load_source;
 
 /// Successfully loaded application names, with original spelling and deterministic order.
 pub fn loaded_files(session: &Session) -> Vec<String> {
-    let mut names: Vec<_> = session.lisp.loaded_files.values().cloned().collect();
+    let mut names: Vec<_> = session.lisp.loaded_files.values().map(|source| source.name.clone()).collect();
     names.sort();
     names
+}
+
+/// Retain the successful load's digest so panel reads neither rehash source nor reflect failed reloads.
+pub fn loaded_file_sha<'a>(session: &'a Session, name: &str) -> Option<&'a str> {
+    session.lisp.loaded_files.get(&file_key(name)).map(|source| source.sha256.as_str())
 }
 
 impl Session {
@@ -659,7 +664,10 @@ impl Session {
     fn lisp_loaded(&mut self, name: &str) {
         let path = name.replace('\\', "/");
         let shown = std::path::Path::new(&path).file_name().and_then(|name| name.to_str()).unwrap_or(name).to_string();
-        self.lisp.loaded_files.insert(file_key(name), shown.clone());
+        let key = file_key(name);
+        if let Some(text) = self.lisp.files.get(&key) {
+            self.lisp.loaded_files.insert(key, audit::Source::loaded(name, text));
+        }
         self.echo(format!("{shown} successfully loaded."));
     }
 }

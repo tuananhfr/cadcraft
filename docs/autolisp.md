@@ -40,6 +40,34 @@ it runs. A routine that waits for input (`getpoint`, `pause`) lets the window wo
 Esc stops it with "Function cancelled", which `*error*` receives. A long loop runs a slice per
 frame, so the window stays live and Esc stops it too.
 
+## Safety
+
+APPLOAD and dropped files ask for review when their UTF-8 source SHA-256 is not approved.
+The prompt defaults to No: Yes loads those bytes once, Always also approves the digest,
+and No/Enter/Escape leaves the file unloaded. JSON `appload` and `(load)` return
+`LISP_NOT_REVIEWED` for unapproved source without prompting. Edited source needs review
+again. `lisptrust {action: "list"|"approve"|"revoke", sha256?}` manages approvals;
+the LISP panel shows Reviewed/Unreviewed and the first eight digest characters.
+Startup files in the support folder retain location-based trust. Direct `lisp {code}`
+is available to callers that already have CLI/control authority.
+
+On desktop, `open` write/append and LISP-triggered export/plot/publish outputs must stay
+inside canonical allowed directories. Defaults are `<settings>/support` and
+`<settings>/lisp-out`; the drawing folder is not automatically allowed.
+`lispsandbox {action: "list"|"add"|"remove", path?}` or the panel's **Allowed folders…**
+controls change the process-wide roots. Add takes an existing directory path; changes
+last for the process. Traversal and symlinks escaping the roots are refused. In the
+browser `open` cannot write files; UBPLOT can still deliver PDFs through the host.
+SAVE/SAVEAS/WBLOCK through `(command ...)` use host I/O outside this write policy.
+
+Routines with net entity changes produce an audit record containing completion time
+(Unix milliseconds), source/digest, created/modified/deleted counts, command ids and
+undo label. `lispaudit {limit?: 20}` returns newest first (maximum 1000). The panel shows
+the latest 20. Read-only routines have no record, and each routine remains one undo step.
+Desktop appends JSONL to `<settings>/logs/lisp-audit.jsonl` with three rotated backups;
+the browser keeps only the session ring. This is a local policy, not an OS sandbox or
+a tamper-proof audit trail. See [security limits](workspace/security.md).
+
 ## The language
 
 Integers are 32-bit and wrap as AutoLISP's do; any real makes arithmetic real. Variables are
@@ -72,13 +100,25 @@ reached", malformed source is a reader error, and every built-in checks its argu
   entnext entupd handent`; `ssget` (modes X, L, P, I, W, C, F, WP, CP, a point, or the user
   selecting; filters with wildcards and `-4` operators) `ssadd ssdel sslength ssname ssmemb
   sssetfirst ssgetfirst`; `tblsearch tblnext` (LAYER, LTYPE, STYLE, BLOCK, DIMSTYLE, APPID)
+- **Block properties:** `(getpropertyvalue ename "EffectiveName"|"BlockName"|"Rotation"|"Position"|"Layer"|"Handle")`.
+  Layer/Handle work for any entity; the other properties require an INSERT. Rotation is
+  radians and Position is `(x y z)`. Unknown/unavailable properties return an error.
+  `(ubplot-attribs ename)` returns ordered `(tag . value)` pairs, or nil for a non-INSERT.
+- **Quick Plot:** `(ubplot-scan ss [settings-json])` returns a SheetPlan JSON string;
+  the optional JSON object supplies scan parameters. `(ubplot-publish plan-json [path])`
+  returns a manifest JSON string and publishes synchronously. Both refuse an active
+  command; desktop paths obey the sandbox and `ubplot-publish` requires `.pdf`.
+  `(ubplot-templates)` lists approved versioned templates with names, local rectangle
+  corners when available, paper and sheet-id tags. General VLA/VLAX and `-plot` prompt
+  compatibility remain unavailable; these are native adapters, not ActiveX emulation.
 - **Input:** `initget getpoint getcorner getdist getangle getorient getreal getint getstring
   getkword entsel nentsel`
 - **Units:** `rtos angtos distof angtof`
 - **No-ops:** `vl-load-com gc redraw`; `ver`
 
 Entity lists use the DXF group codes of CADCraft's DXF files: what `entget` returns is what a
-DXF file holds for the object, plus `-1` (its name) and `410` (its layout).
+DXF file holds for the object, plus `-1` (its name) and `410` (its layout). Angle group
+50 is in degrees; `getpropertyvalue` Rotation is in radians.
 
 ## Testing against the corpus
 

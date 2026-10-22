@@ -2074,3 +2074,37 @@ ribbon	Fonts	Phông chữ
 	Always	Luôn luôn
 	{name} was not loaded	Chưa tải tệp {name}
 	Template changes last for this visit	Các thay đổi mẫu bản vẽ chỉ được giữ trong phiên truy cập này
+	Print Profile	Hồ sơ in
+	Profile…	Hồ sơ…
+	Edit level	Cấp chỉnh sửa
+	From level	Từ cấp
+	Platform	Nền tảng
+	Company	Công ty
+	Project	Dự án
+	Sheet Set	Bộ tờ bản vẽ
+	Drawing	Bản vẽ
+	Device	Thiết bị
+	Printer	Máy in
+	Paper	Giấy
+	Sheet order	Thứ tự bản vẽ
+	Frame templates	Mẫu khung
+	Naming	Đặt tên
+	Output mode	Chế độ đầu ra
+	Pages per file	Số trang mỗi tệp
+	PDF layers	Lớp PDF
+	Text as geometry	Văn bản dạng hình học
+	Lineweights	Độ dày nét
+	Retry limit	Giới hạn thử lại
+	Reviewed	Đã duyệt
+	Unreviewed	Chưa duyệt
+	Allowed folders…	Thư mục được phép…
+	Recent LISP edits	Chỉnh sửa LISP gần đây
+	No LISP edits in this session	Chưa có chỉnh sửa LISP trong phiên này
+	No allowed folders	Không có thư mục được phép
+	Folder path	Đường dẫn thư mục
+	LISP cannot write files in the browser	LISP không thể ghi tệp trong trình duyệt
+	Time (Unix ms): {time}	Thời gian (Unix ms): {time}
+	Created: {n}	Đã tạo: {n}
+	Modified: {n}	Đã sửa: {n}
+	Deleted: {n}	Đã xóa: {n}
+	Undo: {label}	Hoàn tác: {label}

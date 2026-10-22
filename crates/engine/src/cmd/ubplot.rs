@@ -1,5 +1,6 @@
 mod interactive;
 mod jobs;
+pub mod profile;
 pub(crate) mod publish;
 mod templates;
 
@@ -78,6 +79,10 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{action: list|status|manifest|resume|cancel|remove, jobId?} → job summaries, {manifest}, or action result; resume runs synchronously")
             .noundo()
             .enabled(always),
+        CommandSpec::new("ubplot.profile", "Print Profile", profile::run_profile)
+            .params("{action: effective|explain|get|set|unset|lock|unlock|import|export, level?, id?, key?, value?, text?}")
+            .noundo()
+            .enabled(always),
         CommandSpec::new("ubplot.publish", "Publish Plot Frames", jobs::run_publish)
             .params("{plan?: SheetPlan (default: the last plan), output?: merged|split (merged), path?: file (merged) or file whose stem names split files, title?, background?: false} → {plan, files: [{path?|name, sheets: [sheet_key], bytes, sha256, data?}], failed: [{sheetKey, issues}]}; background:true accepts mode?, pagesPerFile?, retryLimit? and returns {jobId, status: QUEUED}")
             .noundo()
@@ -111,7 +116,8 @@ fn registry_notice(s: &mut Session) {
 
 pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
     registry_notice(s);
-    validate_request_value(params).map_err(|error| bad("ubplot.scan", error))?;
+    let (params, effective) = profile::resolve_params(s, params, "ubplot.scan")?;
+    let params = &params;
     let incoming = ScanRequest::deserialize(params).map_err(|error| bad("ubplot.scan", error.to_string()))?;
     let (uid, revision) = {
         let state = s.state()?;
@@ -124,7 +130,12 @@ pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
             .as_ref()
             .filter(|last| last.doc_uid == uid)
             .ok_or_else(|| bad("ubplot.scan", "no previous UBPLOT plan for this drawing"))?;
-        (last.request.clone(), (last.revision == revision).then(|| last.plan.clone()), last.revision != revision)
+        let mut request = last.request.clone();
+        request.paper = incoming.paper.or(request.paper);
+        request.scale = incoming.scale.or(request.scale);
+        request.device = incoming.device.or(request.device);
+        let unchanged = last.revision == revision && request == last.request;
+        (request, unchanged.then(|| last.plan.clone()), !unchanged)
     } else {
         (incoming, None, false)
     };
@@ -150,6 +161,7 @@ pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
         }
         plan
     };
+    profile::apply_plan(s.doc()?, &mut plan, params, &effective, "ubplot.scan")?;
     // A drawing too large to walk still scans; every style then counts as used, so no font warning is lost.
     let used = styles_on_sheets(s.doc()?, &plan).ok();
     let fonts: Vec<_> = super::fonts::style_status(s.doc()?)

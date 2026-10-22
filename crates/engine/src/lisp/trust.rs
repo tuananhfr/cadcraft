@@ -88,7 +88,8 @@ pub fn user_only_refusal(command: &str, params: &Value) -> Option<String> {
     let denied = USER_ONLY_COMMANDS.contains(&id) && action != "list"
         || USER_ONLY_ACTION_RULES
             .iter()
-            .any(|(cmd, key, value)| *cmd == id && params.pointer(key).and_then(Value::as_str).is_some_and(|v| v.eq_ignore_ascii_case(value)));
+            .any(|(cmd, key, value)| *cmd == id && params.pointer(key).and_then(Value::as_str).is_some_and(|v| v.eq_ignore_ascii_case(value)))
+        || id == "ubplot.profile" && crate::cmd::ubplot::profile::is_user_only_profile_action(params);
     denied.then(|| format!("Only the user can change permissions with {id}"))
 }
 

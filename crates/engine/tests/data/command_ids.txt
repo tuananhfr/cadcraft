@@ -400,6 +400,7 @@ ubplot.approve
 ubplot.compare
 ubplot.folder
 ubplot.jobs
+ubplot.profile
 ubplot.publish
 ubplot.report
 ubplot.scan
