@@ -4,7 +4,7 @@
 
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
 
@@ -248,7 +248,63 @@ fn catalog(language: &str) -> Option<&'static Catalog<'static>> {
     LANGUAGES.iter().find(|l| l.code == language && !l.source.is_empty()).map(|l| l.catalog.get_or_init(|| parse(l.source).0))
 }
 
+/// The borrowed return permits unchanged input above the cache cap without leaking or using Cow.
+pub fn pseudo(source: &str) -> &str {
+    const MAX_ENTRIES: usize = 20_000;
+    const MAX_SOURCE_BYTES: usize = 4096;
+    static CACHE: OnceLock<Mutex<HashMap<String, &'static str>>> = OnceLock::new();
+
+    // Dynamic or hostile text must not turn the debug locale into an unbounded allocation.
+    if source.len() > MAX_SOURCE_BYTES || source.trim().is_empty() {
+        return source;
+    }
+    let Ok(mut cache) = CACHE.get_or_init(|| Mutex::new(HashMap::new())).lock() else { return source };
+    if let Some(text) = cache.get(source).copied() {
+        return text;
+    }
+    if cache.len() >= MAX_ENTRIES {
+        return source;
+    }
+    let trimmed_start = source.trim_start();
+    let body = trimmed_start.trim_end();
+    let leading = source.get(..source.len() - trimmed_start.len()).unwrap_or_default();
+    let trailing = trimmed_start.get(body.len()..).unwrap_or_default();
+    let mut text = String::new();
+    text.push_str(leading);
+    text.push('[');
+    let mut placeholder = false;
+    for ch in body.chars() {
+        if ch == '{' {
+            placeholder = true;
+        }
+        let accented = if !placeholder && ch.is_ascii_alphabetic() {
+            let alphabet = if ch.is_ascii_uppercase() {
+                "ÁḂÇĎÉḞĞĤÍĴĶĽḾÑÓṔɊŘŠŢÚṼŴẊÝŽ"
+            } else {
+                "áḃçďéḟğĥíĵķľḿñóṕɋřšţúṽŵẋýž"
+            };
+            alphabet.chars().nth(usize::from(ch.to_ascii_lowercase() as u8 - b'a')).unwrap_or(ch)
+        } else {
+            ch
+        };
+        text.push(accented);
+        if ch == '}' {
+            placeholder = false;
+        }
+    }
+    let padding = (body.chars().count() * 2).div_ceil(5);
+    text.extend(std::iter::repeat_n('·', padding));
+    text.push(']');
+    text.push_str(trailing);
+    let text: &'static str = Box::leak(text.into_boxed_str());
+    cache.insert(source.to_string(), text);
+    text
+}
+
 pub fn tr<'a>(language: &str, source: &'a str) -> &'a str {
+    if language == "qps" {
+        return pseudo(source);
+    }
     catalog(language).and_then(|c| c.get(&("", source))).copied().unwrap_or(source)
 }
 

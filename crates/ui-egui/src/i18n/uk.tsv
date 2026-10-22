@@ -1554,6 +1554,7 @@
 	Resolve Workspace Conflict	Розв’язати конфлікт робочого простору
 	Keep my layout	Зберегти моє компонування
 	Use the other tab's layout	Використати компонування іншої вкладки
+	No font covers the Vietnamese interface	Немає шрифту для в’єтнамського інтерфейсу
 
 	{axes} of	{axes} точки
 	(need {axes})	(потрібно {axes})
@@ -1807,4 +1808,3 @@
 	Added font {font}	Додано шрифт {font}
 	Removed font {font}	Вилучено шрифт {font}
 	{layout} · {paper}	{layout} · {paper}
-	No font covers the Vietnamese interface	Немає шрифту для в’єтнамського інтерфейсу
