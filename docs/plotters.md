@@ -316,9 +316,10 @@ A folder job has one manifest and `job.json`, plus a `folder.json` artifact cont
 JSON `true`. This is a loader marker, not a folder configuration file. Synchronous Folder
 execution and `ubplot.jobs resume` use `FolderLoader`, retaining only the current drawing
 and checking its bytes against the queued hash before render. Sources are read-only;
-output cannot overwrite a source. The desktop UI background pump currently uses a
-current-drawing snapshot loader even for Folder jobs, so use synchronous Folder mode or
-the CLI for multi-file work. Web Folder mode returns a desktop-only error.
+output cannot overwrite a source. The desktop UI background pump picks `FolderLoader` for
+jobs that carry `folder.json` (`worker.rs`, `ubplot_worker::folder_job_resumes_with_folder_loader`)
+and a current-drawing snapshot otherwise, so a Folder job also runs and resumes with no
+drawing open. Web Folder mode returns a desktop-only error.
 
 ```text
 cadcraft-cli ubplot --folder DIR --out DIR [--mode merged|per-sheet] [--pages-per-file N] [--max-files N] [--max-depth N] [--jobs-dir DIR] [--templates FILE] [--layouts]
