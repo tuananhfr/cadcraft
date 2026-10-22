@@ -35,6 +35,47 @@ const MAX_LAYERS: usize = 4096;
 const MAX_LINKS: usize = 10_000;
 const MAX_URL: usize = 2048;
 
+/// A rectangular plot area in world coordinates; rotation is counter-clockwise in radians.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlotFrame {
+    pub center: Vec2,
+    pub size: Vec2,
+    pub rotation: f64,
+}
+
+impl PlotFrame {
+    fn from_outline(v: &Value) -> Result<Self> {
+        let invalid = || IoError::Format("outline must contain exactly four finite rectangle vertices".into());
+        let raw = v.as_array().filter(|a| a.len() == 4).ok_or_else(invalid)?;
+        let mut points = [Vec2::ZERO; 4];
+        for (p, raw) in points.iter_mut().zip(raw) {
+            let pair = raw.as_array().filter(|a| a.len() == 2).ok_or_else(invalid)?;
+            *p = Vec2::new(pair.first().and_then(Value::as_f64).ok_or_else(invalid)?, pair.get(1).and_then(Value::as_f64).ok_or_else(invalid)?);
+        }
+        let (center, size, rotation) = cadcraft_render::rectangle_frame(&points).ok_or_else(invalid)?;
+        Ok(Self { center, size, rotation })
+    }
+
+    fn bounds(self) -> Result<Bounds2> {
+        let b = Bounds2::new(self.center - self.size * 0.5, self.center + self.size * 0.5);
+        if !self.center.is_finite()
+            || !self.size.is_finite()
+            || self.size.x <= 0.0
+            || self.size.y <= 0.0
+            || !self.rotation.is_finite()
+            || !b.min.is_finite()
+            || !b.max.is_finite()
+            || !b.width().is_finite()
+            || !b.height().is_finite()
+            || b.width() <= 0.0
+            || b.height() <= 0.0
+        {
+            return Err(IoError::Format("plot frame must have a finite centre, positive size and finite rotation".into()));
+        }
+        Ok(b)
+    }
+}
+
 /// Plot settings. `None` fields fall back to the layout's page setup (or sensible defaults for
 /// model space).
 #[derive(Clone, Debug)]
@@ -62,6 +103,10 @@ pub struct PdfOptions {
     /// Model space only: plot this rectangle (drawing units), fitted to the printable area,
     /// instead of the extents. Ignored for layouts.
     pub window: Option<Bounds2>,
+    /// Rotate the display list into this frame before fitting its local rectangle.
+    pub frame: Option<PlotFrame>,
+    /// Page label, replacing the space name.
+    pub label: Option<String>,
     /// Drawing layers become PDF layers (optional content groups). Default on.
     pub layers: bool,
     /// With `layers`: objects on layers that are off are included on PDF layers that start
@@ -100,6 +145,8 @@ impl Default for PdfOptions {
             compress: false,
             title: String::new(),
             window: None,
+            frame: None,
+            label: None,
             layers: true,
             include_off_layers: false,
             links: Vec::new(),
@@ -140,6 +187,8 @@ impl PdfOptions {
             compress: v.get("compress").and_then(Value::as_bool).unwrap_or(true),
             title: v.get("title").and_then(Value::as_str).unwrap_or("").to_string(),
             window: window(v.get("window")),
+            frame: v.get("outline").and_then(|v| PlotFrame::from_outline(v).ok()),
+            label: v.get("label").and_then(Value::as_str).map(str::to_string),
             margins: margins(v.get("margins")),
             hyperlinks: v.get("hyperlinks").and_then(Value::as_bool).unwrap_or(true),
             plot_transparency: v.get("plotTransparency").and_then(Value::as_bool),
@@ -203,26 +252,49 @@ pub fn plot(d: &Drawing, space: &Space, opts: &Value) -> Result<Vec<u8>> {
     // `layouts: [name | "Model"] | "all"` plots those sheets into one file, one page each,
     // instead of `space`; "all" = Model if it has objects, then the layouts in tab order.
     let o = PdfOptions::from_json(opts);
-    // `pages: [{window: [[x1,y1],[x2,y2]], paper?, landscape?, scale?}]` plots model space once
-    // per window, one page each (a book of sheet frames), instead of `space`.
+    if let Some(outline) = opts.get("outline") {
+        PlotFrame::from_outline(outline)?;
+    }
     if let Some(pages) = opts.get("pages") {
-        let list = pages.as_array().ok_or_else(|| IoError::Format("`pages` must be a list of {window, paper?, landscape?}".into()))?;
+        let list = pages.as_array().ok_or_else(|| IoError::Format("`pages` must be a list of page objects".into()))?;
         if list.len() > MAX_PAGES {
             return Err(IoError::Format(format!("at most {MAX_PAGES} sheets fit in one PDF")));
         }
         let items = list
             .iter()
             .map(|pg| {
-                let w = window(pg.get("window")).ok_or_else(|| IoError::Format("each page needs a `window` with two corners".into()))?;
+                if ["window", "outline", "layout"].iter().filter(|key| pg.get(**key).is_some()).count() != 1 {
+                    return Err(IoError::Format("each page needs exactly one of window, outline, layout".into()));
+                }
+                let page_space = if let Some(raw) = pg.get("layout") {
+                    let name = raw.as_str().ok_or_else(|| IoError::Format("page layout must be a layout name".into()))?;
+                    let layout = d.layout(name).ok_or_else(|| IoError::Format(format!("no layout `{name}`")))?;
+                    Space::Paper(layout.name.clone())
+                } else if pg.get("window").is_some() {
+                    Space::Model
+                } else {
+                    space.clone()
+                };
                 let mut po = PdfOptions::from_json(&serde_json::json!({
                     "paper": pg.get("paper"), "landscape": pg.get("landscape"), "scale": pg.get("scale"),
+                    "width": pg.get("width"), "height": pg.get("height"), "label": pg.get("label"),
                     "plotStyleTable": opts.get("plotStyleTable"), "lineweights": opts.get("lineweights"),
                     "margins": opts.get("margins"), "text": opts.get("text"),
                 }));
-                po.window = Some(w);
-                po.fit = Some(true);
+                if let Some(raw) = pg.get("outline") {
+                    po.frame = Some(PlotFrame::from_outline(raw)?);
+                    po.fit = Some(true);
+                } else if let Some(raw) = pg.get("window") {
+                    po.window = Some(window(Some(raw)).ok_or_else(|| IoError::Format("each page needs a `window` with two corners".into()))?);
+                    po.fit = Some(true);
+                }
+                if po.landscape.is_none()
+                    && let Some((w, h)) = po.paper_mm
+                {
+                    po.landscape = Some(w > h);
+                }
                 po.compress = o.compress;
-                Ok((Space::Model, po))
+                Ok((page_space, po))
             })
             .collect::<Result<Vec<_>>>()?;
         return pdf_items(d, &items, &o);
@@ -412,7 +484,8 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
         cancel: None,
     };
     let k = unit_mm * PT_PER_MM;
-    let window = o.window.filter(|w| matches!(space, Space::Model) && !w.is_empty());
+    let frame_bounds = o.frame.map(PlotFrame::bounds).transpose()?;
+    let window = frame_bounds.or_else(|| o.window.filter(|w| matches!(space, Space::Model) && !w.is_empty()));
     let fit = o.fit.unwrap_or(window.is_some() || matches!(space, Space::Model));
     // Chord tolerance: about 0.05 mm on paper.
     let est = plot_scale(&window.unwrap_or_else(|| d.extents(space)), &sheet, fit, o.scale);
@@ -420,7 +493,10 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
     let tolerance = if tol.is_finite() && tol > 0.0 { tol } else { ropts.tolerance };
     // Relative point sizes follow the plotted window (else the extents).
     let view_height = window.map(|w| w.height()).unwrap_or(0.0);
-    let list = cadcraft_render::build_plot(d, space, &cadcraft_render::Options { tolerance, view_height, ..ropts });
+    let mut list = cadcraft_render::build_plot(d, space, &cadcraft_render::Options { tolerance, view_height, ..ropts });
+    if let Some(frame) = o.frame {
+        list.rotate_about(frame.center, -frame.rotation);
+    }
     let b = window.unwrap_or(list.bounds);
     let s = plot_scale(&b, &sheet, fit, o.scale);
     let map = if fit || matches!(space, Space::Model) {
@@ -449,7 +525,7 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
         }
     }
     let links = links(&list, &map, &clip_pt, links_to);
-    Ok(SheetPage { media, list, map, clip_pt, layers, links, label: sheet_name(space) })
+    Ok(SheetPage { media, list, map, clip_pt, layers, links, label: o.label.clone().unwrap_or_else(|| sheet_name(space)) })
 }
 
 /// Source and destination origins for the shared model-space PDF/PNG placement behavior.

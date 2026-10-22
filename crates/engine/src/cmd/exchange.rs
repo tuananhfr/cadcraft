@@ -43,7 +43,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("preview", "Plot Preview", run_preview)
             .menu(&["File", "Plot Preview"])
             .alias(&["pre"])
-            .params("{layout?: current|\"Model\", paper?, landscape?, fit?, scale?, lineweights?, plotTransparency?, width?: pixels (default 1200)} → {data: base64 PNG, width, height, layout, paper}")
+            .params("{layout?: current|\"Model\", outline?: [[x,y] x 4], paper?, landscape?, fit?, scale?, lineweights?, plotTransparency?, width?: pixels (default 1200), height?: paper mm (with width also supplying paper width)} → {data: base64 PNG, width, height, layout, paper}")
             .noundo(),
         CommandSpec::new("publish", "Batch Publish...", run_publish)
             .menu(&["File", "Batch Publish..."])
@@ -292,6 +292,19 @@ fn plot_scale(b: &Bounds2, sheet: &Sheet, fit: bool, scale: Option<f64>) -> f64 
 fn run_preview(s: &mut Session, p: &Value) -> Result<Value> {
     let space = plot_space("preview", s, p)?;
     let d = s.doc()?;
+    let frame = if let Some(raw) = p.get("outline") {
+        let invalid = || bad("preview", "outline must contain exactly four finite rectangle vertices");
+        let raw = raw.as_array().filter(|a| a.len() == 4).ok_or_else(invalid)?;
+        let mut points = [Vec2::ZERO; 4];
+        for (point, raw) in points.iter_mut().zip(raw) {
+            let pair = raw.as_array().filter(|a| a.len() == 2).ok_or_else(invalid)?;
+            *point = Vec2::new(pair.first().and_then(Value::as_f64).ok_or_else(invalid)?, pair.get(1).and_then(Value::as_f64).ok_or_else(invalid)?);
+        }
+        Some(cadcraft_render::rectangle_frame(&points).ok_or_else(invalid)?)
+    } else {
+        None
+    };
+    let frame_bounds = frame.map(|(center, size, _)| Bounds2::new(center - size * 0.5, center + size * 0.5));
     let mut page = match space.layout() {
         Some(n) => d.layout(n).map(|l| l.page.clone()).unwrap_or_default(),
         None => {
@@ -307,11 +320,27 @@ fn run_preview(s: &mut Session, p: &Value) -> Result<Value> {
             page
         }
     };
+    if let Some((_, size, _)) = frame {
+        page.width_mm = size.x * paper::paper_unit_mm(d);
+        page.height_mm = size.y * paper::paper_unit_mm(d);
+        page.landscape = size.x > size.y;
+        page.margins_mm = [0.0; 4];
+    }
     if let Some(name) = str_param(p, "paper") {
         let ps = paper::paper_size(name).ok_or_else(|| bad("preview", format!("unknown paper size `{name}`")))?;
         page.paper = ps.name.into();
         page.width_mm = ps.width_mm;
         page.height_mm = ps.height_mm;
+    }
+    if frame.is_some()
+        && let (Some(w), Some(h)) = (p.get("width").and_then(Value::as_f64), p.get("height").and_then(Value::as_f64))
+    {
+        if !w.is_finite() || !h.is_finite() || w <= 0.0 || h <= 0.0 {
+            return Err(bad("preview", "custom paper dimensions must be finite and positive"));
+        }
+        page.width_mm = w;
+        page.height_mm = h;
+        page.landscape = w > h;
     }
     if let Some(l) = p.get("landscape").and_then(Value::as_bool) {
         page.landscape = l;
@@ -319,14 +348,14 @@ fn run_preview(s: &mut Session, p: &Value) -> Result<Value> {
     let sheet = Sheet::from_page(&page, paper::paper_unit_mm(d));
     let lineweights = p.get("lineweights").and_then(Value::as_bool).unwrap_or(if space.is_paper() { page.lineweights } else { true });
     let transparency = super::plotters::plot_transparency(s, p).unwrap_or(page.plot_transparency);
-    let fit = p.get("fit").and_then(Value::as_bool).unwrap_or(matches!(space, Space::Model));
+    let fit = p.get("fit").and_then(Value::as_bool).unwrap_or(frame.is_some() || matches!(space, Space::Model));
     let scale = p.get("scale").and_then(Value::as_f64).filter(|v| v.is_finite() && *v > 0.0);
     let width = p.get("width").and_then(Value::as_u64).unwrap_or(PREVIEW_PX).clamp(16, MAX_PREVIEW_PX);
     let height = ((width as f64) * sheet.size.y / sheet.size.x).round();
     let height = if height.is_finite() { (height as u64).clamp(16, MAX_PREVIEW_PX) } else { width };
     let px_per_paper_unit = width as f64 / sheet.size.x;
     // Curves are flattened to about half a pixel.
-    let est = plot_scale(&d.extents(&space), &sheet, fit, scale);
+    let est = plot_scale(&frame_bounds.unwrap_or_else(|| d.extents(&space)), &sheet, fit, scale);
     let tol = 0.5 / (px_per_paper_unit * est);
     let ropts = cadcraft_render::Options {
         tolerance: if tol.is_finite() && tol > 0.0 { tol } else { 0.01 },
@@ -335,17 +364,21 @@ fn run_preview(s: &mut Session, p: &Value) -> Result<Value> {
         fill: true,
         lineweights,
         transparency,
+        view_height: frame_bounds.map(|b| b.height()).unwrap_or(0.0),
         ..Default::default()
     };
-    let list = cadcraft_render::build_plot(d, &space, &ropts);
-    let b = list.bounds;
+    let mut list = cadcraft_render::build_plot(d, &space, &ropts);
+    if let Some((center, _, rotation)) = frame {
+        list.rotate_about(center, -rotation);
+    }
+    let b = frame_bounds.unwrap_or(list.bounds);
     // Paper point q shows drawing point (q - to) / k + from.
     let (from, k, to) = if fit || space == Space::Model {
         (if b.is_empty() { Vec2::ZERO } else { b.center() }, plot_scale(&b, &sheet, fit, scale), sheet.printable.center())
     } else {
         (Vec2::ZERO, plot_scale(&b, &sheet, fit, scale), Vec2::ZERO)
     };
-    let world = Bounds2::new((Vec2::ZERO - to) / k + from, (sheet.size - to) / k + from);
+    let world = frame_bounds.unwrap_or_else(|| Bounds2::new((Vec2::ZERO - to) / k + from, (sheet.size - to) / k + from));
     if ![world.min.x, world.min.y, world.max.x, world.max.y].iter().all(|v| v.is_finite()) {
         return Err(bad("preview", "the drawing is too large to preview at this scale"));
     }
