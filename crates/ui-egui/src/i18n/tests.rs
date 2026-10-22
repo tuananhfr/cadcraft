@@ -23,7 +23,7 @@ fn catalog_is_valid_and_preserves_placeholders_and_ellipses() {
         let (catalog, errors) = parse(language.source);
         assert!(errors.is_empty(), "{}: {errors:?}", language.code);
         for ((context, key), value) in catalog {
-            assert!(["", "menu", "@plural"].contains(&context), "unknown context: {context}");
+            assert!(["", "menu", "ribbon", "@plural"].contains(&context), "unknown context: {context}");
             let forms: Vec<_> = if context == "@plural" { value.split('|').collect() } else { vec![value] };
             if context == "@plural" {
                 assert_eq!(forms.len(), language.plural_forms, "{}: {key}", language.code);
@@ -84,7 +84,7 @@ fn glossary_is_valid_and_carries_the_uf_tab_table() {
 /// to English for what they don't cover yet; their gaps are reported, not enforced, so adding a
 /// command doesn't require a row in every language.
 const REQUIRED: &[&str] = &["uk"];
-const REPORTED: &[&str] = &["pt-BR", "de", "es", "cs", "ru", "fr", "zh", "it", "ko", "sv", "ar"];
+const REPORTED: &[&str] = &["pt-BR", "de", "es", "cs", "ru", "fr", "zh", "it", "ko", "sv", "ar", "vi"];
 
 fn check(language: &str, what: &str, missing: Vec<String>) {
     if REQUIRED.contains(&language) {
@@ -855,7 +855,7 @@ fn korean_locale_saved_preference_and_single_count_form() {
     assert_eq!(restored.language(), app.language());
     with_language("ko", || {
         for n in [0, 1, 2, 5, 11, 21, 101, u64::MAX] {
-            assert_eq!(plural_ko(n), 0);
+            assert_eq!(plural_single(n), 0);
             assert_eq!(count(n, "{n} contributor", "{n} contributors"), format!("기여자 {n}명"));
         }
         assert_eq!(format("Current: {color}", &[("color", "{n} Open".into())]), "현재: {n} Open");
@@ -1115,4 +1115,230 @@ fn formatted_prompt_translates_template_and_keeps_user_text() {
         assert_eq!(prompt_message(&p), format!("{{message}} Вітальня {}", tr("uk", "Specify stretch point")));
         assert_eq!(prompt_message(&Prompt::new("Select objects", Accept::SELECT)), tr("uk", "Select objects"));
     });
+}
+
+#[test]
+fn vietnamese_locales_preferences_and_single_count_form() {
+    for tag in ["vi", "vi-VN", "vi_VN.UTF-8", "VI-vn", " vi-VN "] {
+        assert_eq!(locale_language(tag), Some("vi"), "{tag}");
+    }
+    for tag in ["vie", "vn"] {
+        assert_eq!(locale_language(tag), None, "{tag}");
+    }
+    assert_eq!(Preference::parse("vi"), Some(Preference::Vietnamese));
+    assert_eq!(Preference::Vietnamese.name(), "Tiếng Việt");
+    assert_eq!(Preference::Vietnamese.resolve(&["en-US".into()]), "vi");
+    assert_eq!(Preference::Auto.resolve(&["pl-PL".into(), "vi-VN".into()]), "vi");
+    assert_eq!(Preference::restore(Some("vi")), Preference::Vietnamese);
+    assert_eq!(serde_json::to_string(&Preference::Vietnamese).unwrap(), "\"vi\"");
+    assert_eq!(serde_json::from_str::<Preference>("\"vi\"").unwrap(), Preference::Vietnamese);
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.ui.interface_language = Preference::Vietnamese;
+    let mut restored = CadApp::new(Session::new(), Services::default());
+    restored.load_prefs(&app.prefs_json());
+    assert_eq!(restored.ui.interface_language, Preference::Vietnamese);
+    with_language("vi", || {
+        for n in [0, 1, 2, 5, 21, u64::MAX] {
+            assert_eq!(plural_single(n), 0);
+            assert_eq!(count(n, "{n} contributor", "{n} contributors"), format!("{n} người đóng góp"));
+        }
+        assert_eq!(format("Current: {color}", &[("color", "{n} Open".into())]), "Hiện hành: {n} Open");
+    });
+}
+
+#[test]
+fn ribbon_tab_labels_follow_the_uf_table() {
+    for (en, vi) in [
+        ("Home", "Vẽ"),
+        ("Insert", "Chèn"),
+        ("Annotate", "Ghi chú"),
+        ("Layers", "Lớp bản vẽ"),
+        ("View", "Hiển thị"),
+        ("Layout", "Bố cục in"),
+        ("Properties", "Thuộc tính"),
+        ("Xref", "Tham chiếu ngoài"),
+        ("Plot", "In bản vẽ"),
+    ] {
+        assert_eq!(tr_ribbon("vi", en), vi, "{en}");
+        assert_eq!(with_language("vi", || ribbon(en)), vi, "{en}");
+    }
+    assert_eq!(tr_ribbon("uk", "Home"), tr("uk", "Home"));
+    assert_eq!(tr_ribbon("vi", "Open"), tr("vi", "Open"));
+    assert_eq!(tr_ribbon("unknown", "Home"), "Home");
+}
+
+#[test]
+fn live_vietnamese_switch_preserves_drawing_command_and_saved_choice() {
+    if !crate::theme::can_show("vi") {
+        eprintln!("Vietnamese rendering skipped: no covering UI font; fallback is tested separately");
+        return;
+    }
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.ui.in_window_menu = true;
+    app.session.state_mut().unwrap().title = "Open".into();
+    let ctx = egui::Context::default();
+    app.logic(&ctx);
+    assert!(render(&mut app, &ctx).contains("Properties"));
+    app.start("line");
+    let prompt = crate::control::cmdline_state(&app);
+    let commands = crate::control::all_commands(&app);
+    let menus = format!("{:?}", crate::menus::tree(&app));
+    let drawing = app.session.state().unwrap().clone();
+    app.run("ui.language", json!({"lang":"vi"})).unwrap();
+    app.logic(&ctx);
+    let text = render(&mut app, &ctx);
+    for label in ["Thuộc tính", "Tệp", "Chỉ định điểm đầu"] {
+        assert!(text.contains(label), "missing {label}: {text}");
+    }
+    assert_eq!(app.language(), "vi");
+    assert_eq!(app.fonts_language, Some("vi"));
+    let mut restored = CadApp::new(Session::new(), Services::default());
+    restored.load_prefs(&app.prefs_json());
+    assert_eq!(restored.ui.interface_language, Preference::Vietnamese);
+    app.ui.dialog = Some("language".into());
+    for language in ["en", "vi", "en"] {
+        app.run("ui.language", json!({"lang":language})).unwrap();
+        app.logic(&ctx);
+        let text = render(&mut app, &ctx);
+        assert!(text.contains(if language == "vi" { "Ngôn ngữ giao diện" } else { "Interface Language" }), "{text}");
+        assert_eq!(app.ui.dialog.as_deref(), Some("language"));
+        assert_eq!(crate::control::cmdline_state(&app), prompt);
+        assert_eq!(crate::control::all_commands(&app), commands);
+        assert_eq!(format!("{:?}", crate::menus::tree(&app)), menus);
+        let state = app.session.state().unwrap();
+        assert_eq!(state.title, "Open");
+        assert!(std::sync::Arc::ptr_eq(&state.doc, &drawing.doc));
+        assert_eq!(state.selection, drawing.selection);
+        assert_eq!(state.views, drawing.views);
+        assert_eq!(state.is_dirty(), drawing.is_dirty());
+    }
+    app.ui.dialog = None;
+    assert!(render(&mut app, &ctx).contains("Properties"));
+}
+
+#[test]
+fn user_named_ribbon_tab_is_not_translated() {
+    let mut app = CadApp::new(Session::new(), Services::default());
+    app.ws.effective.layout.ribbon = crate::wsprofile::presets::preset("AUTOCAD_FAMILIAR").unwrap().layout.ribbon;
+    app.ws.effective.layout.ribbon.visible = true;
+    let home = app.ws.effective.layout.ribbon.tabs.iter().find(|tab| tab.id == "home").unwrap().clone();
+    let mut renamed = home.clone();
+    renamed.label = "Bản vẽ kiến trúc".into();
+    let mut custom = home.clone();
+    custom.id = "custom_1".into();
+    custom.label = "Home".into();
+    app.ws.effective.layout.ribbon.tabs.push(crate::wsprofile::schema::RibbonTab {
+        id: "custom_2".into(),
+        label: "Bản vẽ kiến trúc".into(),
+        ..Default::default()
+    });
+    let ctx = egui::Context::default();
+    for language in ["vi", "en"] {
+        with_language(language, || {
+            assert_eq!(crate::ribbon::render::tab_label(&home), if language == "vi" { "Vẽ" } else { "Home" });
+            assert_eq!(crate::ribbon::render::tab_label(&renamed), "Bản vẽ kiến trúc");
+            renamed.label = "Insert".into();
+            assert_eq!(crate::ribbon::render::tab_label(&renamed), "Insert");
+            renamed.label = "Bản vẽ kiến trúc".into();
+            assert_eq!(crate::ribbon::render::tab_label(&custom), "Home");
+            let mut group = home.groups.iter().find(|group| group.id == "draw").unwrap().clone();
+            assert_eq!(crate::ribbon::render::group_label(&home, &group), if language == "vi" { "Vẽ" } else { "Draw" });
+            group.label = "Insert".into();
+            assert_eq!(crate::ribbon::render::group_label(&home, &group), "Insert");
+            group.id = "custom_1".into();
+            group.label = "Draw".into();
+            assert_eq!(crate::ribbon::render::group_label(&home, &group), "Draw");
+            let input =
+                egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 1000.0))), ..Default::default() };
+            let mut output = ctx.run_ui(input, |ui| crate::ribbon::render::show(&mut app, ui));
+            assert!(painted_text(&output.shapes).contains("Bản vẽ kiến trúc"));
+            output.textures_delta.clear();
+        });
+    }
+}
+
+#[test]
+fn vietnamese_falls_back_to_english_without_a_covering_font() {
+    let mut app = CadApp::new(Session::new(), Services::default());
+    let ctx = egui::Context::default();
+    let result = app.run("ui.language", json!({"lang":"vi"})).unwrap();
+    app.logic(&ctx);
+    let supported = crate::theme::can_show("vi");
+    assert_eq!(app.language(), if supported { "vi" } else { "en" });
+    assert_eq!(result["shown"], app.language());
+    assert_eq!(app.ui.interface_language, Preference::Vietnamese);
+    let mut restored = CadApp::new(Session::new(), Services::default());
+    restored.load_prefs(&app.prefs_json());
+    assert_eq!(restored.ui.interface_language, Preference::Vietnamese);
+    let text = render(&mut app, &ctx);
+    if supported {
+        assert!(text.contains("Thuộc tính"), "{text}");
+    } else {
+        assert!(text.contains("Properties"), "{text}");
+        assert!(app.status.as_ref().is_some_and(|(s, _)| s.contains("No font covers the Vietnamese interface")));
+    }
+}
+
+#[test]
+fn vietnamese_ui_fonts_cover_catalog_when_shown() {
+    if !crate::theme::can_show("vi") {
+        eprintln!("Vietnamese glyph coverage skipped: no covering UI font");
+        return;
+    }
+    let letters: BTreeSet<_> = include_str!("vi.tsv")
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| line.split('\t').nth(2))
+        .flat_map(str::chars)
+        .chain("Tiếng Việt".chars())
+        .filter(|c| !c.is_ascii())
+        .collect();
+    let ctx = egui::Context::default();
+    crate::theme::install_fonts(&ctx, "vi");
+    let mut output = ctx.run_ui(Default::default(), |_| {});
+    output.textures_delta.clear();
+    let missing = ctx.fonts_mut(|view| {
+        let mut missing = Vec::new();
+        for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+            let mut font = view.fonts.font(&family);
+            for c in &letters {
+                if !font.characters().contains_key(c) {
+                    missing.push(format!("{family:?}: {c} (U+{:04X})", u32::from(*c)));
+                }
+            }
+        }
+        missing
+    });
+    assert!(missing.is_empty(), "missing Vietnamese UI glyphs: {}", missing.join(", "));
+}
+
+#[test]
+fn glossary_is_approved_before_bulk_rows() {
+    let rows = include_str!("vi.tsv").lines().filter(|line| !line.is_empty() && !line.starts_with('#')).count();
+    if rows > 60 {
+        let status = include_str!("vi_glossary.tsv").lines().find(|line| line.starts_with("# status:"));
+        assert!(status.is_some_and(|line| line.starts_with("# status: approved ")), "bulk Vietnamese translation needs an approved glossary");
+    }
+}
+
+#[test]
+fn vietnamese_catalog_follows_the_glossary() {
+    let (catalog, errors) = parse(include_str!("vi.tsv"));
+    assert!(errors.is_empty(), "{errors:?}");
+    let glossary = glossary();
+    for (context, key, value) in &glossary {
+        if let Some(translated) = catalog.get(&(*context, *key)) {
+            assert_eq!(translated, value, "{context}: {key}");
+        }
+    }
+    for ((context, key), value) in &catalog {
+        if *context == "ribbon" {
+            assert!(glossary.contains(&(*context, *key, *value)), "unknown ribbon translation: {key}");
+        }
+    }
+    for (context, key, value) in glossary.iter().filter(|(context, key, _)| {
+        *context == "ribbon" && ["Home", "Insert", "Annotate", "Layers", "View", "Layout", "Properties", "Xref", "Plot"].contains(key)
+    }) {
+        assert_eq!(catalog.get(&(*context, *key)), Some(value), "missing U-F ribbon row: {key}");
+    }
 }

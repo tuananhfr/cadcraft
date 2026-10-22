@@ -318,25 +318,15 @@ pub fn install_fonts(ctx: &egui::Context, language: &str) {
     let chinese = language.starts_with("zh");
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let candidates: &[&str] = if cfg!(target_os = "macos") {
-            &["/System/Library/Fonts/SFNS.ttf", "/System/Library/Fonts/Helvetica.ttc", "/Library/Fonts/Arial.ttf"]
-        } else if cfg!(windows) {
-            &["C:\\Windows\\Fonts\\segoeui.ttf", "C:\\Windows\\Fonts\\arial.ttf"]
-        } else {
-            &[
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                "/usr/share/fonts/TTF/DejaVuSans.ttf",
-                "/usr/share/fonts/noto/NotoSans-Regular.ttf",
-                "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-            ]
-        };
-        for path in candidates {
-            if let Ok(bytes) = std::fs::read(path) {
-                fonts.font_data.insert("system-ui".into(), std::sync::Arc::new(egui::FontData::from_owned(bytes)));
-                if let Some(f) = fonts.families.get_mut(&FontFamily::Proportional) {
-                    f.insert(0, "system-ui".into());
-                }
-                break;
+        if let Some(bytes) = system_ui_font() {
+            fonts.font_data.insert("system-ui".into(), std::sync::Arc::new(egui::FontData::from_owned(bytes.as_ref().clone())));
+            if let Some(f) = fonts.families.get_mut(&FontFamily::Proportional) {
+                f.insert(0, "system-ui".into());
+            }
+            if language == "vi"
+                && let Some(f) = fonts.families.get_mut(&FontFamily::Monospace)
+            {
+                f.push("system-ui".into());
             }
         }
         let mut paths: Vec<&std::path::Path> = Vec::new();
@@ -397,6 +387,48 @@ pub fn install_fonts(ctx: &egui::Context, language: &str) {
         }
     }
     ctx.set_fonts(fonts);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn system_ui_font() -> Option<&'static std::sync::Arc<Vec<u8>>> {
+    static FOUND: std::sync::OnceLock<Option<std::sync::Arc<Vec<u8>>>> = std::sync::OnceLock::new();
+    FOUND
+        .get_or_init(|| {
+            let candidates: &[&str] = if cfg!(target_os = "macos") {
+                &["/System/Library/Fonts/SFNS.ttf", "/System/Library/Fonts/Helvetica.ttc", "/Library/Fonts/Arial.ttf"]
+            } else if cfg!(windows) {
+                &["C:\\Windows\\Fonts\\segoeui.ttf", "C:\\Windows\\Fonts\\arial.ttf"]
+            } else {
+                &[
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                    "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+                    "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+                ]
+            };
+            candidates.iter().find_map(|path| read_capped(std::path::Path::new(path), MAX_UI_FONT_BYTES).map(std::sync::Arc::new))
+        })
+        .as_ref()
+}
+
+/// Check the face installed by `install_fonts`, so selecting Vietnamese cannot produce boxes.
+pub fn vietnamese_ui_font() -> bool {
+    static FOUND: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *FOUND.get_or_init(|| {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            system_ui_font().and_then(|bytes| cadcraft_fonts::ttf::Face::new(bytes.clone(), 0)).is_some_and(|face| face.has_glyph('ạ'))
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            cadcraft_fonts::CRAFT_FONTS
+                .iter()
+                .find(|font| font.family == "Noto Sans")
+                .filter(|font| font.bytes.len() as u64 <= MAX_UI_FONT_BYTES)
+                .and_then(|font| cadcraft_fonts::ttf::Face::new(std::sync::Arc::new(font.bytes.to_vec()), 0))
+                .is_some_and(|face| face.has_glyph('ạ'))
+        }
+    })
 }
 
 /// Largest interface font file read or embedded face copied (CJK collections are 15–60 MB).
@@ -633,6 +665,7 @@ pub fn shows_hangul(language: &str) -> bool {
 pub fn can_show(language: &str) -> bool {
     match language {
         "ko" => shows_hangul("ko"),
+        "vi" => vietnamese_ui_font(),
         "ar" => arabic_font().is_some(),
         l if l.starts_with("zh") => cjk_font().is_some(),
         _ => true,

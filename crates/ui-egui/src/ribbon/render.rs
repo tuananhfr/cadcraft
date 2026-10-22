@@ -7,6 +7,30 @@ use crate::CadApp;
 use crate::theme::Tokens;
 use crate::wsprofile::schema::{RibbonGroup, RibbonTab};
 
+fn preset_tabs() -> &'static [RibbonTab] {
+    static TABS: std::sync::OnceLock<Vec<RibbonTab>> = std::sync::OnceLock::new();
+    TABS.get_or_init(|| {
+        crate::wsprofile::presets::PRESET_IDS
+            .iter()
+            .filter_map(|id| crate::wsprofile::presets::preset(id))
+            .flat_map(|preset| preset.layout.ribbon.tabs)
+            .collect()
+    })
+}
+
+// Matching both identity and the shipped label keeps custom and renamed labels as user data.
+pub(crate) fn tab_label(tab: &RibbonTab) -> &str {
+    if preset_tabs().iter().any(|preset| preset.id == tab.id && preset.label == tab.label) { crate::i18n::ribbon(&tab.label) } else { &tab.label }
+}
+
+pub(crate) fn group_label<'a>(tab: &RibbonTab, group: &'a RibbonGroup) -> &'a str {
+    let builtin = preset_tabs()
+        .iter()
+        .filter(|preset| preset.id == tab.id)
+        .any(|preset| preset.groups.iter().any(|built| built.id == group.id && built.label == group.label));
+    if builtin { crate::i18n::ribbon(&group.label) } else { &group.label }
+}
+
 pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
     if !app.ws.effective.layout.ribbon.visible {
         return;
@@ -34,7 +58,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
     egui::Panel::top("cc_ribbon").exact_size(height).frame(egui::Frame::NONE.fill(Tokens::get().chrome)).show(ui, |ui| {
         ui.horizontal(|ui| {
             for tab in &tabs {
-                let response = ui.add(egui::Button::selectable(active == tab.id, crate::i18n::t(&tab.label)));
+                let response = ui.add(egui::Button::selectable(active == tab.id, tab_label(tab)));
                 if response.clicked() || response.double_clicked() {
                     active = tab.id.clone();
                 }
@@ -156,7 +180,7 @@ fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
                     ui.spacing_mut().item_spacing.y = ROW_GAP;
                     if compact {
                         egui::containers::menu::MenuButton::from_button(
-                            egui::Button::new(crate::i18n::t(&group.label)).truncate().min_size(vec2(COMPACT_WIDTH, BUTTON_HEIGHT)),
+                            egui::Button::new(group_label(tab, group)).truncate().min_size(vec2(COMPACT_WIDTH, BUTTON_HEIGHT)),
                         )
                         .ui(ui, |ui| {
                             for id in &group.commands {
@@ -177,7 +201,7 @@ fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
                                 }
                             });
                         }
-                        ui.add_sized(vec2(width, LABEL_HEIGHT), egui::Label::new(crate::i18n::t(&group.label)).truncate());
+                        ui.add_sized(vec2(width, LABEL_HEIGHT), egui::Label::new(group_label(tab, group)).truncate());
                     }
                 });
             });

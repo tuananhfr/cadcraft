@@ -41,10 +41,12 @@ pub enum Preference {
     Swedish,
     #[serde(rename = "ar")]
     Arabic,
+    #[serde(rename = "vi")]
+    Vietnamese,
 }
 
 impl Preference {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Auto,
         Self::English,
         Self::Ukrainian,
@@ -59,6 +61,7 @@ impl Preference {
         Self::Korean,
         Self::Swedish,
         Self::Arabic,
+        Self::Vietnamese,
     ];
 
     /// The codes a preference can be given as, for messages ("auto, en or uk").
@@ -86,6 +89,7 @@ impl Preference {
             Self::Korean => "ko",
             Self::Swedish => "sv",
             Self::Arabic => "ar",
+            Self::Vietnamese => "vi",
         }
     }
 
@@ -111,6 +115,7 @@ impl Preference {
             }
             Self::Swedish => "Svenska",
             Self::Arabic => "العربية",
+            Self::Vietnamese => "Tiếng Việt",
         }
     }
 
@@ -138,6 +143,7 @@ impl Preference {
             Self::Korean => "ko",
             Self::Swedish => "sv",
             Self::Arabic => "ar",
+            Self::Vietnamese => "vi",
             Self::Auto => locales.iter().find_map(|s| locale_language(s)).unwrap_or("en"),
         }
     }
@@ -154,7 +160,7 @@ pub struct Language {
     catalog: OnceLock<Catalog<'static>>,
 }
 
-pub static LANGUAGES: [Language; 13] = [
+pub static LANGUAGES: [Language; 14] = [
     Language { code: "en", name: "English", source: "", plural: plural_en, plural_forms: 2, catalog: OnceLock::new() },
     Language {
         code: "uk", name: "Українська", source: include_str!("uk.tsv"), plural: plural_uk, plural_forms: 3, catalog: OnceLock::new()
@@ -182,13 +188,14 @@ pub static LANGUAGES: [Language; 13] = [
     // Italian integer plurals (CLDR `it`) follow the English rule: one (1), other.
     Language { code: "it", name: "Italiano", source: include_str!("it.tsv"), plural: plural_en, plural_forms: 2, catalog: OnceLock::new() },
     // Korean has one integer plural form and needs a Hangul-capable interface font.
-    Language { code: "ko", name: "한국어", source: include_str!("ko.tsv"), plural: plural_ko, plural_forms: 1, catalog: OnceLock::new() },
+    Language { code: "ko", name: "한국어", source: include_str!("ko.tsv"), plural: plural_single, plural_forms: 1, catalog: OnceLock::new() },
     // Swedish plurals follow the English rule: one (1), other.
     Language { code: "sv", name: "Svenska", source: include_str!("sv.tsv"), plural: plural_en, plural_forms: 2, catalog: OnceLock::new() },
     // العربية (Arabic) is right-to-left; an installed Arabic font (`theme::arabic_font`)
     // covers its glyphs, and the shell keeps egui's left-to-right run order. Six plural
     // forms: zero, one, two, few, many, other.
     Language { code: "ar", name: "العربية", source: include_str!("ar.tsv"), plural: plural_arabic, plural_forms: 6, catalog: OnceLock::new() },
+    Language { code: "vi", name: "Tiếng Việt", source: include_str!("vi.tsv"), plural: plural_single, plural_forms: 1, catalog: OnceLock::new() },
 ];
 
 /// BCP 47 and POSIX locale tags, including `uk-UA`, `uk_UA.UTF-8` and `pt_BR.UTF-8`.
@@ -259,6 +266,15 @@ pub fn menu(source: &str) -> &str {
     CURRENT.with(|l| tr_menu(l.get(), source))
 }
 
+/// Ribbon headings can differ from ordinary labels; catalogs without a context row fall back.
+pub fn tr_ribbon<'a>(language: &str, source: &'a str) -> &'a str {
+    catalog(language).and_then(|c| c.get(&("ribbon", source))).copied().unwrap_or_else(|| tr(language, source))
+}
+
+pub fn ribbon(source: &str) -> &str {
+    CURRENT.with(|l| tr_ribbon(l.get(), source))
+}
+
 /// Named placeholders allow translations to reorder values. Inserted values are never looked up
 /// or substituted again, so a user's name containing `{n}` is preserved verbatim.
 pub fn format(source: &str, values: &[(&str, String)]) -> String {
@@ -322,8 +338,8 @@ pub fn plural_pt(n: u64) -> usize {
     usize::from(n > 1)
 }
 
-/// Korean uses the same count form for every integer.
-fn plural_ko(_n: u64) -> usize {
+/// Korean and Vietnamese use the same count form for every integer.
+fn plural_single(_n: u64) -> usize {
     0
 }
 

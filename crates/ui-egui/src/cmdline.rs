@@ -12,6 +12,7 @@ use crate::theme::Tokens;
 #[derive(Default)]
 pub struct CmdLine {
     pub buffer: String,
+    ime_composing: bool,
     /// The selection as of the last frame, to notice when it changes.
     seen_selection: Vec<cadcraft_doc::Handle>,
     /// Something was typed at the command line since the selection was made.
@@ -170,6 +171,10 @@ pub(crate) fn all_suggestions(prefix: &str) -> Vec<Suggestion> {
 }
 
 impl CmdLine {
+    pub(crate) fn ime_composing(&self) -> bool {
+        self.ime_composing
+    }
+
     /// Track the selection: a new selection starts with nothing typed since.
     pub fn watch_selection(&mut self, sel: &[cadcraft_doc::Handle]) {
         if self.seen_selection != sel {
@@ -264,6 +269,26 @@ pub fn keyboard(app: &mut CadApp, ctx: &egui::Context) {
     let text_prompt = app.session.current_prompt().is_some_and(|p| p.accept.text && !p.accept.point && !p.accept.number);
     options_still_fit(app);
     for ev in events {
+        match &ev {
+            egui::Event::Ime(egui::ImeEvent::Preedit { text, .. }) => {
+                app.cmd.ime_composing = !text.is_empty();
+                continue;
+            }
+            egui::Event::Ime(egui::ImeEvent::Commit(text)) => {
+                app.cmd.buffer.push_str(&crate::i18n::fold::nfc(text));
+                app.cmd.ime_composing = false;
+                app.cmd.note_typing();
+                continue;
+            }
+            _ => {}
+        }
+        // capture_tab turns Tab into text before egui can move focus away from the canvas.
+        if app.cmd.ime_composing()
+            && (matches!(&ev, egui::Event::Key { key: Key::Enter | Key::Space | Key::Escape | Key::Tab, .. })
+                || matches!(&ev, egui::Event::Text(text) if text == " " || text == "\t"))
+        {
+            continue;
+        }
         // The options menu takes the arrows, Enter and Escape; typing closes it.
         if app.cmd.options.is_some() {
             let space = matches!(&ev, egui::Event::Text(t) if t == " ") && !text_prompt;
