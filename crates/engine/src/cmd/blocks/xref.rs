@@ -18,6 +18,7 @@ use serde_json::{Value, json};
 use self::load::{Outcome, Sym};
 use super::{InsStage, InsertM, insert_with, valid_block_name};
 use crate::cmd::{CommandSpec, bad, bool_or, f64_or, point_param, point_value, str_param};
+use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
 
 pub(super) fn specs() -> Vec<CommandSpec> {
@@ -429,13 +430,17 @@ impl Interactive for XrefM {
                 .kw(&["?", "Bind", "Detach", "Path", "Unload", "Reload", "Overlay", "Attach"])
                 .default("Attach"),
             XStage::Names("?") => Prompt::new("Enter xref(s) to list", Accept::TEXT).default("*"),
-            XStage::Names(op) => Prompt::new(format!("Enter xref name(s) to {op}"), Accept::TEXT),
+            XStage::Names(op) => Prompt::tf("Enter xref name(s) to {op}", vec![("op", PromptArg::Key(op))], Accept::TEXT),
             XStage::PathNames => Prompt::new("Edit path for which xref(s)", Accept::TEXT),
             XStage::NewPath(names) => {
                 let old = names.first().and_then(|n| s.doc().ok()?.block(n)?.xref_path.clone()).unwrap_or_default();
-                Prompt::new(format!("Enter new path for \"{}\"", names.first().cloned().unwrap_or_default()), Accept::TEXT).default(old)
+                let args = vec![("name", PromptArg::Text(names.first().cloned().unwrap_or_default()))];
+                Prompt::tf("Enter new path for \"{name}\"", args, Accept::TEXT).default(old)
             }
-            XStage::File { overlay } => Prompt::new(format!("Enter name of file to {}", if *overlay { "overlay" } else { "attach" }), Accept::TEXT),
+            XStage::File { overlay } => {
+                let args = vec![("operation", PromptArg::Key(if *overlay { "overlay" } else { "attach" }))];
+                Prompt::tf("Enter name of file to {operation}", args, Accept::TEXT)
+            }
             XStage::Insert(m) => m.prompt(s),
         }
     }
@@ -550,7 +555,7 @@ impl Interactive for XbindM {
     fn prompt(&self, _s: &Session) -> Prompt {
         match self.sym {
             None => Prompt::new("Enter symbol type to bind", crate::cmd::curves::KW).kw(&["Block", "Dimstyle", "LAyer", "LType", "Style"]),
-            Some(t) => Prompt::new(format!("Enter dependent {t} name(s)"), Accept::TEXT),
+            Some(t) => Prompt::tf("Enter dependent {kind} name(s)", vec![("kind", PromptArg::Key(t))], Accept::TEXT),
         }
     }
     fn input(&mut self, s: &mut Session, i: Input) -> Result<Step> {

@@ -192,11 +192,11 @@ fn tracking_options(ui: &mut egui::Ui, s: &mut cadcraft_engine::Settings) {
 }
 
 /// LUNITS values in the order the Type list shows them.
-const LENGTH_TYPES: [(i64, &str); 5] = [(4, "Architectural"), (2, "Decimal"), (3, "Engineering"), (5, "Fractional"), (1, "Scientific")];
+pub(crate) const LENGTH_TYPES: [(i64, &str); 5] = [(4, "Architectural"), (2, "Decimal"), (3, "Engineering"), (5, "Fractional"), (1, "Scientific")];
 /// AUNITS values.
-const ANGLE_TYPES: [(i64, &str); 5] = [(0, "Decimal Degrees"), (1, "Deg/Min/Sec"), (2, "Grads"), (3, "Radians"), (4, "Surveyor's Units")];
+pub(crate) const ANGLE_TYPES: [(i64, &str); 5] = [(0, "Decimal Degrees"), (1, "Deg/Min/Sec"), (2, "Grads"), (3, "Radians"), (4, "Surveyor's Units")];
 /// INSUNITS names, indexed by value (DXF Reference, header group code 70).
-const INSERTION_UNITS: [&str; 25] = [
+pub(crate) const INSERTION_UNITS: [&str; 25] = [
     "Unitless",
     "Inches",
     "Feet",
@@ -249,47 +249,50 @@ fn units(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
             .unwrap_or([2, 4, 0, 0, 1])
     });
     let (mut apply, mut cancel) = (false, false);
-    egui::Window::new("Drawing Units").open(open).resizable(false).collapsible(false).show(ctx, |ui| {
-        let [lu, lp, au, ap, ins] = &mut v;
-        let types = |t: &[(i64, &str)]| t.iter().map(|(k, l)| (*k, l.to_string())).collect::<Vec<_>>();
-        egui::Grid::new("units_grid").num_columns(2).spacing(vec2(12.0, 6.0)).show(ui, |ui| {
-            ui.strong("Length");
-            ui.end_row();
-            ui.label("Type");
-            pick(ui, "units_lunits", lu, &types(&LENGTH_TYPES));
-            ui.end_row();
-            ui.label("Precision");
-            pick(ui, "units_luprec", lp, &(0..=8).map(|p| (p, format_distance(1.5, *lu, p))).collect::<Vec<_>>());
-            ui.end_row();
-            ui.strong("Angle");
-            ui.end_row();
-            ui.label("Type");
-            pick(ui, "units_aunits", au, &types(&ANGLE_TYPES));
-            ui.end_row();
-            ui.label("Precision");
-            pick(ui, "units_auprec", ap, &(0..=8).map(|p| (p, format_angle(45f64.to_radians(), *au, p))).collect::<Vec<_>>());
-            ui.end_row();
-            ui.strong("Insertion scale");
-            ui.end_row();
-            ui.label("Units to scale inserted content");
-            let names = INSERTION_UNITS.iter().enumerate().map(|(k, l)| (k as i64, l.to_string())).collect::<Vec<_>>();
-            pick(ui, "units_insunits", ins, &names);
-            ui.end_row();
-            ui.strong("Sample output");
-            ui.end_row();
-            ui.label("");
-            ui.label(format!("{},{},{}", format_distance(1.5, *lu, *lp), format_distance(2.0039, *lu, *lp), format_distance(0.0, *lu, *lp)));
-            ui.end_row();
-            ui.label("");
-            ui.label(format_angle(45f64.to_radians(), *au, *ap));
-            ui.end_row();
-        });
-        ui.separator();
-        ui.horizontal(|ui| {
-            apply = ui.button("OK").clicked();
-            cancel = ui.button("Cancel").clicked();
-        });
-    });
+    egui::Window::new(crate::tl!("Drawing Units")).id(egui::Id::new("Drawing Units")).open(open).resizable(false).collapsible(false).show(
+        ctx,
+        |ui| {
+            let [lu, lp, au, ap, ins] = &mut v;
+            let types = |t: &[(i64, &str)]| t.iter().map(|(k, l)| (*k, crate::i18n::t(l).to_string())).collect::<Vec<_>>();
+            egui::Grid::new("units_grid").num_columns(2).spacing(vec2(12.0, 6.0)).show(ui, |ui| {
+                ui.strong(crate::tl!("Length"));
+                ui.end_row();
+                ui.label(crate::tl!("Type"));
+                pick(ui, "units_lunits", lu, &types(&LENGTH_TYPES));
+                ui.end_row();
+                ui.label(crate::tl!("Precision"));
+                pick(ui, "units_luprec", lp, &(0..=8).map(|p| (p, format_distance(1.5, *lu, p))).collect::<Vec<_>>());
+                ui.end_row();
+                ui.strong(crate::tl!("Angle"));
+                ui.end_row();
+                ui.label(crate::tl!("Type"));
+                pick(ui, "units_aunits", au, &types(&ANGLE_TYPES));
+                ui.end_row();
+                ui.label(crate::tl!("Precision"));
+                pick(ui, "units_auprec", ap, &(0..=8).map(|p| (p, format_angle(45f64.to_radians(), *au, p))).collect::<Vec<_>>());
+                ui.end_row();
+                ui.strong(crate::tl!("Insertion scale"));
+                ui.end_row();
+                ui.label(crate::tl!("Units to scale inserted content"));
+                let names = INSERTION_UNITS.iter().enumerate().map(|(k, l)| (k as i64, crate::i18n::t(l).to_string())).collect::<Vec<_>>();
+                pick(ui, "units_insunits", ins, &names);
+                ui.end_row();
+                ui.strong(crate::tl!("Sample output"));
+                ui.end_row();
+                ui.label("");
+                ui.label(format!("{},{},{}", format_distance(1.5, *lu, *lp), format_distance(2.0039, *lu, *lp), format_distance(0.0, *lu, *lp)));
+                ui.end_row();
+                ui.label("");
+                ui.label(format_angle(45f64.to_radians(), *au, *ap));
+                ui.end_row();
+            });
+            ui.separator();
+            ui.horizontal(|ui| {
+                apply = ui.button(crate::tl!("OK")).clicked();
+                cancel = ui.button(crate::tl!("Cancel")).clicked();
+            });
+        },
+    );
     if apply {
         let [lu, lp, au, ap, ins] = v;
         let _ = app.run("units", json!({ "lunits": lu, "luprec": lp, "aunits": au, "auprec": ap, "insunits": ins }));
@@ -329,7 +332,7 @@ fn about(ctx: &egui::Context, open: &mut bool) {
                     ui.label(crate::tf!("Version {version}", version = env!("CARGO_PKG_VERSION")));
                     ui.label(crate::tl!("Computer-aided design and drafting: an open-source, clean-room CAD application written in pure Rust."));
                     ui.add_space(6.0);
-                    ui.label(RichText::new("UbotCAD — dựa trên CADCraft của nhóm ArtCraft.").color(t.text_dim));
+                    ui.label(RichText::new(crate::tl!("UbotCAD — based on CADCraft by the ArtCraft team.")).color(t.text_dim));
                     ui.hyperlink_to("ubotbuild.com", "https://ubotbuild.com/");
                     ui.add_space(6.0);
                     ui.label(RichText::new(crate::tl!("MIT OR Apache-2.0. Not affiliated with Autodesk, Inc.")).small().color(t.text_faint));

@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use super::super::helpers::support_text;
 use super::super::qselect::wildcard;
 use super::*;
+use crate::prompt::PromptArg;
 use crate::{Accept, Input, Interactive, Prompt, Step};
 
 /// Names no file may define: they are not linetype definitions.
@@ -207,7 +208,8 @@ impl Interactive for DashLinetype {
             Ask::LoadFile => Prompt::new("Enter name of linetype file", Accept::TEXT).default("built-in library"),
             Ask::Reload => {
                 let name = self.reloads.last().map(|l| l.name.as_str()).unwrap_or("");
-                Prompt::new(format!("Linetype {name} is already loaded. Reload it?"), Accept::TEXT).kw(&["Yes", "No"]).default("Yes")
+                let args = vec![("name", PromptArg::Text(name.to_string()))];
+                Prompt::tf("Linetype {name} is already loaded. Reload it?", args, Accept::TEXT).kw(&["Yes", "No"]).default("Yes")
             }
             Ask::Set => {
                 let cur = s.doc().map(|d| d.header.str("CELTYPE", "ByLayer")).unwrap_or_default();

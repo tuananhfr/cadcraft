@@ -9,6 +9,7 @@ use super::helpers::*;
 use super::machines::number;
 use super::pline_opts::{Outcome, PlineAsk};
 use super::*;
+use crate::prompt::PromptArg;
 use crate::{Accept, Input, Interactive, Prompt, Result, Session, Step, snap};
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -593,7 +594,8 @@ impl Interactive for PlineM {
             let unit = if self.half { "half-width" } else { "width" };
             let (which, w) = if self.asking_width == 1 { ("starting", self.start_w) } else { ("ending", self.end_w) };
             let shown = if self.half { w / 2.0 } else { w };
-            return Prompt::new(format!("Specify {which} {unit}"), Accept::NUMBER).default(format!("{shown:.4}"));
+            let args = vec![("which", PromptArg::Key(which)), ("unit", PromptArg::Key(unit))];
+            return Prompt::tf("Specify {which} {unit}", args, Accept::NUMBER).default(format!("{shown:.4}"));
         }
         let base = self.verts.last().map(|v| v.p);
         if let (Some(a), Some(st)) = (self.ask, base) {

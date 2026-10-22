@@ -5,6 +5,7 @@ use cadcraft_geom::{Polyline, Vec2};
 use serde_json::{Value, json};
 
 use super::*;
+use crate::prompt::PromptArg;
 use crate::units::{format_angle, format_distance};
 use crate::{Accept, Input, Interactive, Prompt, Result, Session, Step};
 
@@ -708,20 +709,20 @@ impl Interactive for AreaM {
     }
     fn prompt(&self, _s: &Session) -> Prompt {
         if self.object {
-            return Prompt::new(format!("{}Select objects", self.mode_prefix()), Accept::SELECT);
+            return Prompt::tf("{mode}Select objects", vec![("mode", PromptArg::Key(self.mode_prefix()))], Accept::SELECT);
         }
         if self.length {
             return length_prompt();
         }
-        let next = format!("{}Specify next point", self.mode_prefix());
+        let next = Prompt::tf("{mode}Specify next point", vec![("mode", PromptArg::Key(self.mode_prefix()))], Accept::POINT);
         match (self.pts.len(), self.mode) {
             (0, AreaMode::Single) => {
                 Prompt::new("Specify first corner point", Accept::POINT).kw(&["Object", "Add area", "Subtract area"]).default("Object")
             }
             (0, AreaMode::Add) => Prompt::new("Specify first corner point", Accept::POINT).kw(&["Object", "Subtract area"]),
             (0, AreaMode::Subtract) => Prompt::new("Specify first corner point", Accept::POINT).kw(&["Object", "Add area"]),
-            (1, _) => Prompt::new(next, Accept::POINT).kw(&["Arc", "Length", "Undo"]).base_opt(self.pts.last().copied()),
-            _ => Prompt::new(next, Accept::POINT).kw(&["Arc", "Length", "Undo", "Total"]).default("Total").base_opt(self.pts.last().copied()),
+            (1, _) => next.kw(&["Arc", "Length", "Undo"]).base_opt(self.pts.last().copied()),
+            _ => next.kw(&["Arc", "Length", "Undo", "Total"]).default("Total").base_opt(self.pts.last().copied()),
         }
     }
     fn input(&mut self, s: &mut Session, i: Input) -> Result<Step> {

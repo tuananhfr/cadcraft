@@ -10,6 +10,7 @@ use crate::cmd::curves::KW;
 use crate::cmd::machines::{SelOutcome, SelectPhase};
 use crate::cmd::qselect::wildcard;
 use crate::cmd::{CommandSpec, bad, str_param, targets};
+use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
 
 /// Longest attribute value a string replacement may produce (bytes).
@@ -233,7 +234,10 @@ impl Interactive for AtteditM {
     }
     fn prompt(&self, _s: &Session) -> Prompt {
         match self.attribs.get(self.values.len()) {
-            Some((_, tag, cur)) if self.block.is_some() => Prompt::new(format!("Enter value for {tag}"), Accept::TEXT).default(cur.clone()),
+            Some((_, tag, cur)) if self.block.is_some() => {
+                let args = vec![("tag", PromptArg::Text(tag.clone()))];
+                Prompt::tf("Enter value for {tag}", args, Accept::TEXT).default(cur.clone())
+            }
             _ => Prompt::new("Select block reference", Accept::SELECT),
         }
     }

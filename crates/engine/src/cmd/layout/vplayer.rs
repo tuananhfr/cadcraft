@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 
 use super::super::find_command;
 use super::super::qselect::wildcard;
+use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
 
 const OPTIONS: &[&str] = &["?", "Color", "Freeze", "Thaw", "Reset", "Newfrz", "Vpvisdflt"];
@@ -350,7 +351,7 @@ impl Interactive for VplayerM {
                     Change::Reset => "to reset",
                     Change::Color(_) => "to change color",
                 };
-                Prompt::new(format!("Enter layer name(s) {what}"), NAME)
+                Prompt::tf("Enter layer name(s) {what}", vec![("what", PromptArg::Key(what))], NAME)
             }
             Stage::Apply(..) => {
                 if active(s).is_some() {

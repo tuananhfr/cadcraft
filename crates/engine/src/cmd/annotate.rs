@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 use super::helpers::v3;
 use super::machines::{SelOutcome, SelectPhase, SelectRun};
 use super::*;
+use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, LeaderOrder, MLeaderOptions, Prompt, Result, Session, Step};
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -838,7 +839,10 @@ impl Interactive for OverrideM {
             return sel.prompt();
         }
         match &self.var {
-            Some(v) => Prompt::new(format!("Enter new value for dimension variable {}", v.to_ascii_uppercase()), Accept::TEXT),
+            Some(v) => {
+                let args = vec![("name", PromptArg::Text(v.to_ascii_uppercase()))];
+                Prompt::tf("Enter new value for dimension variable {name}", args, Accept::TEXT)
+            }
             None => Prompt::new("Enter dimension variable name to override", Accept::TEXT).kw(&["Clear overrides"]),
         }
     }

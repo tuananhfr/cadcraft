@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 
 use crate::cmd::curves::{KW, handle_value};
 use crate::cmd::{CommandSpec, bad, bool_or, str_param};
+use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
 
 pub(super) fn specs() -> Vec<CommandSpec> {
@@ -260,7 +261,7 @@ impl Interactive for BcloseM {
     }
     fn prompt(&self, s: &Session) -> Prompt {
         let name = s.state().ok().and_then(|st| st.block_editor().map(str::to_string)).unwrap_or_default();
-        Prompt::new(format!("Save changes to block \"{name}\"?"), KW).kw(&["Yes", "No"]).default("Y")
+        Prompt::tf("Save changes to block \"{name}\"?", vec![("name", PromptArg::Text(name))], KW).kw(&["Yes", "No"]).default("Y")
     }
     fn input(&mut self, s: &mut Session, i: Input) -> Result<Step> {
         let answer = match i {
@@ -295,7 +296,10 @@ impl Interactive for BsaveasM {
     }
     fn prompt(&self, _s: &Session) -> Prompt {
         match &self.name {
-            Some(n) => Prompt::new(format!("Block \"{n}\" already exists. Redefine it?"), KW).kw(&["Yes", "No"]).default("N"),
+            Some(n) => {
+                let args = vec![("name", PromptArg::Text(n.clone()))];
+                Prompt::tf("Block \"{name}\" already exists. Redefine it?", args, KW).kw(&["Yes", "No"]).default("N")
+            }
             None => Prompt::new("Enter block name", Accept::TEXT),
         }
     }

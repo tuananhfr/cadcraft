@@ -10,6 +10,7 @@ use crate::cmd::curves::KW;
 use crate::cmd::machines::{SelOutcome, SelectPhase};
 use crate::cmd::qselect::wildcard;
 use crate::cmd::{CommandSpec, bad, str_param, targets};
+use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
 
 pub(super) fn attdisp_spec() -> CommandSpec {
@@ -261,7 +262,10 @@ impl Interactive for AttsyncM {
             Stage::List => Prompt::new("Enter block(s) to list", Accept::TEXT).default("*"),
             Stage::Name => Prompt::new("Enter name of block to sync", Accept::TEXT).kw(&["?"]),
             Stage::Select => Prompt::new("Select a block", Accept::SELECT),
-            Stage::Confirm => Prompt::new(format!("ATTSYNC block {}?", self.picked), KW).kw(&["Yes", "No"]).default("Yes"),
+            Stage::Confirm => {
+                let args = vec![("name", PromptArg::Text(self.picked.clone()))];
+                Prompt::tf("ATTSYNC block {name}?", args, KW).kw(&["Yes", "No"]).default("Yes")
+            }
         }
     }
     fn input(&mut self, s: &mut Session, i: Input) -> Result<Step> {

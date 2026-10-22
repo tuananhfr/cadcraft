@@ -378,7 +378,7 @@ fn panel_of(id: &str) -> Option<Panel> {
 pub(crate) fn command_known(id: &str) -> bool {
     crate::menus::is_ui_command(id)
         || cadcraft_engine::command_specs().iter().any(|spec| spec.id == id || spec.aliases.contains(&id))
-        || cadcraft_engine::cmd::registry::resolve_stable(id).is_some()
+        || cadcraft_engine::cmd::registry::resolve_command(id).is_some()
 }
 
 fn report(layout: &WorkspaceLayout) -> ApplyReport {
@@ -881,5 +881,20 @@ pub(crate) fn keep_locked_stack_sizes(app: &CadApp, next: &mut Workspace) {
             }
             Node::Tabs { .. } => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::command_known;
+
+    #[test]
+    fn command_known_accepts_namespaced_engine_ids() {
+        assert!(command_known("cad.draw.line"));
+        assert!(command_known("cad.other.-block"));
+        assert!(command_known("line"));
+        assert!(command_known("l"));
+        assert!(command_known("ui.dock"));
+        assert!(!command_known("cad.draw.nope"));
     }
 }

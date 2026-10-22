@@ -3,8 +3,6 @@
 //! `fonts` command ([`cadcraft_engine::cmd::fonts`]); the added fonts live in
 //! [`cadcraft_fonts::ttf`]. The host keeps both between runs: the table in the profile, the added
 //! fonts through [`CadApp::take_font_changes`].
-//!
-//! The interface text is English only for now, so this file is not in the translated sources.
 
 use std::collections::BTreeMap;
 
@@ -58,7 +56,7 @@ impl CadApp {
         // An SHX font under another extension is keyed (and so kept and removed) as `<stem>.shx`.
         let kept = if font.is_shx() && !ttf::key(file_name).ends_with(".shx") { font.stem.clone() } else { file_name.to_string() };
         self.fontmgr.changes.push(FontChange::Added { file_name: kept, bytes });
-        self.after_font_change(format!("Added font {}", font.families.first().unwrap_or(&font.stem)));
+        self.after_font_change(crate::tf!("Added font {font}", font = font.families.first().unwrap_or(&font.stem)));
         Ok(font)
     }
 
@@ -71,7 +69,7 @@ impl CadApp {
     pub fn remove_font(&mut self, stem: &str) {
         if ttf::remove_user_font(stem) {
             self.fontmgr.changes.push(FontChange::Removed { stem: stem.to_string() });
-            self.after_font_change(format!("Removed font {stem}"));
+            self.after_font_change(crate::tf!("Removed font {font}", font = stem));
         }
     }
 
@@ -232,7 +230,7 @@ pub fn report(app: &mut CadApp) -> Value {
 }
 
 pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
-    egui::Window::new("Fonts")
+    egui::Window::new(crate::tl!("Fonts"))
         .id(egui::Id::new("cc_fonts"))
         .open(open)
         .collapsible(false)
@@ -254,15 +252,15 @@ pub fn body(ui: &mut egui::Ui, app: &mut CadApp) {
     let local_supported = app.fontmgr.local_supported;
     let local = app.fontmgr.local_fonts.clone();
     let can_pick = app.fontmgr.pick_file.is_some() || cfg!(target_arch = "wasm32");
-    ui.label(RichText::new("Fonts stay on this computer. They are not uploaded and never change the drawing.").color(t.text_dim));
+    ui.label(RichText::new(crate::tl!("Fonts stay on this computer. They are not uploaded and never change the drawing.")).color(t.text_dim));
     ui.add_space(6.0);
-    ui.heading("In this drawing");
+    ui.heading(crate::tl!("In this drawing"));
     if rows.is_empty() {
-        ui.label(RichText::new("No drawing is open.").color(t.text_dim));
+        ui.label(RichText::new(crate::tl!("No drawing is open.")).color(t.text_dim));
     } else {
         egui::ScrollArea::vertical().max_height(260.0).auto_shrink([false, true]).id_salt("fonts-rows").show(ui, |ui| {
             egui::Grid::new("fonts-grid").num_columns(4).striped(true).spacing([12.0, 6.0]).show(ui, |ui| {
-                for h in ["Font", "Used by", "Status", "Draw with"] {
+                for h in [crate::tl!("Font"), crate::tl!("Used by"), crate::tl!("Status"), crate::tl!("Draw with")] {
                     ui.label(RichText::new(h).color(t.text_dim));
                 }
                 ui.end_row();
@@ -273,12 +271,12 @@ pub fn body(ui: &mut egui::Ui, app: &mut CadApp) {
         });
     }
     ui.add_space(8.0);
-    ui.heading("Any other missing font");
+    ui.heading(crate::tl!("Any other missing font"));
     ui.horizontal(|ui| {
-        ui.label("Draw with");
-        let shown = if alt.is_empty() { "Built-in stroke font".to_string() } else { alt.clone() };
+        ui.label(crate::tl!("Draw with"));
+        let shown = if alt.is_empty() { crate::tl!("Built-in stroke font").to_string() } else { alt.clone() };
         egui::ComboBox::from_id_salt("fonts-alt").selected_text(shown).width(260.0).show_ui(ui, |ui| {
-            if ui.selectable_label(alt.is_empty(), "Built-in stroke font").clicked() {
+            if ui.selectable_label(alt.is_empty(), crate::tl!("Built-in stroke font")).clicked() {
                 act = Some(Act::Alt(String::new()));
             }
             choices(ui, |ui, label, name| {
@@ -289,30 +287,30 @@ pub fn body(ui: &mut egui::Ui, app: &mut CadApp) {
         });
     });
     ui.add_space(8.0);
-    ui.heading("Fonts you added");
+    ui.heading(crate::tl!("Fonts you added"));
     if added.is_empty() {
-        ui.label(RichText::new("None yet. Add the font files a drawing needs (.ttf, .otf, .ttc, .shx).").color(t.text_dim));
+        ui.label(RichText::new(crate::tl!("None yet. Add the font files a drawing needs (.ttf, .otf, .ttc, .shx).")).color(t.text_dim));
     }
     for f in &added {
         ui.horizontal(|ui| {
             ui.label(f.families.first().unwrap_or(&f.stem));
-            ui.label(RichText::new(format!("{} · {} KB", f.stem, f.bytes.div_ceil(1024))).color(t.text_dim));
-            if ui.small_button("Remove").clicked() {
+            ui.label(RichText::new(crate::tf!("{font} · {size} KB", font = f.stem, size = f.bytes.div_ceil(1024))).color(t.text_dim));
+            if ui.small_button(crate::tl!("Remove")).clicked() {
                 act = Some(Act::Remove(f.stem.clone()));
             }
         });
     }
     if let Some(list) = &local {
         ui.add_space(4.0);
-        ui.label(RichText::new("Fonts installed on this computer (click to add)").color(t.text_dim));
+        ui.label(RichText::new(crate::tl!("Fonts installed on this computer (click to add)")).color(t.text_dim));
         local_list(ui, list, &mut act);
     }
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        if ui.add_enabled(can_pick, egui::Button::new("Add font file...")).clicked() {
+        if ui.add_enabled(can_pick, egui::Button::new(crate::tl!("Add font file..."))).clicked() {
             act = Some(Act::Add);
         }
-        if local_supported && ui.button("Add installed font...").clicked() {
+        if local_supported && ui.button(crate::tl!("Add installed font...")).clicked() {
             act = Some(Act::ListLocal);
         }
         if let Some(n) = &note {
@@ -344,30 +342,30 @@ fn font_row(ui: &mut egui::Ui, r: &Row, act: &mut Option<Act>) {
     let name = if r.font.is_empty() { BUILTIN_FONT } else { r.font.as_str() };
     ui.label(dim(name.to_string()));
     let styles = r.styles.join(", ");
-    let shown = if r.used { styles.clone() } else { format!("{styles} (unused)") };
+    let shown = if r.used { styles.clone() } else { crate::tf!("{styles} (unused)", styles = styles) };
     ui.label(dim(shown)).on_hover_text(styles);
     let (text, color) = match r.state.as_str() {
-        "found" => ("Found", t.text),
-        "stroke" => ("Stroke font", t.text),
-        _ => ("Missing", t.warn),
+        "found" => (crate::tl!("Found"), t.text),
+        "stroke" => (crate::tl!("Stroke font"), t.text),
+        _ => (crate::tl!("Missing"), t.warn),
     };
     let status = ui.label(RichText::new(text).color(color));
     if let Some(l) = &r.legacy {
-        status.on_hover_text(format!("Text typed for this {l} font is shown as Unicode."));
+        status.on_hover_text(crate::tf!("Text typed for this {font} font is shown as Unicode.", font = l));
     }
     if r.state == "found" {
         ui.label("");
     } else {
         let shown = match (&r.with, r.mapped) {
             (Some(w), _) => w.clone(),
-            (None, true) => "Built-in stroke font".to_string(),
-            (None, false) => "Default".to_string(),
+            (None, true) => crate::tl!("Built-in stroke font").to_string(),
+            (None, false) => crate::tl!("Default").to_string(),
         };
         egui::ComboBox::from_id_salt(("fonts-with", &r.font)).selected_text(shown).width(220.0).show_ui(ui, |ui| {
-            if ui.selectable_label(!r.mapped, "Default").clicked() {
+            if ui.selectable_label(!r.mapped, crate::tl!("Default")).clicked() {
                 *act = Some(Act::Map(r.font.clone(), String::new()));
             }
-            if ui.selectable_label(r.mapped && r.with.is_none(), "Built-in stroke font").clicked() {
+            if ui.selectable_label(r.mapped && r.with.is_none(), crate::tl!("Built-in stroke font")).clicked() {
                 *act = Some(Act::Map(r.font.clone(), BUILTIN_FONT.to_string()));
             }
             choices(ui, |ui, label, name| {
@@ -384,7 +382,7 @@ fn font_row(ui: &mut egui::Ui, r: &Row, act: &mut Option<Act>) {
 fn local_list(ui: &mut egui::Ui, list: &[String], act: &mut Option<Act>) {
     let id = ui.id().with("fonts-local-filter");
     let mut filter = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_default();
-    ui.add(egui::TextEdit::singleline(&mut filter).hint_text("Filter").desired_width(f32::INFINITY));
+    ui.add(egui::TextEdit::singleline(&mut filter).hint_text(crate::tl!("Filter")).desired_width(f32::INFINITY));
     let needle = filter.trim().to_lowercase();
     ui.data_mut(|d| d.insert_temp(id, filter));
     egui::ScrollArea::vertical().max_height(160.0).id_salt("fonts-local").show(ui, |ui| {
@@ -401,13 +399,13 @@ fn local_list(ui: &mut egui::Ui, list: &[String], act: &mut Option<Act>) {
 fn choices(ui: &mut egui::Ui, mut item: impl FnMut(&mut egui::Ui, &str, &str)) {
     let id = ui.id().with("fonts-filter");
     let mut filter = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_default();
-    ui.add(egui::TextEdit::singleline(&mut filter).hint_text("Filter").desired_width(f32::INFINITY));
+    ui.add(egui::TextEdit::singleline(&mut filter).hint_text(crate::tl!("Filter")).desired_width(f32::INFINITY));
     let needle = filter.trim().to_lowercase();
     ui.data_mut(|d| d.insert_temp(id, filter));
     egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
         for c in ttf::font_choices() {
             if needle.is_empty() || c.name.to_lowercase().contains(&needle) {
-                let label = if c.origin == FontOrigin::Added { format!("{} (added)", c.name) } else { c.name.clone() };
+                let label = if c.origin == FontOrigin::Added { crate::tf!("{font} (added)", font = c.name) } else { c.name.clone() };
                 item(ui, &label, &c.name);
             }
         }

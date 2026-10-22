@@ -47,6 +47,7 @@ pub mod fonts;
 pub mod helpers;
 pub mod machines;
 pub mod options;
+pub mod outcome;
 pub mod registry;
 
 use cadcraft_doc::Handle;
@@ -211,7 +212,10 @@ pub fn command_specs() -> &'static [CommandSpec] {
 
 pub fn find_command(id: &str) -> Option<&'static CommandSpec> {
     let l = id.to_ascii_lowercase();
-    command_specs().iter().find(|c| c.id == l)
+    command_specs().iter().find(|c| c.id == l).or_else(|| {
+        let resolved = registry::resolve_command(&l)?;
+        command_specs().iter().find(|c| c.id == resolved)
+    })
 }
 
 /// Resolve a typed name or alias (AutoCAD-style short names such as `L`, `C`, `PL`) to an id.
