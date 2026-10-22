@@ -9,6 +9,7 @@ use serde_json::Value;
 use super::codes::{self, issue};
 use super::ids::{job_id, sheet_key};
 use super::outline::{normalize_outline, rect_of};
+use super::paper::{PaperChoice, matches_size, resolve_paper, sheet_margins};
 use super::{
     FrameCandidate, FrameRegistry, MAX_SCAN_FRAMES, PlotScale, SHEETPLAN_SCHEMA, Severity, Sheet, SheetMode, SheetPlan, SheetSource, SheetStatus,
 };
@@ -88,7 +89,7 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
         parse_scale(scale, unit_mm)?;
     }
     if let Some(paper) = &req.paper {
-        paper_dimensions(paper)?;
+        PaperChoice::parse(paper)?;
     }
     let mut plan = SheetPlan {
         schema_version: SHEETPLAN_SCHEMA.into(),
@@ -123,7 +124,6 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
                 let (outline, rotation_deg) = window_outline(value)?;
                 let [a, b, c, _] = outline.map(|[x, y]| Vec2::new(x, y));
                 let mut sheet = empty_sheet(order(index)?, SheetSource::Window { outline, rotation_deg });
-                sheet.paper_mm = paper_dimensions(req.paper.as_deref().unwrap_or("A3"))?;
                 sheet.landscape = (b - a).len() > (c - b).len();
                 sheet.plot_scale = match &req.scale {
                     Some(scale) => parse_scale(scale, unit_mm)?,
@@ -159,6 +159,7 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
                 let mut sheet = empty_sheet(order(index)?, SheetSource::Layout { name: layout.name.clone() });
                 sheet.paper_mm = [page.width_mm, page.height_mm];
                 sheet.landscape = page.landscape;
+                sheet.paper_name = Some(page.paper.clone());
                 sheet.plot_scale = if page.scale_to_fit {
                     PlotScale::Fit
                 } else if positive(page.scale) && positive(1.0 / page.scale) {
@@ -222,12 +223,6 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
     let mut sheets = Vec::with_capacity(plan.sheets.len());
     for mut sheet in plan.sheets {
         let key = sheet_key(&sheet);
-        if req.mode != ScanMode::Window {
-            if let Some(paper) = &req.paper {
-                sheet.paper_mm = paper_dimensions(paper)?;
-                sheet.issues.retain(|i| i.code != codes::PAPER_CUSTOM);
-            }
-        }
         if let Some(scale) = &req.scale {
             sheet.plot_scale = parse_scale(scale, unit_mm)?;
             sheet.scale_label = Some(scale.clone());
@@ -239,12 +234,10 @@ pub fn build_plan(d: &Drawing, req: &ScanRequest, reg: &FrameRegistry, source_ha
             plan.issues.push(issue(Severity::Info, codes::SHEET_EXCLUDED, format!("Sheet {key} was excluded."), Some(&sheet.sheet_id)));
             continue;
         }
+        let paper = req.overrides.get(&key).and_then(|settings| settings.paper.as_deref()).or(req.paper.as_deref());
+        resolve_sheet_paper(d, &mut sheet, paper, unit_mm)?;
         for entry in &mut sheet.issues {
             entry.sheet_id = Some(sheet.sheet_id.clone());
-        }
-        sheet.issues.retain(|i| i.code != codes::PAPER_TOO_LARGE);
-        if sheet.paper_mm.into_iter().any(|dimension| dimension > 5080.0) {
-            sheet.issues.push(issue(Severity::Block, codes::PAPER_TOO_LARGE, "Paper dimension exceeds 5080 mm.", Some(&sheet.sheet_id)));
         }
         sheet.status = if sheet.issues.iter().chain(&plan.issues).any(|i| i.severity == Severity::Block) {
             SheetStatus::Blocked
@@ -283,8 +276,92 @@ fn parse_scale(text: &str, unit_mm: f64) -> Result<PlotScale, String> {
     PlotScale::from_real_ratio(text, unit_mm).ok_or_else(|| "scale must be fit or a finite positive ratio".into())
 }
 
-fn paper_dimensions(name: &str) -> Result<[f64; 2], String> {
-    paper_size(name).map(|paper| [paper.width_mm, paper.height_mm]).ok_or_else(|| format!("unknown paper size `{name}`"))
+fn resolve_sheet_paper(d: &Drawing, sheet: &mut Sheet, selected: Option<&str>, unit_mm: f64) -> Result<(), String> {
+    let [existing_w, existing_h] = sheet.paper_mm;
+    let existing = || {
+        sheet
+            .paper_name
+            .as_deref()
+            .and_then(|name| PaperChoice::parse(name).ok())
+            .filter(|choice| match choice {
+                PaperChoice::Named(paper) => {
+                    (paper.width_mm - existing_w.min(existing_h)).abs() < 0.01 && (paper.height_mm - existing_w.max(existing_h)).abs() < 0.01
+                }
+                PaperChoice::Roll { .. } => true,
+                _ => false,
+            })
+            .unwrap_or(PaperChoice::Custom { w: existing_w, h: existing_h })
+    };
+    let mut choice = match selected {
+        Some(text) => PaperChoice::parse(text)?,
+        None => existing(),
+    };
+    // Block media is chosen from the unscaled frame; a scale override must not enlarge it to hide a mismatch.
+    if choice == PaperChoice::Auto && !matches!(&sheet.source, SheetSource::Window { .. }) {
+        choice = existing();
+    }
+    let outline_size = match &sheet.source {
+        SheetSource::Block { outline, .. } | SheetSource::Window { outline, .. } => {
+            let [a, b, c, _] = outline.map(|[x, y]| Vec2::new(x, y));
+            Some([(b - a).len(), (c - b).len()])
+        }
+        SheetSource::Layout { .. } => None,
+    };
+    let landscape = outline_size.map_or(sheet.landscape, |[w, h]| w > h);
+    match &choice {
+        PaperChoice::Named(paper) => {
+            sheet.paper_mm = [paper.width_mm, paper.height_mm];
+            sheet.paper_name = Some(paper.name.into());
+        }
+        PaperChoice::Custom { w, h } => {
+            sheet.paper_mm = [w.min(*h), w.max(*h)];
+            sheet.paper_name = Some(format!("{w}x{h}"));
+        }
+        PaperChoice::Roll { width, margin } => sheet.paper_name = Some(format!("roll:{width}:{margin}")),
+        PaperChoice::Auto => {}
+    }
+    sheet.issues.retain(|entry| {
+        !matches!(entry.code.as_str(), codes::PAPER_CUSTOM | codes::PAPER_TOO_SMALL | codes::PAPER_TOO_LARGE | codes::SCALE_PAPER_MISMATCH)
+    });
+    if outline_size.is_some_and(|size| !size.into_iter().all(positive)) {
+        return Ok(());
+    }
+    let [a, b] = sheet.paper_mm;
+    let oriented = if landscape { [a.max(b), a.min(b)] } else { [a.min(b), a.max(b)] };
+    let margins = if sheet.plot_scale == PlotScale::Fit && !matches!(choice, PaperChoice::Auto | PaperChoice::Roll { .. }) {
+        [0.0; 4]
+    } else {
+        sheet_margins(d, sheet)
+    };
+    let frame = match (&sheet.plot_scale, outline_size) {
+        (PlotScale::Ratio { paper_mm, drawing_units }, Some(size)) => size.map(|side| side * (paper_mm / drawing_units)),
+        (PlotScale::Fit, Some(size)) if matches!(choice, PaperChoice::Auto | PaperChoice::Roll { .. }) => size.map(|side| side * unit_mm),
+        (_, None) => {
+            let [w, h] = oriented;
+            let [l, b, r, t] = margins;
+            [w - l - r, h - b - t]
+        }
+        _ => oriented,
+    };
+    match resolve_paper(&choice, frame, margins) {
+        Ok(resolved) => {
+            sheet.paper_mm = resolved.paper_mm;
+            sheet.landscape = resolved.landscape;
+            sheet.paper_name = Some(resolved.name.clone());
+            if matches!(choice, PaperChoice::Custom { .. }) || (choice == PaperChoice::Auto && paper_size(&resolved.name).is_none()) {
+                sheet.issues.push(issue(Severity::Info, codes::PAPER_CUSTOM, "Frame uses a custom paper size.", Some(&sheet.sheet_id)));
+            }
+        }
+        Err(mut error) => {
+            let label = sheet.scale_label.clone().unwrap_or_else(|| match sheet.plot_scale {
+                PlotScale::Fit => "fit".into(),
+                PlotScale::Ratio { paper_mm, drawing_units } => format!("{paper_mm}:{drawing_units}"),
+            });
+            error.message = error.message.replacen("at selected scale;", &format!("at {label};"), 1);
+            sheet.issues.push(error);
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn window_outline(value: &Value) -> Result<([[f64; 2]; 4], f64), String> {
@@ -327,6 +404,7 @@ fn empty_sheet(order: u32, source: SheetSource) -> Sheet {
         landscape: true,
         plot_scale: PlotScale::Fit,
         scale_label: None,
+        paper_name: paper_size("A3").map(|paper| paper.name.into()),
         status: SheetStatus::NeedsPreview,
         issues: Vec::new(),
         attributes: BTreeMap::new(),
@@ -372,14 +450,22 @@ fn block_sheet(candidate: FrameCandidate, order: u32, reg: &FrameRegistry, unit_
     if [w, h].into_iter().all(positive) {
         sheet.landscape = w > h;
         let portrait = [w.min(h), w.max(h)];
-        let standard = ["A0", "A1", "A2", "A3", "A4", "A5"].into_iter().filter_map(|name| paper_dimensions(name).ok());
-        let media = template.into_iter().flat_map(|t| t.media_mm.iter().take(MAX_SCAN_FRAMES)).map(|[w, h]| [w.min(*h), w.max(*h)]);
-        let found = media
-            .chain(standard)
-            .find(|size| size.iter().zip(portrait).all(|(expected, actual)| (expected - actual).abs() <= (expected * 0.005).max(1.0)));
-        sheet.paper_mm = found.unwrap_or_else(|| portrait.map(|v| (v * 10.0).round() / 10.0));
-        if found.is_none() {
-            sheet.issues.push(issue(Severity::Info, codes::PAPER_CUSTOM, "Frame uses a custom paper size.", Some(&sheet.sheet_id)));
+        let media = template
+            .into_iter()
+            .flat_map(|t| t.media_mm.iter().take(MAX_SCAN_FRAMES))
+            .map(|[w, h]| [w.min(*h), w.max(*h)])
+            .find(|size| matches_size(*size, portrait));
+        let choice = media.map_or(PaperChoice::Auto, |[w, h]| PaperChoice::Custom { w, h });
+        match resolve_paper(&choice, [w, h], [0.0; 4]) {
+            Ok(resolved) => {
+                sheet.paper_mm = resolved.paper_mm;
+                sheet.paper_name = Some(resolved.name);
+            }
+            Err(error) => {
+                sheet.paper_mm = portrait;
+                sheet.paper_name = None;
+                sheet.issues.push(error);
+            }
         }
         if !sheet.paper_mm.into_iter().all(positive) {
             sheet.paper_mm = [297.0, 420.0];
@@ -415,10 +501,6 @@ fn apply_override(sheet: &mut Sheet, settings: &SheetOverride, unit_mm: f64) -> 
         sheet.landscape = (b - a).len() > (c - b).len();
         sheet.frame_template_id = None;
         sheet.issues.retain(|i| !frame_issue(&i.code));
-    }
-    if let Some(paper) = &settings.paper {
-        sheet.paper_mm = paper_dimensions(paper)?;
-        sheet.issues.retain(|i| i.code != codes::PAPER_CUSTOM);
     }
     if let Some(scale) = &settings.scale {
         sheet.plot_scale = parse_scale(scale, unit_mm)?;

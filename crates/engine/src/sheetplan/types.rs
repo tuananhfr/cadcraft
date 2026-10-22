@@ -31,6 +31,8 @@ pub struct Sheet {
     pub plot_scale: PlotScale,
     #[serde(default)]
     pub scale_label: Option<String>,
+    #[serde(default)]
+    pub paper_name: Option<String>,
     pub status: SheetStatus,
     #[serde(default)]
     pub issues: Vec<PreflightIssue>,
@@ -184,6 +186,8 @@ struct SheetInput {
     plot_scale: PlotScale,
     #[serde(default)]
     scale_label: Option<String>,
+    #[serde(default)]
+    paper_name: Option<String>,
     status: SheetStatus,
     #[serde(default)]
     issues: Vec<PreflightIssue>,
@@ -305,6 +309,7 @@ fn parse_sheet(v: &Value) -> Result<Sheet, String> {
         landscape: input.landscape.unwrap_or(width > height),
         plot_scale: input.plot_scale,
         scale_label: input.scale_label,
+        paper_name: input.paper_name,
         status,
         issues: input.issues,
         attributes: input.attributes,

@@ -1,13 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use cadcraft_doc::{Handle, PlotOutput, Space};
+use cadcraft_doc::{Handle, Space};
 use serde_json::{Value, json};
 
 use super::{LastPlan, bad, io, source_hash};
 use crate::cmd::file::base64_encode;
 use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::ids::{sha256_hex, sheet_key};
+use crate::sheetplan::paper::sheet_margins;
 use crate::sheetplan::{PlotScale, ScanMode, ScanRequest, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, parse_plan};
 use crate::{Result, Session};
 
@@ -189,26 +190,7 @@ fn page(s: &Session, sheet: &Sheet) -> std::result::Result<Value, String> {
             object.insert("fit".into(), json!(false));
         }
     }
-    let layout = match &sheet.source {
-        SheetSource::Layout { name } => d.layout(name),
-        SheetSource::Block { block_handle, .. } => Handle::parse_hex(block_handle).and_then(|handle| match d.space_of(handle)? {
-            Space::Paper(name) => d.layout(&name),
-            Space::Model => None,
-        }),
-        SheetSource::Window { .. } => None,
-    };
-    let margins = layout
-        .and_then(|layout| {
-            let device = crate::cmd::plotters::find_device(&layout.page.device)?;
-            if device.output == PlotOutput::Pdf {
-                return None;
-            }
-            let matches_size = |paper: &&cadcraft_doc::DevicePaper| {
-                (paper.width.min(paper.height) - a.min(b)).abs() < 0.01 && (paper.width.max(paper.height) - a.max(b)).abs() < 0.01
-            };
-            device.paper(&layout.page.paper).filter(matches_size).or_else(|| device.papers.iter().find(matches_size)).map(|paper| paper.margins)
-        })
-        .unwrap_or([0.0; 4]);
+    let margins = sheet_margins(d, sheet);
     object.insert("margins".into(), json!(margins));
     Ok(page)
 }

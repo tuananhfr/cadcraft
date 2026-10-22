@@ -350,7 +350,7 @@ fn scan_block_paper_scale_and_issue_rules() {
     support::frames::nest(d, "NESTED", "FRAME-A3", [5.0, 5.0], 30.0);
     support::frames::title_only_block(d, "NO-FRAME");
     frame_block(d, "CUSTOM", 123.4, 456.7);
-    frame_block(d, "TOO-LARGE", 6000.0, 200.0);
+    frame_block(d, "TOO-LARGE", 15_001.0, 200.0);
     let nested = place(&mut s, "NESTED", [0.0, 0.0], 50.0, 0.0, false, &[]);
     let dynamic = place(&mut s, "*U7", [30000.0, 0.0], 1.0, 0.0, false, &[]);
     let custom = place(&mut s, "CUSTOM", [31000.0, 0.0], 1.0, 0.0, false, &[]);

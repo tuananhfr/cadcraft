@@ -2,6 +2,7 @@ pub mod codes;
 pub mod detect;
 pub mod ids;
 pub mod outline;
+pub mod paper;
 pub mod plan;
 pub mod registry;
 pub mod types;

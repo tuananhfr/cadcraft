@@ -3,6 +3,8 @@ use super::types::{PreflightIssue, Severity};
 pub const FRAME_AMBIGUOUS: &str = "FRAME_AMBIGUOUS";
 pub const FRAME_NOT_FOUND: &str = "FRAME_NOT_FOUND";
 pub const FRAME_MINSERT: &str = "FRAME_MINSERT";
+pub const PAPER_TOO_SMALL: &str = "PAPER_TOO_SMALL";
+pub const SCALE_PAPER_MISMATCH: &str = "SCALE_PAPER_MISMATCH";
 pub const PAPER_TOO_LARGE: &str = "PAPER_TOO_LARGE";
 pub const RENDER_FAILED: &str = "RENDER_FAILED";
 pub const FRAME_DUPLICATE: &str = "FRAME_DUPLICATE";
