@@ -78,6 +78,138 @@ fn missing_commands_menus_tools_and_snap_labels(language: &str) -> Vec<String> {
     sources.into_iter().filter(|s| !s.is_empty() && !catalog.contains_key(&("", *s))).map(str::to_string).collect()
 }
 
+const WIDGET_LITERAL_FILES: &[(&str, &str)] = &[
+    ("managers.rs", include_str!("../managers.rs")),
+    ("managers/battman.rs", include_str!("../managers/battman.rs")),
+    ("autosave.rs", include_str!("../autosave.rs")),
+    ("fontmgr.rs", include_str!("../fontmgr.rs")),
+    ("viewcube.rs", include_str!("../viewcube.rs")),
+    ("dialogs.rs", include_str!("../dialogs.rs")),
+];
+
+fn widget_text_argument(arguments: &str, wanted: usize) -> Option<&str> {
+    let (mut start, mut argument, mut depth) = (0, 0, 0usize);
+    let (mut quoted, mut escape) = (false, false);
+    for (i, c) in arguments.char_indices() {
+        if quoted {
+            if escape {
+                escape = false;
+            } else if c == '\\' {
+                escape = true;
+            } else if c == '"' {
+                quoted = false;
+            }
+            continue;
+        }
+        match c {
+            '"' => quoted = true,
+            '(' | '[' | '{' => depth += 1,
+            ')' if depth == 0 => return (argument == wanted).then(|| arguments[start..i].trim()),
+            ')' | ']' | '}' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                if argument == wanted {
+                    return Some(arguments[start..i].trim());
+                }
+                argument += 1;
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn unmarked_widget_literals(source: &str) -> Vec<(usize, String)> {
+    let mut missing = Vec::new();
+    for (pattern, argument) in [
+        (".label(", 0),
+        (".button(", 0),
+        ("Button::new(", 0),
+        ("Window::new(", 0),
+        (".heading(", 0),
+        (".on_hover_text(", 0),
+        (".small_button(", 0),
+        (".collapsing(", 0),
+        ("RichText::new(", 0),
+        (".hint_text(", 0),
+        ("selectable_label(", 1),
+        ("checkbox(", 1),
+        ("radio(", 1),
+        ("radio_value(", 1),
+        ("radio_value(", 2),
+    ] {
+        for (offset, _) in source.match_indices(pattern) {
+            let line_start = source[..offset].rfind('\n').map_or(0, |i| i + 1);
+            if source[line_start..offset].trim_start().starts_with("//") {
+                continue;
+            }
+            let Some(text) = widget_text_argument(&source[offset + pattern.len()..], argument) else { continue };
+            if !text.starts_with('"') || !text.as_bytes().get(1).is_some_and(u8::is_ascii_uppercase) {
+                continue;
+            }
+            let Some(Ok(label)) = serde_json::Deserializer::from_str(text).into_iter::<String>().next() else { continue };
+            // Axes, product names, CAD tokens and font/file names are data rather than UI prose.
+            if ["X", "Y", "B", "UbotCAD", "OK", "ByLayer", "ByBlock", "WCS", cadcraft_fonts::BUILTIN_FONT].contains(&label.as_str())
+                || [".ttf", ".otf", ".ttc", ".shx", ".dxf", ".dwg", ".lin", ".ctb", ".stb", ".pc3"]
+                    .iter()
+                    .any(|ext| label.to_ascii_lowercase().ends_with(ext))
+            {
+                continue;
+            }
+            missing.push((source[..offset].bytes().filter(|b| *b == b'\n').count() + 1, label));
+        }
+    }
+    missing.sort();
+    missing.dedup();
+    missing
+}
+
+#[test]
+fn widget_literals_are_marked() {
+    let mut missing = Vec::new();
+    for (file, source) in WIDGET_LITERAL_FILES {
+        missing.extend(unmarked_widget_literals(source).into_iter().map(|(line, text)| format!("{file}:{line}: {text}")));
+    }
+    assert!(missing.is_empty(), "unmarked widget literals:\n{}", missing.join("\n"));
+}
+
+#[test]
+fn widget_literal_scanner_checks_nested_arguments_and_exemptions() {
+    let source = r#"
+        ui.label("Label"); ui.button("Button"); Button::new("Enabled"); Window::new("Window");
+        ui.heading("Heading"); ui.on_hover_text("Tooltip"); ui.small_button("Small");
+        ui.collapsing("Details", |_| {}); RichText::new("Rich"); edit.hint_text("Hint");
+        ui.selectable_label(matches!(value, (1, 2)), "Choice");
+        ui.checkbox(&mut enabled, "Checkbox"); ui.radio(value == (1, 2), "Radio");
+        ui.radio_value(&mut value, (1, 2), "Radio value");
+        ui.label("X"); ui.label("Y"); ui.label("B"); ui.label("UbotCAD"); ui.button("OK");
+        ui.label("ByLayer"); ui.label("ByBlock"); ui.label("WCS"); ui.label("Example.shx");
+        ui.label(crate::tl!("Translated")); ui.label(crate::tf!("Count {count}", count = 2));
+        // ui.label("Comment");
+    "#;
+    let labels: BTreeSet<_> = unmarked_widget_literals(source).into_iter().map(|(_, label)| label).collect();
+    let expected: BTreeSet<_> = [
+        "Label",
+        "Button",
+        "Enabled",
+        "Window",
+        "Heading",
+        "Tooltip",
+        "Small",
+        "Details",
+        "Rich",
+        "Hint",
+        "Choice",
+        "Checkbox",
+        "Radio",
+        "Radio value",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect();
+    assert_eq!(labels, expected);
+}
+
 #[test]
 fn every_marked_ui_literal_has_a_translation() {
     for language in REQUIRED.iter().chain(REPORTED) {
@@ -95,7 +227,6 @@ fn missing_marked_ui_literals(language: &str) -> BTreeSet<String> {
         include_str!("../credits.rs"),
         include_str!("../palettes/quickcalc.rs"),
         include_str!("../palettes/patterns.rs"),
-        include_str!("../dialogs.rs"),
         include_str!("../hatchdlg.rs"),
         include_str!("../mtext_editor.rs"),
         include_str!("../layers.rs"),
@@ -125,7 +256,7 @@ fn missing_marked_ui_literals(language: &str) -> BTreeSet<String> {
         include_str!("../toolbars/menu.rs"),
     ];
     let mut missing = BTreeSet::new();
-    for source in sources {
+    for source in sources.into_iter().chain(WIDGET_LITERAL_FILES.iter().map(|(_, source)| *source)) {
         for marker in ["crate::tl!(", "crate::tf!("] {
             for rest in source.split(marker).skip(1) {
                 // These macros require a quoted literal. Use JSON's string decoding for escapes.
@@ -154,6 +285,18 @@ fn missing_marked_ui_literals(language: &str) -> BTreeSet<String> {
                     missing.insert(key);
                 }
             }
+        }
+    }
+    // Unit choices and shared style titles use dynamic translation to retain their source values.
+    for key in crate::dialogs::LENGTH_TYPES
+        .iter()
+        .chain(&crate::dialogs::ANGLE_TYPES)
+        .map(|(_, label)| *label)
+        .chain(crate::dialogs::INSERTION_UNITS)
+        .chain(["Text Style", "Table Style", "Multileader Style"])
+    {
+        if !catalog.contains_key(&("", key)) {
+            missing.insert(key.to_string());
         }
     }
     missing

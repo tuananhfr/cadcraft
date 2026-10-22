@@ -1607,3 +1607,183 @@
 	Specify end point or length change	Укажіть кінцеву точку або зміну довжини
 	Specify radius	Укажіть радіус
 	Specify stretch point	Укажіть точку розтягування
+
+# Style managers, drawing units, recovery, fonts and navigation.
+	 ({count} times)	 ({count} разів)
+	 · landscape	 · альбомна орієнтація
+	A recovery copy of the open drawing with unsaved changes was autosaved.	Автоматично збережено копію відкритого креслення з незбереженими змінами для відновлення.
+	Add font file...	Додати файл шрифту...
+	Add installed font...	Додати встановлений шрифт...
+	Angle tolerance (degrees)	Допуск кута (градуси)
+	Angstroms	Ангстреми
+	Any other missing font	Будь-який інший відсутній шрифт
+	Appearance	Вигляд
+	Apply changes to existing references	Застосувати зміни до наявних входжень
+	Apply to Layout	Застосувати до аркуша
+	Architectural	Архітектурний
+	Arrowhead size	Розмір стрілки
+	Astronomical Units	Астрономічні одиниці
+	Backwards	Дзеркально
+	Block Attribute Manager	Диспетчер атрибутів блоків
+	Block:	Блок:
+	Bring every reference in line with these definitions	Узгодити всі входження з цими визначеннями
+	Built-in stroke font	Вбудований штриховий шрифт
+	Cell margin	Відступ комірки
+	Center the plot	Центрувати друк
+	Center the plotted model bounds on the printable area	Центрувати межі моделі в області друку
+	Centimeters	Сантиметри
+	Compass: view rotation isn't available in the 2D plan view yet	Компас: обертання виду ще недоступне у двовимірному плані
+	Constant	Сталий
+	Constraint bar transparency (%)	Прозорість панелі обмежень (%)
+	Constraint types AUTOCONSTRAIN applies	Типи обмежень, які застосовує AUTOCONSTRAIN
+	Coordinate system	Система координат
+	Current	Поточний
+	Current linetype: {current}	Поточний тип лінії: {current}
+	Current style: {current}	Поточний стиль: {current}
+	Decameters	Декаметри
+	Decimal	Десятковий
+	Decimal Degrees	Десяткові градуси
+	Decimeters	Дециметри
+	Deg/Min/Sec	Град/хв/с
+	Details	Подробиці
+	Dimensional	Розмірні
+	Discard	Відкинути
+	Dismiss	Закрити
+	Distance from the printable area's lower-left corner; values range from −100000 to 100000 mm	Відстань від нижнього лівого кута області друку; значення від −100000 до 100000 мм
+	Distance tolerance	Допуск відстані
+	Draw new objects with the selected linetype	Креслити нові об'єкти вибраним типом лінії
+	Draw with	Відображати шрифтом
+	Drawing Recovery	Відновлення креслень
+	Drawing Units	Одиниці креслення
+	Edit attribute {tag}	Редагувати атрибут {tag}
+	Engineering	Інженерний
+	Every library linetype is loaded.	Усі типи ліній бібліотеки завантажено.
+	Feet	Фути
+	First corner	Перший кут
+	Fit to paper	Вписати в аркуш
+	Font	Шрифт
+	Fonts installed on this computer (click to add)	Шрифти, встановлені на цьому комп'ютері (натисніть, щоб додати)
+	Fonts stay on this computer. They are not uploaded and never change the drawing.	Шрифти залишаються на цьому комп'ютері. Вони не передаються в мережу й ніколи не змінюють креслення.
+	Fonts you added	Додані вами шрифти
+	Found	Знайдено
+	Found in drawing: {count}	Знайдено в кресленні: {count}
+	Fractional	Дробовий
+	From File...	З файлу...
+	Geometric	Геометричні
+	Gigameters	Гігаметри
+	Global scale factor	Глобальний коефіцієнт масштабу
+	Grads	Гради
+	Graphics error	Графічна помилка
+	Header row	Рядок заголовків
+	Hectometers	Гектометри
+	Height (0 = ask)	Висота (0 = запитувати)
+	Hide UCS Icon	Приховати значок UCS
+	Hide ViewCube	Приховати куб виду
+	Home: zoom to the drawing extents	Початковий вид: показати межі креслення
+	In this drawing	У цьому кресленні
+	Inches	Дюйми
+	Infer geometric constraints	Автоматично визначати геометричні обмеження
+	Insertion scale	Масштаб вставлення
+	Invisible	Невидимий
+	Keep the files and ask again next time	Зберегти файли й запитати знову наступного разу
+	Kilometers	Кілометри
+	Landing gap	Відступ полиці
+	Landing length	Довжина полиці
+	Landscape	Альбомна
+	Later	Пізніше
+	Light Years	Світлові роки
+	Limits	Ліміти
+	Linetype Manager	Диспетчер типів ліній
+	Meters	Метри
+	Microinches	Мікродюйми
+	Microns	Мікрони
+	Miles	Милі
+	Millimeters	Міліметри
+	Mils	Тисячні дюйма
+	Missing	Відсутній
+	Mode	Режим
+	Model-space offset placement is not supported by SVG	SVG не підтримує розміщення зі зміщенням у просторі моделі
+	Modes	Режими
+	Move Down	Перемістити вниз
+	Move Up	Перемістити вгору
+	Multileader Style	Стиль мультивиносок
+	Nanometers	Нанометри
+	New style name	Назва нового стилю
+	No drawing is open.	Немає відкритого креслення.
+	None yet. Add the font files a drawing needs (.ttf, .otf, .ttc, .shx).	Поки немає. Додайте файли шрифтів, потрібних кресленню (.ttf, .otf, .ttc, .shx).
+	Nothing needed autosaving.	Нічого не потребувало автозбереження.
+	Offsets must be within ±100000 mm	Зміщення мають бути в межах ±100000 мм
+	Opened drawings have no file name: save them to keep them.	Відкриті креслення не мають назви файлу: збережіть їх, щоб не втратити.
+	Opposite corner	Протилежний кут
+	Orientation	Орієнтація
+	PDF on the paper chosen below	PDF на вибраному нижче аркуші
+	PDMODE {value}	PDMODE {value}
+	Page setup of {name}	Параметри сторінки {name}
+	Paper size	Розмір паперу
+	Paper units per drawing unit, or a ratio such as 1:50	Одиниці паперу на одиницю креслення або співвідношення, наприклад 1:50
+	Parsecs	Парсеки
+	Pick the window's corners in the drawing	Укажіть кути рамки в кресленні
+	Plot area	Область друку
+	Plot object lineweights	Друкувати товщини ліній об'єктів
+	Plot objects with their transparency (PLOTTRANSPARENCYOVERRIDE can override it)	Друкувати об'єкти з прозорістю (PLOTTRANSPARENCYOVERRIDE може її перевизначати)
+	Plot offset	Зміщення друку
+	Plot transparency	Друкувати прозорість
+	Point Size	Розмір точки
+	Point Style	Стиль точок
+	Portrait	Книжкова
+	Precision	Точність
+	Printer/plotter	Принтер/плотер
+	Prompt	Запит
+	Properties of {style}	Властивості {style}
+	Radians	Радіани
+	Recovery copies of {count} drawings with unsaved changes were autosaved.	Автоматично збережено копії креслень із незбереженими змінами для відновлення: {count}.
+	Sample output	Зразок виведення
+	Save these settings in the layout's page setup	Зберегти ці налаштування в параметрах сторінки аркуша
+	Save your work and restart UbotCAD. Recovery copies are offered at the next start if needed.	Збережіть роботу й перезапустіть UbotCAD. За потреби копії для відновлення буде запропоновано під час наступного запуску.
+	Scientific	Науковий
+	Set Size Relative to Screen	Задати розмір відносно екрана
+	Set Size in Absolute Units	Задати розмір в абсолютних одиницях
+	Show constraint bars	Показувати панелі обмежень
+	Show dynamic constraints	Показувати динамічні обмеження
+	Stroke font	Штриховий шрифт
+	Styles	Стилі
+	Surveyor's Units	Геодезичні одиниці
+	Sync	Синхронізувати
+	Table Style	Стиль таблиць
+	Tag	Тег
+	Text Style	Стиль тексту
+	Text typed for this {font} font is shown as Unicode.	Текст, набраний для шрифту {font}, відображається в Unicode.
+	The graphics device stopped working (a driver reset or a GPU that stopped responding). UbotCAD can't draw again until it restarts.	Графічний пристрій припинив роботу (скидання драйвера або зависання графічного процесора). UbotCAD не зможе відображати креслення до перезапуску.
+	The graphics driver reported an error{times}. UbotCAD kept running, but the drawing may not display correctly.	Графічний драйвер повідомив про помилку{times}. UbotCAD продовжив роботу, але креслення може відображатися неправильно.
+	The sheet as these settings plot it	Вигляд аркуша для друку з цими налаштуваннями
+	This drawing has no blocks with attributes.	У цьому кресленні немає блоків з атрибутами.
+	This drawing has no layouts.	У цьому кресленні немає аркушів.
+	Title row	Рядок назви
+	Top: plan view of the drawing (zoom extents)	Зверху: вигляд креслення в плані (показати межі)
+	UCS icon: World Coordinate System	Значок UCS: світова система координат
+	US Survey Feet	Геодезичні фути США
+	US Survey Inch	Геодезичний дюйм США
+	US Survey Mile	Геодезична миля США
+	US Survey Yard	Геодезичний ярд США
+	UbotCAD did not close normally. These drawings were autosaved:	UbotCAD завершив роботу некоректно. Ці креслення було автоматично збережено:
+	UbotCAD draws in the World Coordinate System; user coordinate systems aren't available yet.	UbotCAD креслить у світовій системі координат; користувацькі системи координат ще недоступні.
+	UbotCAD — based on CADCraft by the ArtCraft team.	UbotCAD — на основі CADCraft від команди ArtCraft.
+	Unitless	Безрозмірні
+	Units to scale inserted content	Одиниці масштабування вставленого вмісту
+	Upside down	Догори дриґом
+	Used by	Використовується в
+	Window <	Рамка <
+	World (WCS)	Світова (WCS)
+	X offset (mm)	Зміщення X (мм)
+	Y offset (mm)	Зміщення Y (мм)
+	Yards	Ярди
+	units	одиниці
+	{date} UTC · {size} KB	{date} UTC · {size} КБ
+	{description} ({output})	{description} ({output})
+	{font} (added)	{font} (додано)
+	{font} · {size} KB	{font} · {size} КБ
+	{styles} (unused)	{styles} (не використовується)
+	{width} × {height} mm	{width} × {height} мм
+	Added font {font}	Додано шрифт {font}
+	Removed font {font}	Вилучено шрифт {font}
+	{layout} · {paper}	{layout} · {paper}
