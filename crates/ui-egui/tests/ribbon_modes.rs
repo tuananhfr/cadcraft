@@ -7,7 +7,7 @@ use cadcraft_ui_egui::wsprofile::store::MemoryStore;
 use cadcraft_ui_egui::{CadApp, Services};
 use egui::{Id, Key, Rect, vec2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::json;
 
 // App restarts share the engine's process-wide alias store.

@@ -4,7 +4,7 @@ use cadcraft_engine::Session;
 use cadcraft_ui_egui::{CadApp, Services};
 use egui::{Key, Modifiers, vec2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 
 fn harness() -> Harness<'static, CadApp> {
     let mut app = CadApp::new(Session::default(), Services::default());
