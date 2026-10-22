@@ -14,6 +14,8 @@ use crate::{EngineError, Result, Session};
 
 const PUBLISH: &str = "ubplot.publish";
 const JOBS: &str = "ubplot.jobs";
+const FOLDER: &str = "ubplot.folder";
+const FOLDER_DEFINITION: &str = "folder.json";
 // A manifest omits render geometry and output settings; retain them in the same store transaction.
 const JOB_DEFINITION: &str = "job.json";
 
@@ -32,13 +34,13 @@ fn boolean(command: &str, params: &Value, key: &str) -> Result<bool> {
     }
 }
 
-fn number(params: &Value, key: &str, default: u64, min: u64, max: u64) -> Result<u64> {
+fn number(command: &str, params: &Value, key: &str, default: u64, min: u64, max: u64) -> Result<u64> {
     let value = match params.get(key) {
-        Some(value) => value.as_u64().ok_or_else(|| bad(PUBLISH, format!("{key} must be an unsigned integer")))?,
+        Some(value) => value.as_u64().ok_or_else(|| bad(command, format!("{key} must be an unsigned integer")))?,
         None => default,
     };
     if !(min..=max).contains(&value) {
-        return Err(bad(PUBLISH, format!("{key} must be within {min}..={max}")));
+        return Err(bad(command, format!("{key} must be within {min}..={max}")));
     }
     Ok(value)
 }
@@ -64,9 +66,9 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     };
     let mut output = OutputSpec { mode, ..Default::default() };
     let max_pages = u64::try_from(cadcraft_doc::MAX_PLOT_PAGES).map_err(|error| bad(PUBLISH, error.to_string()))?;
-    let pages = number(params, "pagesPerFile", u64::from(output.pages_per_file), 1, max_pages)?;
+    let pages = number(PUBLISH, params, "pagesPerFile", u64::from(output.pages_per_file), 1, max_pages)?;
     output.pages_per_file = u32::try_from(pages).map_err(|error| bad(PUBLISH, error.to_string()))?;
-    let retry_limit = u8::try_from(number(params, "retryLimit", u64::from(DEFAULT_RETRY_LIMIT), 0, u64::from(MAX_RETRY_LIMIT))?)
+    let retry_limit = u8::try_from(number(PUBLISH, params, "retryLimit", u64::from(DEFAULT_RETRY_LIMIT), 0, u64::from(MAX_RETRY_LIMIT))?)
         .map_err(|error| bad(PUBLISH, error.to_string()))?;
     if let Some(path) = path {
         let path = Path::new(path);
@@ -107,6 +109,126 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     let result = json!({"jobId": job.job_id, "status": "QUEUED"});
     s.plot_jobs.queued.push_back(job);
     Ok(result)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(super) fn run_folder(_: &mut Session, _: &Value) -> Result<Value> {
+    Err(bad(FOLDER, "Folder mode is only in the desktop app"))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn run_folder(s: &mut Session, params: &Value) -> Result<Value> {
+    use crate::sheetplan::queue::folder::{absolute, folder_source};
+
+    crate::sheetplan::plan::validate_request_value(params).map_err(|error| bad(FOLDER, error))?;
+    let folder = text(FOLDER, params, "folder")?.ok_or_else(|| bad(FOLDER, "folder is required"))?;
+    let out = text(FOLDER, params, "out")?.ok_or_else(|| bad(FOLDER, "out is required"))?;
+    if [folder, out].into_iter().any(|path| path.is_empty() || path.len() > 4096) {
+        return Err(bad(FOLDER, "folder and out must contain 1 to 4096 bytes"));
+    }
+    let recursive = if params.get("recursive").is_some() { boolean(FOLDER, params, "recursive")? } else { true };
+    let depth = number(FOLDER, params, "maxDepth", 16, 0, 32)?;
+    let count = number(FOLDER, params, "maxFiles", 1000, 1, u64::try_from(MAX_JOB_SOURCES).map_err(|error| bad(FOLDER, error.to_string()))?)?;
+    let layouts = boolean(FOLDER, params, "layouts")?;
+    let background = boolean(FOLDER, params, "background")?;
+    let mode = match text(FOLDER, params, "mode")?.unwrap_or("merged") {
+        "merged" => OutputMode::Merged,
+        "split" | "per_sheet" => OutputMode::PerSheet,
+        _ => return Err(bad(FOLDER, "mode must be merged or split")),
+    };
+    let pages = number(FOLDER, params, "pagesPerFile", 256, 1, 256)?;
+    let root = absolute(Path::new(folder)).map_err(|error| bad(FOLDER, error))?;
+    if !root.is_dir() {
+        return Err(bad(FOLDER, "folder must be an existing directory"));
+    }
+    let out = absolute(Path::new(out)).map_err(|error| bad(FOLDER, error))?;
+    if out.exists() && !out.is_dir() {
+        return Err(bad(FOLDER, "out must be a directory"));
+    }
+    if out == root {
+        return Err(bad(FOLDER, "out must differ from folder"));
+    }
+    if super::io().is_none() || budget_plot().is_none() || merge_pdf().is_none() {
+        return Err(bad(FOLDER, "file decoding and PDF queue rendering are not available in this build"));
+    }
+    let depth = usize::try_from(depth).map_err(|error| bad(FOLDER, error.to_string()))?;
+    let count = usize::try_from(count).map_err(|error| bad(FOLDER, error.to_string()))?;
+    let mut scan = scan_folder(&root, if recursive { depth } else { 0 }, count, std::slice::from_ref(&out));
+    let mut sources = Vec::new();
+    let mut sheets = 0_usize;
+    for path in &scan.files {
+        match folder_source(path, &s.ubplot.registry, layouts) {
+            Ok(mut source) => {
+                sheets = sheets.checked_add(source.plan.sheets.len()).ok_or_else(|| bad(FOLDER, "job sheet count overflow"))?;
+                if sheets > MAX_JOB_SHEETS {
+                    return Err(bad(FOLDER, "job exceeds sheet limits"));
+                }
+                if !source.plan.sheets.is_empty() {
+                    prepare_plan(&mut source.plan).map_err(|error| bad(FOLDER, error.to_string()))?;
+                }
+                sources.push(source);
+            }
+            Err(error) => {
+                if scan.skipped.len() >= MAX_JOB_SOURCES {
+                    return Err(bad(FOLDER, "skipped file count exceeds supported limits"));
+                }
+                scan.skipped.push(SkippedFile { path: path.clone(), reason: format!("read_error: {error}") });
+            }
+        }
+    }
+    if sources.is_empty() {
+        return Err(bad(FOLDER, format!("no readable drawings found; skipped_files: {}", json!(scan.skipped))));
+    }
+    let output = OutputSpec {
+        mode,
+        dir: Some(out.to_string_lossy().into_owned()),
+        pages_per_file: u32::try_from(pages).map_err(|error| bad(FOLDER, error.to_string()))?,
+        ..Default::default()
+    };
+    let job = PrintJob::new(sources, output, DEFAULT_RETRY_LIMIT).map_err(|issues| bad(FOLDER, job_error(issues).to_string()))?;
+    let definition = serde_json::to_vec(&job).map_err(|error| bad(FOLDER, error.to_string()))?;
+    if definition.len() > MAX_MANIFEST_BYTES {
+        return Err(bad(FOLDER, "job definition exceeds 64 MiB"));
+    }
+    let mut manifest = PublishManifest::new(&job, now());
+    scan.skipped.sort_by_key(|entry| (entry.path.to_lowercase(), entry.path.clone()));
+    manifest.skipped_files = scan.skipped;
+    if !s.plot_jobs.persisted {
+        manifest.issues.push(issue(Severity::Info, "JOBS_NOT_PERSISTED", "Jobs are kept in memory until a host installs persistent storage.", None));
+    }
+    let store = s.ensure_job_store();
+    if let Some(existing) = store.read_manifest(&job.job_id).map_err(|error| bad(FOLDER, error))? {
+        manifest = PublishManifest::from_json(&existing).map_err(|error| bad(FOLDER, error))?;
+        let saved = store.read_artifact(&job.job_id, JOB_DEFINITION).map_err(|error| bad(FOLDER, error))?;
+        if manifest.job_id != job.job_id
+            || saved.as_deref() != Some(definition.as_slice())
+            || store.read_artifact(&job.job_id, FOLDER_DEFINITION).map_err(|error| bad(FOLDER, error))?.is_none()
+        {
+            return Err(bad(FOLDER, "jobId already exists with a different plan or settings; remove it before publishing again"));
+        }
+    } else {
+        if store.list_jobs().len() >= MAX_JOB_SHEETS || s.plot_jobs.queued.len() >= MAX_JOB_SHEETS {
+            return Err(bad(FOLDER, "job queue exceeds supported limits"));
+        }
+        s.ensure_job_store()
+            .commit(&job.job_id, &[(JOB_DEFINITION.into(), definition), (FOLDER_DEFINITION.into(), b"true".to_vec())], &manifest.to_json())
+            .map_err(|error| bad(FOLDER, error))?;
+    }
+    if background {
+        let result = json!({"jobId": job.job_id, "status": manifest.status, "skipped_files": manifest.skipped_files});
+        if !matches!(manifest.status, JobStatus::Done | JobStatus::Failed | JobStatus::Cancelled)
+            && !s.plot_jobs.queued.iter().any(|queued| queued.job_id == job.job_id)
+        {
+            s.plot_jobs.queued.push_back(job);
+        }
+        return Ok(result);
+    }
+    let id = job.job_id.clone();
+    let manifest = run_to_end(job, s.ensure_job_store(), &mut FolderLoader::default(), &PdfSheetRenderer, &SheetBudget::desktop(), &now)
+        .map_err(|error| bad(FOLDER, error))?;
+    s.plot_jobs.queued.retain(|job| job.job_id != id);
+    s.plot_jobs.cancel_requests.retain(|request| request != &id);
+    Ok(json!({"skipped_files": manifest.skipped_files, "manifest": manifest}))
 }
 
 fn queue_plan(s: &mut Session, params: &Value) -> Result<SheetPlan> {
@@ -227,14 +349,25 @@ pub(super) fn run_jobs(s: &mut Session, params: &Value) -> Result<Value> {
                 return Err(bad(JOBS, "PDF queue rendering is not available in this build"));
             }
             let job = read_job(s.ensure_job_store(), id)?;
-            let hash = source_hash(s)?;
-            let mut loader = SnapshotLoader(Arc::new(s.doc()?.clone()), hash);
+            let folder = s.ensure_job_store().read_artifact(id, FOLDER_DEFINITION).map_err(|error| bad(JOBS, error))?.is_some();
+            let mut loader: Box<dyn SourceLoader> = if folder {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    Box::new(FolderLoader::default())
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    return Err(bad(JOBS, "Folder mode is only in the desktop app"));
+                }
+            } else {
+                Box::new(SnapshotLoader(Arc::new(s.doc()?.clone()), source_hash(s)?))
+            };
             #[cfg(not(target_arch = "wasm32"))]
             let budget = SheetBudget::desktop();
             #[cfg(target_arch = "wasm32")]
             let budget = SheetBudget::web();
             let store = s.ensure_job_store();
-            let manifest = run_to_end(job, store, &mut loader, &PdfSheetRenderer, &budget, &now).map_err(|error| bad(JOBS, error))?;
+            let manifest = run_to_end(job, store, loader.as_mut(), &PdfSheetRenderer, &budget, &now).map_err(|error| bad(JOBS, error))?;
             s.plot_jobs.queued.retain(|job| job.job_id != id);
             s.plot_jobs.cancel_requests.retain(|request| request != id);
             Ok(json!({"manifest": manifest}))

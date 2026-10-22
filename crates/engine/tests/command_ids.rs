@@ -126,6 +126,7 @@ fn appload_is_execute_and_line_is_edit() {
     assert_eq!(risk("line"), RiskClass::Edit);
     assert_eq!(risk("open"), RiskClass::File);
     assert_eq!(risk("plot"), RiskClass::File);
+    assert_eq!(risk("ubplot.folder"), RiskClass::File);
     assert_eq!(risk("bsave"), RiskClass::Edit);
     assert_eq!(risk("undo"), RiskClass::Edit);
     assert_eq!(risk("new"), RiskClass::File);

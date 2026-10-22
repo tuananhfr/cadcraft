@@ -404,6 +404,7 @@ UI-only focus/fullscreen ids: `ui.fullscreen`, `ui.focusmode`, `cleanscreenon`, 
 | `u` | `cad.edit.u` | Edit | model, paper | available | edit |  |
 | `ubplot` | `cad.file.ubplot` | File | model, paper | available | file | ubp |
 | `ubplot.approve` | `cad.other.ubplot.approve` | Other | model, paper | available | edit |  |
+| `ubplot.folder` | `cad.other.ubplot.folder` | Other | model, paper | available | file |  |
 | `ubplot.jobs` | `cad.other.ubplot.jobs` | Other | model, paper | available | file |  |
 | `ubplot.publish` | `cad.other.ubplot.publish` | Other | model, paper | available | file |  |
 | `ubplot.scan` | `cad.other.ubplot.scan` | Other | model, paper | available | read |  |
