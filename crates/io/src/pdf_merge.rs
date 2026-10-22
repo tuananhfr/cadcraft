@@ -409,8 +409,7 @@ impl<'a> Part<'a> {
             return Err(invalid());
         }
         let mut labels = Vec::with_capacity(pages.len());
-        for (index, pair) in nums.chunks_exact(2).enumerate() {
-            let [number, label] = pair else { return Err(invalid()) };
+        for (index, [number, label]) in nums.as_chunks::<2>().0.iter().enumerate() {
             if number.number()? != index {
                 return Err(invalid());
             }
