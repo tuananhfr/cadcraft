@@ -12,7 +12,7 @@ use cadcraft_geom::{PolyVertex, Vec2, Vec3};
 use cadcraft_ui_egui::{CadApp, Services};
 use egui::{Event, Modifiers, PointerButton, vec2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::{NodeT, Queryable};
+use egui_kittest::kittest::Queryable;
 use serde_json::json;
 
 fn test_lock() -> MutexGuard<'static, ()> {
@@ -259,6 +259,8 @@ fn pick_window_replaces_ambiguous_sheet_in_place() {
 fn shift_click_removes_frame() {
     let _guard = test_lock();
     let (mut app, frames) = app(&[false, false]);
+    // The fixture opens at the default view; the frames must be on screen to be clicked.
+    app.run("zoom", json!({"mode": "extents"})).unwrap();
     app.start("ubplot");
     app.session.input(Input::Enter).unwrap();
     app.session.input(Input::Pick(frames)).unwrap();
