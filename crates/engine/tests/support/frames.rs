@@ -120,6 +120,8 @@ pub fn anon_dynamic(d: &mut Drawing, effective: &str, anon: &str) {
     );
 }
 
+// Only the queue tests build whole batches; the other binaries sharing this module never call it.
+#[allow(dead_code)]
 pub fn frames_drawing(n: usize) -> Drawing {
     let mut session = Session::new();
     session.doc_mut().unwrap().header.set_i64("INSUNITS", 4);
