@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 use super::attribs::{blocks_with_attdefs, has_attdefs, reference_count, rename_tag, sync};
 use crate::cmd::curves::KW;
 use crate::cmd::{CommandSpec, bad, bool_or, str_param};
+use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
 
 pub(super) fn battman_spec() -> CommandSpec {
@@ -397,9 +398,15 @@ impl Interactive for BattmanM {
         let yes_no = |v: bool| if v { "Yes" } else { "No" };
         match self.stage {
             Stage::Block => Prompt::new("Enter name of block to manage", Accept::TEXT).kw(&["?"]),
-            Stage::Option => Prompt::new(format!("Block {}: enter an option", self.block), KW).kw(OPTIONS).default("eXit"),
+            Stage::Option => {
+                let args = vec![("name", PromptArg::Text(self.block.clone()))];
+                Prompt::tf("Block {name}: enter an option", args, KW).kw(OPTIONS).default("eXit")
+            }
             Stage::Tag(_) => Prompt::new("Enter attribute tag", Accept::TEXT),
-            Stage::Prop => Prompt::new(format!("Attribute {}: enter property to change", self.tag), KW).kw(PROPS).default("eXit"),
+            Stage::Prop => {
+                let args = vec![("tag", PromptArg::Text(self.tag.clone()))];
+                Prompt::tf("Attribute {tag}: enter property to change", args, KW).kw(PROPS).default("eXit")
+            }
             Stage::Value(p) => {
                 let a = self.current(s);
                 let text = |f: fn(&Attrib) -> String| a.as_ref().map(f).unwrap_or_default();

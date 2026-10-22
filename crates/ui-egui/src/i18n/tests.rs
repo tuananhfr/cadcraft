@@ -900,3 +900,30 @@ fn default_fonts_cover_swedish_letters_and_quotes() {
         }
     });
 }
+
+#[test]
+fn formatted_prompt_translates_template_and_keeps_user_text() {
+    use cadcraft_engine::prompt::{Accept, Prompt, PromptArg};
+
+    with_language("uk", || {
+        let p = Prompt::tf("Enter value for {tag}", vec![("tag", PromptArg::Text("ROOM".into()))], Accept::TEXT);
+        assert_ne!(tr("uk", "Enter value for {tag}"), "Enter value for {tag}");
+        assert_eq!(prompt_message(&p), tr("uk", "Enter value for {tag}").replace("{tag}", "ROOM"));
+
+        let p = Prompt::tf(
+            "{title} {message}",
+            vec![("title", PromptArg::Text("** STRETCH **".into())), ("message", PromptArg::Key("Specify stretch point"))],
+            Accept::POINT,
+        );
+        assert_ne!(tr("uk", "Specify stretch point"), "Specify stretch point");
+        assert_eq!(prompt_message(&p), format!("** STRETCH ** {}", tr("uk", "Specify stretch point")));
+
+        let p = Prompt::tf(
+            "{title} {message}",
+            vec![("title", PromptArg::Text("{message} Вітальня".into())), ("message", PromptArg::Key("Specify stretch point"))],
+            Accept::POINT,
+        );
+        assert_eq!(prompt_message(&p), format!("{{message}} Вітальня {}", tr("uk", "Specify stretch point")));
+        assert_eq!(prompt_message(&Prompt::new("Select objects", Accept::SELECT)), tr("uk", "Select objects"));
+    });
+}

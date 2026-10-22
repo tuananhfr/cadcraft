@@ -1534,3 +1534,76 @@
 	Auto-hide needs a dock edge	Для автоматичного приховування потрібен край закріплення
 	Panel placement is missing	Розташування панелі відсутнє
 	Show {panel}	Показати {panel}
+
+	{axes} of	{axes} точки
+	(need {axes})	(потрібно {axes})
+	{snap} of	{snap} точки
+	Specify {which} {unit}	Укажіть {which} {unit}
+	Block "{name}" already exists. Redefine it?	Блок "{name}" уже існує. Перевизначити його?
+	Enter the position of the first object to move (0-{last})	Введіть позицію першого об’єкта для переміщення (0-{last})
+	Enter the position to move it to (0-{last})	Введіть позицію для переміщення (0-{last})
+	{title} {message}	{title} {message}
+	Enter xref name(s) to {op}	Введіть назви зовнішніх посилань для дії: {op}
+	Enter new path for "{name}"	Введіть новий шлях для "{name}"
+	Enter name of file to {operation}	Введіть назву файлу для дії: {operation}
+	Enter dependent {kind} name(s)	Введіть назви залежних об’єктів типу {kind}
+	Enter datum reference {number}	Введіть базове посилання {number}
+	Enter new value for dimension variable {name}	Введіть нове значення розмірної змінної {name}
+	Really want layer "{name}" (the CURRENT layer) off?	Справді вимкнути шар "{name}" (ПОТОЧНИЙ шар)?
+	Enter new weight (current = {weight})	Введіть нову вагу (поточна = {weight})
+	Enter layer name(s) {what}	Введіть назви шарів {what}
+	Enter text for cell {cell} (=formula)	Введіть текст для комірки {cell} (=формула)
+	Enter cell style name of table style {style}	Введіть назву стилю комірки для стилю таблиці {style}
+	Block {name}: enter an option	Блок {name}: введіть параметр
+	Attribute {tag}: enter property to change	Атрибут {tag}: введіть властивість для зміни
+	{mode}Select objects	{mode}Виберіть об’єкти
+	{mode}Specify next point	{mode}Укажіть наступну точку
+	Purge {kind} "{name}"?	Очистити {kind} "{name}"?
+	ATTSYNC block {name}?	ATTSYNC блока {name}?
+	Enter value for {tag}	Введіть значення для {tag}
+	Enter new value for {name}	Введіть нове значення для {name}
+	Property to ignore or compare again (ignored: {properties})	Властивість для ігнорування або повторного порівняння (ігноруються: {properties})
+	Save changes to block "{name}"?	Зберегти зміни блока "{name}"?
+	Enter old {kind} name	Введіть стару назву об’єкта типу {kind}
+	Enter new {kind} name	Введіть нову назву об’єкта типу {kind}
+	Linetype {name} is already loaded. Reload it?	Тип лінії {name} уже завантажено. Перезавантажити його?
+	starting	початкову
+	ending	кінцеву
+	width	ширину
+	half-width	напівширину
+	bind	вбудувати
+	detach	від’єднати
+	unload	вивантажити
+	reload	перезавантажити
+	overlay	накласти
+	attach	приєднати
+	block	блок
+	dimstyle	розмірний стиль
+	layer	шар
+	linetype	тип лінії
+	style	стиль
+	dimension style	розмірний стиль
+	group	група
+	multileader style	стиль мультивиноски
+	multiline style	стиль мультилінії
+	table style	стиль таблиці
+	text style	стиль тексту
+	zero-length object	об’єкт нульової довжини
+	empty text object	порожній текстовий об’єкт
+	object	об’єкт
+	material	матеріал
+	plot style	стиль друку
+	UCS	ПСК
+	view	вид
+	viewport configuration	конфігурація видових екранів
+	to freeze	для заморожування
+	to thaw	для розморожування
+	to reset	для скидання
+	to change color	для зміни кольору
+	(ADD mode) 	(режим ДОДАВАННЯ) 
+	(SUBTRACT mode) 	(режим ВІДНІМАННЯ) 
+	Specify new vertex point	Укажіть точку нової вершини
+	Specify a point on the arc	Укажіть точку на дузі
+	Specify end point or length change	Укажіть кінцеву точку або зміну довжини
+	Specify radius	Укажіть радіус
+	Specify stretch point	Укажіть точку розтягування

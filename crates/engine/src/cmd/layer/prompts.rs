@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 
 use super::super::find_command;
 use super::super::qselect::wildcard;
+use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
 
 const OPTIONS: &[&str] = &[
@@ -433,7 +434,10 @@ impl Interactive for LayerM {
                 let p = Prompt::new(msg, NAME);
                 if enter_is_current { p.default(cur) } else { p }
             }
-            Stage::ConfirmOff(_) => Prompt::new(format!("Really want layer \"{cur}\" (the CURRENT layer) off?"), KW).kw(&["Yes", "No"]).default("N"),
+            Stage::ConfirmOff(_) => {
+                let args = vec![("name", PromptArg::Text(cur.to_string()))];
+                Prompt::tf("Really want layer \"{name}\" (the CURRENT layer) off?", args, KW).kw(&["Yes", "No"]).default("N")
+            }
         }
     }
     fn input(&mut self, s: &mut Session, i: Input) -> Result<Step> {

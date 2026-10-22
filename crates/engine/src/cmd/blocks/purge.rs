@@ -11,6 +11,7 @@ use serde_json::{Map, Value, json};
 
 use super::super::qselect::wildcard;
 use super::super::{bad, find_command, str_param};
+use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -445,7 +446,8 @@ impl Interactive for PurgeM {
             Stage::Verify(..) => Prompt::new("Verify each name to be purged?", KW).kw(&["Yes", "No"]).default("Y"),
             Stage::Confirm { kind, queue, .. } => {
                 let n = queue.front().map(String::as_str).unwrap_or("");
-                Prompt::new(format!("Purge {} \"{n}\"?", noun(*kind)), KW).kw(&["Yes", "No"]).default("N")
+                let args = vec![("kind", PromptArg::Key(noun(*kind))), ("name", PromptArg::Text(n.to_string()))];
+                Prompt::tf("Purge {kind} \"{name}\"?", args, KW).kw(&["Yes", "No"]).default("N")
             }
         }
     }

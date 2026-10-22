@@ -14,6 +14,7 @@ use serde_json::{Value, json};
 
 use super::machines::{SelOutcome, SelectPhase, number};
 use super::*;
+use crate::prompt::PromptArg;
 use crate::{Accept, Input, Interactive, Prompt, Result, Session, Step};
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -674,7 +675,8 @@ impl Interactive for OverkillM {
             Stage::Ignore => {
                 let mut kws: Vec<&str> = vec!["None", "All"];
                 kws.extend(IGNORABLE.iter().map(|(k, _)| *k));
-                Prompt::new(format!("Property to ignore or compare again (ignored: {})", o.ignored_names()), Accept::TEXT).kw(&kws).default("Done")
+                let args = vec![("properties", PromptArg::Text(o.ignored_names()))];
+                Prompt::tf("Property to ignore or compare again (ignored: {properties})", args, Accept::TEXT).kw(&kws).default("Done")
             }
             Stage::Tolerance => Prompt::new("Specify tolerance", Accept::NUMBER).default(format!("{}", o.tol)),
             Stage::Plines => Prompt::new("Optimize segments within polylines", Accept::TEXT).kw(&["Yes", "No"]).default(yes_no(o.plines)),

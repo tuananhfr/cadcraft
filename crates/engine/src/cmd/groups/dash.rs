@@ -9,6 +9,7 @@ use super::super::machines::{SelOutcome, SelectPhase, number};
 use super::super::qselect::wildcard;
 use super::super::*;
 use super::{add_members, create, echo_list, find, remove_members, rename, ungroup, valid_name};
+use crate::prompt::PromptArg;
 use crate::{Accept, Input, Interactive, Prompt, Result, Session, Step};
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -249,8 +250,11 @@ impl Interactive for DashGroupM {
                 };
                 Prompt::new(msg, super::super::curves::KW).kw(&["Yes", "No"]).default("Y")
             }
-            Stage::From => Prompt::new(format!("Enter the position of the first object to move (0-{last})"), Accept::NUMBER),
-            Stage::To => Prompt::new(format!("Enter the position to move it to (0-{last})"), Accept::NUMBER),
+            Stage::From => {
+                let args = vec![("last", PromptArg::Text(last.to_string()))];
+                Prompt::tf("Enter the position of the first object to move (0-{last})", args, Accept::NUMBER)
+            }
+            Stage::To => Prompt::tf("Enter the position to move it to (0-{last})", vec![("last", PromptArg::Text(last.to_string()))], Accept::NUMBER),
             Stage::Count => Prompt::new("Number of objects to move", Accept::NUMBER).default("1"),
         }
     }
