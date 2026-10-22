@@ -108,6 +108,10 @@ fn command_matches(c: &Value, f: &str) -> bool {
 /// Run a tool. `Err` is a protocol error (unknown tool, or arguments that don't fit its input
 /// schema), answered with JSON-RPC invalid params; a failing tool is an `isError` result.
 pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> Result<Value, String> {
+    cadcraft_engine::lisp::trust::with_mcp_input(|| call_tool_inner(b, name, args))
+}
+
+fn call_tool_inner(b: &mut dyn Backend, name: &str, args: &Value) -> Result<Value, String> {
     let a = check_args(name, args)?;
     let r = match name {
         "command_line" => b.call("cmdline.input", a),
@@ -115,10 +119,8 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> Result<Value,
         "execute" => {
             let command = a.get("command").and_then(Value::as_str).unwrap_or("");
             let params = a.get("params").cloned().unwrap_or(json!({}));
-            if cadcraft_engine::cmd::find_command(command).is_some_and(|spec| spec.id == "lispsandbox")
-                && matches!(params.get("action").and_then(Value::as_str), Some("add" | "remove"))
-            {
-                Err("Only the user can change LISP write folders".into())
+            if let Some(message) = cadcraft_engine::lisp::trust::user_only_refusal(command, &params) {
+                Err(message)
             } else {
                 b.call("engine.execute", json!({"command": command, "params": params}))
             }
@@ -152,6 +154,9 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> Result<Value,
         other => return Err(format!("unknown tool `{other}`")),
     };
     Ok(match r {
+        Ok(v) if v.get("error").and_then(Value::as_str).is_some_and(|error| error.starts_with("Only the user")) => {
+            err_text(v.get("error").and_then(Value::as_str).unwrap_or("Only the user can answer APPLOADTRUST"))
+        }
         Ok(v) => text(&v),
         Err(e) => err_text(&e),
     })

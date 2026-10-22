@@ -13,6 +13,7 @@ mod server;
 mod tools;
 
 pub use backend::{Backend, Headless, Remote};
+pub use cadcraft_engine::lisp::trust::USER_ONLY_COMMANDS;
 pub use server::{PROTOCOL_VERSION, Server};
 
 #[cfg(test)]

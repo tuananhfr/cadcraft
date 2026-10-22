@@ -1,5 +1,32 @@
 # Workspace profile security
 
+LISP file loading uses a content-based review gate on desktop and web. JSON
+`appload` and `(load)` refuse unapproved UTF-8 source with
+`LISP_NOT_REVIEWED: NAME (sha256 DIGEST)`; they never open a prompt. Typed/menu
+APPLOAD and dropped files ask `Load unreviewed LISP file NAME (sha256 12345678)?
+[Yes/No/Always] <No>:` in the `APPLOADTRUST` interactive machine. Yes loads the
+reviewed bytes once; Always also approves their full SHA-256. No, Enter and Escape
+leave the file unloaded. Editing the source changes its digest and requires review
+again. Approval applies to identical contents regardless of filename or location.
+
+`lisptrust {action: "list"|"approve"|"revoke", sha256}` manages up to 256 unique
+SHA-256 approvals. The existing user-profile preferences store them alongside
+FONTALT on desktop and web, under `lispApproved`; these approvals are not part of
+a portable workspace. Invalid digests are ignored on restore. A poisoned approval
+store refuses loading. Startup `acad.lsp`/`acaddoc.lsp` in `<settings>/support`
+retain their existing location-based startup trust. Other files loaded by those
+routines still require review. Direct local `lisp {code}` remains available to
+callers that already hold CLI/control authority; this is not an arbitrary-code
+sandbox or protection against a caller that can rewrite local settings.
+
+MCP may list approvals and write folders, but only the user can approve/revoke
+source or change write folders. `USER_ONLY_COMMANDS` and the shared
+`USER_ONLY_ACTION_RULES` hook govern these permissions; the latter is the extension
+point for future Company-level profile rules. Both headless and remote MCP calls
+carry their origin into dispatch, including nested JSON commands, aliases and
+each input within a script. No MCP input can answer or cancel a pending
+`APPLOADTRUST` prompt. LISP routines also cannot grant themselves permissions.
+
 Desktop LISP writes are restricted to canonical allowed folders. The desktop host
 creates `<settings>/support` and `<settings>/lisp-out` at startup and installs them
 as the defaults; the current drawing's directory is not implicitly allowed.

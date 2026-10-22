@@ -297,3 +297,206 @@ fn ubplot_publish_path_needs_pdf_extension() {
         assert!(std::fs::read(&path).unwrap().starts_with(b"%PDF-"));
     }
 }
+
+struct Review {
+    sandbox: Sandbox,
+    previous: Vec<String>,
+}
+
+impl Review {
+    fn new(name: &str) -> Self {
+        let sandbox = Sandbox::new(name);
+        let previous = cadcraft_engine::lisp::trust::approved();
+        cadcraft_engine::lisp::trust::set_approved(Vec::new());
+        Self { sandbox, previous }
+    }
+
+    fn file(&self, text: &str) -> PathBuf {
+        let path = self.sandbox.base.join("review.lsp");
+        std::fs::write(&path, text).unwrap();
+        path
+    }
+}
+
+impl Drop for Review {
+    fn drop(&mut self) {
+        cadcraft_engine::lisp::trust::set_approved(self.previous.clone());
+    }
+}
+
+#[test]
+fn appload_json_refuses_unreviewed_file() {
+    use cadcraft_engine::lisp::trust::source_sha;
+
+    let review = Review::new("json-review");
+    let text = "(setq json_review 101)";
+    let path = review.file(text);
+    let mut session = setup();
+    let expected = format!("LISP_NOT_REVIEWED: review.lsp (sha256 {})", source_sha(text));
+    for params in [
+        json!({"name": "review.lsp", "text": text}),
+        json!({"name": "review.lsp", "data": cadcraft_engine::cmd::file::base64_encode(text.as_bytes())}),
+    ] {
+        assert_eq!(session.execute("appload", &params).unwrap_err().to_string(), expected);
+    }
+    let error = session.execute("appload", &json!({"path": path})).unwrap_err().to_string();
+    assert!(error.contains("LISP_NOT_REVIEWED"), "{error}");
+    assert!(session.lisp_var("JSON_REVIEW").is_nil());
+    assert!(cadcraft_engine::lisp::loaded_files(&session).is_empty());
+    assert!(session.running.is_none());
+    assert_eq!(eval(&mut session, "(setq direct_review 102)")["value"], "102");
+}
+
+#[test]
+fn approved_file_loads() {
+    use cadcraft_engine::lisp::trust::{approve, approved, is_approved, source_sha};
+
+    let review = Review::new("approved-review");
+    let text = "(setq approved_review 201)";
+    let path = review.file(text);
+    let sha = source_sha(text);
+    let mut session = setup();
+    assert!(approve(&sha));
+    assert!(is_approved(&sha.to_ascii_uppercase()));
+    for params in [
+        json!({"path": path}),
+        json!({"name": "review.lsp", "text": text}),
+        json!({"name": "review.lsp", "data": cadcraft_engine::cmd::file::base64_encode(text.as_bytes())}),
+    ] {
+        assert!(session.execute("appload", &params).unwrap().get("error").is_none());
+        assert_eq!(to_text(&session.lisp_var("APPROVED_REVIEW"), true), "201");
+    }
+    assert_eq!(session.execute("lisptrust", &json!({})).unwrap()["approved"], json!([sha]));
+    session.execute("LISPTRUST", &json!({"action": "revoke", "sha256": sha})).unwrap();
+    assert!(!is_approved(&sha));
+    assert!(session.execute("appload", &json!({"path": path})).is_err());
+    session.execute("cad.other.lisptrust", &json!({"action": "approve", "sha256": sha})).unwrap();
+    assert!(is_approved(&sha));
+    let before = approved();
+    for params in [json!({"action": "unknown"}), json!({"action": "approve"}), json!({"action": "approve", "sha256": "bad"})] {
+        assert!(session.execute("lisptrust", &params).is_err());
+        assert_eq!(approved(), before);
+    }
+}
+
+#[test]
+fn interactive_appload_asks_and_always_approves() {
+    use cadcraft_engine::lisp::trust::{is_approved, source_sha};
+
+    let review = Review::new("interactive-review");
+    let text = "(setq interactive_review 301)";
+    let path = review.file(text);
+    let sha = source_sha(text);
+    let mut session = setup();
+    session.cmdline("appload").unwrap();
+    session.cmdline(&path.to_string_lossy()).unwrap();
+    assert!(session.lisp_review_pending());
+    assert_eq!(session.running.as_ref().unwrap().machine.name(), "APPLOADTRUST");
+    assert_eq!(
+        session.current_prompt().unwrap().display(),
+        format!("Load unreviewed LISP file {} (sha256 {})? [Yes/No/Always] <No>:", path.display(), &sha[..8])
+    );
+    assert!(session.lisp_var("INTERACTIVE_REVIEW").is_nil());
+    session.cmdline("A").unwrap();
+    assert!(is_approved(&sha));
+    assert!(!session.lisp_review_pending());
+    assert_eq!(to_text(&session.lisp_var("INTERACTIVE_REVIEW"), true), "301");
+    session.cmdline("appload").unwrap();
+    session.cmdline(&path.to_string_lossy()).unwrap();
+    assert!(session.running.is_none(), "approved content does not prompt again");
+
+    for answer in ["N", "", "ESC", "Y"] {
+        let text = format!("(setq answer_review \"{answer}\")");
+        let path = review.file(&text);
+        let mut session = setup();
+        session.cmdline("appload").unwrap();
+        session.cmdline(&path.to_string_lossy()).unwrap();
+        assert!(session.lisp_review_pending());
+        if answer == "ESC" {
+            session.cancel();
+        } else {
+            session.cmdline(answer).unwrap();
+        }
+        assert!(session.running.is_none());
+        assert!(!is_approved(&source_sha(&text)), "only Always persists approval");
+        if answer == "Y" {
+            assert_eq!(to_text(&session.lisp_var("ANSWER_REVIEW"), true), "\"Y\"");
+            session.cmdline("appload").unwrap();
+            session.cmdline(&path.to_string_lossy()).unwrap();
+            assert!(session.lisp_review_pending(), "Yes authorizes one load");
+            session.cancel();
+        } else {
+            assert!(session.lisp_var("ANSWER_REVIEW").is_nil());
+            assert!(session.log.iter().any(|line| line == &format!("{} was not loaded", path.display())));
+        }
+    }
+}
+
+#[test]
+fn edited_file_needs_review_again() {
+    use cadcraft_engine::lisp::trust::{approve, is_approved, source_sha};
+
+    let review = Review::new("edited-review");
+    let original = "(setq edited_review 401)";
+    let edited = "(setq edited_review 402)";
+    let path = review.file(original);
+    let mut session = setup();
+    assert!(approve(&source_sha(original)));
+    session.execute("appload", &json!({"path": path})).unwrap();
+    std::fs::write(&path, edited).unwrap();
+    assert!(!is_approved(&source_sha(edited)));
+    assert!(session.execute("appload", &json!({"path": path})).unwrap_err().to_string().contains("LISP_NOT_REVIEWED"));
+    session.cmdline("appload").unwrap();
+    session.cmdline(&path.to_string_lossy()).unwrap();
+    assert!(session.current_prompt().unwrap().message.contains("unreviewed"));
+    std::fs::write(&path, "(setq edited_review 403)").unwrap();
+    session.cmdline("Always").unwrap();
+    assert_eq!(to_text(&session.lisp_var("EDITED_REVIEW"), true), "402", "review authorizes the displayed bytes");
+    assert!(is_approved(&source_sha(edited)));
+    assert!(!is_approved(&source_sha("(setq edited_review 403)")));
+    session.cmdline("appload").unwrap();
+    session.cmdline(&path.to_string_lossy()).unwrap();
+    assert!(session.lisp_review_pending());
+    session.cancel();
+}
+
+#[test]
+fn load_inside_routine_refuses_unreviewed() {
+    use cadcraft_engine::lisp::trust::{approve, revoke, source_sha};
+
+    let review = Review::new("routine-review");
+    let text = "(setq routine_review 501)";
+    let path = review.file(text);
+    let mut session = setup();
+    let code = format!("(defun c:review-test () (load {} 'missing)) (c:review-test)", quoted(&path));
+    let result = eval(&mut session, &code);
+    assert_eq!(result["error"], format!("LISP_NOT_REVIEWED: {} (sha256 {})", path.display(), source_sha(text)));
+    assert!(session.lisp_var("ROUTINE_REVIEW").is_nil());
+    assert!(!session.lisp_review_pending());
+    assert!(approve(&source_sha(text)));
+    assert!(eval(&mut session, &code).get("error").is_none());
+    assert_eq!(to_text(&session.lisp_var("ROUTINE_REVIEW"), true), "501");
+    session.execute("appload", &json!({"name": "cached-review.lsp", "text": text})).unwrap();
+    assert!(revoke(&source_sha(text)));
+    assert!(eval(&mut session, "(load \"cached-review\")")["error"].as_str().unwrap().contains("LISP_NOT_REVIEWED"));
+}
+
+#[test]
+fn approval_list_validates_and_limits_digests() {
+    use cadcraft_engine::lisp::trust::{MAX_APPROVED, approve, approved, is_approved, revoke, set_approved, source_sha};
+
+    let _review = Review::new("approval-validation");
+    assert_eq!(source_sha("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    let sha = source_sha("approval-validation");
+    set_approved(vec!["bad".into(), sha.to_ascii_uppercase(), sha.clone()]);
+    assert_eq!(approved(), std::slice::from_ref(&sha));
+    assert!(!approve(&"z".repeat(64)));
+    assert!(!revoke("bad"));
+    assert!(is_approved(&sha));
+    set_approved((0..MAX_APPROVED + 1).map(|i| source_sha(&format!("approval-{i}"))).collect());
+    assert_eq!(approved().len(), MAX_APPROVED);
+    assert!(!approve(&source_sha("one-more-approval")));
+    assert!(approve(&approved()[0]));
+    assert!(revoke(&approved()[0]));
+    assert!(approve(&sha));
+}

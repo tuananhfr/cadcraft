@@ -232,3 +232,97 @@ fn mcp_cannot_change_lisp_write_roots() {
     tool(&mut s, "script", json!({"text": "lispsandbox\n"}));
     assert_eq!(tool(&mut s, "execute", json!({"command": "lispsandbox"})), listed);
 }
+
+#[test]
+fn mcp_cannot_approve_lisp() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use cadcraft_engine::lisp::trust::{approved, is_approved, source_sha};
+
+    struct Observed(Rc<RefCell<Headless>>);
+    impl crate::Backend for Observed {
+        fn call(&mut self, method: &str, params: Value) -> Result<Value, String> {
+            crate::Backend::call(&mut *self.0.borrow_mut(), method, params)
+        }
+        fn has_ui(&self) -> bool {
+            false
+        }
+        fn describe(&self) -> String {
+            "observed headless session".into()
+        }
+    }
+
+    fn refused(server: &mut Server, name: &str, arguments: Value) {
+        let result = call(server, 1, "tools/call", json!({"name": name, "arguments": arguments}));
+        assert_eq!(result["result"]["isError"], true, "{result}");
+        assert!(result["result"]["content"][0]["text"].as_str().unwrap().to_ascii_lowercase().contains("only the user"), "{result}");
+    }
+
+    let backend = Rc::new(RefCell::new(Headless::default()));
+    let mut server = Server::new(Box::new(Observed(backend.clone())));
+    let text = "(setq mcp_review 601)";
+    let sha = source_sha(text);
+    assert!(!is_approved(&sha));
+    let before = approved();
+    for command in ["lisptrust", "LISPTRUST", "cad.other.lisptrust"] {
+        for action in ["approve", "revoke"] {
+            refused(&mut server, "execute", json!({"command": command, "params": {"action": action, "sha256": sha}}));
+            let input = format!("{command} {}", json!({"action": action, "sha256": sha}));
+            refused(&mut server, "command_line", json!({"text": input}));
+            refused(&mut server, "script", json!({"text": format!("{input}\n")}));
+            refused(
+                &mut server,
+                "execute",
+                json!({"command": "script", "params": {"data": cadcraft_engine::cmd::file::base64_encode(input.as_bytes())}}),
+            );
+        }
+        assert_eq!(tool(&mut server, "execute", json!({"command": command, "params": {"action": "list"}}))["approved"], json!(before));
+    }
+    tool(&mut server, "command_line", json!({"text": "lisptrust"}));
+    tool(&mut server, "script", json!({"text": "lisptrust\n"}));
+    for command in ["lispsandbox", "cad.other.lispsandbox"] {
+        refused(&mut server, "command_line", json!({"text": format!("{command} {}", json!({"action": "add", "path": "."}))}));
+        refused(&mut server, "script", json!({"text": format!("{command} {}\n", json!({"action": "remove", "path": "."}))}));
+    }
+    assert_eq!(approved(), before);
+
+    backend.borrow_mut().session.lisp_load_interactive("mcp-review.lsp", text).unwrap();
+    for input in ["A", "Always", "Y", "Yes", "N", "", "'zoom"] {
+        refused(&mut server, "command_line", json!({"text": input}));
+        refused(&mut server, "script", json!({"text": format!("{input}\n")}));
+        assert!(backend.borrow().session.lisp_review_pending());
+        assert!(backend.borrow().session.lisp_var("MCP_REVIEW").is_nil());
+    }
+    refused(&mut server, "execute", json!({"command": "lisp", "params": {"code": "(setq mcp_review 999)"}}));
+    refused(&mut server, "cancel", json!({}));
+    assert_eq!(approved(), before);
+    assert!(backend.borrow().session.lisp_review_pending());
+    backend.borrow_mut().session.cmdline("N").unwrap();
+    assert!(!backend.borrow().session.lisp_review_pending());
+    assert!(backend.borrow().session.lisp_var("MCP_REVIEW").is_nil());
+
+    let path = std::env::temp_dir().join(format!("cadcraft-mcp-review-{}.lsp", std::process::id()));
+    std::fs::write(&path, text).unwrap();
+    refused(&mut server, "script", json!({"text": format!("appload\n{}\nA\n", path.display())}));
+    assert!(backend.borrow().session.lisp_review_pending());
+    assert!(backend.borrow().session.lisp_var("MCP_REVIEW").is_nil());
+    backend.borrow_mut().session.cancel();
+    // The file prompt takes the rest of the line, so a same-line answer never reaches the review.
+    tool(&mut server, "script", json!({"text": format!("appload \"{}\" A", path.display())}));
+    assert!(!backend.borrow().session.lisp_review_pending());
+    assert!(backend.borrow().session.lisp_var("MCP_REVIEW").is_nil());
+    assert!(!is_approved(&sha));
+    backend.borrow_mut().session.cancel();
+    let path_text = cadcraft_engine::lisp::value::to_text(&cadcraft_engine::lisp::value::Value::str(&path.to_string_lossy()), true);
+    let code = format!("(progn (getint) (command \"appload\" {path_text} \"Always\"))");
+    tool(&mut server, "command_line", json!({"text": code}));
+    assert!(backend.borrow().session.lisp_running());
+    backend.borrow_mut().session.input(cadcraft_engine::Input::Text("1".into())).unwrap();
+    assert!(!backend.borrow().session.lisp_running());
+    assert!(backend.borrow().session.lisp_review_pending());
+    assert!(!is_approved(&sha), "a resumed routine cannot authorize its own file");
+    assert!(backend.borrow().session.lisp_var("MCP_REVIEW").is_nil());
+    backend.borrow_mut().session.cancel();
+    std::fs::remove_file(path).unwrap();
+}

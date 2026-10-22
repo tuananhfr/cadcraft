@@ -252,6 +252,7 @@ line	cad.draw.line
 linetype	cad.format.linetype
 lisp	cad.other.lisp
 lispsandbox	cad.other.lispsandbox
+lisptrust	cad.other.lisptrust
 list	cad.tools.list
 ltscale	cad.other.ltscale
 lwdisplay	cad.other.lwdisplay

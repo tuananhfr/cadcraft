@@ -315,11 +315,16 @@ fn interactive_routine_waits_for_the_user() {
     assert!(s.doc().unwrap().model.iter().any(|e| matches!(&e.kind, cadcraft_doc::EntityKind::Circle(c) if c.center.x == 50.0 && c.radius == 2.0)));
 }
 
+fn approve_source(text: &str) {
+    assert!(super::trust::approve(&super::trust::source_sha(text)));
+}
+
 #[test]
 fn appload_and_load() {
     let mut s = session();
-    let r =
-        s.execute("appload", &serde_json::json!({"name": "tools.lsp", "text": "(defun c:hi () (princ \"hi\") (princ)) (setq loaded 1)"})).unwrap();
+    let text = "(defun c:hi () (princ \"hi\") (princ)) (setq loaded 1)";
+    approve_source(text);
+    let r = s.execute("appload", &serde_json::json!({"name": "tools.lsp", "text": text})).unwrap();
     assert!(r.get("error").is_none(), "{r}");
     assert!(s.log.iter().any(|l| l == "tools.lsp successfully loaded."));
     s.cmdline("HI").unwrap();
@@ -441,6 +446,7 @@ fn startup_files_load_from_the_support_folder() {
     assert!(matches!(s.lisp_var("C:FROMACAD"), Value::Func(_)));
     s.lisp_tick();
     assert_eq!(v(&s, "STARTED"), "1", "a drawing gets its startup files once");
+    approve_source(&std::fs::read_to_string(dir.join("lazy.lsp")).unwrap());
     // autoload: the command loads its file on first use.
     s.cmdline("LAZY").unwrap();
     assert_eq!(v(&s, "LAZY-RAN"), "1");

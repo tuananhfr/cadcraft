@@ -2059,3 +2059,7 @@ ribbon	Check	Kiểm tra
 	Ribbon tabs, canvas and a floating command line.	Thẻ dải băng, vùng vẽ và dòng lệnh nổi.
 ribbon	Standards	Tiêu chuẩn
 ribbon	Fonts	Phông chữ
+	LISP file approvals	Phê duyệt tệp LISP
+	Load unreviewed LISP file {name} (sha256 {sha})?	Tải tệp LISP chưa được duyệt {name} (sha256 {sha})?
+	Always	Luôn luôn
+	{name} was not loaded	Chưa tải tệp {name}

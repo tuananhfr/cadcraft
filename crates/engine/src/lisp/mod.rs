@@ -13,6 +13,7 @@ pub mod read;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod sandbox;
 mod startup;
+pub mod trust;
 mod ubplot;
 pub mod value;
 
@@ -615,6 +616,11 @@ impl Session {
     /// and `(load name)` finds it later even where there is no file system. `blocking`: run to
     /// the end (programmatic calls).
     pub fn lisp_load(&mut self, name: &str, text: &str, blocking: bool) -> crate::Result<Option<std::result::Result<Value, String>>> {
+        trust::check_source(name, text)?;
+        self.lisp_load_once(name, text, blocking)
+    }
+
+    pub(crate) fn lisp_load_once(&mut self, name: &str, text: &str, blocking: bool) -> crate::Result<Option<std::result::Result<Value, String>>> {
         self.lisp.files.insert(file_key(name), text.to_string());
         let r = self.lisp_eval(text, false, blocking, Vec::new())?;
         match &r {

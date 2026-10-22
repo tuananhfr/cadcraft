@@ -2057,3 +2057,8 @@ ribbon	Standards	Стандарти
 ribbon	Fonts	Шрифти
 ribbon	Xref	Зовнішні посилання
 ribbon	Plot	Друк креслення
+	LISP file approvals	Дозволи на завантаження файлів LISP
+	Load unreviewed LISP file {name} (sha256 {sha})?	Завантажити неперевірений файл LISP {name} (sha256 {sha})?
+	Always	Завжди
+	{name} was not loaded	Файл {name} не завантажено
+	Enter name of LISP file to load	Введіть ім’я файлу LISP для завантаження
