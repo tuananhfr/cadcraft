@@ -6,6 +6,7 @@ pub mod outline;
 pub mod paper;
 pub mod plan;
 pub mod preflight;
+pub mod profile;
 pub mod queue;
 pub mod registry;
 pub mod split;
