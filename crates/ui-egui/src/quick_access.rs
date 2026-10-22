@@ -171,13 +171,14 @@ fn position_menu(app: &mut CadApp, ui: &mut egui::Ui) {
 fn item(app: &mut CadApp, ui: &mut egui::Ui, id: &str, at: usize, count: usize) {
     // Explicit identity keeps focus on the command when its position changes.
     ui.scope_builder(egui::UiBuilder::new().id(ui.id().with(id)), |ui| {
-        let source = ui.dnd_drag_source(ui.id().with("drag"), DragItem(id.to_string()), |ui| button(app, ui, id));
-        if let Some(payload) = source.response.dnd_release_payload::<DragItem>()
+        // `dnd_drag_source` puts a drag-only widget on top of the button, which swallows its clicks.
+        let response = button(app, ui, id).interact(egui::Sense::drag());
+        response.dnd_set_drag_payload(DragItem(id.to_string()));
+        if let Some(payload) = response.dnd_release_payload::<DragItem>()
             && let Err(error) = app.run("ui.quickaccess.move", json!({"id": payload.0, "to": at}))
         {
             app.set_status(error);
         }
-        let response = source.inner;
         if response.has_focus() && !app.cmd.ime_composing() && !ui.ctx().text_edit_focused() {
             let to = if ui.input_mut(|input| input.consume_key(egui::Modifiers::ALT, egui::Key::ArrowLeft)) {
                 Some(at.saturating_sub(1))

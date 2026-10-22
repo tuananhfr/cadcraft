@@ -204,6 +204,12 @@ fn button_nth<'h>(h: &'h Harness<'_, CadApp>, label: &'h str, nth: usize) -> egu
     h.query_all_by_role_and_label(egui::accesskit::Role::Button, label).nth(nth).unwrap_or_else(|| panic!("no button {label} #{nth}"))
 }
 
+// Dock panel tabs are Role::Tab too and can share a ribbon tab's label ("Layers").
+fn ribbon_tab<'h>(h: &'h Harness<'_, CadApp>, label: &'h str) -> Option<egui_kittest::Node<'h>> {
+    let ribbon = egui::containers::panel::PanelState::load(&h.ctx, Id::new("cc_ribbon")).unwrap().outer_rect;
+    h.query_all_by_role_and_label(egui::accesskit::Role::Tab, label).find(|node| ribbon.y_range().contains(node.rect().center().y))
+}
+
 fn command_label(id: &str) -> String {
     let label = cadcraft_engine::find_command(id)
         .map(|spec| spec.label)
@@ -287,9 +293,9 @@ fn compact_mode_shows_icon_buttons_with_tooltips() {
     }
     let mut h = harness(app);
     for tab in cadcraft_ui_egui::ribbon::visible_tabs(h.state()) {
-        h.get_by_role_and_label(egui::accesskit::Role::Tab, &tab.label).scroll_to_me();
+        ribbon_tab(&h, &tab.label).unwrap().scroll_to_me();
         h.run_steps(3);
-        h.get_by_role_and_label(egui::accesskit::Role::Tab, &tab.label).click();
+        ribbon_tab(&h, &tab.label).unwrap().click();
         h.run_steps(3);
         let row = egui::containers::panel::PanelState::load(&h.ctx, Id::new("cc_ribbon")).unwrap().outer_rect;
         assert!(row.height() <= cadcraft_ui_egui::ribbon::render::COMPACT_HEIGHT + 1.0);
@@ -359,7 +365,11 @@ fn flyout_is_keyboard_operable() {
     h.run_steps(3);
     assert!(popup_open(&h));
     assert!(h.query_by_role_and_label(egui::accesskit::Role::Button, &command_label("wblock")).is_some());
-    let pos = h.state().canvas.rect.unwrap().center();
+    // At 200 % the flyout covers the canvas centre, and a click inside the flyout keeps it open.
+    let canvas = h.state().canvas.rect.unwrap();
+    let flyout = h.ctx.read_response(Id::new("cc_ribbon_flyout")).unwrap().rect;
+    let pos = egui::pos2(canvas.center().x, (flyout.bottom() + canvas.bottom()) / 2.0);
+    assert!(canvas.contains(pos) && !flyout.contains(pos), "{pos:?} must be on the canvas outside {flyout:?}");
     h.hover_at(pos);
     for pressed in [true, false] {
         h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
@@ -369,8 +379,8 @@ fn flyout_is_keyboard_operable() {
 }
 
 fn select_ribbon_tab(h: &mut Harness<'_, CadApp>, title: &str) {
-    if h.query_by_role_and_label(egui::accesskit::Role::Tab, title).is_some() {
-        h.get_by_role_and_label(egui::accesskit::Role::Tab, title).click();
+    if let Some(tab) = ribbon_tab(h, title) {
+        tab.click();
     } else {
         h.get_by_label("»").click();
         h.run_steps(3);
@@ -395,11 +405,11 @@ fn tab_overflow_keeps_every_tab_reachable() {
     assert!(h.query_by_label("»").is_some());
     assert!(tabs.iter().any(|tab| {
         let title = cadcraft_ui_egui::i18n::with_language("vi", || cadcraft_ui_egui::i18n::ribbon(&tab.label).to_string());
-        h.query_by_role_and_label(egui::accesskit::Role::Tab, &title).is_none()
+        ribbon_tab(&h, &title).is_none()
     }));
     for tab in tabs {
         let title = cadcraft_ui_egui::i18n::with_language("vi", || cadcraft_ui_egui::i18n::ribbon(&tab.label).to_string());
-        let overflowed = h.query_by_role_and_label(egui::accesskit::Role::Tab, &title).is_none();
+        let overflowed = ribbon_tab(&h, &title).is_none();
         if overflowed {
             h.get_by_label("»").click();
             h.run_steps(3);
@@ -412,7 +422,7 @@ fn tab_overflow_keeps_every_tab_reachable() {
         }
         let active: String = h.ctx.data(|data| data.get_temp(Id::new("cc_ribbon_active"))).unwrap();
         assert_eq!(active, tab.id);
-        let item = h.get_by_role_and_label(egui::accesskit::Role::Tab, &title);
+        let item = ribbon_tab(&h, &title).unwrap();
         inside(h.ctx.content_rect(), item.rect());
         assert_eq!(item.accesskit_node().is_selected(), Some(true));
         assert!(popup_open(&h));
