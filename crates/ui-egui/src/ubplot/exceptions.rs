@@ -220,7 +220,7 @@ fn fixes(ui: &mut egui::Ui, sheets: &[&Sheet], request: &ScanRequest, action: &m
     });
 }
 
-fn issue_label(code: &str) -> &str {
+pub(super) fn issue_label(code: &str) -> &str {
     match code {
         "FRAME_AMBIGUOUS" => crate::tl!("FRAME_AMBIGUOUS"),
         "FRAME_NOT_FOUND" => crate::tl!("FRAME_NOT_FOUND"),
