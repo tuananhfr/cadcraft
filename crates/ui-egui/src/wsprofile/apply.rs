@@ -201,7 +201,7 @@ pub fn apply(app: &mut CadApp, layout: &WorkspaceLayout, area: egui::Rect) -> Ap
 
 /// Applies profile zoom once, then observes egui keyboard zoom through the debounced profile path.
 pub(crate) fn sync_scale(app: &mut CadApp, ctx: &egui::Context) {
-    let wanted = app.ws.user.ui_scale.clamp(0.75, 2.0);
+    let wanted = app.ws.device.ui_scale.clamp(0.75, 2.0);
     if !wanted.is_finite() {
         return;
     }

@@ -212,7 +212,7 @@ fn ui_json(app: &CadApp) -> Map<String, Value> {
     m.insert("saveFormat".into(), json!(app.ui.save_format.as_str()));
     m.insert("systemCursor".into(), json!(app.ui.system_cursor));
     m.insert("historyLines".into(), json!(app.ui.history_lines));
-    m.insert("uiScale".into(), json!(app.ws.user.ui_scale));
+    m.insert("uiScale".into(), json!(app.ws.device.ui_scale));
     m.insert("modelBackground".into(), color_json(o.model_background));
     m.insert("paperBackground".into(), color_json(o.paper_background));
     m.insert("selectionColor".into(), color_json(o.selection_color));

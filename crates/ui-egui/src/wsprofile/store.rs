@@ -27,6 +27,7 @@ pub struct ProfileSet {
     pub profiles: Vec<WorkspaceProfile>,
     /// The working profile: the user's layer over its `base_id` preset, as last committed.
     pub user: Option<WorkspaceProfile>,
+    pub device: Option<super::device::DeviceState>,
     /// Fields a newer writer added, kept through a save.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
@@ -34,7 +35,7 @@ pub struct ProfileSet {
 
 impl Default for ProfileSet {
     fn default() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into(), active: SAFE_PRESET.into(), profiles: Vec::new(), user: None, extra: Map::new() }
+        Self { schema_version: SCHEMA_VERSION.into(), active: SAFE_PRESET.into(), profiles: Vec::new(), user: None, device: None, extra: Map::new() }
     }
 }
 

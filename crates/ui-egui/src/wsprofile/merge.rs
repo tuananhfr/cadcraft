@@ -19,6 +19,7 @@ pub enum Level {
     Discipline,
     Project,
     User,
+    Device,
     Session,
 }
 

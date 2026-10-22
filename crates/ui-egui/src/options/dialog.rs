@@ -152,14 +152,14 @@ fn display(app: &CadApp, ui: &mut egui::Ui, changes: &mut Map<String, Value>) {
         ui.label(crate::tl!("Interface scale"));
         let preview_id = ui.id().with("interface_scale_preview");
         let preview = ui.ctx().data(|data| data.get_temp::<f32>(preview_id));
-        let mut scale = preview.unwrap_or(app.ws.user.ui_scale);
+        let mut scale = preview.unwrap_or(app.ws.device.ui_scale);
         let response = ui.add(egui::Slider::new(&mut scale, 0.75..=2.0).step_by(0.05));
         response.widget_info(|| egui::WidgetInfo::slider(true, f64::from(scale), crate::tl!("Interface scale")));
         if response.is_pointer_button_down_on() {
             ui.ctx().data_mut(|data| data.insert_temp(preview_id, scale));
         } else if response.drag_stopped() || response.changed() || preview.is_some() {
             ui.ctx().data_mut(|data| data.remove::<f32>(preview_id));
-            if scale != app.ws.user.ui_scale {
+            if scale != app.ws.device.ui_scale {
                 changes.insert("uiScale".into(), json!(scale));
             }
         }

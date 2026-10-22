@@ -7,6 +7,7 @@ pub mod autosave;
 pub mod canonical;
 pub mod commands;
 pub mod conflict;
+pub mod device;
 pub mod history;
 pub mod merge;
 pub mod migrate;
@@ -25,6 +26,7 @@ use serde_json::{Map, Value, json};
 use crate::{CadApp, FileKind};
 use apply::{ApplyReport, Fingerprint};
 use autosave::Autosave;
+use device::{DeviceState, split_geometry};
 use history::LayoutHistory;
 use merge::{Effective, Layer, Level, apply_patch_locked, diff_patch, effective};
 use presets::{PRESET_IDS, SAFE_PRESET, preset};
@@ -91,6 +93,7 @@ pub struct Choice {
 pub struct WsState {
     /// The working profile: the user layer over `user.base_id` (no session layer in it).
     pub user: WorkspaceProfile,
+    pub device: DeviceState,
     pub layers: Vec<Layer>,
     pub effective: Effective,
     pub history: LayoutHistory,
@@ -137,11 +140,13 @@ pub struct WsState {
 impl Default for WsState {
     fn default() -> Self {
         let user = startup::fresh_user(SAFE_PRESET, &[]);
-        let layers = startup::layers_for(&user, &[]);
+        let device = DeviceState::default();
+        let layers = startup::layers_for(&user, &[], &device);
         let effective = effective(&layers);
         Self {
             applied: effective.layout.clone(),
             user,
+            device,
             layers,
             effective,
             history: LayoutHistory::default(),
@@ -182,7 +187,7 @@ impl WsState {
     }
 
     fn policy(&self) -> Vec<Layer> {
-        self.layers.iter().filter(|layer| !matches!(layer.level, Level::Platform | Level::User | Level::Session)).cloned().collect()
+        self.layers.iter().filter(|layer| !matches!(layer.level, Level::Platform | Level::User | Level::Device | Level::Session)).cloned().collect()
     }
 
     /// The layout the user layer starts from for the current base.
@@ -193,10 +198,20 @@ impl WsState {
     /// Recomputes the layers and the effective layout after `user` changed.
     pub fn rebuild(&mut self) {
         let session: Vec<Layer> = self.layers.iter().filter(|layer| layer.level == Level::Session).cloned().collect();
-        let mut layers = startup::layers_for(&self.user, &self.policy());
+        let mut layers = startup::layers_for(&self.user, &self.policy(), &self.device);
         layers.extend(session);
         self.layers = layers;
         self.effective = effective(&self.layers);
+    }
+
+    fn local_layout(&self) -> WorkspaceLayout {
+        effective(&startup::layers_for(&self.user, &self.policy(), &self.device)).layout
+    }
+
+    fn keep_layout(&mut self, layout: WorkspaceLayout) {
+        let (user, _) = split_geometry(diff_patch(&self.local_layout(), &layout));
+        self.user.layout = merge::apply_patch(&self.user.layout, &user);
+        self.device.layout_patch = split_geometry(diff_patch(&self.user.layout, &layout)).1;
     }
 
     /// Whether a change is not stored yet; a host checks this before it exits.
@@ -239,7 +254,7 @@ pub(crate) fn observe(app: &mut CadApp, record: bool) -> bool {
     let before = std::mem::replace(&mut app.ws.applied, captured.clone());
     if first_look {
         // An app that never applied a profile: what it shows is the baseline, not an edit.
-        app.ws.user.layout = captured;
+        app.ws.keep_layout(captured);
         app.ws.rebuild();
         return false;
     }
@@ -250,8 +265,9 @@ pub(crate) fn observe(app: &mut CadApp, record: bool) -> bool {
         return prefs_changed;
     }
     let delta = diff_patch(&before, &captured);
-    let open = apply_patch_locked(&app.ws.user.layout, &delta, &Default::default());
-    let mut allowed = apply_patch_locked(&app.ws.user.layout, &delta, &app.ws.effective.locked);
+    let local = app.ws.local_layout();
+    let open = apply_patch_locked(&local, &delta, &Default::default());
+    let mut allowed = apply_patch_locked(&local, &delta, &app.ws.effective.locked);
     // The user's layer may already hold a value a lock hides, so an unchanged layer does not mean
     // the edit went through.
     let refused: Vec<String> =
@@ -261,17 +277,14 @@ pub(crate) fn observe(app: &mut CadApp, record: bool) -> bool {
     // The tree holds every panel's placement, including a refused move or a session's placement;
     // the panel list alone then describes what the user may keep.
     let session_places_panels = app.ws.layers.iter().any(|layer| layer.level == Level::Session && layer.patch.get("panels").is_some());
-    if allowed.dock_tree != app.ws.user.layout.dock_tree
-        && (panels_refused || session_places_panels)
-        && merge::check(&app.ws.effective, "/dock_tree").is_ok()
-    {
+    if allowed.dock_tree != local.dock_tree && (panels_refused || session_places_panels) && merge::check(&app.ws.effective, "/dock_tree").is_ok() {
         allowed.dock_tree = None;
     }
-    if allowed != app.ws.user.layout {
+    if allowed != local {
         if record {
-            app.ws.history.record(app.ws.user.layout.clone());
+            app.ws.history.record(local);
         }
-        app.ws.user.layout = allowed;
+        app.ws.keep_layout(allowed);
         app.ws.mark_changed();
     }
     app.ws.rebuild();
@@ -292,18 +305,20 @@ pub(crate) fn observe(app: &mut CadApp, record: bool) -> bool {
 /// as for any other layout edit. Returns whether anything changed.
 pub(crate) fn edit_toolbars(app: &mut CadApp, change: impl FnOnce(&mut Vec<schema::ToolbarState>) -> Result<(), String>) -> Result<bool, String> {
     observe(app, true);
-    let mut next = app.ws.user.layout.clone();
+    let before = app.ws.local_layout();
+    let mut next = before.clone();
     change(&mut next.toolbars)?;
-    if next == app.ws.user.layout {
+    if next == before {
         return Ok(false);
     }
-    let delta = diff_patch(&app.ws.user.layout, &next);
+    let delta = diff_patch(&before, &next);
     if merge::changed_pointers(&delta).iter().any(|pointer| merge::check(&app.ws.effective, pointer).is_err()) {
         return Err(LOCKED_MESSAGE.into());
     }
     let profile = WorkspaceProfile { layout: next, ..app.ws.user.clone() };
     startup::check_profile(&profile, &app.ws.policy()).map_err(|reason| format!("The tool bars cannot be stored: {reason}"))?;
-    app.ws.history.record(std::mem::replace(&mut app.ws.user.layout, profile.layout));
+    app.ws.history.record(before);
+    app.ws.keep_layout(profile.layout);
     app.ws.rebuild();
     app.apply_workspace();
     app.ws.mark_changed();
@@ -313,18 +328,20 @@ pub(crate) fn edit_toolbars(app: &mut CadApp, change: impl FnOnce(&mut Vec<schem
 /// Profile-only edits use the same policy, history and autosave path as docked controls.
 pub(crate) fn edit_layout(app: &mut CadApp, change: impl FnOnce(&mut WorkspaceLayout) -> Result<(), String>) -> Result<bool, String> {
     observe(app, true);
-    let mut next = app.ws.user.layout.clone();
+    let before = app.ws.local_layout();
+    let mut next = before.clone();
     change(&mut next)?;
-    if next == app.ws.user.layout {
+    if next == before {
         return Ok(false);
     }
-    let delta = diff_patch(&app.ws.user.layout, &next);
+    let delta = diff_patch(&before, &next);
     if merge::changed_pointers(&delta).iter().any(|pointer| merge::check(&app.ws.effective, pointer).is_err()) {
         return Err(LOCKED_MESSAGE.into());
     }
     let profile = WorkspaceProfile { layout: next, ..app.ws.user.clone() };
     startup::check_profile(&profile, &app.ws.policy()).map_err(|reason| crate::tf!("The workspace cannot be stored: {reason}", reason = reason))?;
-    app.ws.history.record(std::mem::replace(&mut app.ws.user.layout, profile.layout));
+    app.ws.history.record(before);
+    app.ws.keep_layout(profile.layout);
     app.ws.rebuild();
     app.apply_workspace();
     app.ws.mark_changed();
@@ -399,15 +416,21 @@ pub fn tick(app: &mut CadApp, ctx: &egui::Context) {
             app.apply_workspace();
         }
     }
+    let area = app.ws.area;
+    app.ws.device.screen = Some(screen::ScreenProfile {
+        work_area: [area.min.x, area.min.y, area.width(), area.height()],
+        pixel_ratio: ctx.native_pixels_per_point().filter(|ratio| ratio.is_finite() && *ratio > 0.0).unwrap_or(1.0),
+        ..screen::ScreenProfile::default()
+    });
     app.ws.area_known = true;
     if down {
         if app.ws.drag_before.is_none() && app.ws.synced.as_ref() != Some(&Fingerprint::of(app)) {
-            app.ws.drag_before = Some(app.ws.user.layout.clone());
+            app.ws.drag_before = Some(app.ws.local_layout());
         }
         observe(app, false);
     } else if let Some(before) = app.ws.drag_before.take() {
         observe(app, false);
-        if app.ws.user.layout != before {
+        if app.ws.local_layout() != before {
             app.ws.history.record(before);
             app.ws.mark_changed();
             app.ws.autosave.interaction_ended();
@@ -492,6 +515,11 @@ impl CadApp {
         }
         let session: Vec<Layer> = self.ws.layers.iter().filter(|layer| layer.level == Level::Session).cloned().collect();
         self.ws.store = Some(store);
+        self.ws.device = restored.set.device.clone().unwrap_or_default();
+        self.ws.device.screen = Some(screen::ScreenProfile {
+            work_area: [self.ws.area.min.x, self.ws.area.min.y, self.ws.area.width(), self.ws.area.height()],
+            ..screen::ScreenProfile::default()
+        });
         self.ws.user = restored.user;
         self.ws.layers = restored.layers;
         self.ws.layers.extend(session);
@@ -600,6 +628,7 @@ impl CadApp {
             active: self.ws.active.clone(),
             profiles,
             user: Some(user.clone()),
+            device: Some(self.ws.device.clone()),
             extra: self.ws.set_extra.clone(),
         };
         let unkept_damage = &mut self.ws.unkept_damage;

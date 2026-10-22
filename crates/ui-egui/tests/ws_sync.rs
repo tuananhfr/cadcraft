@@ -131,13 +131,13 @@ fn offline_edit_then_online_syncs_ux05() {
     remote.inner.borrow_mut().online = false;
     let mut first = app(&store, &remote);
     set(&mut first, "/toolbars/draw/dock", json!("left"));
-    set(&mut first, "/ui_scale", json!(1.25));
+    set(&mut first, "/command_line/lines", json!(5));
     set(&mut first, "/status_bar/visible", json!(false));
     commit(&mut first);
     assert_eq!(first.ws.status, SaveStatus::Offline);
     let local = store.current().user.unwrap();
     assert_eq!(draw(&local), Dock::Left);
-    assert_eq!(local.ui_scale, 1.25);
+    assert_eq!(local.layout.command_line.lines, 5);
     assert!(!local.layout.status_bar.visible);
     assert_eq!(remote.profile().revision, 1);
     drop(first);
@@ -149,7 +149,7 @@ fn offline_edit_then_online_syncs_ux05() {
     let server = remote.profile();
     assert!(server.revision > 1);
     assert_eq!(draw(&server), Dock::Left);
-    assert_eq!(server.ui_scale, 1.25);
+    assert_eq!(server.layout.command_line.lines, 5);
     assert!(!server.layout.status_bar.visible);
     let mut restarted_again = app(&store, &remote);
     restarted_again.sync_now();
@@ -209,14 +209,14 @@ fn different_fields_merge_silently() {
     let mut b = app(&SharedStore::seeded(&base), &remote);
     set(&mut a, "/toolbars/draw/dock", json!("left"));
     commit(&mut a);
-    set(&mut b, "/ui_scale", json!(1.5));
+    set(&mut b, "/command_line/lines", json!(7));
     commit(&mut b);
     assert_eq!(b.ws.status, SaveStatus::Synced);
     assert!(b.ws.sync.pending.is_none());
     assert_eq!(draw(&b.ws.user), Dock::Left);
-    assert_eq!(b.ws.user.ui_scale, 1.5);
+    assert_eq!(b.ws.user.layout.command_line.lines, 7);
     assert_eq!(remote.profile().revision, 3);
-    assert_eq!(remote.profile().ui_scale, 1.5);
+    assert_eq!(remote.profile().layout.command_line.lines, 7);
     assert_eq!(draw(&remote.profile()), Dock::Left);
 }
 
@@ -227,11 +227,11 @@ fn forbidden_is_reported_not_retried_forever() {
     let remote = SharedRemote::seeded(&base);
     remote.inner.borrow_mut().forbidden.insert(base.profile_id.clone());
     let mut app = app(&store, &remote);
-    set(&mut app, "/ui_scale", json!(1.5));
+    set(&mut app, "/command_line/lines", json!(7));
     commit(&mut app);
     assert_eq!(app.ws.status, SaveStatus::Offline);
     assert!(app.ws.message.as_ref().unwrap().contains("forbidden"));
-    assert_eq!(store.current().user.unwrap().ui_scale, 1.5);
+    assert_eq!(store.current().user.unwrap().layout.command_line.lines, 7);
     let calls = remote.calls.get();
     for _ in 0..20 {
         app.sync_now();
@@ -242,7 +242,7 @@ fn forbidden_is_reported_not_retried_forever() {
     app.attach_remote(Box::new(remote.clone()));
     app.sync_now();
     assert_eq!(app.ws.status, SaveStatus::Synced);
-    assert_eq!(remote.profile().ui_scale, 1.5);
+    assert_eq!(remote.profile().layout.command_line.lines, 7);
 }
 
 #[test]
@@ -254,7 +254,7 @@ fn keep_mine_and_use_server_are_explicit() {
         let store_b = SharedStore::seeded(&base);
         let mut b = app(&store_b, &remote);
         set(&mut a, "/toolbars/draw/dock", json!("left"));
-        set(&mut a, "/ui_scale", json!(1.25));
+        set(&mut a, "/command_line/lines", json!(5));
         commit(&mut a);
         set(&mut b, "/toolbars/draw/dock", json!("right"));
         commit(&mut b);
@@ -264,7 +264,7 @@ fn keep_mine_and_use_server_are_explicit() {
         assert_eq!(b.ws.status, SaveStatus::Synced);
         assert_eq!(draw(&b.ws.user), expected);
         assert_eq!(draw(&remote.profile()), expected);
-        assert_eq!(b.ws.user.ui_scale, 1.25, "server-only changes survive either choice");
+        assert_eq!(b.ws.user.layout.command_line.lines, 5, "server-only changes survive either choice");
         assert!(b.ws.sync.pending.is_none());
     }
 }
@@ -297,7 +297,7 @@ fn sync_waits_for_local_commit_and_failed_storage() {
     let store = SharedStore::seeded(&base);
     let remote = SharedRemote::seeded(&base);
     let mut app = app(&store, &remote);
-    set(&mut app, "/ui_scale", json!(1.5));
+    set(&mut app, "/command_line/lines", json!(7));
     app.sync_now();
     assert_eq!(remote.calls.get(), 0);
     assert_eq!(app.ws.status, SaveStatus::Unsaved);
@@ -305,8 +305,8 @@ fn sync_waits_for_local_commit_and_failed_storage() {
     assert!(app.commit_workspace_now().is_err());
     app.sync_now();
     assert_eq!(remote.calls.get(), 0);
-    assert_eq!(remote.profile().ui_scale, 1.0);
-    assert_eq!(app.ws.user.ui_scale, 1.5);
+    assert_eq!(remote.profile().layout.command_line.lines, 3);
+    assert_eq!(app.ws.user.layout.command_line.lines, 7);
 }
 
 #[test]
@@ -314,12 +314,12 @@ fn memory_remote_checks_etag_permissions_and_revision_overflow() {
     let base = base();
     let mut remote = MemoryRemote { profiles: BTreeMap::from([(base.profile_id.clone(), base.clone())]), online: true, ..Default::default() };
     assert!(matches!(remote.get("missing"), Err(RemoteError::NotFound)));
-    assert!(matches!(remote.patch(&base.profile_id, "wrong", &json!({"ui_scale": 1.5})), Err(RemoteError::Stale { .. })));
+    assert!(matches!(remote.patch(&base.profile_id, "wrong", &json!({"layout": {"command_line": {"lines": 7}}})), Err(RemoteError::Stale { .. })));
     assert_eq!(remote.get(&base.profile_id).unwrap(), base);
-    let next = remote.patch(&base.profile_id, base.etag.as_deref().unwrap(), &json!({"ui_scale": 1.5})).unwrap();
+    let next = remote.patch(&base.profile_id, base.etag.as_deref().unwrap(), &json!({"layout": {"command_line": {"lines": 7}}})).unwrap();
     assert_eq!(next.revision, 2);
     assert_ne!(next.etag, base.etag);
-    assert_eq!(next.ui_scale, 1.5);
+    assert_eq!(next.layout.command_line.lines, 7);
     remote.profiles.get_mut(&base.profile_id).unwrap().revision = u64::MAX;
     assert!(matches!(remote.patch(&base.profile_id, next.etag.as_deref().unwrap(), &json!({})), Err(RemoteError::Forbidden(_))));
     assert_eq!(remote.profiles.get(&base.profile_id).unwrap().revision, u64::MAX);
@@ -368,17 +368,17 @@ fn use_server_and_keep_both_fetch_the_latest_server() {
         set(&mut b, "/toolbars/draw/dock", json!("right"));
         commit(&mut b);
         assert_eq!(b.ws.status, SaveStatus::Conflict);
-        set(&mut a, "/ui_scale", json!(1.75));
+        set(&mut a, "/command_line/lines", json!(9));
         commit(&mut a);
         let latest = remote.profile();
         b.resolve_conflict(resolution);
         assert_eq!(b.ws.status, SaveStatus::Synced);
-        assert_eq!(b.ws.user.ui_scale, 1.75);
+        assert_eq!(b.ws.user.layout.command_line.lines, 9);
         assert_eq!(draw(&b.ws.user), Dock::Left);
         assert_eq!(remote.profile(), latest);
         if resolution == Resolution::KeepBoth {
             assert_eq!(draw(&b.ws.profiles[0]), Dock::Right);
-            assert_eq!(b.ws.profiles[0].ui_scale, 1.0);
+            assert_eq!(b.ws.profiles[0].layout.command_line.lines, 3);
         }
     }
 }
@@ -430,12 +430,12 @@ fn failed_local_acknowledgement_keeps_edits_and_can_retry() {
     let remote = SharedRemote::seeded(&base);
     let mut app = app(&store, &remote);
     app.attach_remote(Box::new(FailAcknowledgement { remote: remote.clone(), store: store.clone() }));
-    set(&mut app, "/ui_scale", json!(1.5));
+    set(&mut app, "/command_line/lines", json!(7));
     app.commit_workspace_now().unwrap();
     app.sync_now();
     assert!(matches!(app.ws.status, SaveStatus::Failed(_)));
-    assert_eq!(app.ws.user.ui_scale, 1.5);
-    assert_eq!(store.current().user.unwrap().ui_scale, 1.5);
+    assert_eq!(app.ws.user.layout.command_line.lines, 7);
+    assert_eq!(store.current().user.unwrap().layout.command_line.lines, 7);
     assert_eq!(remote.profile().revision, 2);
     assert!(app.ws.autosave.pending());
     store.0.borrow_mut().fail_writes = false;
@@ -451,10 +451,10 @@ fn sync_without_a_remote_preserves_local_status() {
     let mut app = CadApp::new(Session::new(), Services::default());
     app.skip_first_run_picker = true;
     app.attach_profile_store(Box::new(store.clone()));
-    set(&mut app, "/ui_scale", json!(1.25));
+    set(&mut app, "/command_line/lines", json!(5));
     commit(&mut app);
     assert_eq!(app.ws.status, SaveStatus::SavedLocally);
-    assert_eq!(store.current().user.unwrap().ui_scale, 1.25);
+    assert_eq!(store.current().user.unwrap().layout.command_line.lines, 5);
 }
 
 struct RacingRemote {
@@ -483,7 +483,7 @@ fn repeated_stale_responses_have_a_bounded_retry() {
     let mut app = app(&store, &remote);
     let patches = Rc::new(Cell::new(0));
     app.attach_remote(Box::new(RacingRemote { server: base, patches: patches.clone() }));
-    set(&mut app, "/ui_scale", json!(1.5));
+    set(&mut app, "/command_line/lines", json!(7));
     app.commit_workspace_now().unwrap();
     let after_commit = patches.get();
     if after_commit == 0 {
@@ -491,6 +491,25 @@ fn repeated_stale_responses_have_a_bounded_retry() {
     }
     assert_eq!(patches.get(), 2, "one stale retry is allowed per sync attempt");
     assert_eq!(app.ws.status, SaveStatus::Offline);
-    assert_eq!(app.ws.user.ui_scale, 1.5);
-    assert_eq!(store.current().user.unwrap().ui_scale, 1.5);
+    assert_eq!(app.ws.user.layout.command_line.lines, 7);
+    assert_eq!(store.current().user.unwrap().layout.command_line.lines, 7);
+}
+
+#[test]
+fn ui_scale_is_not_synced() {
+    let base = base();
+    let store = SharedStore::seeded(&base);
+    let remote = SharedRemote::seeded(&base);
+    let mut first = app(&store, &remote);
+    set(&mut first, "/ui_scale", json!(1.5));
+    commit(&mut first);
+    assert_eq!(first.ws.status, SaveStatus::Synced);
+    assert_eq!(first.ws.device.ui_scale, 1.5);
+    assert_eq!(store.current().device.unwrap().ui_scale, 1.5);
+    assert!(serde_json::to_value(remote.profile()).unwrap().get("ui_scale").is_none());
+    assert_eq!(remote.profile().revision, base.revision, "a device edit sends no profile patch");
+    let second = app(&SharedStore::seeded(&base), &remote);
+    assert_eq!(second.ws.device.ui_scale, 1.0);
+    let restarted = app(&store, &remote);
+    assert_eq!(restarted.ws.device.ui_scale, 1.5, "sync baseline persistence keeps local geometry");
 }

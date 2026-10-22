@@ -298,6 +298,7 @@ impl CadApp {
         let set = ProfileSet {
             active: self.ws.active.clone(),
             user: Some(self.ws.user.clone()),
+            device: Some(self.ws.device.clone()),
             profiles: self.ws.profiles.clone(),
             extra: extra.clone(),
             ..ProfileSet::default()

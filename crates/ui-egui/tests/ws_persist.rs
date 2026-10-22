@@ -156,7 +156,7 @@ fn crash_recovery_ux04() {
     assert!(app.ui.docking.layout.contains(&Panel::ExternalRefs));
     assert_eq!(app.ui.docking.layout.root, root, "docked panels keep their places");
     let user = &app.ws.user;
-    assert_eq!(user.ui_scale, 1.25);
+    assert_eq!(app.ws.device.ui_scale, 1.25);
     assert_eq!(user.layout.shortcuts.get("line").map(String::as_str), Some("L"));
     assert_eq!(user.layout.aliases.get("ln").map(String::as_str), Some("line"));
     assert_eq!(user.layout.quick_access, vec!["qsave".to_string(), "u".to_string()]);
@@ -705,7 +705,7 @@ fn session_hidden_panel_not_persisted_via_dock_tree() {
 fn session_layer_hides_a_panel_the_users_dock_tree_shows() {
     let mut app = attached(MemoryStore::default());
     run(&mut app, "ui.dock", json!({"operation": "move", "panel": "properties", "target": "toolSets", "zone": "bottom"}));
-    assert!(app.ws.user.layout.dock_tree.is_some());
+    assert!(app.ws.device.layout_patch.get("dock_tree").is_some());
     app.set_session_layer(json!({"panels": [{"id": "layers", "visible": false, "mode": "hidden"}]}));
     assert!(!app.ui.docking.layout.contains(&Panel::Layers));
 }
@@ -1080,12 +1080,12 @@ fn import_base_change_undo_restores_identity_and_preferences() {
     assert_eq!(again.ws.user.profile_id, before.profile_id);
     assert_eq!(again.ws.user.base_id, before.base_id);
     assert_eq!(again.ws.user.layout, before.layout);
-    assert_eq!(again.ws.user.ui_scale, before.ui_scale);
+    assert_eq!(again.ws.device.ui_scale, 1.25);
     run(&mut app, "ui.layout.redo", json!({}));
     assert_eq!(app.ws.active, "AUTOCAD_FAMILIAR");
     assert_eq!(app.ws.user.base_id, imported.base_id);
     assert_eq!(app.ws.user.layout, imported.layout);
-    assert_eq!(app.ws.user.ui_scale, imported.ui_scale);
+    assert_eq!(app.ws.device.ui_scale, 1.25);
 }
 
 #[test]
@@ -1195,7 +1195,7 @@ fn failed_outgoing_save_blocks_workspace_switch() {
             assert_eq!(again.ws.active, active);
             assert_eq!(again.ws.user.profile_id, before.profile_id);
             assert_eq!(again.ws.user.layout, before.layout);
-            assert_eq!(again.ws.user.ui_scale, 1.25);
+            assert_eq!(again.ws.device.ui_scale, 1.25);
         }
     }
 }
