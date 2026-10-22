@@ -170,6 +170,10 @@ pub(crate) fn placeholder_label(command: &Command) -> String {
     crate::tf!("{title} — not available in this version", title = command.label)
 }
 
+pub(crate) fn placeholder_reason(command: &Command) -> String {
+    if PLANNED.iter().any(|(_, title)| *title == command.label) { crate::tl!("Planned").to_string() } else { placeholder_label(command) }
+}
+
 /// The window's tool bars in drawing order for `dock`: by row, then by position in the row.
 pub(crate) fn docked(toolbars: &[ToolbarState], dock: Dock) -> Vec<&ToolbarState> {
     let mut bars: Vec<&ToolbarState> = toolbars.iter().filter(|bar| bar.dock == dock).collect();

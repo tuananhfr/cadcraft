@@ -199,7 +199,7 @@ fn placeholder_button(ui: &mut egui::Ui, rect: Rect, id: Id, command: &Command) 
     ui.painter().rect_stroke(rect.shrink(3.0), 3.0, Stroke::new(1.0, t.text_faint), StrokeKind::Inside);
     ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "?", crate::theme::small(), t.text_faint);
     icons::describe_control(ui, &response, &label, None, false);
-    response.on_disabled_hover_text(label);
+    response.on_disabled_hover_text(super::placeholder_reason(command));
 }
 
 /// Draws `bar` in `band` from `start` (along the bar's axis) up to `end`; returns the extent it used.
@@ -288,7 +288,8 @@ fn draw_bar(ui: &mut egui::Ui, app: &mut CadApp, bar: &ToolbarState, band: Rect,
                 }
                 for (command_id, command) in group {
                     let label = if command.known { crate::i18n::t(&command.label).to_string() } else { placeholder_label(command) };
-                    let item = ui.add_enabled(command.known, egui::Button::new(label.as_str()));
+                    let item =
+                        ui.add_enabled(command.known, egui::Button::new(label.as_str())).on_disabled_hover_text(super::placeholder_reason(command));
                     if command.known {
                         building(ui.ctx(), |geometry| geometry.stops.push((item.id, owner)));
                     }

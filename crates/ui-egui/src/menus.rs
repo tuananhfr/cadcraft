@@ -28,6 +28,8 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.panel.peek", "Show Auto-hide Panel", &[], None),
     ("ui.panel.fonts", "Fonts", &[], None),
     ("ui.panel.lisp", "LISP", &[], None),
+    ("ui.panel.blocks", "Blocks", &["Window", "Blocks"], None),
+    ("ui.panel.history", "Command History", &[], None),
     ("ui.panel.toolsets", "Tool Sets", &[], None),
     ("ui.panel.externalreferences", "External References", &[], None),
     ("ui.dock.reset", "Reset Panel Layout", &["Window", "Reset Panel Layout"], None),
@@ -107,7 +109,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.resetpalettes", "Reset Palettes", &["Window", "Reset Palettes"], None),
     ("ui.start", "Start", &["Window", "Start"], None),
     ("ui.dialog.layers", "Layer Properties Manager", &["Window", "Layers"], None),
-    ("ui.dialog.blocks", "Blocks", &["Window", "Blocks"], None),
+    ("ui.dialog.blocks", "Blocks", &[], None),
     ("ui.dialog.qselect", "Quick Select...", &[], None),
     ("ui.dialog.parameters", "Parameters Manager", &["Window", "Parameters Manager"], None),
     ("ui.dialog.dsettings", "Drafting Settings...", &[], None),
@@ -197,9 +199,19 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
     if matches!(id, "ui.dock" | "ui.dock.reset") {
         return Some(crate::docking::command(app, id == "ui.dock.reset", params));
     }
+    if id == "ui.dialog.blocks" {
+        return run_ui_command_inner(app, "ui.panel.blocks", params);
+    }
     if matches!(
         id,
-        "ui.panel.properties" | "ui.panel.layers" | "ui.panel.fonts" | "ui.panel.lisp" | "ui.panel.toolsets" | "ui.panel.externalreferences"
+        "ui.panel.properties"
+            | "ui.panel.layers"
+            | "ui.panel.fonts"
+            | "ui.panel.lisp"
+            | "ui.panel.toolsets"
+            | "ui.panel.externalreferences"
+            | "ui.panel.blocks"
+            | "ui.panel.history"
     ) {
         let panel = match id {
             "ui.panel.toolsets" => "toolSets",
@@ -455,7 +467,6 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
         }
         "ui.dialog.language"
         | "ui.dialog.layers"
-        | "ui.dialog.blocks"
         | "ui.dialog.dsettings"
         | "ui.dialog.about"
         | "ui.dialog.commands"
