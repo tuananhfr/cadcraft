@@ -39,6 +39,11 @@ pub struct Closing {
 }
 
 impl CadApp {
+    /// Whether any open drawing has changes that are not saved yet.
+    pub fn has_unsaved_drawings(&self) -> bool {
+        self.session.docs.iter().any(|d| d.is_dirty())
+    }
+
     /// Close one drawing (`None`: the active one) as the user asked for it: a drawing with unsaved
     /// changes asks Save / Don't Save / Cancel first.
     pub fn request_close(&mut self, index: Option<usize>) {
@@ -68,7 +73,7 @@ impl CadApp {
     /// about each drawing first and quit once all are dealt with. Returns whether the close has to
     /// wait (the caller then cancels the window close).
     pub fn request_quit(&mut self) -> bool {
-        if self.quit_confirmed || !self.session.docs.iter().any(|d| d.is_dirty()) {
+        if self.quit_confirmed || !self.has_unsaved_drawings() {
             return false;
         }
         if self.closing.is_none() {
