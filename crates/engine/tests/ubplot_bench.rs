@@ -60,7 +60,10 @@ fn install_hooks() {
 fn benchmark_drawing(count: usize, prefix: &str) -> Drawing {
     let mut drawing = frames_drawing(count);
     let mut block = (**drawing.block("FRAME-A3").unwrap()).clone();
-    block.entities.retain(|entity| !matches!(entity.kind, EntityKind::Text(_)));
+    let texts: Vec<_> = block.entities.iter().filter(|entity| matches!(entity.kind, EntityKind::Text(_))).map(|entity| entity.handle).collect();
+    for handle in texts {
+        block.entities.remove(handle);
+    }
     for index in 0..200 {
         let y = 20.0 + f64::from(index);
         let line = Line { a: Vec3::new(20.0, y, 0.0), b: Vec3::new(400.0, y, 0.0) };
