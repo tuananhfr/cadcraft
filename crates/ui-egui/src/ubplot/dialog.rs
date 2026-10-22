@@ -213,7 +213,7 @@ fn exceptions(ui: &mut egui::Ui, plan: &SheetPlan, request: &ScanRequest, show_a
                         }
                         *action = Some(Action::Edit(Box::new(next)));
                     }
-                    egui::ComboBox::from_id_salt("paper").selected_text(crate::tl!("Set paper for all")).show_ui(ui, |ui| {
+                    ui.menu_button(crate::tl!("Set paper for all"), |ui| {
                         for (paper, label) in [
                             ("A0", crate::tl!("A0")),
                             ("A1", crate::tl!("A1")),
@@ -228,6 +228,7 @@ fn exceptions(ui: &mut egui::Ui, plan: &SheetPlan, request: &ScanRequest, show_a
                                     next.overrides.entry(sheet_key(sheet)).or_default().paper = Some(paper.into());
                                 }
                                 *action = Some(Action::Edit(Box::new(next)));
+                                ui.close();
                             }
                         }
                     });

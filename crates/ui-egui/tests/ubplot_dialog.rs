@@ -270,7 +270,16 @@ fn shift_click_removes_frame() {
     h.event(Event::PointerButton { pos, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::SHIFT });
     h.event(Event::PointerButton { pos, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::SHIFT });
     h.run_steps(3);
-    assert_eq!(h.state().session.marks().len(), 1);
+    let app = h.state();
+    let log = &app.session.log[app.session.log.len().saturating_sub(4)..];
+    assert_eq!(
+        app.session.marks().len(),
+        1,
+        "prompt {:?}, pending window {}, cursor {:?} vs {pos:?}, log {log:?}",
+        app.session.prompt_text(),
+        app.session.pending_window.is_some(),
+        app.canvas.cursor
+    );
     assert_eq!(h.state().session.marks()[0].label, "1");
     h.event(Event::ModifiersChanged(Modifiers::NONE));
     h.event(Event::PointerButton { pos, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE });
