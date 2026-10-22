@@ -342,6 +342,7 @@
 	Equal	Рівність
 	Erase	Стерти
 	Evaluate	Обчислити
+	LISP edit log	Журнал змін LISP
 	LISP write folders	Теки запису LISP
 	Evaluate LISP	Обчислити LISP
 	Exclude from new selection set	Виключити з нового набору вибраних об'єктів

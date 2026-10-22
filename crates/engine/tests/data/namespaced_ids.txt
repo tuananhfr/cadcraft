@@ -251,6 +251,7 @@ limits	cad.format.limits
 line	cad.draw.line
 linetype	cad.format.linetype
 lisp	cad.other.lisp
+lispaudit	cad.other.lispaudit
 lispsandbox	cad.other.lispsandbox
 lisptrust	cad.other.lisptrust
 list	cad.tools.list

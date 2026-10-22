@@ -27,6 +27,10 @@ pub fn set_clock(h: ClockHook) {
     let _ = CLOCK.set(h);
 }
 
+pub(crate) fn now_ms() -> u64 {
+    CLOCK.get().map_or(0, |clock| clock())
+}
+
 pub struct UbplotState {
     pub registry: FrameRegistry,
     pub(crate) registry_store: Option<Box<dyn RegistryStore>>,
@@ -248,7 +252,7 @@ fn run_approve(s: &mut Session, params: &Value) -> Result<Value> {
     if let Some(last) = s.ubplot.last.as_ref().filter(|last| last.doc_uid == uid) {
         plan.audit = merge_audit(&last.plan.audit, &plan.audit).map_err(|error| bad(COMMAND, error))?;
     }
-    let at_ms = CLOCK.get().map_or(0, |clock| clock());
+    let at_ms = now_ms();
     approve_with_splits(&mut plan, &items, &splits, by, at_ms).map_err(|error| bad(COMMAND, error))?;
     let result = serde_json::to_value(&plan).map_err(|error| bad(COMMAND, error.to_string()))?;
     publish::remember(s, &plan, supplied)?;

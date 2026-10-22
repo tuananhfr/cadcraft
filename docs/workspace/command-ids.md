@@ -264,6 +264,7 @@ UI-only recovery status: `ui.recovery.status` (registered in `ui-egui::menus::UI
 | `line` | `cad.draw.line` | Draw | model, paper | available | edit | l |
 | `linetype` | `cad.format.linetype` | Format | model, paper | available | edit | lt, ltype |
 | `lisp` | `cad.other.lisp` | Other | model, paper | available | execute |  |
+| `lispaudit` | `cad.other.lispaudit` | Other | model, paper | available | read |  |
 | `lispsandbox` | `cad.other.lispsandbox` | Other | model, paper | available | file |  |
 | `lisptrust` | `cad.other.lisptrust` | Other | model, paper | available | file |  |
 | `list` | `cad.tools.list` | Tools | model, paper | available | read | li, ls |

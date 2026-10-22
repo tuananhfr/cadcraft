@@ -159,6 +159,7 @@ pub struct PickSet {
 /// A function defined in LISP (`defun`, `lambda`).
 #[derive(Debug)]
 pub struct Func {
+    pub source: Option<super::audit::Source>,
     pub name: Option<Sym>,
     pub params: Vec<Sym>,
     /// Local variables (after the `/` in the argument list): bound to nil during a call.

@@ -10,6 +10,9 @@ use crate::{Accept, CommandSpec, EngineError, Input, Interactive, Prompt, Result
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
+        CommandSpec::new("lispaudit", "LISP edit log", run_lispaudit)
+            .params("{limit?: integer (default 20, maximum 1000)} → {records: LispAudit[]} (newest first)")
+            .noundo(),
         CommandSpec::new("lisptrust", "LISP file approvals", run_lisptrust)
             .params("{action?: list|approve|revoke (default list), sha256?: source digest} → {approved}")
             .noundo(),
@@ -29,6 +32,15 @@ pub fn specs() -> Vec<CommandSpec> {
             )
             .noundo(),
     ]
+}
+
+fn run_lispaudit(s: &mut Session, p: &Value) -> Result<Value> {
+    let limit = match p.get("limit") {
+        None => 20,
+        Some(value) => value.as_u64().ok_or_else(|| bad("lispaudit", "`limit` must be a non-negative integer"))?.min(1_000) as usize,
+    };
+    let records: Vec<_> = s.lisp_audit().into_iter().rev().take(limit).collect();
+    Ok(json!({"records": records}))
 }
 
 fn run_lisptrust(s: &mut Session, p: &Value) -> Result<Value> {

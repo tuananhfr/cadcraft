@@ -115,6 +115,7 @@ pub const FILE_IDS: &[&str] = &[
 pub const EDIT_IDS: &[&str] = &["undo", "u", "redo", "mredo", "bsave", "bsaveas", "bclose", "layout.set", "ubplot.approve"];
 
 pub const LISP_IDS: &[&str] = &[
+    "lispaudit",
     "lisptrust",
     "appload",
     "load",

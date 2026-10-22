@@ -86,6 +86,9 @@ pub enum Frame {
     Forms {
         rest: Vec<Value>,
     },
+    Source {
+        previous: Option<super::audit::Source>,
+    },
     /// `vl-catch-all-apply`: an error below this frame becomes its value.
     Catch,
     /// After a wait, call `f` with `args` (the rest of a `command` after a `pause`).
@@ -121,7 +124,7 @@ pub enum Flow {
     /// Evaluate an expression (`eval`).
     Eval(Value),
     /// Evaluate forms in order; the value is the last one's (`load`).
-    Forms(Vec<Value>),
+    Forms(Vec<Value>, super::audit::Source),
     /// `mapcar`.
     Map(Value, Vec<Value>),
     /// `vl-catch-all-apply`: call the function, turning an error into a value.
@@ -231,6 +234,7 @@ impl Machine {
         while let Some(frame) = self.stack.pop() {
             match frame {
                 Frame::Unbind { saved } => restore(ctx.env, saved),
+                Frame::Source { previous } => ctx.env.audit_source = previous,
                 Frame::Foreach { var, saved, .. } => restore(ctx.env, vec![(var, saved)]),
                 Frame::Catch if !e.quit => {
                     self.state = State::Ret(super::builtins::catch_all_error(&e.msg));
@@ -378,6 +382,10 @@ impl Machine {
                 }
                 None => self.state = State::Ret(v),
             },
+            Frame::Source { previous } => {
+                ctx.env.audit_source = previous;
+                self.state = State::Ret(v);
+            }
             Frame::Catch => self.state = State::Ret(v),
             Frame::Resume { f, args } => self.state = State::Call(f, args),
         }
@@ -462,7 +470,11 @@ impl Machine {
             Special::Quote => self.state = State::Ret(args.car()),
             Special::Function => {
                 let a = args.car();
-                self.state = State::Ret(if a.car().as_sym().is_some_and(|s| s.name() == "LAMBDA") { make_func(None, a.cdr())? } else { a });
+                self.state = State::Ret(if a.car().as_sym().is_some_and(|s| s.name() == "LAMBDA") {
+                    make_func(None, a.cdr(), ctx.env.audit_source.clone())?
+                } else {
+                    a
+                });
             }
             Special::Setq => {
                 if args.is_nil() {
@@ -505,11 +517,11 @@ impl Machine {
             Special::Or => self.and_or(args, false),
             Special::Defun => {
                 let Value::Sym(name) = args.car() else { return Err(LispError::bad_arg("symbolp", &args.car())) };
-                let f = make_func(Some(name.clone()), args.cdr())?;
+                let f = make_func(Some(name.clone()), args.cdr(), ctx.env.audit_source.clone())?;
                 ctx.env.set(&name, f);
                 self.state = State::Ret(Value::Sym(name));
             }
-            Special::Lambda => self.state = State::Ret(make_func(None, args)?),
+            Special::Lambda => self.state = State::Ret(make_func(None, args, ctx.env.audit_source.clone())?),
         }
         Ok(())
     }
@@ -528,7 +540,7 @@ impl Machine {
                     if let Flow::Value(v) = &flow {
                         super::value::charge_result(v)?;
                     }
-                    self.flow(flow);
+                    self.flow(ctx, flow);
                 }
                 BuiltinKind::Special(_) => return Err(LispError::new(format!("bad function: {}", b.name))),
             },
@@ -556,12 +568,19 @@ impl Machine {
         Ok(())
     }
 
-    fn flow(&mut self, flow: Flow) {
+    fn flow(&mut self, ctx: &mut Ctx<'_>, flow: Flow) {
         match flow {
             Flow::Value(v) => self.state = State::Ret(v),
             Flow::Call(f, args) => self.state = State::Call(f, args),
             Flow::Eval(e) => self.state = State::Eval(e),
-            Flow::Forms(forms) => {
+            Flow::Forms(forms, source) => {
+                if let Some(pending) = ctx.s.lisp.audit_pending.as_mut()
+                    && pending.source.is_none()
+                {
+                    pending.source = Some(source.clone());
+                }
+                let previous = ctx.env.audit_source.replace(source);
+                self.stack.push(Frame::Source { previous });
                 self.stack.push(Frame::Forms { rest: forms.into_iter().rev().collect() });
                 self.state = State::Ret(Value::Nil);
             }
@@ -611,7 +630,7 @@ fn restore(env: &mut Env, saved: Vec<(Sym, Option<Value>)>) {
 }
 
 /// A function from `((params / locals) body…)`.
-fn make_func(name: Option<Sym>, def: Value) -> Result<Value, LispError> {
+fn make_func(name: Option<Sym>, def: Value, source: Option<super::audit::Source>) -> Result<Value, LispError> {
     let arglist = def.car();
     if !arglist.is_list() {
         return Err(LispError::bad_arg("listp", &arglist));
@@ -628,7 +647,7 @@ fn make_func(name: Option<Sym>, def: Value) -> Result<Value, LispError> {
             params.push(s);
         }
     }
-    Ok(Value::Func(std::sync::Arc::new(Func { name, params, locals, body: def.cdr() })))
+    Ok(Value::Func(std::sync::Arc::new(Func { source, name, params, locals, body: def.cdr() })))
 }
 
 impl Ctx<'_> {

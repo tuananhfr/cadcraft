@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, Once};
 
 use cadcraft_engine::Session;
-use cadcraft_engine::cmd::file::{IoHooks, set_io};
+use cadcraft_engine::cmd::file::{EntityCodec, IoHooks, set_entity_codec, set_io};
 use cadcraft_engine::lisp::sandbox::{check_write, set_write_roots, write_roots};
 use cadcraft_engine::lisp::value::{Value as LispValue, to_text};
 use cadcraft_engine::sheetplan::{Severity, SheetPlan, ids};
@@ -48,6 +48,7 @@ fn setup() -> Session {
             write: |drawing, _| Ok(cadcraft_io::write_dxf(drawing).into_bytes()),
             plot: Some(|drawing, space, options| cadcraft_io::plotter::plot(drawing, space, options).map_err(|error| error.to_string())),
         });
+        set_entity_codec(EntityCodec { groups: cadcraft_io::entity_groups, entity: cadcraft_io::entity_from_groups });
         cadcraft_engine::cmd::ubplot::set_clock(|| 42);
     });
     Session::new()
@@ -499,4 +500,167 @@ fn approval_list_validates_and_limits_digests() {
     assert!(approve(&approved()[0]));
     assert!(revoke(&approved()[0]));
     assert!(approve(&sha));
+}
+
+const AUDIT_LINE: &str = r#"(entmake '((0 . "LINE") (10 0 0 0) (11 5 0 0)))"#;
+
+#[test]
+fn lisp_edit_is_one_undo_step_and_audited() {
+    use cadcraft_engine::lisp::trust::{approve, source_sha};
+
+    let _review = Review::new("audit-edit");
+    let mut session = setup();
+    session.execute("line", &json!({"points": [[0, 10], [5, 10]]})).unwrap();
+    let before = session.state().unwrap().doc.clone();
+    let undo_before = session.state().unwrap().undo.len();
+    let text = format!("(defun c:audit-edit (/ victim) (setq victim (entlast)) (repeat 3 {AUDIT_LINE}) (entdel victim) (princ))");
+    assert!(approve(&source_sha(&text)));
+    session.execute("appload", &json!({"name": "folder/audit-edit.lsp", "text": text})).unwrap();
+    assert!(session.lisp_audit().is_empty());
+    session.cmdline("audit-edit").unwrap();
+    let records = session.lisp_audit();
+    assert_eq!(records.len(), 1);
+    let record = &records[0];
+    assert_eq!((record.created, record.modified, record.deleted), (3, 0, 1));
+    assert_eq!(record.at_ms, 42);
+    assert_eq!(record.source, "audit-edit.lsp");
+    assert_eq!(record.sha256.as_deref(), Some(source_sha(&text).as_str()));
+    assert_eq!(record.undo_label, "AUDIT-EDIT");
+    assert!(record.commands.is_empty());
+    let state = session.state().unwrap();
+    assert_eq!(state.undo.len(), undo_before + 1);
+    assert_eq!(state.undo.last().unwrap().label, record.undo_label);
+    session.execute("undo", &json!({"count": 1})).unwrap();
+    assert_eq!(session.doc().unwrap(), before.as_ref());
+    assert_eq!(session.state().unwrap().undo.len(), undo_before);
+    assert_eq!(session.lisp_audit(), records);
+}
+
+#[test]
+fn read_only_routine_is_not_audited() {
+    let mut session = setup();
+    session.execute("line", &json!({"points": [[0, 0], [5, 0]]})).unwrap();
+    let result = eval(&mut session, "(setq read_only 1) (entget (entlast)) (princ)");
+    assert!(result.get("error").is_none(), "{result}");
+    assert!(session.lisp_audit().is_empty());
+    let result = eval(&mut session, "(entmod (entget (entlast)))");
+    assert!(result.get("error").is_none(), "{result}");
+    assert!(session.lisp_audit().is_empty(), "writing identical entity data is not a change");
+    let result = eval(&mut session, "(setq victim (entlast)) (entdel victim) (entdel victim)");
+    assert!(result.get("error").is_none(), "{result}");
+    assert!(session.lisp_audit().is_empty(), "an edit restored within the routine has no net entity change");
+    session.cmdline("(+ 1 2)").unwrap();
+    assert!(session.lisp_audit().is_empty());
+    assert_eq!(session.execute("lispaudit", &json!({})).unwrap(), json!({"records": []}));
+}
+
+#[test]
+fn audit_ring_is_capped() {
+    let mut session = setup();
+    let first = eval(&mut session, &format!("(repeat 2 {AUDIT_LINE})"));
+    assert!(first.get("error").is_none(), "{first}");
+    for _ in 0..1_000 {
+        let result = eval(&mut session, AUDIT_LINE);
+        assert!(result.get("error").is_none(), "{result}");
+    }
+    let records = session.lisp_audit();
+    assert_eq!(records.len(), 1_000);
+    assert!(records.iter().all(|record| record.created == 1), "the oldest, two-entity record was evicted");
+    assert!(Session::new().lisp_audit().is_empty(), "the ring belongs to its session");
+    assert_eq!(session.execute("lispaudit", &json!({})).unwrap()["records"].as_array().unwrap().len(), 20);
+    assert_eq!(session.execute("lispaudit", &json!({"limit": u64::MAX})).unwrap()["records"].as_array().unwrap().len(), 1_000);
+    assert_eq!(session.execute("lispaudit", &json!({"limit": 0})).unwrap(), json!({"records": []}));
+    for limit in [json!(-1), json!(1.5), json!("2"), Value::Null] {
+        assert!(session.execute("lispaudit", &json!({"limit": limit})).is_err());
+    }
+}
+
+#[test]
+fn routine_using_command_erase_is_audited() {
+    let mut session = setup();
+    session.execute("line", &json!({"points": [[0, 0], [5, 0]]})).unwrap();
+    let before = session.state().unwrap().doc.clone();
+    let undo_before = session.state().unwrap().undo.len();
+    let result = eval(&mut session, r#"(command "_.ERASE" (entlast) "") (command "_.LINE" '(0 10) '(5 10) "")"#);
+    assert!(result.get("error").is_none(), "{result}");
+    let records = session.lisp_audit();
+    assert_eq!(records.len(), 1);
+    let record = &records[0];
+    assert_eq!((record.created, record.modified, record.deleted), (1, 0, 1));
+    assert_eq!(record.commands, ["erase", "line"]);
+    assert_eq!(record.source, "lisp");
+    assert_eq!(record.sha256, None);
+    assert_eq!(record.undo_label, "LISP");
+    assert_eq!(session.state().unwrap().undo.len(), undo_before + 1);
+    session.execute("undo", &json!({"count": 1})).unwrap();
+    assert_eq!(session.doc().unwrap(), before.as_ref());
+}
+
+#[test]
+fn lisp_error_after_edit_is_audited_and_undoable() {
+    let mut session = setup();
+    session.execute("circle", &json!({"center": [0, 0], "radius": 2})).unwrap();
+    let before = session.state().unwrap().doc.clone();
+    let undo_before = session.state().unwrap().undo.len();
+    let code = r#"(setq d (entget (entlast))) (entmod (subst (cons 40 9.0) (assoc 40 d) d)) (/ 1 0)"#;
+    let result = eval(&mut session, code);
+    assert!(result.get("error").is_some(), "{result}");
+    let records = session.lisp_audit();
+    assert_eq!(records.len(), 1);
+    assert_eq!((records[0].created, records[0].modified, records[0].deleted), (0, 1, 0));
+    assert_eq!(session.state().unwrap().undo.len(), undo_before + 1);
+    session.execute("undo", &json!({"count": 1})).unwrap();
+    assert_eq!(session.doc().unwrap(), before.as_ref());
+}
+
+#[test]
+fn audit_commands_are_bounded_and_records_are_newest_first() {
+    let mut session = setup();
+    let code = r#"(repeat 51 (command "_.LINE" '(0 0) '(5 0) "")) (command "_.CIRCLE" '(10 10) 2)"#;
+    let result = eval(&mut session, code);
+    assert!(result.get("error").is_none(), "{result}");
+    assert_eq!(session.lisp_audit()[0].created, 52);
+    assert_eq!(session.lisp_audit()[0].commands, vec!["line"; 50]);
+    let result = eval(&mut session, &format!("(repeat 2 {AUDIT_LINE})"));
+    assert!(result.get("error").is_none(), "{result}");
+    let latest = cadcraft_engine::lisp::trust::with_mcp_input(|| session.execute("cad.other.lispaudit", &json!({"limit": 1}))).unwrap();
+    assert_eq!(latest["records"].as_array().unwrap().len(), 1);
+    assert_eq!(latest["records"][0]["created"], 2);
+    let listed = session.execute("lispaudit", &json!({"limit": 2})).unwrap();
+    assert_eq!(listed["records"][1]["created"], 52);
+    let meta = cadcraft_engine::cmd::registry::command_registry().into_iter().find(|meta| meta.stable_id == "lispaudit").unwrap();
+    assert_eq!(meta.risk_class, cadcraft_engine::cmd::registry::RiskClass::Read);
+    assert_eq!(meta.capabilities, ["lisp"]);
+    assert!(meta.permissions.is_empty());
+    assert!(!meta.undoable);
+}
+
+#[test]
+fn load_provenance_survives_yield_and_later_command_calls() {
+    use cadcraft_engine::lisp::trust::{approve, source_sha};
+
+    let review = Review::new("audit-load");
+    let text = format!("(defun c:audit-loaded () {AUDIT_LINE}) (getstring) {AUDIT_LINE}");
+    let path = review.file(&text);
+    assert!(approve(&source_sha(&text)));
+    let mut session = setup();
+    session.cmdline(&format!("(load {})", quoted(&path))).unwrap();
+    assert!(session.lisp_running());
+    assert!(session.lisp_audit().is_empty());
+    session.input(cadcraft_engine::Input::Text("continue".into())).unwrap();
+    assert!(!session.lisp_running());
+    let records = session.lisp_audit();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].source, "review.lsp");
+    assert_eq!(records[0].sha256.as_deref(), Some(source_sha(&text).as_str()));
+    session.cmdline("audit-loaded").unwrap();
+    let records = session.lisp_audit();
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[1].source, "review.lsp");
+    assert_eq!(records[1].sha256, records[0].sha256);
+    assert_eq!(records[1].undo_label, "AUDIT-LOADED");
+    let result = eval(&mut session, AUDIT_LINE);
+    assert!(result.get("error").is_none(), "{result}");
+    assert_eq!(session.lisp_audit()[2].source, "lisp");
+    assert_eq!(session.lisp_audit()[2].sha256, None);
 }

@@ -324,6 +324,7 @@ menu	Help	Trợ giúp
 	End Object Isolation	Kết thúc cô lập đối tượng
 	Equal	Bằng nhau
 	Erase	Xóa
+	LISP edit log	Nhật ký chỉnh sửa LISP
 	LISP write folders	Thư mục ghi LISP
 	Evaluate LISP	Thực thi LISP
 	Explode	Phá khối

@@ -5,6 +5,7 @@
 //! (`getpoint`, `pause`) and carry on later, so the interface keeps drawing while a routine
 //! waits. Each drawing has its own symbols, as in AutoCAD. A run is one undo step.
 
+pub mod audit;
 pub mod builtins;
 mod drawing;
 pub mod eval;
@@ -48,6 +49,7 @@ impl LispError {
 
 /// One drawing's LISP environment.
 pub struct Env {
+    pub(crate) audit_source: Option<audit::Source>,
     pub globals: HashMap<Sym, Value>,
     /// Printed text not yet ended by a newline.
     pub out: String,
@@ -70,6 +72,7 @@ pub struct Env {
 impl Default for Env {
     fn default() -> Self {
         let mut e = Env {
+            audit_source: None,
             globals: HashMap::new(),
             out: String::new(),
             initget: None,
@@ -107,6 +110,8 @@ impl Env {
 /// The session's LISP: each drawing's environment and the routine running, if any.
 #[derive(Default)]
 pub struct LispState {
+    audit: std::collections::VecDeque<audit::LispAudit>,
+    audit_pending: Option<audit::Pending>,
     envs: HashMap<u64, Env>,
     run: Option<Box<Run>>,
     /// A routine runs, from its start to its end (also while its machine is out of `run`).
@@ -223,12 +228,16 @@ impl Session {
         inputs: Vec<Value>,
     ) -> crate::Result<Option<std::result::Result<Value, String>>> {
         let forms = read::read_all(src).map_err(|e| crate::EngineError::Other(format!("; error: {}", e.msg)))?;
-        self.lisp_start(Machine::forms(forms), print, blocking, inputs, "LISP".into())
+        self.lisp_start(Machine::forms(forms), print, blocking, inputs, "LISP".into(), None)
     }
 
     /// Call a LISP function (`c:` commands typed at the command line).
     fn lisp_call(&mut self, f: Value, label: String) -> crate::Result<Option<std::result::Result<Value, String>>> {
-        self.lisp_start(Machine::calling(f, Vec::new()), false, false, Vec::new(), label)
+        let source = match &f {
+            Value::Func(function) => function.source.clone(),
+            _ => None,
+        };
+        self.lisp_start(Machine::calling(f, Vec::new()), false, false, Vec::new(), label, source)
     }
 
     fn lisp_start(
@@ -238,6 +247,7 @@ impl Session {
         blocking: bool,
         inputs: Vec<Value>,
         label: String,
+        source: Option<audit::Source>,
     ) -> crate::Result<Option<std::result::Result<Value, String>>> {
         if self.lisp.active {
             return Err(crate::EngineError::Other("a LISP routine is already running".into()));
@@ -248,6 +258,8 @@ impl Session {
         let st = self.state()?;
         let before = Some((st.doc.clone(), st.selection.clone()));
         let uid = st.uid;
+        self.lisp.envs.entry(uid).or_default().audit_source = source.clone();
+        self.lisp.audit_pending = Some(audit::Pending { source, commands: Vec::new() });
         self.lisp.run = Some(Box::new(Run {
             machine,
             loaded_file: None,
@@ -426,6 +438,7 @@ impl Session {
         self.lisp.active = false;
         let mut env = self.lisp.envs.remove(&run.uid).unwrap_or_default();
         self.lisp_flush(&mut env, true);
+        env.audit_source = None;
         self.lisp.envs.insert(run.uid, env);
         if let (Ok(v), true) = (&result, run.print) {
             let text = value::to_text(v, true);
@@ -439,12 +452,18 @@ impl Session {
         {
             self.lisp_loaded(name);
         }
+        let pending = self.lisp.audit_pending.take().unwrap_or_default();
+        let mut record = None;
         if let Some((doc, sel)) = run.before
             && let Some(st) = self.docs.iter_mut().find(|d| d.uid == run.uid)
             && !Arc::ptr_eq(&doc, &st.doc)
         {
+            record = audit::record(&doc, &st.doc, pending, run.label.clone());
             st.push_undo(crate::Snapshot { label: run.label.clone(), doc, selection: sel });
             st.revision += 1;
+        }
+        if let Some(record) = record {
+            audit::publish(&mut self.lisp.audit, record);
         }
         self.lisp_last = Some(result);
     }
@@ -622,7 +641,9 @@ impl Session {
 
     pub(crate) fn lisp_load_once(&mut self, name: &str, text: &str, blocking: bool) -> crate::Result<Option<std::result::Result<Value, String>>> {
         self.lisp.files.insert(file_key(name), text.to_string());
-        let r = self.lisp_eval(text, false, blocking, Vec::new())?;
+        let forms = read::read_all(text).map_err(|e| crate::EngineError::Other(format!("; error: {}", e.msg)))?;
+        let source = audit::Source::loaded(name, text);
+        let r = self.lisp_start(Machine::forms(forms), false, blocking, Vec::new(), "LISP".into(), Some(source))?;
         match &r {
             Some(Ok(_)) => self.lisp_loaded(name),
             None => {

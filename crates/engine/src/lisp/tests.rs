@@ -489,7 +489,13 @@ fn deeply_nested_lists_drop_without_overflowing_the_stack() {
     // Functions nested in function bodies too.
     let mut f = Value::Nil;
     for _ in 0..200_000 {
-        f = Value::Func(std::sync::Arc::new(super::value::Func { name: None, params: Vec::new(), locals: Vec::new(), body: Value::list(vec![f]) }));
+        f = Value::Func(std::sync::Arc::new(super::value::Func {
+            source: None,
+            name: None,
+            params: Vec::new(),
+            locals: Vec::new(),
+            body: Value::list(vec![f]),
+        }));
     }
     drop(f);
     // The same built by a routine and dropped when the variable is cleared.
