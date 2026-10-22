@@ -649,3 +649,201 @@ mod baseline {
         }
     }
 }
+
+mod reports {
+    use std::collections::BTreeMap;
+
+    use cadcraft_engine::sheetplan::codes;
+    use cadcraft_engine::sheetplan::{PreflightContext, Severity, SheetPlan, preflight};
+
+    use super::*;
+
+    fn fixture() -> (Session, SheetPlan) {
+        let mut session = Session::new();
+        frame_block(session.doc_mut().unwrap(), "FRAME", 420.0, 297.0);
+        let handles = [
+            place(&mut session, "FRAME", [0.0, 0.0], 1.0, 0.0, false, &[("SO_BV", "KT-01"), ("issue_rev", "R2"), ("REV", "R999")]),
+            place(&mut session, "FRAME", [500.0, 0.0], 1.0, 0.0, false, &[("SO_BV", "KT-01"), ("ISSUE_REV", "R10")]),
+            place(&mut session, "FRAME", [1000.0, 0.0], 1.0, 0.0, false, &[("SO_BV", "KT-02")]),
+        ];
+        let mut old = template("office");
+        old["version"] = json!(1);
+        old["status"] = json!("superseded");
+        old["superseded_by"] = json!("office@2");
+        old["attributes"] = json!({"sheet_id": ["SO_BV"], "revision": ["ISSUE_REV"]});
+        let mut new = old.clone();
+        new["version"] = json!(2);
+        new["status"] = json!("approved");
+        new.as_object_mut().unwrap().remove("superseded_by");
+        session.ubplot.registry = load_registry(Some(&json!({"schema_version": "2", "templates": [old, new]}).to_string())).0;
+        let value = session.execute("ubplot.scan", &json!({"mode": "block", "handles": handles.map(|handle| handle.hex())})).unwrap();
+        let mut plan: SheetPlan = serde_json::from_value(value).unwrap();
+        assert_eq!(plan.sheets.len(), 3);
+        assert!(plan.sheets[0].issues.iter().any(|issue| issue.code == codes::REVISION_OLD));
+        assert!(!plan.sheets[1].issues.iter().any(|issue| issue.code == codes::REVISION_OLD));
+        plan.sheets[2].frame_template_id = Some("office@1".into());
+        check(&session, &mut plan);
+        (session, plan)
+    }
+
+    fn check(session: &Session, plan: &mut SheetPlan) {
+        check_with_revisions(session, plan, &BTreeMap::new());
+    }
+
+    fn check_with_revisions(session: &Session, plan: &mut SheetPlan, revisions: &BTreeMap<String, String>) {
+        let context = PreflightContext { registry: &session.ubplot.registry, device: None, device_missing: false, revisions, fonts: &[], web: false };
+        preflight(session.doc().unwrap(), plan, &context);
+    }
+
+    #[test]
+    fn old_revision_and_duplicate_ids_reported() {
+        let (mut session, mut plan) = fixture();
+        let before = plan.clone();
+        check(&session, &mut plan);
+        assert_eq!(plan, before);
+        let registry = session.ubplot.registry.clone();
+        let last = session.ubplot.last.as_ref().unwrap().plan.clone();
+        let drawing = (session.state().unwrap().revision, session.state().unwrap().is_dirty());
+        let value = serde_json::to_value(&plan).unwrap();
+        let report = session.execute("ubplot.report", &json!({"plan": value})).unwrap();
+        let rows = report["rows"].as_array().unwrap();
+        assert_eq!(rows.len(), 3);
+        for (sheet, row) in plan.sheets.iter().zip(rows) {
+            assert_eq!(row["order"], sheet.order);
+            assert_eq!(row["sheet_id"], sheet.sheet_id);
+            assert_eq!(row["frame_template_id"], json!(sheet.frame_template_id));
+            assert_eq!(row["status"], "NEEDS_PREVIEW");
+            assert!(sheet.issues.iter().all(|issue| issue.severity == Severity::Warn));
+        }
+        assert_eq!(rows[0]["revision"], "R2");
+        assert_eq!(rows[1]["revision"], "R10");
+        assert_eq!(rows[2]["revision"], Value::Null);
+        assert_eq!(rows[0]["issue_codes"], json!([codes::SHEET_ID_DUPLICATE, codes::REVISION_OLD]));
+        assert_eq!(rows[1]["issue_codes"], json!([codes::SHEET_ID_DUPLICATE]));
+        assert_eq!(rows[2]["issue_codes"], json!([codes::TEMPLATE_SUPERSEDED]));
+        assert_eq!(session.execute("ubplot.report", &json!({"plan": value, "format": "json"})).unwrap(), report);
+        assert_eq!(session.execute("cad.other.ubplot.report", &json!({"plan": value})).unwrap(), report);
+        assert_eq!(session.ubplot.registry, registry);
+        assert_eq!(session.ubplot.last.as_ref().unwrap().plan, last);
+        assert_eq!((session.state().unwrap().revision, session.state().unwrap().is_dirty()), drawing);
+
+        for (left, right, old) in [
+            (" r2 ", "R10", true),
+            ("R02", "r2", false),
+            ("R00018446744073709551616", "r18446744073709551616", false),
+            ("R00018446744073709551616", "R18446744073709551617", true),
+            ("R9B2", "r9b10", true),
+            ("R18446744073709551616", "R18446744073709551617", true),
+            ("R99999999999999999999", "R100000000000000000000", true),
+            ("", "R10", false),
+            ("   ", "R10", false),
+            ("R10", "", false),
+        ] {
+            plan.sheets[0].attributes = BTreeMap::from([("ISSUE_REV".into(), left.into())]);
+            plan.sheets[1].attributes = BTreeMap::from([("ISSUE_REV".into(), right.into())]);
+            check(&session, &mut plan);
+            assert_eq!(plan.sheets[0].issues.iter().any(|issue| issue.code == codes::REVISION_OLD), old, "{left:?} / {right:?}");
+            assert!(!plan.sheets[1].issues.iter().any(|issue| issue.code == codes::REVISION_OLD));
+        }
+        plan.sheets[0].attributes.clear();
+        plan.sheets[1].attributes.insert("ISSUE_REV".into(), "R10".into());
+        plan.sheets[1].sheet_id = "KT-03".into();
+        check(&session, &mut plan);
+        assert!(
+            plan.sheets
+                .iter()
+                .all(|sheet| { !sheet.issues.iter().any(|issue| matches!(issue.code.as_str(), codes::SHEET_ID_DUPLICATE | codes::REVISION_OLD)) })
+        );
+        for params in [json!({}), json!({"plan": {}}), json!({"plan": value, "format": "xml"}), json!({"plan": value, "format": 7})] {
+            assert!(session.execute("ubplot.report", &params).is_err());
+        }
+    }
+
+    #[test]
+    fn registered_revision_checks_preserve_missing_values_and_plan_precedence() {
+        let (session, original) = fixture();
+        for expected in ["R20", " R20 ", "R1"] {
+            let mut plan = original.clone();
+            let revisions = BTreeMap::from([("KT-01".into(), expected.into())]);
+            check_with_revisions(&session, &mut plan, &revisions);
+            let issues: Vec<_> =
+                plan.sheets[0].issues.iter().filter(|issue| matches!(issue.code.as_str(), codes::REVISION_OLD | codes::REVISION_NEWER)).collect();
+            assert_eq!(issues.len(), 1);
+            assert_eq!(issues[0].code, codes::REVISION_OLD);
+            assert_eq!(issues[0].severity, Severity::Warn);
+            assert_eq!(issues[0].message, "Revision `R2` is older than highest revision `R10` for sheet id `KT-01` in this plan.");
+            let issue = plan.sheets[1].issues.iter().find(|issue| issue.code.starts_with("REVISION_")).unwrap();
+            assert_eq!(issue.code, if expected.trim() == "R1" { codes::REVISION_NEWER } else { codes::REVISION_OLD });
+            assert_eq!(issue.severity, if expected.trim() == "R1" { Severity::Info } else { Severity::Warn });
+            assert_eq!(issue.message, format!("Revision `R10` compared with registered revision `{expected}`."));
+            let before = plan.clone();
+            check_with_revisions(&session, &mut plan, &revisions);
+            assert_eq!(plan, before);
+        }
+        for template_id in [Some("office@2"), Some("unknown@1"), None] {
+            for attributes in [BTreeMap::new(), BTreeMap::from([("ISSUE_REV".into(), "   ".into())])] {
+                let mut plan = original.clone();
+                plan.sheets[0].attributes = attributes;
+                plan.sheets[0].frame_template_id = template_id.map(str::to_string);
+                let revisions = BTreeMap::from([("KT-01".into(), " R10 ".into())]);
+                check_with_revisions(&session, &mut plan, &revisions);
+                let issues: Vec<_> = plan.sheets[0].issues.iter().filter(|issue| issue.code == codes::REVISION_OLD).collect();
+                assert_eq!(issues.len(), 1);
+                assert_eq!(issues[0].severity, Severity::Warn);
+                assert_eq!(issues[0].sheet_id.as_deref(), Some("KT-01"));
+                assert_eq!(
+                    issues[0].message,
+                    if template_id == Some("office@2") {
+                        "Revision `` compared with registered revision ` R10 `."
+                    } else {
+                        "Revision is missing; registered revision is ` R10 `."
+                    }
+                );
+                check(&session, &mut plan);
+                assert!(!plan.sheets[0].issues.iter().any(|issue| issue.code.starts_with("REVISION_")));
+                check_with_revisions(&session, &mut plan, &BTreeMap::from([("KT-01".into(), String::new())]));
+                assert!(!plan.sheets[0].issues.iter().any(|issue| issue.code.starts_with("REVISION_")));
+            }
+        }
+    }
+
+    #[test]
+    fn report_csv_has_bom_and_header() {
+        let (mut session, plan) = fixture();
+        let header = "\u{feff}order,sheet_id,revision,frame_template_id,status,issue_codes\r\n";
+        let result = session.execute("ubplot.report", &json!({"plan": plan, "format": "csv"})).unwrap();
+        let text = result["text"].as_str().unwrap();
+        assert_eq!(text.as_bytes().get(..3), Some([0xef, 0xbb, 0xbf].as_slice()));
+        assert_eq!(
+            text,
+            format!(
+                "{header}1,KT-01,R2,office@2,NEEDS_PREVIEW,SHEET_ID_DUPLICATE;REVISION_OLD\r\n\
+                 2,KT-01,R10,office@2,NEEDS_PREVIEW,SHEET_ID_DUPLICATE\r\n\
+                 3,KT-02,,office@1,NEEDS_PREVIEW,TEMPLATE_SUPERSEDED\r\n"
+            )
+        );
+        let mut value = serde_json::to_value(&plan).unwrap();
+        value["sheets"][0]["sheet_id"] = json!("KT,\"Đợt 1\"\r\nA");
+        value["sheets"][0]["attributes"] = json!({"ISSUE_REV": "R,\"2\"\nB"});
+        value["sheets"][0]["issues"][0]["code"] = json!("CUSTOM,\"ISSUE\"");
+        value["sheets"][0]["status"] = json!("DONE");
+        value["sheets"][1]["frame_template_id"] = Value::Null;
+        value["sheets"][1]["issues"] = json!([]);
+        value["sheets"][1]["status"] = json!("READY");
+        value["sheets"][2]["frame_template_id"] = json!("office,\"old\"\n@1");
+        value["sheets"].as_array_mut().unwrap().reverse();
+        let result = session.execute("ubplot.report", &json!({"plan": value, "format": "csv"})).unwrap();
+        assert_eq!(
+            result["text"].as_str().unwrap(),
+            format!(
+                "{header}1,\"KT,\"\"Đợt 1\"\"\r\nA\",\"R,\"\"2\"\"\nB\",office@2,DONE,\"CUSTOM,\"\"ISSUE\"\";REVISION_OLD\"\r\n\
+                 2,KT-01,,,READY,\r\n\
+                 3,KT-02,,\"office,\"\"old\"\"\n@1\",NEEDS_PREVIEW,TEMPLATE_SUPERSEDED\r\n"
+            )
+        );
+        let mut empty = plan;
+        empty.sheets.clear();
+        assert_eq!(session.execute("ubplot.report", &json!({"plan": empty, "format": "csv"})).unwrap()["text"], header);
+        assert_eq!(session.execute("ubplot.report", &json!({"plan": empty})).unwrap()["rows"], json!([]));
+    }
+}

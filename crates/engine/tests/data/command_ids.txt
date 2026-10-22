@@ -394,6 +394,7 @@ u
 ubplot
 ubplot.approve
 ubplot.publish
+ubplot.report
 ubplot.scan
 ubplot.templates
 undo

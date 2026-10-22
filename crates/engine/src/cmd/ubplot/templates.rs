@@ -107,6 +107,45 @@ pub(super) fn run_templates(s: &mut Session, params: &Value) -> Result<Value> {
     Ok(result)
 }
 
+pub(super) fn run_report(s: &mut Session, params: &Value) -> Result<Value> {
+    const COMMAND: &str = "ubplot.report";
+    validate_request_value(params).map_err(|error| bad(COMMAND, error))?;
+    let format = match params.get("format") {
+        None => "json",
+        Some(Value::String(format)) if matches!(format.as_str(), "json" | "csv") => format.as_str(),
+        Some(_) => return Err(bad(COMMAND, "format must be json or csv")),
+    };
+    let value = params.get("plan").ok_or_else(|| bad(COMMAND, "plan is required"))?;
+    let plan = crate::sheetplan::parse_plan(value).map_err(|error| bad(COMMAND, error))?;
+    let mut rows = Vec::with_capacity(plan.sheets.len());
+    let mut csv = String::from("\u{feff}order,sheet_id,revision,frame_template_id,status,issue_codes\r\n");
+    for sheet in &plan.sheets {
+        let revision = crate::sheetplan::preflight::sheet_revision(sheet, &s.ubplot.registry);
+        let codes: Vec<_> = sheet.issues.iter().map(|issue| issue.code.as_str()).collect();
+        if format == "csv" {
+            let status = serde_json::to_value(sheet.status).map_err(|error| bad(COMMAND, error.to_string()))?;
+            let fields = [
+                sheet.order.to_string(),
+                sheet.sheet_id.clone(),
+                revision.unwrap_or("").to_string(),
+                sheet.frame_template_id.as_deref().unwrap_or("").to_string(),
+                status.as_str().unwrap_or("").to_string(),
+                codes.join(";"),
+            ];
+            csv.push_str(&fields.iter().map(|field| csv_field(field)).collect::<Vec<_>>().join(","));
+            csv.push_str("\r\n");
+        } else {
+            rows.push(json!({"order": sheet.order, "sheet_id": sheet.sheet_id, "revision": revision,
+                "frame_template_id": sheet.frame_template_id, "status": sheet.status, "issue_codes": codes}));
+        }
+    }
+    Ok(if format == "csv" { json!({"text": csv}) } else { json!({"rows": rows}) })
+}
+
+fn csv_field(value: &str) -> String {
+    if value.contains([',', '"', '\r', '\n']) { format!("\"{}\"", value.replace('"', "\"\"")) } else { value.to_string() }
+}
+
 fn input_bytes(params: &Value) -> Result<(String, Vec<u8>)> {
     if let Some(value) = params.get("path") {
         let path = value.as_str().filter(|path| !path.is_empty()).ok_or_else(|| bad(COMMAND, "path must be a nonempty string"))?;
