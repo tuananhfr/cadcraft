@@ -490,7 +490,7 @@ fn approval_list_validates_and_limits_digests() {
     assert_eq!(source_sha("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     let sha = source_sha("approval-validation");
     set_approved(vec!["bad".into(), sha.to_ascii_uppercase(), sha.clone()]);
-    assert_eq!(approved(), [sha.clone()]);
+    assert_eq!(approved(), std::slice::from_ref(&sha));
     assert!(!approve(&"z".repeat(64)));
     assert!(!revoke("bad"));
     assert!(is_approved(&sha));
