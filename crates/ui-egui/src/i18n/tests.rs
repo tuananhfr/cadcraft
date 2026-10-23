@@ -1593,3 +1593,90 @@ fn vietnamese_catalog_follows_the_glossary() {
         assert_eq!(catalog.get(&(*context, *key)), Some(value), "missing U-F ribbon row: {key}");
     }
 }
+
+#[test]
+fn dynamic_layer_prompts_translate_values_without_changing_engine_text() {
+    for (option, value, english, vietnamese) in [
+        ("Color", "1", "Enter name list of layer(s) for color 1", "Nhập danh sách tên các lớp cần gán màu 1"),
+        (
+            "Ltype",
+            "Continuous",
+            "Enter name list of layer(s) for linetype \"Continuous\"",
+            "Nhập danh sách tên các lớp cần gán kiểu đường \"Continuous\"",
+        ),
+        ("LWeight", "0.25", "Enter name list of layer(s) for lineweight 0.25mm", "Nhập danh sách tên các lớp cần gán độ dày nét 0.25mm"),
+        ("TRansparency", "35", "Enter name list of layer(s) for transparency 35%", "Nhập danh sách tên các lớp cần gán độ trong suốt 35%"),
+    ] {
+        let mut session = Session::new();
+        session.start("-layer").unwrap();
+        session.cmdline(option).unwrap();
+        session.cmdline(value).unwrap();
+        let prompt = session.current_prompt().unwrap();
+        assert!(prompt.template.is_some(), "{option}");
+        assert_eq!(prompt.message, english);
+        assert_eq!(prompt.default.as_deref(), Some("0"));
+        with_language("vi", || assert_eq!(prompt_message(&prompt), vietnamese));
+        with_language("en", || assert_eq!(prompt_message(&prompt), english));
+        assert_eq!(prompt.message, english);
+    }
+}
+
+#[test]
+fn group_confirmation_keeps_placeholder_text_in_the_group_name() {
+    let name = "ROOM {name} Văn phòng";
+    for (selectable, english, vietnamese) in [
+        (
+            true,
+            "Group ROOM {name} Văn phòng is selectable. Make it unselectable?",
+            "Có thể chọn nhóm ROOM {name} Văn phòng. Chuyển nhóm sang không cho chọn?",
+        ),
+        (
+            false,
+            "Group ROOM {name} Văn phòng is not selectable. Make it selectable?",
+            "Không thể chọn nhóm ROOM {name} Văn phòng. Chuyển nhóm sang cho phép chọn?",
+        ),
+    ] {
+        let mut session = Session::new();
+        session.doc_mut().unwrap().groups.push(cadcraft_engine::doc::Group {
+            name: name.into(),
+            description: String::new(),
+            selectable,
+            members: Vec::new(),
+        });
+        session.start("-group").unwrap();
+        session.cmdline("Selectable").unwrap();
+        session.input(cadcraft_engine::Input::Text(name.into())).unwrap();
+        let prompt = session.current_prompt().unwrap();
+        assert_eq!(prompt.message, english);
+        with_language("vi", || assert_eq!(prompt_message(&prompt), vietnamese));
+        assert_eq!(prompt.match_keyword("y").as_deref(), Some("Yes"));
+    }
+}
+
+#[test]
+fn ubplot_source_prompt_translates_without_changing_keyword_metadata() {
+    let mut session = Session::new();
+    session.start("ubplot").unwrap();
+    let prompt = session.current_prompt().unwrap();
+    assert!(prompt.raw);
+    with_language("vi", || assert_eq!(prompt_message(&prompt), "In khung bản vẽ theo [Block/Window/Layout/Last] <Block>:"));
+    with_language("en", || assert_eq!(prompt_message(&prompt), "Plot frames by [Block/Window/Layout/Last] <Block>:"));
+    assert_eq!(prompt.keywords, ["Block", "Window", "Layout", "Last"]);
+    assert_eq!(prompt.default.as_deref(), Some("Block"));
+    assert_eq!(prompt.display(), "Plot frames by [Block/Window/Layout/Last] <Block>:");
+    for (text, keyword) in [("b", "Block"), ("blo", "Block"), ("W", "Window"), ("L", "Layout"), ("last", "Last")] {
+        assert_eq!(prompt.match_keyword(text).as_deref(), Some(keyword));
+    }
+}
+
+#[test]
+fn unknown_raw_prompt_keeps_routine_text_and_formatting() {
+    let mut prompt = cadcraft_engine::Prompt::new("\nRoutine says: Specify first point {name} [Yes/No] <No>: \n", cadcraft_engine::Accept::TEXT)
+        .kw(&["Yes", "No"])
+        .default("No");
+    prompt.raw = true;
+    let expected = "Routine says: Specify first point {name} [Yes/No] <No>: ";
+    for language in ["vi", "en", "qps"] {
+        with_language(language, || assert_eq!(prompt_message(&prompt), expected));
+    }
+}

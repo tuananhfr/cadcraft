@@ -74,20 +74,32 @@ impl Change {
         }
     }
     /// The layer-list prompt for this change; `true` when Enter means the current layer.
-    fn prompt(&self) -> (String, bool) {
+    fn prompt(&self) -> (Prompt, bool) {
         match self {
-            Change::On => ("Enter name list of layer(s) to turn on".into(), false),
-            Change::Off => ("Enter name list of layer(s) to turn off".into(), false),
-            Change::Freeze => ("Enter name list of layer(s) to freeze".into(), false),
-            Change::Thaw => ("Enter name list of layer(s) to thaw".into(), false),
-            Change::Lock => ("Enter name list of layer(s) to lock".into(), false),
-            Change::Unlock => ("Enter name list of layer(s) to unlock".into(), false),
-            Change::Color(c) => (format!("Enter name list of layer(s) for color {c}"), true),
-            Change::Ltype(l) => (format!("Enter name list of layer(s) for linetype \"{l}\""), true),
-            Change::Lweight(mm) => (format!("Enter name list of layer(s) for lineweight {mm:.2}mm"), true),
-            Change::Transparency(t) => (format!("Enter name list of layer(s) for transparency {t}%"), true),
-            Change::Plot(_) => ("Enter layer name(s) for this plot preference".into(), true),
-            Change::Description(_) => ("Enter name list of layer(s) to apply description".into(), true),
+            Change::On => (Prompt::new("Enter name list of layer(s) to turn on", NAME), false),
+            Change::Off => (Prompt::new("Enter name list of layer(s) to turn off", NAME), false),
+            Change::Freeze => (Prompt::new("Enter name list of layer(s) to freeze", NAME), false),
+            Change::Thaw => (Prompt::new("Enter name list of layer(s) to thaw", NAME), false),
+            Change::Lock => (Prompt::new("Enter name list of layer(s) to lock", NAME), false),
+            Change::Unlock => (Prompt::new("Enter name list of layer(s) to unlock", NAME), false),
+            Change::Color(c) => {
+                let args = vec![("c", PromptArg::Text(c.clone()))];
+                (Prompt::tf("Enter name list of layer(s) for color {c}", args, NAME), true)
+            }
+            Change::Ltype(l) => {
+                let args = vec![("l", PromptArg::Text(l.clone()))];
+                (Prompt::tf("Enter name list of layer(s) for linetype \"{l}\"", args, NAME), true)
+            }
+            Change::Lweight(mm) => {
+                let args = vec![("mm", PromptArg::Text(format!("{mm:.2}")))];
+                (Prompt::tf("Enter name list of layer(s) for lineweight {mm}mm", args, NAME), true)
+            }
+            Change::Transparency(t) => {
+                let args = vec![("t", PromptArg::Text(t.to_string()))];
+                (Prompt::tf("Enter name list of layer(s) for transparency {t}%", args, NAME), true)
+            }
+            Change::Plot(_) => (Prompt::new("Enter layer name(s) for this plot preference", NAME), true),
+            Change::Description(_) => (Prompt::new("Enter name list of layer(s) to apply description", NAME), true),
         }
     }
 }
@@ -430,8 +442,7 @@ impl Interactive for LayerM {
             Stage::Plot => Prompt::new("Enter a plotting preference", KW).kw(&["Plot", "No"]).default("Plot"),
             Stage::Description => Prompt::new("Enter layer description", Accept::TEXT),
             Stage::Layers(c) => {
-                let (msg, enter_is_current) = c.prompt();
-                let p = Prompt::new(msg, NAME);
+                let (p, enter_is_current) = c.prompt();
                 if enter_is_current { p.default(cur) } else { p }
             }
             Stage::ConfirmOff(_) => {

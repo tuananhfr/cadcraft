@@ -243,12 +243,10 @@ impl Interactive for DashGroupM {
             Stage::NewName => Prompt::new("Enter new group name", Accept::TEXT).kw(&["?"]),
             Stage::Selectable => {
                 let on = s.doc().ok().and_then(|d| d.groups.iter().find(|x| x.name.eq_ignore_ascii_case(&g))).is_some_and(|x| x.selectable);
-                let msg = if on {
-                    format!("Group {g} is selectable. Make it unselectable?")
-                } else {
-                    format!("Group {g} is not selectable. Make it selectable?")
-                };
-                Prompt::new(msg, super::super::curves::KW).kw(&["Yes", "No"]).default("Y")
+                let source =
+                    if on { "Group {name} is selectable. Make it unselectable?" } else { "Group {name} is not selectable. Make it selectable?" };
+                let args = vec![("name", PromptArg::Text(g))];
+                Prompt::tf(source, args, super::super::curves::KW).kw(&["Yes", "No"]).default("Y")
             }
             Stage::From => {
                 let args = vec![("last", PromptArg::Text(last.to_string()))];

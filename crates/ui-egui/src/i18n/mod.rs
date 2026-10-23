@@ -360,6 +360,14 @@ pub fn format(source: &str, values: &[(&str, String)]) -> String {
 pub fn prompt_message(prompt: &cadcraft_engine::Prompt) -> String {
     use cadcraft_engine::prompt::PromptArg;
 
+    if prompt.raw {
+        // Routine text has no template semantics; only a whole displayed key may be translated.
+        let displayed = prompt.display();
+        return CURRENT.with(|language| {
+            catalog(language.get()).and_then(|c| c.get(&("", displayed.as_str()))).copied().unwrap_or(displayed.as_str()).to_string()
+        });
+    }
+
     match &prompt.template {
         Some(template) => {
             let values: Vec<_> = template

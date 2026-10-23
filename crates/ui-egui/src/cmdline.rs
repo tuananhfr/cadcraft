@@ -554,7 +554,13 @@ fn show_at(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect, bar: Rect) {
         let hr = Rect::from_min_size(pos2(bar.left(), bar.top() - lh * lines.len() as f32 - 4.0), vec2(w, lh * lines.len() as f32 + 2.0));
         p.rect_filled(hr, 3.0, t.cmd_history);
         for (i, l) in lines.iter().enumerate() {
-            p.text(pos2(hr.left() + 8.0, hr.top() + 1.0 + lh * i as f32), egui::Align2::LEFT_TOP, l, crate::theme::small(), t.text_dim);
+            p.text(
+                pos2(hr.left() + 8.0, hr.top() + 1.0 + lh * i as f32),
+                egui::Align2::LEFT_TOP,
+                crate::i18n::t(l),
+                crate::theme::small(),
+                t.text_dim,
+            );
         }
     }
     p.rect_filled(bar, 3.0, t.cmd_bg);
@@ -614,8 +620,7 @@ fn show_at(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect, bar: Rect) {
         Some(pr) => {
             // The grip modes name themselves ("** STRETCH **…").
             let name = app.session.running.as_ref().filter(|r| r.id != "grip").map(|r| r.id.to_ascii_uppercase() + " ").unwrap_or_default();
-            // A LISP `get…` prompt shows as the routine wrote it (no keywords, default or colon added).
-            let mut message = if pr.raw { pr.display() } else { crate::i18n::prompt_message(pr) };
+            let mut message = crate::i18n::prompt_message(pr);
             let mut tail = Vec::new();
             if pr.raw {
                 // A routine that follows the "… [Yes/No] <No>: " convention keeps its answers visible like a native prompt.
@@ -896,13 +901,15 @@ fn history_rows(ui: &mut egui::Ui, app: &CadApp, replay: bool) -> Option<String>
             log.len(),
             |ui, rows| {
                 for line in log.get(rows).into_iter().flatten() {
+                    // Replay and automation keep the English log; only the painted text is localized.
                     let command = line.strip_prefix("Command: ").filter(|name| replay && !name.trim().is_empty());
                     let sense = if command.is_some() { Sense::click() } else { Sense::hover() };
                     let (row, response) = ui.allocate_exact_size(vec2(ui.available_width(), LINE_H), sense);
                     let p = ui.painter().with_clip_rect(row.intersect(ui.clip_rect()));
-                    p.text(pos2(row.left(), row.center().y), egui::Align2::LEFT_CENTER, line, crate::theme::small(), t.text_dim);
+                    let text = crate::i18n::t(line);
+                    p.text(pos2(row.left(), row.center().y), egui::Align2::LEFT_CENTER, text, crate::theme::small(), t.text_dim);
                     if let Some(command) = command {
-                        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), line));
+                        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), text));
                         if response.double_clicked() {
                             repeat = Some(command.to_string());
                         }
@@ -913,6 +920,99 @@ fn history_rows(ui: &mut egui::Ui, app: &CadApp, replay: bool) -> Option<String>
         );
     });
     repeat
+}
+
+#[cfg(test)]
+mod history_translation_tests {
+    use super::*;
+
+    fn painted_text(shapes: &[egui::epaint::ClippedShape]) -> String {
+        fn collect(shape: &egui::Shape, text: &mut String) {
+            match shape {
+                egui::Shape::Text(shape) => {
+                    text.push_str(shape.galley.text());
+                    text.push('\n');
+                }
+                egui::Shape::Vec(shapes) => {
+                    for shape in shapes {
+                        collect(shape, text);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut text = String::new();
+        for shape in shapes {
+            collect(&shape.shape, &mut text);
+        }
+        text
+    }
+
+    #[test]
+    fn raw_ubplot_prompt_renders_the_catalog_translation() {
+        let mut app = CadApp::new(cadcraft_engine::Session::new(), crate::Services::default());
+        app.session.start("ubplot").unwrap();
+        let ctx = egui::Context::default();
+        let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 600.0))), ..Default::default() };
+        for (language, prefix) in [("vi", "In khung bản vẽ theo"), ("en", "Plot frames by")] {
+            let mut text = String::new();
+            for _ in 0..2 {
+                let output = ctx.run_ui(input.clone(), |ui| {
+                    crate::i18n::with_language(language, || {
+                        let canvas = ui.max_rect();
+                        let bar = Rect::from_min_size(pos2(10.0, 500.0), vec2(1100.0, INPUT_HEIGHT));
+                        show_at(&mut app, ui, canvas, bar);
+                    });
+                });
+                text = painted_text(&output.shapes);
+            }
+            assert!(text.contains(prefix), "{language}: {text}");
+            assert!(text.contains(" [Block/Window/Layout/Last] <Block>:"), "{text}");
+            assert_eq!(app.session.current_prompt().unwrap().display(), "Plot frames by [Block/Window/Layout/Last] <Block>:");
+        }
+    }
+
+    #[test]
+    fn compact_and_expanded_history_translate_without_changing_log_or_replay() {
+        let mut app = CadApp::new(cadcraft_engine::Session::new(), crate::Services::default());
+        app.ui.history_lines = 4;
+        app.session.log.clear();
+        for line in ["Requires a positive radius.", "Revision cloud finished.", "Command: circle", "Custom output {name}: LINE"] {
+            app.session.echo(line);
+        }
+        let original = app.session.log.clone();
+        let ctx = egui::Context::default();
+        let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 600.0))), ..Default::default() };
+        for language in ["vi", "en"] {
+            for expanded in [false, true] {
+                let mut text = String::new();
+                for _ in 0..2 {
+                    let output = ctx.run_ui(input.clone(), |ui| {
+                        crate::i18n::with_language(language, || {
+                            if expanded {
+                                let _ = history_rows(ui, &app, true);
+                            } else {
+                                let canvas = ui.max_rect();
+                                let bar = Rect::from_min_size(pos2(10.0, 500.0), vec2(1100.0, INPUT_HEIGHT));
+                                show_at(&mut app, ui, canvas, bar);
+                            }
+                        });
+                    });
+                    text = painted_text(&output.shapes);
+                }
+                let (error, result) = if language == "vi" {
+                    ("Cần nhập bán kính dương.", "Đã hoàn tất đám mây sửa đổi.")
+                } else {
+                    ("Requires a positive radius.", "Revision cloud finished.")
+                };
+                assert!(text.contains(error), "{language}, expanded={expanded}: {text}");
+                assert!(text.contains(result), "{language}, expanded={expanded}: {text}");
+                assert!(text.contains("Command: circle"), "{text}");
+                assert!(text.contains("Custom output {name}: LINE"), "{text}");
+                assert_eq!(app.session.log, original);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

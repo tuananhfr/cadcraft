@@ -2115,3 +2115,319 @@ ribbon	Fonts	Phông chữ
 	The requested printer is missing or offline; keeping PDF files.	Máy in được yêu cầu không có hoặc ngoại tuyến; giữ lại các tệp PDF.
 	The printer has no recognised paper sizes; keeping PDF files.	Máy in không có khổ giấy được nhận dạng; giữ lại các tệp PDF.
 	The PDF handler does not expose PrintTo; keeping PDF files.	Trình xử lý PDF không hỗ trợ PrintTo; giữ lại các tệp PDF.
+
+# --- UbotCAD vi batch W2: command prompts ---
+	Enter a ratio such as 1:50.	Nhập tỉ lệ, ví dụ 1:50.
+	Select an arc, circle or line.	Chọn cung tròn, đường tròn hoặc đường thẳng.
+	Select an arc.	Chọn cung tròn.
+	Specify location of the block	Chỉ định vị trí khối
+	Select a dimension.	Chọn kích thước.
+	Select a linear or aligned dimension.	Chọn kích thước thẳng hoặc song song.
+	Specify the distance between columns	Chỉ định khoảng cách giữa các cột
+	Specify the distance between rows	Chỉ định khoảng cách giữa các hàng
+	Specify the distance between the first and last column	Chỉ định khoảng cách giữa cột đầu và cột cuối
+	Specify the distance between the first and last row	Chỉ định khoảng cách giữa hàng đầu và hàng cuối
+	Specify the distance between levels	Chỉ định khoảng cách giữa các tầng
+	Specify the distance between the first and last level	Chỉ định khoảng cách giữa tầng đầu và tầng cuối
+	Select objects other than the array.	Chọn các đối tượng ngoài mảng.
+	Enter three values from 0 to 255, separated by commas.	Nhập ba giá trị từ 0 đến 255, cách nhau bằng dấu phẩy.
+	Enter a color name or a number from 0 to 256.	Nhập tên màu hoặc số từ 0 đến 256.
+	Enter Yes or No.	Nhập Yes hoặc No.
+	** STRETCH ** Specify stretch point or distance	** STRETCH ** Chỉ định điểm kéo giãn hoặc khoảng cách
+	Select objects to {}	Chọn đối tượng để {}
+	Select a line or polyline segment	Chọn đường thẳng hoặc đoạn đa tuyến
+	Select a line, polyline segment or ellipse	Chọn đường thẳng, đoạn đa tuyến hoặc elip
+	Select an arc, circle or ellipse	Chọn cung tròn, đường tròn hoặc elip
+	Select two points	Chọn hai điểm
+	Specify start angle	Chỉ định góc bắt đầu
+	Specify end angle	Chỉ định góc kết thúc
+	Specify start parameter	Chỉ định tham số bắt đầu
+	Specify end parameter	Chỉ định tham số kết thúc
+	Select a closed polyline.	Chọn đa tuyến kín.
+	Select a line object.	Chọn đối tượng đường thẳng.
+	Specify first chamfer distance for rectangles	Chỉ định khoảng cách vát góc thứ nhất cho hình chữ nhật
+	Specify second chamfer distance for rectangles	Chỉ định khoảng cách vát góc thứ hai cho hình chữ nhật
+	Specify fillet radius for rectangles	Chỉ định bán kính bo góc cho hình chữ nhật
+	Specify line width for rectangles	Chỉ định bề rộng đường cho hình chữ nhật
+	Specify the elevation for rectangles	Chỉ định cao độ cho hình chữ nhật
+	Specify thickness for rectangles	Chỉ định độ dày cho hình chữ nhật
+	Enter area of rectangle in current units	Nhập diện tích hình chữ nhật theo đơn vị hiện hành
+	Enter rectangle length	Nhập chiều dài hình chữ nhật
+	Enter rectangle width	Nhập chiều rộng hình chữ nhật
+	Specify length for rectangles	Chỉ định chiều dài cho hình chữ nhật
+	Specify width for rectangles	Chỉ định chiều rộng cho hình chữ nhật
+	Pick points	Bấm chọn điểm
+	Specify second point of arc	Chỉ định điểm thứ hai của cung tròn
+	Specify tangent direction for the start point of arc	Chỉ định hướng tiếp tuyến tại điểm đầu cung tròn
+	Select a circle or arc.	Chọn đường tròn hoặc cung tròn.
+	Select a line.	Chọn đường thẳng.
+	Select a line, circle, arc or polyline segment.	Chọn đường thẳng, đường tròn, cung tròn hoặc đoạn đa tuyến.
+	Specify second point on circle: _tan to	Chỉ định điểm thứ hai trên đường tròn: _tan tới
+	Specify third point on circle: _tan to	Chỉ định điểm thứ ba trên đường tròn: _tan tới
+	Select an object.	Chọn đối tượng.
+	Specify length of segment	Chỉ định chiều dài đoạn
+	Enter the number of segments	Nhập số đoạn
+	Select a closed polyline, circle, ellipse or closed spline.	Chọn đa tuyến kín, đường tròn, elip hoặc đường spline kín.
+	Enter Top, Zero or Bottom.	Nhập Top, Zero hoặc Bottom.
+	Select a multiline.	Chọn đường đa nét.
+	Select two different multilines.	Chọn hai đường đa nét khác nhau.
+	Enter one of CC OC MC CT OT MT CJ AV DV CS CA WA.	Nhập một trong các lựa chọn CC OC MC CT OT MT CJ AV DV CS CA WA.
+	Enter ON or OFF.	Nhập ON hoặc OFF.
+	Enter All, None, One, Combine or Layer.	Nhập All, None, One, Combine hoặc Layer.
+	** STRETCH **	** STRETCH **
+	** MOVE **	** MOVE **
+	** ROTATE **	** ROTATE **
+	** SCALE **	** SCALE **
+	** MIRROR **	** MIRROR **
+	Select grip or <edit the hot grips>	Chọn điểm nắm hoặc <sửa các điểm nắm đang kích hoạt>
+	Specify new vertex point	Chỉ định vị trí đỉnh mới
+	Specify a point on the arc	Chỉ định một điểm trên cung tròn
+	Specify end point or length change	Chỉ định điểm cuối hoặc lượng thay đổi chiều dài
+	Specify radius	Chỉ định bán kính
+	** STRETCH ** Specify stretch point	** STRETCH ** Chỉ định điểm kéo giãn
+	** MOVE ** Specify move point	** MOVE ** Chỉ định điểm di chuyển
+	** ROTATE ** Specify rotation angle	** ROTATE ** Chỉ định góc xoay
+	** SCALE ** Specify scale factor	** SCALE ** Chỉ định hệ số tỉ lệ
+	** MIRROR ** Specify second point	** MIRROR ** Chỉ định điểm thứ hai
+	Choose one of the options.	Chọn một trong các tùy chọn.
+	Select at least one region.	Chọn ít nhất một miền.
+	Select regions to subtract from.	Chọn các miền bị trừ.
+	Select regions to subtract from ..	Chọn các miền bị trừ ..
+	Select regions to subtract ..	Chọn các miền dùng để trừ ..
+	Select one or more regions.	Chọn một hoặc nhiều miền.
+	Enter a color name or a number from 1 to 255.	Nhập tên màu hoặc số từ 1 đến 255.
+	Enter a lineweight from 0.0mm to 2.11mm.	Nhập độ dày nét từ 0.0mm đến 2.11mm.
+	Enter a transparency value from 0 to 90.	Nhập độ trong suốt từ 0 đến 90.
+	Enter Plot or No.	Nhập Plot hoặc No.
+	Enter name list of layer(s) to turn on	Nhập danh sách tên các lớp cần bật
+	Enter name list of layer(s) to turn off	Nhập danh sách tên các lớp cần tắt
+	Enter name list of layer(s) to freeze	Nhập danh sách tên các lớp cần đóng băng
+	Enter name list of layer(s) to thaw	Nhập danh sách tên các lớp cần rã băng
+	Enter name list of layer(s) to lock	Nhập danh sách tên các lớp cần khóa
+	Enter name list of layer(s) to unlock	Nhập danh sách tên các lớp cần mở khóa
+	Enter name list of layer(s) for color {c}	Nhập danh sách tên các lớp cần gán màu {c}
+	Enter name list of layer(s) for linetype "{l}"	Nhập danh sách tên các lớp cần gán kiểu đường "{l}"
+	Enter name list of layer(s) for lineweight {mm:.2}mm	Nhập danh sách tên các lớp cần gán độ dày nét {mm:.2}mm
+	Enter name list of layer(s) for transparency {t}%	Nhập danh sách tên các lớp cần gán độ trong suốt {t}%
+	Enter layer name(s) for this plot preference	Nhập tên các lớp cần áp dụng tùy chọn in này
+	Enter name list of layer(s) to apply description	Nhập danh sách tên các lớp cần áp dụng mô tả
+	** Command not allowed in Model Tab **	** Không thể dùng lệnh trong thẻ Mô hình **
+	** Command not allowed in Model Tab ** (switch to a layout or pass `layout`)	** Không thể dùng lệnh trong thẻ Mô hình ** (chuyển sang bố cục in hoặc truyền `layout`)
+	** Command not allowed in Model Tab ** (switch to a layout first)	** Không thể dùng lệnh trong thẻ Mô hình ** (chuyển sang bố cục in trước)
+	Select a multileader.	Chọn đường ghi chú nhiều nhánh.
+	Enter an option [Distribute/make segments Parallel/Specify spacing/Use current spacing]: type D, P, S or U.	Nhập lựa chọn [Distribute/make segments Parallel/Specify spacing/Use current spacing]: gõ D, P, S hoặc U.
+	Select at least two objects to join.	Chọn ít nhất hai đối tượng để nối.
+	Specify fillet radius	Chỉ định bán kính bo góc
+	Specify first chamfer distance	Chỉ định khoảng cách vát góc thứ nhất
+	Specify second chamfer distance	Chỉ định khoảng cách vát góc thứ hai
+	Select a 2D polyline.	Chọn đa tuyến 2D.
+	Select objects to stretch by crossing-window or crossing-polygon...	Chọn đối tượng cần kéo giãn bằng cửa sổ giao cắt hoặc đa giác giao cắt...
+	Select an open line, arc, polyline, ellipse arc or spline.	Chọn đường thẳng, cung tròn, đa tuyến hở, cung elip hoặc đường spline hở.
+	Select an open curve.	Chọn đường cong hở.
+	Select a block reference.	Chọn tham chiếu khối.
+	Select a line, arc, circle, polyline, ellipse or spline as the path.	Chọn đường thẳng, cung tròn, đường tròn, đa tuyến, elip hoặc đường spline làm đường dẫn.
+	Select objects to array.	Chọn đối tượng để tạo mảng.
+	Select a curve as the path.	Chọn đường cong làm đường dẫn.
+	Select a text, mtext, attribute definition or dimension.	Chọn chữ, chữ nhiều dòng, định nghĩa thuộc tính khối hoặc kích thước.
+	Select a polyline.	Chọn đa tuyến.
+	Enter Single or Multiple.	Nhập Single hoặc Multiple.
+	Select one polyline (Multiple is available through the JSON form).	Chọn một đa tuyến (có thể dùng Multiple qua dạng JSON).
+	Select a line, arc, open polyline, elliptical arc or open spline.	Chọn đường thẳng, cung tròn, đa tuyến hở, cung elip hoặc đường spline hở.
+	Select a polyline segment.	Chọn đoạn đa tuyến.
+	Select two segments.	Chọn hai đoạn.
+	Select two different segments of the polyline.	Chọn hai đoạn khác nhau của đa tuyến.
+	Specify a point away from the vertex.	Chỉ định một điểm cách xa đỉnh.
+	Select objects to join to the spline.	Chọn đối tượng cần nối vào đường spline.
+	Select point	Chọn điểm
+	Select objects to join to the spline	Chọn đối tượng cần nối vào đường spline
+	Enter width,height in mm.	Nhập chiều rộng,chiều cao theo mm.
+	Select spline-fit polylines to convert	Chọn các đa tuyến khớp spline cần chuyển đổi
+	Enter text height	Nhập chiều cao chữ
+	Enter text color (name, index or ByBlock)	Nhập màu chữ (tên, chỉ số hoặc ByBlock)
+	Enter fill color or None	Nhập màu tô hoặc None
+	Enter alignment [TL/TC/TR/ML/MC/MR/BL/BC/BR]	Nhập cách căn chữ [TL/TC/TR/ML/MC/MR/BL/BC/BR]
+	Enter cell margin	Nhập lề ô
+	Enter data format [General/Decimal/Percent/Text]	Nhập định dạng dữ liệu [General/Decimal/Percent/Text]
+	Enter precision (0-8)	Nhập độ chính xác (0-8)
+	Enter text style name	Nhập tên kiểu chữ
+	Select boundary edges ...	Chọn các cạnh biên ...
+	Select cutting edges ...	Chọn các cạnh cắt ...
+	Enter an extend mode option	Nhập lựa chọn chế độ kéo dài
+	Enter a trim mode option	Nhập lựa chọn chế độ cắt xén
+	Specify first point of first line	Chỉ định điểm đầu của đường thẳng thứ nhất
+	Specify second point of first line	Chỉ định điểm thứ hai của đường thẳng thứ nhất
+	Specify first point of second line	Chỉ định điểm đầu của đường thẳng thứ hai
+	Specify second point of second line	Chỉ định điểm thứ hai của đường thẳng thứ hai
+	Select dominant viewport	Chọn khung nhìn chính
+	Select viewport to join	Chọn khung nhìn cần nối
+	Select a different viewport to join.	Chọn khung nhìn khác để nối.
+	Select a viewport.	Chọn khung nhìn.
+	** ADD VERTEX **	** THÊM ĐỈNH **
+	** REMOVE VERTEX **	** XÓA ĐỈNH **
+	** CONVERT TO ARC **	** CHUYỂN THÀNH CUNG TRÒN **
+	** CONVERT TO LINE **	** CHUYỂN THÀNH ĐƯỜNG THẲNG **
+	** LENGTHEN **	** LENGTHEN **
+	** RADIUS **	** RADIUS **
+	Select object: 	Chọn đối tượng: 
+	Specify second point: 	Chỉ định điểm thứ hai: 
+	Specify first polygon point	Chỉ định điểm đầu của đa giác
+	Invalid option keyword.	Từ khóa tùy chọn không hợp lệ.
+	No annotative objects selected.	Chưa chọn đối tượng chú thích theo tỉ lệ nào.
+	Requires a non-negative number or Auto.	Cần nhập số không âm hoặc Auto.
+	Requires a valid angle.	Cần nhập góc hợp lệ.
+	*Invalid selection*	*Lựa chọn không hợp lệ*
+	Object cannot be dimensioned this way.	Không thể ghi kích thước đối tượng theo cách này.
+	Object selected is not a circle or arc.	Đối tượng đã chọn không phải đường tròn hoặc cung tròn.
+	The two points must be different.	Hai điểm phải khác nhau.
+	No linear dimension to continue. Create one with DIMLINEAR first.	Không có kích thước thẳng để ghi nối tiếp. Hãy tạo bằng DIMLINEAR trước.
+	A multileader needs a leader line or content; nothing was drawn.	Đường ghi chú nhiều nhánh cần có đường dẫn hoặc nội dung; chưa vẽ gì.
+	Requires the name of a block defined in the drawing.	Cần nhập tên khối đã được định nghĩa trong bản vẽ.
+	Requires an integer between 2 and {MAX_LEADER_POINTS}.	Cần nhập số nguyên từ 2 đến {MAX_LEADER_POINTS}.
+	No dimensions selected.	Chưa chọn kích thước nào.
+	Object selected is not a dimension.	Đối tượng đã chọn không phải kích thước.
+	Requires a valid base point.	Cần chỉ định điểm gốc hợp lệ.
+	Edit the source objects, then enter ARRAYCLOSE to save or discard the changes.	Sửa các đối tượng nguồn, rồi nhập ARRAYCLOSE để lưu hoặc bỏ các thay đổi.
+	The changes to the array were discarded.	Đã bỏ các thay đổi của mảng.
+	The array no longer exists; the edited objects stay in the drawing.	Mảng không còn tồn tại; các đối tượng đã sửa vẫn ở trong bản vẽ.
+	Requires a fill angle between -360 and 360 degrees (not 0).	Cần nhập góc phủ từ -360 đến 360 độ (khác 0).
+	Requires a nonzero angle.	Cần nhập góc khác 0.
+	Requires a nonzero distance.	Cần nhập khoảng cách khác 0.
+	Replaced items were restored.	Đã khôi phục các phần tử bị thay thế.
+	Key points are not available yet; specify a point.	Chưa hỗ trợ các điểm đặc trưng; hãy chỉ định một điểm.
+	Requires a number.	Cần nhập một số.
+	Requires Yes or No.	Cần nhập Yes hoặc No.
+	Requires an integer between 1 and {max} (MAXARRAY limits the size of the array).	Cần nhập số nguyên từ 1 đến {max} (MAXARRAY giới hạn kích thước mảng).
+	Requires a valid angle in degrees.	Cần nhập góc hợp lệ theo độ.
+	Row elevations need an associative array; the copies stay at the same elevation.	Cao độ hàng cần dùng mảng liên kết; các bản sao vẫn ở cùng cao độ.
+	A rotation axis (3D) is not available yet; specify the center point.	Chưa hỗ trợ trục xoay (3D); hãy chỉ định tâm.
+	Requires a point or an option keyword.	Cần chỉ định điểm hoặc nhập từ khóa tùy chọn.
+	Performing global editing of attribute values.	Đang sửa toàn bộ các giá trị thuộc tính khối.
+	Requires the string to change.	Cần nhập chuỗi cần thay đổi.
+	Requires a positive number.	Cần nhập số dương.
+	This is a dynamic block: its parameters and actions are kept but can't be edited in UbotCAD yet.	Đây là khối động: các tham số và thao tác được giữ lại nhưng chưa thể sửa trong UbotCAD.
+	Requires a point.	Cần chỉ định một điểm.
+	No xrefs are attached.	Chưa đính kèm tham chiếu ngoài nào.
+	Invalid block name.	Tên khối không hợp lệ.
+	Requires a non-zero number.	Cần nhập số khác 0.
+	Requires an angle.	Cần nhập một góc.
+	Requires an integer between 0 and 1.	Cần nhập số nguyên từ 0 đến 1.
+	Requires a distance.	Cần nhập khoảng cách.
+	Requires numeric distance or second point.	Cần nhập khoảng cách bằng số hoặc chỉ định điểm thứ hai.
+	Invalid point.	Điểm không hợp lệ.
+	Requires an integer between 3 and 1024.	Cần nhập số nguyên từ 3 đến 1024.
+	Requires numeric distance or point.	Cần nhập khoảng cách bằng số hoặc chỉ định điểm.
+	Requires an angle between 0 and 89.4 degrees.	Cần nhập góc từ 0 đến 89.4 độ.
+	Requires a positive height.	Cần nhập chiều cao dương.
+	Invalid end point.	Điểm cuối không hợp lệ.
+	No line or arc to continue.	Không có đường thẳng hoặc cung tròn để vẽ tiếp.
+	Requires numeric distance or a point.	Cần nhập khoảng cách bằng số hoặc chỉ định một điểm.
+	Invalid arc or circle for these values.	Các giá trị này không tạo thành cung tròn hoặc đường tròn hợp lệ.
+	Circle does not exist.	Đường tròn không tồn tại.
+	Requires an integer between 2 and 32767.	Cần nhập số nguyên từ 2 đến 32767.
+	Invalid input.	Dữ liệu nhập không hợp lệ.
+	Revision cloud finished.	Đã hoàn tất đám mây sửa đổi.
+	Requires a positive value.	Cần nhập giá trị dương.
+	Invalid direction.	Hướng không hợp lệ.
+	Invalid angle.	Góc không hợp lệ.
+	Requires a non-negative distance.	Cần nhập khoảng cách không âm.
+	Requires a positive distance.	Cần nhập khoảng cách dương.
+	Requires a positive integer.	Cần nhập số nguyên dương.
+	Clipboard is empty.	Bộ nhớ tạm trống.
+	No command alias file is loaded; ALIASEDIT {file} loads one.	Chưa tải tệp lệnh tắt; dùng ALIASEDIT {file} để tải.
+	Select grips	Chọn các điểm nắm
+	Requires a number or point.	Cần nhập số hoặc chỉ định điểm.
+	Requires an angle or point.	Cần nhập góc hoặc chỉ định điểm.
+	Requires a positive length.	Cần nhập chiều dài dương.
+	Requires a point on a grip.	Cần chỉ định điểm tại điểm nắm.
+	Requires a whole number between 0 and {}.	Cần nhập số nguyên từ 0 đến {}.
+	No matching groups found.	Không tìm thấy nhóm phù hợp.
+	Requires a whole number between 1 and {}.	Cần nhập số nguyên từ 1 đến {}.
+	Group reordered.	Đã đổi thứ tự trong nhóm.
+	Requires an integer between 0 and 3.	Cần nhập số nguyên từ 0 đến 3.
+	Invalid option.	Tùy chọn không hợp lệ.
+	No hatch selected.	Chưa chọn đối tượng tô mặt cắt nào.
+	Nothing to undo.	Không có thao tác để hoàn tác.
+	The selected object has no area.	Đối tượng đã chọn không có diện tích.
+	Selected layers: {}.	Các lớp đã chọn: {}.
+	******** WARNING ********	******** CẢNH BÁO ********
+	Do you wish to continue?	Bạn có muốn tiếp tục không?
+	Color books are not available yet.	Chưa hỗ trợ bộ màu.
+	Requires a layout name.	Cần nhập tên bố cục in.
+	Invalid arc endpoint.	Điểm cuối cung tròn không hợp lệ.
+	Requires a point or option keyword.	Cần chỉ định điểm hoặc nhập từ khóa tùy chọn.
+	No viewport found there.	Không tìm thấy khung nhìn tại đó.
+	Viewport created, zoomed to the model extents.	Đã tạo khung nhìn và thu phóng toàn bộ mô hình.
+	No object found.	Không tìm thấy đối tượng.
+	Clipping boundary deleted.	Đã xóa đường biên cắt.
+	Requires a color name, a number from 1 to 255 or Red,Green,Blue.	Cần nhập tên màu, số từ 1 đến 255 hoặc Red,Green,Blue.
+	  (none)	  (không có)
+	Requires a point inside a viewport.	Cần chỉ định điểm bên trong khung nhìn.
+	0 found	Tìm thấy 0 đối tượng
+	No leader to remove.	Không có đường ghi chú để bỏ.
+	Requires a non-negative number.	Cần nhập số không âm.
+	Rotating/scaling a copy of the selected objects.	Đang xoay/thu phóng theo tỉ lệ bản sao của các đối tượng đã chọn.
+	Cannot offset that object.	Không thể dời song song đối tượng đó.
+	Requires an angle from 0 to 180 degrees.	Cần nhập góc từ 0 đến 180 độ.
+	Invalid spline.	Đường spline không hợp lệ.
+	Requires a point or an angle.	Cần chỉ định điểm hoặc nhập góc.
+	Requires a non-negative fit tolerance.	Cần nhập dung sai khớp không âm.
+	Requires a positive weight.	Cần nhập trọng số dương.
+	Requires an order between {current} and {max}.	Cần nhập cấp từ {current} đến {max}.
+	The spline has no fit data.	Đường spline không có dữ liệu khớp.
+	Cannot join to a closed spline.	Không thể nối vào đường spline kín.
+	All edits have been undone.	Đã hoàn tác mọi chỉnh sửa.
+	Requires an integer between 0 and 99.	Cần nhập số nguyên từ 0 đến 99.
+	A closed spline has no end tangents.	Đường spline kín không có tiếp tuyến đầu mút.
+	Requires a whole number.	Cần nhập số nguyên.
+	Requires a non-negative width.	Cần nhập bề rộng không âm.
+	Cannot measure that object.	Không thể đo đối tượng đó.
+	Requires a positive percentage.	Cần nhập phần trăm dương.
+	Third pair ignored (2D align).	Bỏ qua cặp thứ ba (căn chỉnh 2D).
+	Insert mode: Copy (nested objects are copied as independent objects).	Chế độ chèn: Copy (các đối tượng lồng nhau được sao chép thành các đối tượng độc lập).
+	Requires a count of 1 or more.	Cần nhập số lượng từ 1 trở lên.
+	Everything has been undone	Đã hoàn tác tất cả
+	Requires a factor between 0.25x and 4x, or a distance.	Cần nhập hệ số từ 0.25x đến 4x hoặc khoảng cách.
+	Requires a whole number of columns from 1 to 100.	Cần nhập số cột là số nguyên từ 1 đến 100.
+	Requires a gutter width of 0 or more.	Cần nhập bề rộng khe từ 0 trở lên.
+	Invalid arc for these values.	Các giá trị này không tạo thành cung tròn hợp lệ.
+	Requires a direction.	Cần chỉ định hướng.
+	Requires a positive radius.	Cần nhập bán kính dương.
+	Requires a nonzero radius.	Cần nhập bán kính khác 0.
+	Requires a name.	Cần nhập tên.
+	Loaded linetypes:	Các kiểu đường đã tải:
+	1 object was on a locked layer.	Có 1 đối tượng trên lớp bị khóa.
+	No table cell there.	Không có ô bảng tại đó.
+	The object is not a table.	Đối tượng không phải bảng.
+	No table there.	Không có bảng tại đó.
+	Requires an integer between 1 and {MAX_COLS}.	Cần nhập số nguyên từ 1 đến {MAX_COLS}.
+	Requires an integer between 1 and {MAX_ROWS}.	Cần nhập số nguyên từ 1 đến {MAX_ROWS}.
+	The feature control frame is empty.	Khung dung sai hình học trống.
+	Requires a geometric characteristic or None.	Cần nhập đặc tính hình học hoặc None.
+	Orthographic views are not available yet: UbotCAD views are 2D.	Chưa hỗ trợ các hình chiếu vuông góc: các khung nhìn UbotCAD là 2D.
+	Requires a viewport.	Cần chọn khung nhìn.
+	Requires a scale factor (n, nX or nXP).	Cần nhập hệ số tỉ lệ (n, nX hoặc nXP).
+	Requires a point, or Enter to accept the view.	Cần chỉ định điểm hoặc nhấn Enter để chấp nhận khung nhìn.
+	Requires a point, scale factor or option keyword.	Cần chỉ định điểm, nhập hệ số tỉ lệ hoặc từ khóa tùy chọn.
+	A transparent command is already in progress.	Đang thực hiện một lệnh trong suốt.
+	Invalid group name.	Tên nhóm không hợp lệ.
+	*Cancel*	*Hủy*
+	Invalid input: {}	Dữ liệu nhập không hợp lệ: {}
+	Requires an integer value.	Cần nhập giá trị số nguyên.
+	Requires numeric value.	Cần nhập giá trị số.
+	Requires a string.	Cần nhập chuỗi.
+	Requires numeric distance or two points.	Cần nhập khoảng cách bằng số hoặc chỉ định hai điểm.
+	Requires valid numeric angle or second point.	Cần nhập góc hợp lệ bằng số hoặc chỉ định điểm thứ hai.
+	Too many point modifiers.	Quá nhiều bộ điều chỉnh điểm.
+	Selected entity is not a frame INSERT.	Đối tượng đã chọn không phải INSERT của khung bản vẽ.
+	Invalid geometry or frame traversal limit reached; select a Window.	Hình học không hợp lệ hoặc đã đạt giới hạn duyệt khung; hãy chọn Window.
+	Select objects to add	Chọn đối tượng cần thêm
+	Select objects to remove	Chọn đối tượng cần bỏ
+	Enter name list of layer(s) for lineweight {mm}mm	Nhập danh sách tên các lớp cần gán độ dày nét {mm}mm
+	Group {name} is selectable. Make it unselectable?	Có thể chọn nhóm {name}. Chuyển nhóm sang không cho chọn?
+	Group {name} is not selectable. Make it selectable?	Không thể chọn nhóm {name}. Chuyển nhóm sang cho phép chọn?
+	Not available: {reason}	Không khả dụng: {reason}
+	Check the input: {reason}	Kiểm tra dữ liệu nhập: {reason}
+	Regenerating model.	Đang tái tạo hình mô hình.
+	Regenerating all viewports.	Đang tái tạo hình tất cả khung nhìn.
+	No previous view saved.	Chưa lưu khung nhìn trước đó.
+	no active document	Không có bản vẽ đang mở

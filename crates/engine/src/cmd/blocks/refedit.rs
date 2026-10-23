@@ -404,7 +404,7 @@ impl Interactive for RefsetM {
             }
             RStage::Pick(remove) => {
                 let mut p = self.sel.prompt();
-                p.message = format!("Select objects to {}", if remove { "remove" } else { "add" });
+                p.message = if remove { "Select objects to remove" } else { "Select objects to add" }.into();
                 p
             }
         }

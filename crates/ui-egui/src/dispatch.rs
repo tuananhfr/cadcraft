@@ -16,14 +16,18 @@ impl CadApp {
     pub fn dispatch(&mut self, id: &str, params: Value) -> Dispatched {
         let dispatched = dispatch_command(self, id, params);
         if let Err(reason) = &dispatched.result {
-            let message = i18n::with_language(self.language(), || match dispatched.outcome {
-                Outcome::Unsupported | Outcome::PermissionDenied => crate::tf!("Not available: {reason}", reason = reason),
-                Outcome::ValidationError => crate::tf!("Check the input: {reason}", reason = reason),
-                _ => reason.clone(),
-            });
+            let message = i18n::with_language(self.language(), || failure_message(dispatched.outcome, reason));
             self.set_status(message);
         }
         dispatched
+    }
+}
+
+fn failure_message(outcome: Outcome, reason: &str) -> String {
+    match outcome {
+        Outcome::Unsupported | Outcome::PermissionDenied => crate::tf!("Not available: {reason}", reason = i18n::t(reason)),
+        Outcome::ValidationError => crate::tf!("Check the input: {reason}", reason = i18n::t(reason)),
+        _ => i18n::t(reason).to_string(),
     }
 }
 
@@ -68,4 +72,36 @@ fn dispatch_command(app: &mut CadApp, id: &str, params: Value) -> Dispatched {
         app.session.echo(error.clone());
     }
     Dispatched { outcome, result }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failure_status_translates_catalog_reasons_and_keeps_unknown_data() {
+        i18n::with_language("vi", || {
+            assert_eq!(failure_message(Outcome::ValidationError, "Requires a positive radius."), "Kiểm tra dữ liệu nhập: Cần nhập bán kính dương.");
+            assert_eq!(failure_message(Outcome::Unsupported, "No frames selected"), "Không khả dụng: Chưa chọn khung bản vẽ nào");
+            assert_eq!(failure_message(Outcome::ValidationError, "User data {reason}"), "Kiểm tra dữ liệu nhập: User data {reason}");
+        });
+        i18n::with_language("en", || {
+            assert_eq!(failure_message(Outcome::ValidationError, "Requires a positive radius."), "Check the input: Requires a positive radius.");
+        });
+    }
+
+    #[test]
+    fn dispatch_keeps_english_results_errors_and_log_under_vietnamese() {
+        let mut app = CadApp::new(cadcraft_engine::Session::new(), crate::Services::default());
+        let result = i18n::with_language("vi", || dispatch_command(&mut app, "regen", serde_json::json!({})));
+        assert_eq!(result.result.unwrap(), serde_json::json!({"message": "Regenerating model."}));
+        assert_eq!(app.session.log.last().map(String::as_str), Some("Regenerating model."));
+
+        let params = serde_json::json!({"center": [0, 0], "radius": -1});
+        let expected = cadcraft_engine::Session::new().execute("circle", &params).map_err(|error| error.to_string());
+        assert!(expected.is_err());
+        let result = i18n::with_language("vi", || dispatch_command(&mut app, "circle", params));
+        assert_eq!(result.result, expected);
+        assert_eq!(app.session.log.last().map(String::as_str), expected.as_ref().err().map(String::as_str));
+    }
 }
