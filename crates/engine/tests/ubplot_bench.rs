@@ -254,7 +254,7 @@ fn sp06_folder_1000_files_5000_sheets() {
         let drawing = benchmark_drawing(5, &prefix);
         fs::write(input.join(format!("file-{index:04}.dxf")), cadcraft_io::write_dxf(&drawing)).unwrap();
     }
-    let mut session = Session::empty();
+    let mut session = Session::new();
     let mut registry = FrameRegistry::builtin();
     let mut template = registry.templates.first().unwrap().clone();
     template.id = "bench-a3".into();
