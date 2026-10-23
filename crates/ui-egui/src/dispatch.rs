@@ -25,9 +25,9 @@ impl CadApp {
 
 fn failure_message(outcome: Outcome, reason: &str) -> String {
     match outcome {
-        Outcome::Unsupported | Outcome::PermissionDenied => crate::tf!("Not available: {reason}", reason = i18n::t(reason)),
-        Outcome::ValidationError => crate::tf!("Check the input: {reason}", reason = i18n::t(reason)),
-        _ => i18n::t(reason).to_string(),
+        Outcome::Unsupported | Outcome::PermissionDenied => crate::tf!("Not available: {reason}", reason = i18n::echo(reason)),
+        Outcome::ValidationError => crate::tf!("Check the input: {reason}", reason = i18n::echo(reason)),
+        _ => i18n::echo(reason).into_owned(),
     }
 }
 
@@ -84,6 +84,10 @@ mod tests {
             assert_eq!(failure_message(Outcome::ValidationError, "Requires a positive radius."), "Kiểm tra dữ liệu nhập: Cần nhập bán kính dương.");
             assert_eq!(failure_message(Outcome::Unsupported, "No frames selected"), "Không khả dụng: Chưa chọn khung bản vẽ nào");
             assert_eq!(failure_message(Outcome::ValidationError, "User data {reason}"), "Kiểm tra dữ liệu nhập: User data {reason}");
+            assert_eq!(
+                failure_message(Outcome::ValidationError, "Block \"Office\" not found."),
+                "Kiểm tra dữ liệu nhập: Không tìm thấy khối \"Office\"."
+            );
         });
         i18n::with_language("en", || {
             assert_eq!(failure_message(Outcome::ValidationError, "Requires a positive radius."), "Check the input: Requires a positive radius.");

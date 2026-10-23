@@ -561,7 +561,7 @@ fn show_at(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect, bar: Rect) {
             p.text(
                 pos2(hr.left() + 8.0, hr.top() + 1.0 + lh * i as f32),
                 egui::Align2::LEFT_TOP,
-                crate::i18n::t(l),
+                crate::i18n::echo(l),
                 crate::theme::small(),
                 t.text_dim,
             );
@@ -906,14 +906,14 @@ fn history_rows(ui: &mut egui::Ui, app: &CadApp, replay: bool) -> Option<String>
             |ui, rows| {
                 for line in log.get(rows).into_iter().flatten() {
                     // Replay and automation keep the English log; only the painted text is localized.
-                    let command = line.strip_prefix("Command: ").filter(|name| replay && !name.trim().is_empty());
+                    let command = history_command(line, replay);
                     let sense = if command.is_some() { Sense::click() } else { Sense::hover() };
                     let (row, response) = ui.allocate_exact_size(vec2(ui.available_width(), LINE_H), sense);
                     let p = ui.painter().with_clip_rect(row.intersect(ui.clip_rect()));
-                    let text = crate::i18n::t(line);
-                    p.text(pos2(row.left(), row.center().y), egui::Align2::LEFT_CENTER, text, crate::theme::small(), t.text_dim);
+                    let text = crate::i18n::echo(line);
+                    p.text(pos2(row.left(), row.center().y), egui::Align2::LEFT_CENTER, text.as_ref(), crate::theme::small(), t.text_dim);
                     if let Some(command) = command {
-                        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), text));
+                        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), text.as_ref()));
                         if response.double_clicked() {
                             repeat = Some(command.to_string());
                         }
@@ -924,6 +924,10 @@ fn history_rows(ui: &mut egui::Ui, app: &CadApp, replay: bool) -> Option<String>
         );
     });
     repeat
+}
+
+fn history_command(line: &str, replay: bool) -> Option<&str> {
+    line.strip_prefix("Command: ").filter(|name| replay && !name.trim().is_empty())
 }
 
 #[cfg(test)]
@@ -979,12 +983,21 @@ mod history_translation_tests {
     #[test]
     fn compact_and_expanded_history_translate_without_changing_log_or_replay() {
         let mut app = CadApp::new(cadcraft_engine::Session::new(), crate::Services::default());
-        app.ui.history_lines = 4;
+        app.ui.history_lines = 5;
         app.session.log.clear();
-        for line in ["Requires a positive radius.", "Revision cloud finished.", "Command: circle", "Custom output {name}: LINE"] {
+        for line in [
+            "Requires a positive radius.",
+            "Block \"Văn phòng\" not found.",
+            "Revision cloud finished.",
+            "Command: circle",
+            "Custom output {name}: LINE",
+        ] {
             app.session.echo(line);
         }
         let original = app.session.log.clone();
+        assert_eq!(original.get(3).and_then(|line| history_command(line, true)), Some("circle"));
+        assert_eq!(history_command("Lệnh: circle", true), None);
+        assert_eq!(history_command("Command: circle", false), None);
         let ctx = egui::Context::default();
         let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 600.0))), ..Default::default() };
         for language in ["vi", "en"] {
@@ -1011,7 +1024,14 @@ mod history_translation_tests {
                 };
                 assert!(text.contains(error), "{language}, expanded={expanded}: {text}");
                 assert!(text.contains(result), "{language}, expanded={expanded}: {text}");
-                assert!(text.contains("Command: circle"), "{text}");
+                let command = if language == "vi" { "Lệnh: circle" } else { "Command: circle" };
+                let formatted = if language == "vi" { "Không tìm thấy khối \"Văn phòng\"." } else { "Block \"Văn phòng\" not found." };
+                assert!(text.contains(command), "{text}");
+                assert!(text.contains(formatted), "{text}");
+                if language == "vi" {
+                    assert!(!text.contains("Command: circle"), "{text}");
+                    assert!(!text.contains("Block \"Văn phòng\" not found."), "{text}");
+                }
                 assert!(text.contains("Custom output {name}: LINE"), "{text}");
                 assert_eq!(app.session.log, original);
             }

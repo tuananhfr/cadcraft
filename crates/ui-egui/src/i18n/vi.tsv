@@ -2729,3 +2729,1706 @@ ribbon	Fonts	Phông chữ
 	MODEL	MÔ HÌNH
 	PAPER	GIẤY
 	{id} is only available in the desktop app	{id} chỉ có trong ứng dụng máy tính
+
+# --- UbotCAD vi batch W5 ---
+echo	… and {value1} more	… và {value1} mục khác
+echo	Audit: {n} error{value1} found, {fixed} fixed.	Kiểm tra lỗi: tìm thấy {n} lỗi{value1}, đã sửa {fixed}.
+echo	the {what} "{name}" is missing	thiếu {what} "{name}"
+echo	layer "{value1}" uses linetype "{value2}", which doesn't exist	lớp "{value1}" sử dụng kiểu đường "{value2}" không tồn tại
+echo	dimension style "{value1}" uses text style "{value2}", which doesn't exist	kiểu kích thước "{value1}" sử dụng kiểu chữ "{value2}" không tồn tại
+echo	multileader style "{value1}" uses text style "{value2}", which doesn't exist	kiểu đường ghi chú nhiều nhánh "{value1}" sử dụng kiểu chữ "{value2}" không tồn tại
+echo	the current {what} ({var}) is {shown}, which doesn't exist	{what} hiện hành ({var}) là {shown}, giá trị này không tồn tại
+echo	set to {default}	đặt thành {default}
+echo	the next handle ({value1}) is not above the largest one in use ({value2})	mã đối tượng tiếp theo ({value1}) không lớn hơn mã lớn nhất đang dùng ({value2})
+echo	{n} block reference{value1} to "{name}", which has no definition	{n} tham chiếu khối{value1} đến "{name}" chưa có định nghĩa
+echo	layer "{n}" is used by objects but doesn't exist	lớp "{n}" đang được đối tượng sử dụng nhưng không tồn tại
+echo	dimension's block "{b}" doesn't exist	khối kích thước "{b}" không tồn tại
+echo	{n} object{value1} {what} {shown}, which doesn't exist	{n} đối tượng{value1} có {what} {shown} không tồn tại
+	block contains a reference to itself	khối chứa tham chiếu đến chính nó
+echo	reference to block "{to}" makes the block contain itself	tham chiếu đến khối "{to}" khiến khối chứa chính nó
+echo	group "{value1}" lists {gone} object{value2} exist	nhóm "{value1}" liệt kê {gone} đối tượng{value2} tồn tại
+echo	constraint {value1} refers to an object that doesn't exist	ràng buộc {value1} tham chiếu đối tượng không tồn tại
+echo	Block "{name}" not found.	Không tìm thấy khối "{name}".
+echo	"{value1}" is an external reference; open its drawing (XOPEN) to edit it.	"{value1}" là tham chiếu ngoài; hãy mở bản vẽ nguồn (XOPEN) để sửa.
+echo	"{value1}" is an anonymous block made by another object; it can't be edited in the Block Editor.	"{value1}" là khối ẩn danh do đối tượng khác tạo; không thể sửa trong Trình sửa khối.
+	The current drawing can't be saved as a block from the Block Editor; use WBLOCK or BLOCK.	Không thể lưu bản vẽ hiện hành thành khối từ Trình sửa khối; hãy dùng WBLOCK hoặc BLOCK.
+echo	Block "{name}" can't contain a reference to itself.	Khối "{name}" không thể chứa tham chiếu đến chính nó.
+echo	The Block Editor is already open on "{open}"; close it first (BCLOSE).	Trình sửa khối đang mở "{open}"; hãy đóng trước (BCLOSE).
+	The Block Editor is not open.	Trình sửa khối chưa mở.
+	scale names must be strings	tên tỉ lệ phải là chuỗi
+	expected a scale name or an array of scale names	cần tên tỉ lệ hoặc mảng tên tỉ lệ
+echo	`{name}` is not in the scale list	`{name}` không nằm trong danh sách tỉ lệ
+	nothing selected	chưa chọn gì
+echo	{changed} of {total} object(s) changed	Đã thay đổi {changed} trong {total} đối tượng
+echo	, {value1} not annotative	, {value1} không chú thích theo tỉ lệ
+echo	, {last} scale(s) kept as an object's only scale	, giữ {last} tỉ lệ làm tỉ lệ duy nhất của đối tượng
+echo	{value1} annotative object(s) synchronized	Đã đồng bộ {value1} đối tượng chú thích theo tỉ lệ
+echo	{value1} object(s) updated	Đã cập nhật {value1} đối tượng
+	a scale name has 1 to 255 characters	tên tỉ lệ có từ 1 đến 255 ký tự
+	paper and drawing units must be positive	đơn vị giấy và bản vẽ phải dương
+echo	a scale named `{name}` already exists	tỉ lệ mang tên `{name}` đã tồn tại
+	the scale list is full	danh sách tỉ lệ đã đầy
+echo	`{value1}` is the current annotation scale	`{value1}` là tỉ lệ chú thích hiện hành
+echo	`{value1}` is used by annotative objects	`{value1}` đang được các đối tượng chú thích theo tỉ lệ sử dụng
+	`reset` is true, "metric" or "imperial"	`reset` là true, "metric" hoặc "imperial"
+	`add.name` is required	cần có `add.name`
+echo	`{r}` is not a ratio such as 1:50	`{r}` không phải tỉ số dạng 1:50
+echo	  {value1}  ({value2} paper = {value3} drawing)	  {value1}  ({value2} trên giấy = {value3} trong bản vẽ)
+echo	A scale named "{text}" already exists.	Tỉ lệ "{text}" đã tồn tại.
+echo	Scales of the selected objects: {value1}	Tỉ lệ của các đối tượng đã chọn: {value1}
+	`object` must be a line, arc, circle or polyline segment	`object` phải là đường thẳng, cung tròn, đường tròn hoặc đoạn đa tuyến
+echo	`handle` of a circle/arc, or {center, point}	cần `handle` của đường tròn/cung tròn, hoặc {center, point}
+	object is not a circle or arc	đối tượng không phải đường tròn hoặc cung tròn
+	`point` must differ from `center`	`point` phải khác `center`
+	`lines` needs two line handles	`lines` cần hai mã đường thẳng
+	objects must be two non-parallel lines	cần hai đối tượng là đường thẳng không song song
+	object is not an arc	đối tượng không phải cung tròn
+	`p1` and `p2` must differ from `vertex`	`p1` và `p2` phải khác `vertex`
+	`handle` of an arc is required	cần có `handle` của cung tròn
+	`points` is required	cần có `points`
+echo	at most {MAX_CHAIN} `points` per call	tối đa {MAX_CHAIN} `points` mỗi lần gọi
+	`points` must be a list of points	`points` phải là danh sách điểm
+	no linear dimension to continue	không có kích thước thẳng để nối tiếp
+	`points` (arrow … landing) is required	cần có `points` (mũi tên … chân đường ghi chú)
+	need an arrowhead and a landing point	cần đầu mũi tên và điểm chân
+	bad points	các điểm không hợp lệ
+	need 2+ points	cần 2+ điểm
+echo	{n} of {value1} dimension(s) associated.	Đã liên kết {n} trong {value1} kích thước.
+echo	{n} disassociated.	Đã bỏ liên kết {n}.
+	select dimensions	hãy chọn kích thước
+	`angle` (degrees) is required	cần có `angle` (độ)
+	`base` dimension is required	cần có kích thước `base`
+	`base` is not a dimension	`base` không phải kích thước
+	base must be a linear or aligned dimension	kích thước gốc phải là kích thước thẳng hoặc song song
+echo	{value1} dimension(s) spaced.	Đã giãn cách {value1} kích thước.
+echo	{value1} dimension(s) changed.	Đã thay đổi {value1} kích thước.
+echo	Unknown dimension variable "{t}".	Không nhận diện được biến kích thước "{t}".
+echo	Dimension text = {value1}	Chữ kích thước = {value1}
+	no linear dimension	không có kích thước thẳng
+	bad leader	đường ghi chú không hợp lệ
+	`angle` must be a number (degrees)	`angle` phải là số (độ)
+echo	unknown mode `{other}` (home, new, rotate, oblique)	không nhận diện được chế độ `{other}` (home, new, rotate, oblique)
+	`handle` of an arc or circle is required	cần có `handle` của cung tròn hoặc đường tròn
+	`at` must differ from the centre	`at` phải khác tâm
+	`handle` of a linear or aligned dimension is required	cần có `handle` của kích thước thẳng hoặc song song
+	not a dimension	không phải kích thước
+	only linear and aligned dimensions take a jog	chỉ kích thước thẳng và song song mới tạo được đoạn gãy
+	`first` and `second` must differ	`first` và `second` phải khác nhau
+	no current space	không có không gian hiện hành
+echo	unknown mode `{other}` (auto, manual, remove)	không nhận diện được chế độ `{other}` (auto, manual, remove)
+echo	unknown shape `{other}` (round, angular, none)	không nhận diện được hình dạng `{other}` (round, angular, none)
+echo	at most {MAX_CHAIN} distinct points per call	tối đa {MAX_CHAIN} điểm khác nhau mỗi lần gọi
+	select circles or arcs for radius or diameter dimensions	hãy chọn đường tròn hoặc cung cho kích thước bán kính hoặc đường kính
+	select objects with points to dimension	hãy chọn đối tượng có điểm cần ghi kích thước
+	select objects with at least two distinct points	hãy chọn đối tượng có ít nhất hai điểm khác nhau
+echo	at most {MAX_CHAIN} objects per call	tối đa {MAX_CHAIN} đối tượng mỗi lần gọi
+echo	unknown mode `{m}` (continuous, staggered, baseline, ordinate, radius, diameter)	không nhận diện được chế độ `{m}` (continuous, staggered, baseline, ordinate, radius, diameter)
+echo	{n} dimension(s) created.	Đã tạo {n} kích thước.
+	No such object.	Không có đối tượng này.
+	The object is not an associative array.	Đối tượng không phải mảng liên kết.
+	The array's block is missing.	Thiếu khối của mảng.
+	An array's source objects are being edited; enter ARRAYCLOSE first.	Đang sửa các đối tượng nguồn của mảng; hãy nhập ARRAYCLOSE trước.
+	The array has no such item.	Mảng không có phần tử này.
+	The array parameters are not valid.	Tham số mảng không hợp lệ.
+	The array's source block is missing.	Thiếu khối nguồn của mảng.
+	The array's scale is zero.	Tỉ lệ mảng bằng không.
+	An array's items can't contain the array itself.	Phần tử của mảng không thể chứa chính mảng đó.
+echo	The objects nest block references too deeply (more than {MAX_BLOCK_DEPTH} levels).	Các đối tượng lồng tham chiếu khối quá sâu (hơn {MAX_BLOCK_DEPTH} cấp).
+	No array is being edited.	Không có mảng nào đang được sửa.
+	The source would have no objects; enter ARRAYCLOSE No to discard the changes, or erase the array.	Nguồn sẽ không còn đối tượng; nhập ARRAYCLOSE No để bỏ thay đổi, hoặc xóa mảng.
+echo	`{key}` must be a whole number of at least 1	`{key}` phải là số nguyên ít nhất là 1
+echo	`{key}` must be a number	`{key}` phải là số
+	The items would span more than 360 degrees; enter a smaller angle or fewer items.	Các phần tử sẽ trải rộng hơn 360 độ; hãy nhập góc nhỏ hơn hoặc giảm số phần tử.
+	`handle` (the array) is required	cần có `handle` (mảng)
+	`replace.items` holds [i, j, level] item numbers	`replace.items` chứa số thứ tự phần tử [i, j, level]
+	`replace.items` must be a list of [i, j, level] or "source"	`replace.items` phải là danh sách [i, j, level] hoặc "source"
+	`source.item` is [i, j, level]	`source.item` là [i, j, level]
+	No array selected.	Chưa chọn mảng.
+	No array item there; select an item of the array.	Không có phần tử mảng tại đó; hãy chọn một phần tử của mảng.
+	No replacement objects.	Không có đối tượng thay thế.
+	No objects to array (objects on locked layers are left out).	Không có đối tượng để tạo mảng (bỏ qua đối tượng trên lớp bị khóa).
+echo	The objects nest block references too deeply to array (more than {MAX_BLOCK_DEPTH} levels).	Các đối tượng lồng tham chiếu khối quá sâu để tạo mảng (hơn {MAX_BLOCK_DEPTH} cấp).
+	The array base point is not a valid point.	Điểm gốc của mảng không hợp lệ.
+echo	The array would create {total} objects; the limit is {max} (MAXARRAY). Use fewer items or select fewer objects.	Mảng sẽ tạo {total} đối tượng; giới hạn là {max} (MAXARRAY). Hãy giảm số phần tử hoặc chọn ít đối tượng hơn.
+	`type` must be "rectangular", "polar" or "path"	`type` phải là "rectangular", "polar" hoặc "path"
+echo	Type = Rectangular  Associative = {value1}	Loại = Chữ nhật  Liên kết = {value1}
+	Editing the array with grips is not available yet; choose an option.	Chưa hỗ trợ sửa mảng bằng điểm nắm; hãy chọn một lựa chọn.
+	The unit cell must have a width and a height.	Ô đơn vị phải có chiều rộng và chiều cao.
+echo	Type = Polar  Associative = {value1}	Loại = Cực  Liên kết = {value1}
+	`path` is required	cần có `path`
+echo	{path} is not a recoverable autosave file	{path} không phải tệp tự lưu có thể phục hồi
+echo	unknown action `{other}` (list, open or discard)	không nhận diện được thao tác `{other}` (list, open hoặc discard)
+	invalid base64	base64 không hợp lệ
+	`path` or `data` (base64) is required	cần có `path` hoặc `data` (base64)
+	file formats are not available in this build	định dạng tệp không khả dụng trong bản dựng này
+echo	{name} can't be read: {e}	không thể đọc {name}: {e}
+echo	{path}: {e}	{path}: {e}
+	paths are not available on the web; pass `data`	đường dẫn không khả dụng trên web; hãy truyền `data`
+	answer Yes or No	hãy trả lời Yes hoặc No
+	`handle` is required	cần có `handle`
+	`find` (a non-empty string) is required	cần có `find` (chuỗi không rỗng)
+echo	{n} attribute{value1} selected.	Đã chọn {n} thuộc tính khối{value1}.
+echo	{k} is not available yet.	{k} chưa khả dụng.
+echo	Cannot find layer "{t}".	Không tìm thấy lớp "{t}".
+echo	{n} attribute{value1} changed.	Đã thay đổi {n} thuộc tính khối{value1}.
+	`mode` ("normal", "on" or "off") is required	cần có `mode` ("normal", "on" hoặc "off")
+	`name` (or `handle` of a block reference) is required	cần có `name` (hoặc `handle` của tham chiếu khối)
+	`handle` is not a block reference	`handle` không phải tham chiếu khối
+echo	Block "{name}" has no attribute definitions.	Khối "{name}" không có định nghĩa thuộc tính khối.
+echo	ATTSYNC block {block}: {n} reference{value1} synchronized.	ATTSYNC khối {block}: đã đồng bộ {n} tham chiếu{value1}.
+	No blocks with attributes match.	Không có khối chứa thuộc tính nào phù hợp.
+echo	Blocks with attributes: {value1}	Khối có thuộc tính: {value1}
+echo	Block "{b}" has no attribute definitions.	Khối "{b}" không có định nghĩa thuộc tính khối.
+	That object is not a block reference.	Đối tượng đó không phải tham chiếu khối.
+echo	Block "{value1}" has no attribute tagged "{value2}".	Khối "{value1}" không có thuộc tính khối mang thẻ "{value2}".
+	A tag must be non-empty and without spaces.	Thẻ không được rỗng hoặc chứa dấu cách.
+	The text height must be a positive number.	Chiều cao chữ phải là số dương.
+echo	Layer "{value1}" not found.	Không tìm thấy lớp "{value1}".
+echo	Block "{value1}" already has an attribute tagged "{t}".	Khối "{value1}" đã có thuộc tính khối mang thẻ "{t}".
+echo	"{t}" is listed twice.	"{t}" được liệt kê hai lần.
+echo	The order must list each of the {all} attribute tags once.	Thứ tự phải liệt kê đủ {all} thẻ thuộc tính khối, mỗi thẻ một lần.
+	`name` is required	cần có `name`
+echo	`tag` is required for "{action}"	cần có `tag` cho "{action}"
+	`height` must be a number	`height` phải là số
+	`order` (an array of tags) is required	cần có `order` (mảng thẻ)
+	`order` must hold tags (strings)	`order` phải chứa thẻ (chuỗi)
+echo	unknown action "{other}" (list, edit, remove, up, down, order or sync)	không nhận diện được thao tác "{other}" (list, edit, remove, up, down, order hoặc sync)
+echo	Block {value1}: {n} reference{value2} in the drawing.	Khối {value1}: có {n} tham chiếu{value2} trong bản vẽ.
+echo	  {value1}  prompt "{value2}"  default "{value3}"{modes}	  {value1}  lời nhắc "{value2}"  mặc định "{value3}"{modes}
+	No blocks with attributes.	Không có khối chứa thuộc tính.
+echo	Block "{value1}" has no attribute definitions.	Khối "{value1}" không có định nghĩa thuộc tính khối.
+echo	ATTSYNC block {name}: {n} reference{value1} synchronized.	ATTSYNC khối {name}: đã đồng bộ {n} tham chiếu{value1}.
+	The Block Editor is open on the current drawing; there is no block to save under another name.	Trình sửa khối đang mở bản vẽ hiện hành; không có khối để lưu với tên khác.
+echo	The Block Editor is already open on "{name}"; close it first (BCLOSE).	Trình sửa khối đang mở "{name}"; hãy đóng trước (BCLOSE).
+echo	Not available in the Block Editor (editing "{name}"); close it first (BCLOSE).	Không khả dụng trong Trình sửa khối (đang sửa "{name}"); hãy đóng trước (BCLOSE).
+echo	Block Editor: new block "{name}". BSAVE creates it in the drawing; BCLOSE closes the editor.	Trình sửa khối: khối mới "{name}". BSAVE tạo khối trong bản vẽ; BCLOSE đóng trình sửa.
+echo	Block Editor: editing "{name}". BSAVE saves it into the drawing; BCLOSE closes the editor.	Trình sửa khối: đang sửa "{name}". BSAVE lưu khối vào bản vẽ; BCLOSE đóng trình sửa.
+	`handle` must be a handle	`handle` phải là mã đối tượng
+	`name` or `handle` is required (or select one block reference)	cần có `name` hoặc `handle` (hoặc hãy chọn một tham chiếu khối)
+echo	"{name}" is not a valid block name	"{name}" không phải tên khối hợp lệ
+echo	Block "{name}" saved.	Đã lưu khối "{name}".
+echo	Block "{name}" already exists; pass `replace: true` to redefine it	khối "{name}" đã tồn tại; hãy truyền `replace: true` để định nghĩa lại khối
+echo	Block "{name}" saved; the Block Editor now edits it.	Đã lưu khối "{name}"; Trình sửa khối đang sửa khối này.
+	No blocks to edit.	Không có khối để sửa.
+	`node` (a parameter's graph id) is required	cần có `node` (id đồ thị của tham số)
+	`part` must be base, end or at	`part` phải là base, end hoặc at
+	`to` [x, y] is required	cần có `to` [x, y]
+	the reference is on a locked layer	tham chiếu nằm trên lớp bị khóa
+	no such grip	không có điểm nắm này
+	a list grip is chosen from, not dragged	điểm nắm danh sách dùng để chọn, không dùng để kéo
+echo	{path}: files can't be written in the browser	{path}: không thể ghi tệp trong trình duyệt
+echo	Too much data for a table ({value1} rows, {value2} columns).	Quá nhiều dữ liệu cho một bảng ({value1} hàng, {value2} cột).
+	`at` must be a point [x, y]	`at` phải là điểm [x, y]
+echo	{n} row{value1} extracted.	Đã trích xuất {n} hàng{value1}.
+echo	Written to {f}.	Đã ghi vào {f}.
+echo	{p}: {e}	{p}: {e}
+echo	{path}: file not found	{path}: không tìm thấy tệp
+echo	{_path}: {e}	{_path}: {e}
+	paths are not available on the web	đường dẫn không khả dụng trên web
+echo	Block "{name}" references itself.	khối "{name}" tham chiếu chính nó.
+	no such object	không có đối tượng này
+echo	No unreferenced {noun}s found.	Không tìm thấy {noun} chưa được tham chiếu.
+echo	unknown type `{ty}`	không nhận diện được loại `{ty}`
+	no block reference is being edited (REFEDIT)	không có tham chiếu khối đang được sửa (REFEDIT)
+	the space of the reference is gone	không gian của tham chiếu không còn tồn tại
+	a reference is already being edited; finish with REFCLOSE	đang sửa một tham chiếu; hãy kết thúc bằng REFCLOSE
+	select a block reference	hãy chọn tham chiếu khối
+	the reference is in no space	tham chiếu không thuộc không gian nào
+echo	block "{value1}" not found	Không tìm thấy khối "{value1}"
+echo	"{value1}" is an external reference: editing it in place would write its source drawing, which is not available yet. Open it with XOPEN, edit and save it, then reload.	"{value1}" là tham chiếu ngoài: sửa tại chỗ sẽ ghi vào bản vẽ nguồn, chức năng này chưa khả dụng. Hãy mở bằng XOPEN, sửa và lưu, rồi tải lại.
+echo	"{value1}" is generated geometry and can't be edited in place	"{value1}" là hình học được tạo tự động và không thể sửa tại chỗ
+	the reference must be scaled equally in X and Y (and not flat) to be edited in place	tham chiếu phải có cùng tỉ lệ theo X và Y (và không bị ép phẳng) để sửa tại chỗ
+echo	`objects`: {v} is not an object handle	`objects`: {v} không phải mã đối tượng
+echo	object {value1} is not in block "{value2}"	đối tượng {value1} không thuộc khối "{value2}"
+	`objects` is empty	`objects` đang rỗng
+echo	`objects` must be "all" or an array of handles, got {v}	`objects` phải là "all" hoặc mảng mã đối tượng, đã nhận {v}
+echo	`{key}`: {v} is not an object handle	`{key}`: {v} không phải mã đối tượng
+echo	`{key}` must be an array of object handles, got {v}	`{key}` phải là mảng mã đối tượng, đã nhận {v}
+	the reference can't be inverted	tham chiếu không thể nghịch đảo
+echo	no object {value1}	không có đối tượng {value1}
+echo	object {value1} is not in the working set	đối tượng {value1} không thuộc tập làm việc
+echo	block "{value1}" is gone; REFCLOSE Discard	khối "{value1}" không còn tồn tại; REFCLOSE Discard
+echo	unknown option "{o}" (save or discard)	không nhận diện được lựa chọn "{o}" (save hoặc discard)
+echo	block "{value1}" is gone; use REFCLOSE Discard	khối "{value1}" không còn tồn tại; hãy dùng REFCLOSE Discard
+	the reference can't be inverted; use REFCLOSE Discard	tham chiếu không thể nghịch đảo; hãy dùng REFCLOSE Discard
+echo	Block "{value1}" would reference itself; remove that reference or use REFCLOSE Discard.	Khối "{value1}" sẽ tham chiếu chính nó; hãy bỏ tham chiếu đó hoặc dùng REFCLOSE Discard.
+echo	{value1} object(s) in the working set.	Có {value1} đối tượng trong tập làm việc.
+	Reference changes saved.	Đã lưu thay đổi tham chiếu.
+	Reference changes discarded.	Đã bỏ thay đổi tham chiếu.
+	too many block references	quá nhiều tham chiếu khối
+	no block references selected	chưa chọn tham chiếu khối
+echo	no block `{name}`	không có khối `{name}`
+	external references cannot be replaced	không thể thay thế tham chiếu ngoài
+	too many replacement attributes	quá nhiều thuộc tính khối thay thế
+echo	{value1} is not a block reference	{value1} không phải tham chiếu khối
+echo	no xref "{key}"	không có tham chiếu ngoài "{key}"
+echo	"{key}" is not an xref	"{key}" không phải tham chiếu ngoài
+echo	xref "{key}" is not loaded	chưa tải tham chiếu ngoài "{key}"
+	blocks are nested too deeply	các khối lồng quá sâu
+echo	"{name}" is not an xref-dependent name	"{name}" không phải tên phụ thuộc tham chiếu ngoài
+echo	no symbol "{name}"	không có ký hiệu "{name}"
+echo	no layer "{name}"	không có lớp "{name}"
+echo	no linetype "{name}"	không có kiểu đường "{name}"
+echo	no text style "{name}"	không có kiểu chữ "{name}"
+echo	no dimension style "{name}"	không có kiểu kích thước "{name}"
+echo	no block "{name}"	không có khối "{name}"
+	only blocks, dimension styles, layers, linetypes and text styles can be bound	chỉ có thể gộp khối, kiểu kích thước, lớp, kiểu đường và kiểu chữ vào bản vẽ
+echo	"{value1}" loaded from {value2}.	Đã tải "{value1}" từ {value2}.
+echo	Xref "{value1}" not loaded: {value2}.	Chưa tải tham chiếu ngoài "{value1}": {value2}.
+echo	{path}: not opened, {r}	{path}: chưa mở, {r}
+echo	the referenced files are larger than {value1} MB together	tổng kích thước các tệp tham chiếu lớn hơn {value1} MB
+echo	the file is larger than {value1} MB	tệp lớn hơn {value1} MB
+	files are not available on the web	tệp không khả dụng trên web
+echo	nested xref "{n}" not loaded: {detail}	chưa tải tham chiếu ngoài lồng "{n}": {detail}
+echo	more than {MAX_XREF_OBJECTS} objects	quá {MAX_XREF_OBJECTS} đối tượng
+echo	"{name}" is not a valid xref name	"{name}" không phải tên tham chiếu ngoài hợp lệ
+echo	an xref named "{value1}" is already attached from another file	tham chiếu ngoài mang tên "{value1}" đã được đính kèm từ tệp khác
+echo	a block named "{value1}" already exists	khối mang tên "{value1}" đã tồn tại
+echo	{path} can't be attached: {value1}	không thể đính kèm {path}: {value1}
+echo	{path} can't be attached	không thể đính kèm {path}
+	`scale` must be a number or [x, y]	`scale` phải là số hoặc [x, y]
+	scale must be a non-zero number	tỉ lệ phải là số khác không
+	`rotation` must be a number	`rotation` phải là số
+echo	no xref matches "{pattern}"	không có tham chiếu ngoài phù hợp với "{pattern}"
+echo	Xref "{n}" unloaded.	Đã tạm gỡ tham chiếu ngoài "{n}".
+echo	Xref "{n}" detached.	Đã gỡ bỏ tham chiếu ngoài "{n}".
+echo	Xref "{n}" bound.	Đã gộp tham chiếu ngoài "{n}" vào bản vẽ.
+echo	unknown option "{option}"	không nhận diện được lựa chọn "{option}"
+	`type` must be block, dimstyle, layer, linetype or style	`type` phải là block, dimstyle, layer, linetype hoặc style
+	`names` is required	cần có `names`
+echo	no xref-dependent symbol matches "{pattern}"	không có ký hiệu phụ thuộc tham chiếu ngoài phù hợp với "{pattern}"
+echo	{value1} symbol(s) bound.	Đã gộp {value1} ký hiệu.
+	the selected object is not an xref	đối tượng đã chọn không phải tham chiếu ngoài
+echo	no xref "{name}"	không có tham chiếu ngoài "{name}"
+echo	"{name}" is not an xref	"{name}" không phải tham chiếu ngoài
+echo	No xref matches "{t}".	Không có tham chiếu ngoài phù hợp với "{t}".
+echo	{value1} {value2} {value3} Path	{value1} {value2} {value3} Đường dẫn
+echo	Total xref(s): {value1}	Tổng số tham chiếu ngoài: {value1}
+	invalid block name	tên khối không hợp lệ
+	no objects selected	chưa chọn đối tượng
+echo	Block "{name}" is being edited in place; finish with REFCLOSE first.	đang sửa tại chỗ khối "{name}"; hãy kết thúc bằng REFCLOSE trước.
+	scale cannot be 0	tỉ lệ không được bằng 0
+	`tag` is required	cần có `tag`
+	tag must be non-empty without spaces	thẻ không được rỗng hoặc chứa dấu cách
+	`value` is required	cần có `value`
+echo	Defined blocks: {value1}	Khối đã định nghĩa: {value1}
+echo	Block "{name}" defined with {value1} object(s).	Đã định nghĩa khối "{name}" với {value1} đối tượng.
+	The corner must not be level with the insertion point.	Góc không được ngang bằng với điểm chèn.
+	the clipboard is empty	bộ nhớ tạm đang rỗng
+	the clipboard holds objects from this drawing; Paste to Original Coordinates pastes into another drawing	bộ nhớ tạm chứa đối tượng từ bản vẽ này; Dán vào tọa độ gốc dùng để dán sang bản vẽ khác
+	no free block name	không còn tên khối trống
+echo	`{key}`: unknown point `{t}`	`{key}`: không nhận diện được điểm `{t}`
+echo	`{key}` must be a point name or [x, y]	`{key}` phải là tên điểm hoặc [x, y]
+echo	no such object {value1}	không có đối tượng {value1}
+echo	{value1} objects cannot be constrained	không thể ràng buộc {value1} đối tượng
+echo	cannot use this {value1} here	không thể dùng {value1} này tại đây
+echo	{value1} needs {value2} object(s)	{value1} cần {value2} đối tượng
+	`type` is required	cần có `type`
+echo	unknown constraint type `{t}`	không nhận diện được loại ràng buộc `{t}`
+	`h1` is required	cần có `h1`
+echo	{value1} constraint #{id} applied.	Đã áp dụng ràng buộc {value1} #{id}.
+echo	unknown type `{t}`	không nhận diện được loại `{t}`
+echo	{value1} = {value2}	{value1} = {value2}
+	select objects (or pass `handles`)	hãy chọn đối tượng (hoặc hãy truyền `handles`)
+echo	{value1} constraint(s) applied to {value2} object(s)	Đã áp dụng {value1} ràng buộc cho {value2} đối tượng
+	select objects (or pass `handles` / `ids`)	hãy chọn đối tượng (hoặc hãy truyền `handles` / `ids`)
+echo	`{used}` is used by `{value1}`	`{used}` đang được `{value1}` sử dụng
+echo	{n} constraint(s) removed	Đã bỏ {n} ràng buộc
+echo	`{name}` belongs to a dimensional constraint; delete the constraint instead	`{name}` thuộc ràng buộc kích thước; hãy xóa ràng buộc đó
+echo	no parameter `{name}`	không có tham số `{name}`
+echo	`{name}` is used by `{value1}`	`{name}` đang được `{value1}` sử dụng
+	`expr` or `value` is required	cần có `expr` hoặc `value`
+	No parameters.	Không có tham số.
+echo	unknown mode `{other}`	không nhận diện được chế độ `{other}`
+echo	{what}: {mode}	{what}: {mode}
+	`value` must be 0 or 1	`value` phải là 0 hoặc 1
+echo	CONSTRAINTINFER = {value1}	CONSTRAINTINFER = {value1}
+echo	{value1} constraint(s) removed with their objects.	Đã bỏ {value1} ràng buộc cùng các đối tượng của chúng.
+echo	Constraints could not be satisfied: {e}	Không thể thỏa mãn các ràng buộc: {e}
+	`points` [[x,y],...] (2 or more) is required	cần có `points` [[x,y],...] (2 hoặc hơn)
+	need at least 2 points	cần ít nhất 2 điểm
+	need at least 2 different points	cần ít nhất 2 điểm khác nhau
+	`vertices` needs at least 2 points	`vertices` cần ít nhất 2 điểm
+	`radius` or `diameter` is required	cần có `radius` hoặc `diameter`
+	points are collinear	các điểm thẳng hàng
+echo	give {center, radius} or {p1, p2[, p3]}	hãy cung cấp {center, radius} hoặc {p1, p2[, p3]}
+	radius must be positive	bán kính phải dương
+	`radius` must be positive	`radius` phải dương
+echo	give {p1,p2,p3}, {start,center,end} or {center,radius,start,end}	hãy cung cấp {p1,p2,p3}, {start,center,end} hoặc {center,radius,start,end}
+	these values do not define an arc	các giá trị này không xác định được cung tròn
+	sides must be 3..1024	số cạnh phải là 3..1024
+	edge needs 2 points	cạnh cần 2 điểm
+	edge endpoints must differ	hai đầu cạnh phải khác nhau
+	`radius` (number) is required	cần có `radius` (số)
+	ratio must be in (0, 1] and major non-zero	tỉ số phải nằm trong (0, 1] và bán trục lớn phải khác không
+	`at` or `points` is required	cần có `at` hoặc `points`
+	through point equals base	điểm đi qua trùng với điểm gốc
+	need 2+ different fit points	cần ít nhất 2 điểm khớp khác nhau
+	need 2+ control points	cần 2+ điểm điều khiển
+	`fit` or `control` points are required	cần có các điểm `fit` hoặc `control`
+	`inside` must not be larger than `outside`	`inside` không được lớn hơn `outside`
+	`text` is required	cần có `text`
+	height must be positive	chiều cao phải dương
+	unknown justification	không nhận diện được cách căn chỉnh
+echo	no text style "{n}"	không có kiểu chữ "{n}"
+	`justify` must be TL, TC, TR, ML, MC, MR, BL, BC or BR	`justify` phải là TL, TC, TR, ML, MC, MR, BL, BC hoặc BR
+echo	No {what} line through that point; pick another point.	Không có đường {what} qua điểm đó; hãy chọn điểm khác.
+	No tangent or perpendicular from the last point.	Không có tiếp tuyến hoặc đường vuông góc từ điểm cuối.
+	Point or option keyword required.	Cần nhập điểm hoặc từ khóa lựa chọn.
+echo	Current line-width is {value1}	Chiều rộng nét hiện hành là {value1}
+	Value must be positive and nonzero.	Giá trị phải dương và khác không.
+	Edge endpoints must differ.	Hai đầu cạnh phải khác nhau.
+echo	Current point modes:  PDMODE={m}  PDSIZE={sz}	Chế độ điểm hiện hành:  PDMODE={m}  PDSIZE={sz}
+echo	Current settings: Method=Fit   Knots={value1}	Cài đặt hiện hành: Method=Fit   Knots={value1}
+	CV: not available yet	CV: chưa khả dụng
+echo	Current text style:  "{style}"  Text height:  {value1}  Annotative:  {anno}  Justify:  Left	Kiểu chữ hiện hành:  "{style}"  Chiều cao chữ:  {value1}  Chú thích theo tỉ lệ:  {anno}  Căn chỉnh:  Left
+echo	Current text style:  "{value1}"  Text height:  {value2}  Annotative:  {value3}	Kiểu chữ hiện hành:  "{value1}"  Chiều cao chữ:  {value2}  Chú thích theo tỉ lệ:  {value3}
+echo	Cannot find multiline style "{value1}".	Không tìm thấy kiểu đường nhiều nét "{value1}".
+	`points` (2 or more) is required	cần có `points` (2 hoặc hơn)
+	need 2 or more distinct points	cần ít nhất 2 điểm khác nhau
+	justification must be top, zero or bottom	căn chỉnh phải là top, zero hoặc bottom
+	scale is out of range	tỉ lệ nằm ngoài phạm vi
+	need 2 or more points	cần ít nhất 2 điểm
+echo	Current settings: Justification = {value1}, Scale = {value2}, Style = {value3}	Cài đặt hiện hành: Căn chỉnh = {value1}, Tỉ lệ = {value2}, Kiểu = {value3}
+echo	Loaded multiline styles: {value1}	Kiểu đường nhiều nét đã tải: {value1}
+echo	`{key}` must be an object	`{key}` phải là đối tượng
+	cap angles must be 10..170 degrees	góc đầu mút phải nằm trong 10..170 độ
+	`elements` must be an array	`elements` phải là mảng
+echo	a style has 1 to {MAX_MLINE_ELEMENTS} elements	mỗi kiểu có từ 1 đến {MAX_MLINE_ELEMENTS} phần tử
+	each element needs a finite `offset`	mỗi phần tử cần giá trị `offset` hữu hạn
+echo	unknown colour {c}	không nhận diện được màu {c}
+echo	Cannot find multiline style "{name}".	Không tìm thấy kiểu đường nhiều nét "{name}".
+echo	The STANDARD and the current multiline style can't be deleted ({st}).	Không thể xóa kiểu đường nhiều nét STANDARD và kiểu hiện hành ({st}).
+echo	Multiline style {st} is in use and can't be deleted.	Kiểu đường nhiều nét {st} đang được dùng, không thể xóa.
+	style names have up to 31 characters and none of <>/\":;?*|,=`	tên kiểu có tối đa 31 ký tự và không được chứa <>/\":;?*|,=`
+	`rename` needs a name of up to 31 characters	`rename` cần tên dài tối đa 31 ký tự
+	The STANDARD multiline style can't be renamed.	Không thể đổi tên kiểu đường nhiều nét STANDARD.
+echo	A multiline style named {to} already exists.	Kiểu đường nhiều nét {to} đã tồn tại.
+echo	Multiline style {from} is in use and can't be renamed.	Kiểu đường nhiều nét {from} đang được dùng, không thể đổi tên.
+echo	unknown fill colour {c}	không nhận diện được màu tô {c}
+echo	Multiline style {value1} is in use: its elements and properties can't be changed.	Kiểu đường nhiều nét {value1} đang được dùng: không thể thay đổi phần tử và thuộc tính.
+	`tool` must be one of CC OC MC CT OT MT CJ AV DV CS CA WA	`tool` phải là một trong CC OC MC CT OT MT CJ AV DV CS CA WA
+echo	`{k}` (multiline handle) is required	cần có `{k}` (mã đường nhiều nét)
+	The first multiline has no segments.	Đường nhiều nét thứ nhất không có đoạn.
+	The second multiline has no segments.	Đường nhiều nét thứ hai không có đoạn.
+	Merged tee is not available yet.	Chưa hỗ trợ nút chữ T gộp.
+	The multilines are parallel.	Các đường nhiều nét song song.
+	Nothing would be left of the first multiline.	Đường nhiều nét thứ nhất sẽ không còn phần nào.
+	Corner joints need open multilines.	Nối góc cần các đường nhiều nét hở.
+	Nothing would be left of the second multiline.	Đường nhiều nét thứ hai sẽ không còn phần nào.
+	Too many vertices.	Quá nhiều đỉnh.
+	A vertex is already there.	Đã có đỉnh tại đó.
+	The multiline has too few vertices to delete one.	Đường nhiều nét có quá ít đỉnh để xóa một đỉnh.
+	Point required.	Cần nhập điểm.
+	Point or value required.	Cần nhập điểm hoặc giá trị.
+	start+center needs `end`, `angle` or `length`	`start`+`center` cần `end`, `angle` hoặc `length`
+	start+end needs `angle`, `direction` or `radius`	`start`+`end` cần `angle`, `direction` hoặc `radius`
+	give start with center and/or end (see params)	hãy cung cấp điểm đầu cùng tâm và/hoặc điểm cuối (xem tham số)
+	no line or arc to continue from	không có đường thẳng hoặc cung tròn để tiếp tục từ đó
+	end point is on the tangent line	điểm cuối nằm trên đường tiếp tuyến
+echo	give {center, diameter}, {p1, p2} or {p1, p2, p3}	hãy cung cấp {center, diameter}, {p1, p2} hoặc {p1, p2, p3}
+echo	`{hk}` is required	cần có `{hk}`
+	degenerate ellipse	elip suy biến
+	Cannot divide/measure that object.	Không thể chia/đo đối tượng đó.
+echo	Block "{b}" not found.	Không tìm thấy khối "{b}".
+	`segments` (2..32767) is required	cần có `segments` (2..32767)
+	segments must be 2..32767	số đoạn phải nằm trong 2..32767
+	length must be positive (and not tiny)	chiều dài phải dương (và không quá nhỏ)
+echo	give {p1, p2}, {points}, {freehand} or {handle}	hãy cung cấp {p1, p2}, {points}, {freehand} hoặc {handle}
+	too many points	quá nhiều điểm
+	the boundary needs an area	đường biên cần diện tích
+	The revision cloud needs at least three points enclosing an area.	Đám mây sửa đổi cần ít nhất ba điểm bao quanh một vùng.
+echo	Minimum arc length: {value1}   Maximum arc length: {value1}   Style: Normal   Type: {t}	Chiều dài cung nhỏ nhất: {value1}   Chiều dài cung lớn nhất: {value1}   Kiểu: Normal   Loại: {t}
+	The object has no area.	Đối tượng không có diện tích.
+	Frames mode must be ON, OFF or Display.	Chế độ khung phải là ON, OFF hoặc Display.
+	The polyline must be closed with at least three vertices.	Đa tuyến phải kín và có ít nhất ba đỉnh.
+	Polylines with arc segments cannot be used for wipeouts.	Không thể dùng đa tuyến có đoạn cung để che nền.
+	`points` (3 or more) or `handle` is required	cần có `points` (3 hoặc hơn) hoặc `handle`
+	need 3+ points enclosing an area	cần 3+ điểm bao quanh một vùng
+	No polyline.	Không có đa tuyến.
+	A wipeout needs three or more points enclosing an area.	Vùng che nền cần ít nhất ba điểm bao quanh một vùng.
+	degenerate angle	góc suy biến
+	`base` is required	cần có `base`
+	No line selected.	Chưa chọn đường thẳng.
+	`chamfer` distances must be zero or positive	khoảng cách `chamfer` phải bằng không hoặc dương
+	dimensions: [length, width]	kích thước: [length, width]
+	area must be positive	diện tích phải dương
+	area needs `length` or `breadth`	diện tích cần `length` hoặc `breadth`
+	rectangle has no area	hình chữ nhật không có diện tích
+	The rectangle has no area.	Hình chữ nhật không có diện tích.
+	Value must be positive.	Giá trị phải dương.
+	No first corner.	Chưa có góc đầu.
+	`points` needs 2 or more [x,y,z] points	`points` cần ít nhất 2 điểm [x,y,z]
+	radii must be positive and turns in (0, 500]	bán kính phải dương và số vòng trong (0, 500]
+	sizes are out of range	kích thước nằm ngoài phạm vi
+echo	Number of turns = {value1}     Twist=CCW	Số vòng = {value1}     Twist=CCW
+	Turns must be in (0, 500].	Số vòng phải thuộc (0, 500].
+	`control` points are required	cần có các điểm `control`
+echo	Current settings: Method=CV   Degree={value1}	Cài đặt hiện hành: Method=CV   Bậc={value1}
+	Degree must be 1..10.	Bậc phải thuộc 1..10.
+echo	{k}: use SPLINE for fit points.	{k}: hãy dùng SPLINE cho các điểm khớp.
+	The lines do not define a center line.	Các đường không xác định được đường tâm.
+	`handle` or `handles` is required	cần có `handle` hoặc `handles`
+	`h2` is required	cần có `h2`
+	no reference objects	không có đối tượng tham chiếu
+echo	`order` must be "front", "back", "above" or "under", got {v}	`order` phải là "front", "back", "above" hoặc "under", đã nhận {v}
+	`reference` (object handles) is required	cần có `reference` (mã đối tượng)
+echo	{n} object(s) brought to front.	Đã đưa {n} đối tượng lên trước.
+echo	`objects` must be "text", "dimensions", "leaders" or "all", got {v}	`objects` phải là "text", "dimensions", "leaders" hoặc "all", đã nhận {v}
+echo	{n} hatch object(s) sent to back.	Đã đưa {n} mặt cắt ra sau.
+	Undo is turned off (UNDO Control None); UNDO Control All turns it on.	Hoàn tác đang tắt (UNDO Control None); dùng UNDO Control All để bật.
+	mode: count, mark, back, begin, end, auto or control	chế độ: count, mark, back, begin, end, auto hoặc control
+echo	UNDO {mode} needs UNDO Control All.	UNDO {mode} cần UNDO Control All.
+	`on` (true/false) is required for mode auto	cần có `on` (true/false) cho chế độ auto
+echo	UNDO Auto {value1}	UNDO Auto {value1}
+	UNDO Control All	UNDO Control All
+	UNDO Control None: undo is off	UNDO Control None: hoàn tác đang tắt
+	UNDO Control One: only the last step can be undone	UNDO Control One: chỉ có thể hoàn tác bước cuối
+	UNDO Control Combine set	Đã đặt UNDO Control Combine
+	UNDO Control Layer set	Đã đặt UNDO Control Layer
+	control: all, none, one, combine or layer	điều khiển: all, none, one, combine hoặc layer
+	Back at the mark	Đã trở về dấu đánh dấu
+	Answer Yes or No.	Hãy trả lời Yes hoặc No.
+	Nothing to redo	Không có gì để làm lại
+	window needs 2 corners	cửa sổ cần 2 góc
+	ATTACH is not available yet: raster images and PDF/DWF/DGN underlays can't be shown yet	ATTACH chưa khả dụng: chưa thể hiển thị ảnh raster và nền PDF/DWF/DGN
+	SHARE is not available yet: there is no online service to share through; EXPORT or PUBLISH the drawing and send the file	SHARE chưa khả dụng: chưa có dịch vụ chia sẻ trực tuyến; hãy dùng EXPORT hoặc PUBLISH rồi gửi tệp bản vẽ
+	3DORBIT is not available yet: UbotCAD draws in 2D (plan view) only	3DORBIT chưa khả dụng: UbotCAD chỉ vẽ 2D (mặt bằng)
+	`format` must be dxf, dwg, svg, png or pdf (or give a `path` with one of those extensions)	`format` phải là dxf, dwg, svg, png hoặc pdf (hoặc cung cấp `path` có một trong các phần mở rộng đó)
+echo	Exported to {path}	Đã xuất vào {path}
+	`scale` must be a non-zero number	`scale` phải là số khác không
+echo	{value1} objects imported from {file}	Đã nhập {value1} đối tượng từ {file}
+echo	no layout `{n}`	không có bố cục `{n}`
+	outline must contain exactly four finite rectangle vertices	đường bao phải gồm đúng bốn đỉnh hữu hạn của hình chữ nhật
+echo	unknown paper size `{name}`	không nhận diện được khổ giấy `{name}`
+	custom paper dimensions must be finite and positive	kích thước giấy tùy chọn phải hữu hạn và dương
+	the drawing is too large to preview at this scale	bản vẽ quá lớn để xem trước ở tỉ lệ này
+	rendering the preview failed	không thể kết xuất bản xem trước
+	`layouts` must be a list of layout names	`layouts` phải là danh sách tên bố cục
+	there are no sheets to publish	không có tờ bản vẽ để xuất bản
+echo	at most {MAX_SHEETS} sheets can be published at once	tối đa {MAX_SHEETS} tờ bản vẽ có thể xuất bản cùng lúc
+echo	{name}: {e}	{name}: {e}
+echo	Published {value1} sheet(s): {value2}	Đã xuất bản {value1} tờ bản vẽ: {value2}
+echo	Published {value1} sheet(s)	Đã xuất bản {value1} tờ bản vẽ
+echo	Frame {number} has non-finite or out-of-range coordinates or dimensions; it was not plotted	Khung bản vẽ {number} có tọa độ hoặc kích thước không hữu hạn hay ngoài phạm vi; đã bỏ qua khi in
+echo	Frame {number} ({w} x {h} mm) matches no paper size; it was not plotted	Khung bản vẽ {number} ({w} x {h} mm) không phù hợp khổ giấy nào; đã bỏ qua khi in
+echo	Frame scan stopped after {MAX_FRAMES} model-space entities; additional frames may not have been plotted	Đã dừng quét khung sau {MAX_FRAMES} đối tượng không gian mô hình; các khung còn lại có thể chưa được in
+	plotting is not available in this build	không thể in bản vẽ trong bản dựng này
+echo	no closed polylines {frame_height} mm high (sheet frames) in model space	không có đa tuyến kín cao {frame_height} mm (khung tờ bản vẽ) trong không gian mô hình
+echo	; and {value1} more	; và {value1} mục khác
+echo	Plotted {value1} book(s), {value2} sheet(s)	Đã in {value1} tập, {value2} tờ bản vẽ
+echo	; {skipped} frames were not plotted	; có {skipped} khung bản vẽ chưa được in
+echo	; frame scan stopped after {MAX_FRAMES} model-space entities; additional frames may not have been plotted	; đã dừng quét khung sau {MAX_FRAMES} đối tượng không gian mô hình; các khung còn lại có thể chưa được in
+echo	no open drawing {d}	không có bản vẽ đang mở {d}
+	`path`, `data` (base64) or `document` is required	cần có `path`, `data` (base64) hoặc `document`
+	paths are not available on the web: open the other drawing and compare with it by name (`document`)	không hỗ trợ đường dẫn trên web: hãy mở bản vẽ kia và so sánh theo tên (`document`)
+	a drawing can't be compared with itself	không thể so sánh bản vẽ với chính nó
+echo	Compared with {name}: {value1} only in this drawing, {value2} only in {name}, {value3} changed, {common} the same{value4}.	So với {name}: {value1} chỉ có trong bản vẽ này, {value2} chỉ có trong {name}, {value3} đã thay đổi, {common} giống nhau{value4}.
+echo	 (only the first {MAX_OBJECTS} objects of each were compared)	 (chỉ so sánh {MAX_OBJECTS} đối tượng đầu của mỗi bản vẽ)
+	no comparison: run COMPARE first	chưa có kết quả so sánh: hãy chạy COMPARE trước
+	No differences.	Không có khác biệt.
+	no such area	không có diện tích
+echo	Change area {value1} of {n}.	Vùng thay đổi {value1} trong {n}.
+echo	`{a}` can't be an alias	`{a}` không thể là lệnh tắt
+echo	{a} is a command name; it stays the command	{a} là tên lệnh; tên này vẫn gọi lệnh đó
+echo	`{line}` is not ALIAS, *COMMAND; skipped	`{line}` không có dạng ALIAS, *COMMAND; đã bỏ qua
+echo	{value1} is an external command; UbotCAD doesn't run programs from alias files	{value1} là lệnh ngoài; UbotCAD không chạy chương trình từ tệp lệnh tắt
+echo	{value1}: unknown command {value2}; skipped	{value1}: không nhận diện được lệnh {value2}; đã bỏ qua
+echo	more than {MAX_ALIASES} aliases; the rest are skipped	quá {MAX_ALIASES} lệnh tắt; đã bỏ qua phần còn lại
+echo	{alias}: the command must be a name	{alias}: lệnh phải là một tên
+echo	{alias}: unknown command {target}	{alias}: không nhận diện được lệnh {target}
+echo	more than {MAX_ALIASES} aliases	hơn {MAX_ALIASES} lệnh tắt
+echo	`set` is an object {alias: command}	`set` là đối tượng {alias: command}
+	`remove` is a list of aliases	`remove` là danh sách lệnh tắt
+echo	{n} command alias(es) loaded.	Đã tải {n} lệnh tắt.
+	no alias file	chưa tải tệp lệnh tắt
+echo	{n} command alias(es) loaded from {path}.	Đã tải {n} lệnh tắt từ {path}.
+	`template` must be a file path	`template` phải là đường dẫn tệp
+echo	template {path}: {e}	mẫu bản vẽ {path}: {e}
+echo	template {path}: paths are not available on the web	mẫu bản vẽ {path}: đường dẫn không khả dụng trên web
+	paths are not available on the web; omit `path` to get the file as base64 `data`	đường dẫn không khả dụng trên web; hãy bỏ qua `path` để nhận tệp dạng base64 `data`
+echo	unknown version `{name}` (use {value1})	không nhận diện được phiên bản `{name}` (hãy dùng {value1})
+	`binary` must be true or false	`binary` phải là true hoặc false
+	binary applies to DXF files only	tùy chọn nhị phân chỉ áp dụng cho tệp DXF
+	saving at a chosen version or as binary DXF is not available in this build	bản dựng này chưa hỗ trợ lưu theo phiên bản đã chọn hoặc dạng DXF nhị phân
+echo	{path}: the file could not be read	{path}: không thể đọc tệp
+echo	{name}: the file could not be read	{name}: không thể đọc tệp
+	no such drawing	không có bản vẽ
+	A block reference is being edited in place: finish with REFCLOSE (Save or Discard) before saving.	đang sửa tại chỗ một tham chiếu khối: hãy kết thúc bằng REFCLOSE (Save hoặc Discard) trước khi lưu.
+	saving files is not available in this build; use document.bytes	bản dựng này chưa hỗ trợ lưu tệp; hãy dùng document.bytes
+echo	drawing has no file name yet; use saveas {path}	bản vẽ chưa có tên tệp; hãy dùng saveas {path}
+	`index` is required	cần có `index`
+echo	Not saved in the DWG file (its writer can't write these object types yet; DXF keeps them): {value1}	Chưa lưu vào tệp DWG (bộ ghi chưa hỗ trợ các loại đối tượng này; DXF giữ được chúng): {value1}
+	expected an object	cần đối tượng
+echo	the replacement for `{k}` must be text	phần thay thế cho `{k}` phải là văn bản
+	a font name in `map` is empty	tên phông chữ trong `map` đang rỗng
+	`map` must be an object of font → replacement	`map` phải là đối tượng ánh xạ phông chữ → phông thay thế
+echo	`{key}` must be text	`{key}` phải là văn bản
+	`index` (grip number) is required	cần có `index` (số điểm nắm)
+	index out of range	chỉ số ngoài phạm vi
+	The object is on a locked layer.	Đối tượng nằm trên lớp bị khóa.
+	no such grip, or the result would be degenerate	không có điểm nắm này, hoặc kết quả sẽ suy biến
+	`base` or `baseHandle` + `index` is required	cần có `base` hoặc `baseHandle` + `index`
+	`grips` must be an array of [handle, index] pairs	`grips` phải là mảng các cặp [handle, index]
+echo	`grips`: {g} is not a [handle, index] pair	`grips`: {g} không phải cặp [handle, index]
+	`grips` is empty	`grips` đang rỗng
+	no grip could be stretched (locked, missing, or the result would be degenerate)	không thể kéo giãn điểm nắm nào (bị khóa, bị thiếu hoặc kết quả sẽ suy biến)
+	`option` must be addVertex, removeVertex, toArc, toLine, lengthen or radius	`option` phải là addVertex, removeVertex, toArc, toLine, lengthen hoặc radius
+	that option doesn't apply to this grip, or the result would be degenerate	lựa chọn đó không áp dụng cho điểm nắm này hoặc kết quả sẽ suy biến
+	GRIP is interactive; use grip.stretch, grip.move, grip.rotate, grip.scale or grip.mirror	GRIP là lệnh tương tác; hãy dùng grip.stretch, grip.move, grip.rotate, grip.scale hoặc grip.mirror
+	invalid point	điểm không hợp lệ
+	factor must be positive	hệ số phải dương
+	scale factor would be zero	hệ số tỉ lệ sẽ bằng không
+	the mirror line needs two distinct points	trục đối xứng cần hai điểm khác nhau
+	That would make a degenerate object.	Thao tác này sẽ tạo đối tượng suy biến.
+	The objects can't be edited that way (locked, or the result would be degenerate).	Không thể sửa các đối tượng theo cách đó (bị khóa hoặc kết quả sẽ suy biến).
+	The two points must differ.	Hai điểm phải khác nhau.
+	No grip of a selected object there.	Không có điểm nắm của đối tượng đã chọn tại đó.
+	no grip	không có điểm nắm
+echo	no group named "{name}"	không có nhóm mang tên "{name}"
+echo	positions must be within 0-{value1}	vị trí phải nằm trong 0-{value1}
+echo	`{key}` must be a whole number from 0	`{key}` phải là số nguyên từ 0
+	`from` is required	cần có `from`
+	`to` is required	cần có `to`
+	no such group	không có nhóm
+	`newName` is required	cần có `newName`
+echo	unknown option `{other}`	không nhận diện được lựa chọn `{other}`
+echo	no group named "{n}"	không có nhóm mang tên "{n}"
+echo	Group {n} ungrouped.	Đã rã nhóm {n}.
+echo	Group {n} created with {value1} object(s).	Đã tạo nhóm {n} với {value1} đối tượng.
+echo	{n} object(s) added.	Đã thêm {n} đối tượng.
+echo	{n} object(s) removed.	Đã bỏ {n} đối tượng.
+echo	Requires a whole number between 0 and {value1}.	Cần nhập số nguyên từ 0 đến {value1}.
+echo	"{n}" is not a valid group name.	"{n}" không phải tên nhóm hợp lệ.
+echo	A group named "{n}" already exists.	Nhóm "{n}" đã tồn tại.
+echo	No group named "{t}".	Không có nhóm "{t}".
+echo	Group {value1} renamed to {new}.	Đã đổi tên nhóm {value1} thành {new}.
+echo	Requires a whole number between 1 and {value1}.	Cần nhập số nguyên từ 1 đến {value1}.
+	`value` must be 0, 1, 2 or 3	`value` phải là 0, 1, 2 hoặc 3
+echo	<Group selection {value1}>	<Chọn nhóm {value1}>
+	no objects to group	không có đối tượng để tạo nhóm
+	the drawing has too many groups	bản vẽ có quá nhiều nhóm
+echo	"{n}" is not a valid group name	"{n}" không phải tên nhóm hợp lệ
+echo	a group named "{n}" already exists	nhóm mang tên "{n}" đã tồn tại
+echo	"{new}" is not a valid group name	"{new}" không phải tên nhóm hợp lệ
+echo	a group named "{new}" already exists	nhóm mang tên "{new}" đã tồn tại
+	`name` must hold group names	`name` phải chứa tên nhóm
+echo	`name` must be a group name or an array of names, got {v}	`name` phải là tên nhóm hoặc mảng tên, đã nhận {v}
+	the objects are not in a group	các đối tượng không thuộc nhóm nào
+echo	`add`: no object with handle {value1}	`add`: không có đối tượng có mã {value1}
+echo	"{n}" is not a valid new group name, or a group of that name exists	"{n}" không phải tên nhóm mới hợp lệ hoặc đã có nhóm mang tên này
+echo	Unnamed group {n} created with {value1} object(s).	Đã tạo nhóm không tên {n} với {value1} đối tượng.
+echo	Group "{n}" created with {value1} object(s).	Đã tạo nhóm "{n}" với {value1} đối tượng.
+echo	No group named "{value1}".	Không có nhóm "{value1}".
+	The object is not a member of any group.	Đối tượng không thuộc nhóm nào.
+echo	no group named "{value1}"	không có nhóm mang tên "{value1}"
+echo	{n} object(s) added to group {value1}.	Đã thêm {n} đối tượng vào nhóm {value1}.
+echo	{n} object(s) removed from group {value1}.	Đã bỏ {n} đối tượng khỏi nhóm {value1}.
+echo	Group {value1} has no objects left and was deleted.	Nhóm {value1} không còn đối tượng và đã bị xóa.
+echo	Group {value1} renamed to {value2}.	Đã đổi tên nhóm {value1} thành {value2}.
+echo	Hatch {value1}: its boundary {why}; the hatch is no longer associative.	Mặt cắt {value1}: đường biên {why}; mặt cắt không còn liên kết.
+	select one or more hatches	hãy chọn một hoặc nhiều mặt cắt
+echo	a hatch with more than {MAX_LOOPS} loops can't be separated	không thể tách mặt cắt có hơn {MAX_LOOPS} vòng biên
+echo	`gradient` is an object {name?, color1?, color2?, angle?, centered?}	`gradient` là đối tượng {name?, color1?, color2?, angle?, centered?}
+echo	unknown gradient `name`; use one of {value1}	không nhận diện được `name` của chuyển màu; hãy dùng một trong {value1}
+echo	`gradient.{k}` is a colour such as "5", "red" or "255,128,0"	`gradient.{k}` là màu chẳng hạn "5", "red" hoặc "255,128,0"
+	`gradient.angle` is a number of degrees	`gradient.angle` là số đo bằng độ
+	`gradient.centered` is true or false	`gradient.centered` là true hoặc false
+	`angle` must be a number of degrees	`angle` phải là số đo bằng độ
+	`style` is "normal", "outer" or "ignore"	`style` là "normal", "outer" hoặc "ignore"
+	unknown `originMode`	không nhận diện được `originMode`
+	region boundaries are not available yet; use "polyline"	đường biên miền chưa khả dụng; hãy dùng "polyline"
+	`recreate` is "polyline"	`recreate` là "polyline"
+	give `pattern` or `gradient`, not both	hãy cung cấp `pattern` hoặc `gradient`, không dùng cả hai
+echo	unknown pattern {up}	không nhận diện được mẫu mặt cắt {up}
+	`boundary` is an array of object handles	`boundary` là mảng mã đối tượng
+echo	Hatch {value1}: no boundary object found for {missing} loop(s); it stays non-associative.	Mặt cắt {value1}: không tìm thấy đối tượng đường biên cho {missing} vòng biên; vẫn không liên kết.
+echo	{n} object(s) created.	Đã tạo {n} đối tượng.
+echo	Unknown pattern {up}.	Không nhận diện được mẫu mặt cắt {up}.
+echo	{value1} is a built-in pattern; the built-in definition is kept	{value1} là mẫu mặt cắt tích hợp sẵn; giữ nguyên định nghĩa tích hợp
+echo	more than {MAX_USER_PATTERNS} user patterns; {value1} not loaded	quá {MAX_USER_PATTERNS} mẫu mặt cắt người dùng; chưa tải {value1}
+echo	no hatch pattern could be read from {source}: {value1}	không thể đọc mẫu mặt cắt từ {source}: {value1}
+echo	{value1} pattern(s) loaded from {t}: {value2}	Đã tải {value1} mẫu mặt cắt từ {t}: {value2}
+	give internal `points` or boundary `handles`	hãy cung cấp các điểm bên trong qua `points` hoặc mã đường biên qua `handles`
+	`points` is an array of [x, y]	`points` là mảng [x, y]
+echo	at most {MAX_PICKS} points	tối đa {MAX_PICKS} điểm
+echo	no closed boundary around [{value1}, {value2}]	không có đường biên kín quanh [{value1}, {value2}]
+echo	at most {MAX_PICKS} objects	tối đa {MAX_PICKS} đối tượng
+echo	{value1} is not a closed object	{value1} không phải đối tượng kín
+echo	At most {MAX_PICKS} picks.	Tối đa {MAX_PICKS} lần chọn.
+echo	Analyzing the selected data... {value1} loop(s)	Đang phân tích dữ liệu đã chọn... {value1} vòng biên
+echo	{value1} found	Tìm thấy {value1}
+echo	{value1} found, {others} not closed	Tìm thấy {value1}, có {others} chưa kín
+	Valid hatch boundary not found.	Không tìm thấy đường biên mặt cắt hợp lệ.
+	No closed boundary objects selected.	Chưa chọn đối tượng đường biên kín.
+echo	at most {MAX_BOUNDARY_POINTS} points per call (got {value1})	tối đa {MAX_BOUNDARY_POINTS} điểm mỗi lần gọi (đã nhận {value1})
+echo	more than {MAX_BOUNDARY_OUTPUT} boundary polylines in one call; split the work	một lần gọi có hơn {MAX_BOUNDARY_OUTPUT} đa tuyến đường biên; hãy chia nhỏ công việc
+echo	BOUNDARY created {value1} polyline(s)	BOUNDARY đã tạo {value1} đa tuyến
+echo	{n} Region(s) created.	Đã tạo {n} miền.
+echo	Unknown pattern {up}. Available: {value1}	Không nhận diện được mẫu mặt cắt {up}. Có sẵn: {value1}
+echo	Current pattern: {value1}  Scale: {value2}  Angle: {value3}	Mẫu mặt cắt hiện hành: {value1}  Tỉ lệ: {value2}  Góc: {value3}
+	Separate hatches: on	Mặt cắt riêng: bật
+	Separate hatches: off	Mặt cắt riêng: tắt
+echo	`{text_key}` is larger than {value1} MB	`{text_key}` lớn hơn {value1} MB
+echo	`{path_key}` must be a file path	`{path_key}` phải là đường dẫn tệp
+echo	{path}: larger than {value1} MB	{path}: lớn hơn {value1} MB
+	paths are not available on the web; pass the file's contents	đường dẫn không khả dụng trên web; hãy truyền nội dung tệp
+echo	`space` must be current, model, all or a layout name, got {v}	`space` phải là current, model, all hoặc tên bố cục, đã nhận {v}
+echo	no layout named "{name}"	không có bố cục mang tên "{name}"
+echo	No block references in {wh}.	không có tham chiếu khối trong {wh}.
+echo	Block references in {wh}:	Tham chiếu khối trong {wh}:
+echo	  Total: {}	  Tổng cộng: {}
+	  (nesting too large: counts are partial)	  (lồng quá sâu: số đếm chỉ là một phần)
+echo	Block {name}: {n} in {wh} ({k} nested).	Khối {name}: có {n} trong {wh} ({k} lồng).
+echo	Block {name}: {n} in {wh}.	Khối {name}: có {n} trong {wh}.
+echo	no object with handle {value1}	không có đối tượng có mã {value1}
+echo	a {ty} can't be counted by shape	không thể đếm {ty} theo hình dạng
+echo	{ty}: {n} like the selected one in {value1}.	{ty}: có {n} giống đối tượng đã chọn trong {value1}.
+echo	`object`: {v} is not an object handle	`object`: {v} không phải mã đối tượng
+echo	No block references in {value1}.	không có tham chiếu khối trong {value1}.
+echo	Table of {value1} block(s) inserted.	Đã chèn bảng gồm {value1} khối.
+	These regions are too complex to combine.	Các miền quá phức tạp để kết hợp.
+	Too many loops.	Quá nhiều vòng biên.
+	The result is empty: the regions were erased.	Kết quả rỗng: các miền đã bị xóa.
+echo	`{key}` (array of handles) is required	cần có `{key}` (mảng mã đối tượng)
+echo	`{key}`: {v} is not a handle	`{key}`: {v} không phải mã đối tượng
+	A region can't be subtracted from itself.	Không thể trừ miền khỏi chính nó.
+	----------------   REGIONS   ----------------	----------------   MIỀN   ----------------
+echo	Area:                    {value1}	Diện tích:                    {value1}
+echo	Perimeter:               {value2}	Chu vi:               {value2}
+echo	Bounding box:         X: {value3}  --  {value4}	Hộp bao:         X: {value3}  --  {value4}
+echo	                      Y: {value5}  --  {value6}	                      Y: {value5}  --  {value6}
+echo	Centroid:             X: {value7}	Trọng tâm:             X: {value7}
+echo	                      Y: {value8}	                      Y: {value8}
+echo	Moments of inertia:   X: {value9}	Mômen quán tính:   X: {value9}
+echo	                      Y: {value10}	                      Y: {value10}
+echo	Product of inertia:  XY: {value11}	Tích quán tính:  XY: {value11}
+echo	Radii of gyration:    X: {value12}	Bán kính quán tính:    X: {value12}
+echo	                      Y: {value13}	                      Y: {value13}
+	Principal moments and X-Y directions about centroid:	Mômen chính và hướng X-Y quanh trọng tâm:
+echo	                      I: {value14} along [{value15} {value16}]	                      I: {value14} theo [{value15} {value16}]
+echo	                      J: {value17} along [{value18} {value19}]	                      J: {value17} theo [{value18} {value19}]
+echo	Distance = {value1},  Angle in XY Plane = {value2},  Angle from XY Plane = 0	Khoảng cách = {value1},  Góc trong mặt phẳng XY = {value2},  Góc so với mặt phẳng XY = 0
+echo	Delta X = {value3},  Delta Y = {value4},   Delta Z = {value5}	Độ lệch X = {value3},  Độ lệch Y = {value4},   Độ lệch Z = {value5}
+echo	X = {value1}     Y = {value2}     Z = {value3}	X = {value1}     Y = {value2}     Z = {value3}
+echo	                  {value1}     Layer: "{value2}"	                  {value1}     Lớp: "{value2}"
+echo	                            Space: {value3}	                            Không gian: {value3}
+echo	                   Handle = {value4}	                   Mã đối tượng = {value4}
+echo	              from point, X={value1}  Y={value2}  Z={value3}	              từ điểm, X={value1}  Y={value2}  Z={value3}
+echo	                to point, X={value4}  Y={value5}  Z={value6}	                đến điểm, X={value4}  Y={value5}  Z={value6}
+echo	          Length = {value1},  Angle in XY Plane = {value2}	          Chiều dài = {value1},  Góc trong mặt phẳng XY = {value2}
+echo	            center point, X={value1}  Y={value2}  Z={value3}	            tâm, X={value1}  Y={value2}  Z={value3}
+echo	            radius {value4}	            bán kính {value4}
+echo	     circumference {value5}	     chu vi {value5}
+echo	             area {value6}	             diện tích {value6}
+echo	            start angle {value5}	            góc đầu {value5}
+echo	              end angle {value6}	              góc cuối {value6}
+echo	            {value1}	            {value1}
+echo	    Constant width    {value2}	    Chiều rộng cố định    {value2}
+echo	             area   {value1}	             diện tích   {value1}
+echo	        perimeter   {value2}	        chu vi   {value2}
+echo	          at point  X={value1}  Y={value2}  Z={value3}	          tại điểm  X={value1}  Y={value2}  Z={value3}
+echo	            Style = "{value1}"	            Kiểu = "{value1}"
+echo	       start point, X={value2}  Y={value3}	       điểm đầu, X={value2}  Y={value3}
+echo	          height {value4}	          chiều cao {value4}
+echo	           text {value5}	           chữ {value5}
+echo	        rotation angle {value6}	        góc xoay {value6}
+	`points` or `handle` is required	cần có `points` hoặc `handle`
+echo	Area = {value1}, Perimeter = {value2}	Diện tích = {value1}, Chu vi = {value2}
+	object has no area	đối tượng không có diện tích
+echo	Drawing revision: {rev}	Bản sửa đổi bản vẽ: {rev}
+echo	Edits recorded: {value1}	Số lần sửa đã ghi: {value1}
+echo	{value1} objects in {value2}	{value1} đối tượng trong {value2}
+echo	Model space limits are X: {value3}  Y: {value4}  (Off)	Giới hạn không gian mô hình X: {value3}  Y: {value4}  (Off)
+echo	Model space uses X: {value5}  Y: {value6}	Không gian mô hình sử dụng X: {value5}  Y: {value6}
+echo	                 X: {value7}  Y: {value8}	                 X: {value7}  Y: {value8}
+echo	Current layer: {value9}	Lớp hiện hành: {value9}
+echo	Current color: {value10}	Màu hiện hành: {value10}
+echo	Current linetype: {value11}	Kiểu đường hiện hành: {value11}
+echo	`{k}` must be a string	`{k}` phải là chuỗi
+echo	`{k}` must be a whole number, 0 or more	`{k}` phải là số nguyên không âm
+	`window` must be two corner points [[x0, y0], [x1, y1]]	`window` phải là hai điểm góc [[x0, y0], [x1, y1]]
+	`crossing` must be true or false	`crossing` phải là true hoặc false
+	the next point is too large	điểm tiếp theo quá lớn
+echo	Distance = {value1}	Khoảng cách = {value1}
+echo	{k}: not available yet	{k}: chưa khả dụng
+echo	Total area = {value1}	Tổng diện tích = {value1}
+echo	Cannot {verb} layer "{name}" (layer 0 and Defpoints always stay).	Không thể {verb} lớp "{name}" (luôn giữ lớp 0 và Defpoints).
+echo	Cannot {verb} xref-dependent layer "{name}".	Không thể {verb} lớp phụ thuộc tham chiếu ngoài "{name}".
+echo	Cannot delete the current layer "{name}".	Không thể xóa lớp hiện hành "{name}".
+echo	no layer `{value1}`	không có lớp `{value1}`
+echo	no layer `{to}`	không có lớp `{to}`
+echo	cannot merge into xref-dependent layer "{target}"	không thể gộp vào lớp phụ thuộc tham chiếu ngoài "{target}"
+echo	cannot merge layer "{target}" into itself	không thể gộp lớp "{target}" vào chính nó
+echo	Merged {value1} into "{target}": {value2} moved.	Đã gộp {value1} vào "{target}": đã chuyển {value2}.
+echo	Layer "{target}" is now current.	Lớp "{target}" đã thành lớp hiện hành.
+echo	Deleted {value1} and {value2}.	Đã xóa {value1} và {value2}.
+echo	Selected layers: {value1}.	Các lớp đã chọn: {value1}.
+echo	Cannot merge into xref-dependent layer "{name}".	Không thể gộp vào lớp phụ thuộc tham chiếu ngoài "{name}".
+echo	Cannot merge layer "{name}" into itself.	Không thể gộp lớp "{name}" vào chính nó.
+echo	You are about to merge {value1} into layer "{t}".	Bạn sắp gộp {value1} vào lớp "{t}".
+echo	You are about to delete {value1} and every object on it from this drawing.	Bạn sắp xóa {value1} và mọi đối tượng trên lớp đó khỏi bản vẽ này.
+echo	Cannot find layer "{m}".	Không tìm thấy lớp "{m}".
+echo	-LAYER {other} is not available yet.	-LAYER {other} chưa khả dụng.
+echo	Current layer:  "{cur}"	Lớp hiện hành:  "{cur}"
+echo	Layer "{n}": {value1}	Lớp "{n}": {value1}
+echo	Cannot freeze layer "{cur}". It is the CURRENT layer.	Không thể đóng băng lớp "{cur}". Đây là lớp HIỆN HÀNH.
+echo	Cannot find layer "{n}".	Không tìm thấy lớp "{n}".
+echo	Loaded linetypes: {value1}	Kiểu đường đã tải: {value1}
+echo	Linetype "{t}" is not loaded. Load it with the LINETYPE command.	Chưa tải kiểu đường "{t}". Hãy tải bằng lệnh LINETYPE.
+	a layer's plot style is a style name (such as Normal)	kiểu in của lớp phải là tên kiểu (chẳng hạn Normal)
+	bad colour	màu không hợp lệ
+	a layer colour must be an index or true colour	màu lớp phải là chỉ số màu hoặc màu thực
+	bad lineweight	độ dày nét không hợp lệ
+	a layer linetype cannot be ByLayer or ByBlock	kiểu đường của lớp không được là ByLayer hoặc ByBlock
+echo	linetype `{lt}` is not loaded (load it with LINETYPE)	kiểu đường `{lt}` chưa được tải (tải bằng LINETYPE)
+	invalid layer name	tên lớp không hợp lệ
+echo	layer `{name}` already exists	lớp `{name}` đã tồn tại
+echo	no layer `{name}`	không có lớp `{name}`
+	cannot freeze the current layer	không thể đóng băng lớp hiện hành
+	cannot rename layer 0 or Defpoints	không thể đổi tên lớp 0 hoặc Defpoints
+echo	layer `{nn}` already exists	lớp `{nn}` đã tồn tại
+	No previous layer state.	không có trạng thái lớp trước đó.
+	Restored previous layer states.	Đã khôi phục trạng thái lớp trước đó.
+	cannot delete layer 0, Defpoints or the current layer	không thể xóa lớp 0, Defpoints hoặc lớp hiện hành
+	layer has objects on it	lớp đang chứa đối tượng
+	select an object	hãy chọn đối tượng
+echo	{l} is now the current layer.	{l} đã thành lớp hiện hành.
+	`layer` is required	cần có `layer`
+	select objects on the layers to isolate	hãy chọn đối tượng trên các lớp cần cô lập
+echo	Layer(s) {value1} have been isolated.	Đã cô lập các lớp {value1}.
+	No isolated layers.	không có lớp nào đang cô lập.
+	no such layer state	không có trạng thái lớp này
+	No saved layer states.	Chưa lưu trạng thái lớp nào.
+	invalid name	tên không hợp lệ
+echo	layer state `{to}` already exists	trạng thái lớp `{to}` đã tồn tại
+	the plot style name is empty	tên kiểu in đang rỗng
+	`name` must be a plot style name	`name` phải là tên kiểu in
+	`name` (the table) is required	cần có `name` (bảng)
+echo	no plot style table `{name}`	không có bảng kiểu in `{name}`
+echo	`{k}` must be a string or null	`{k}` phải là chuỗi hoặc null
+	`color` must be "#rrggbb" or null	`color` phải là "#rrggbb" hoặc null
+	`grayscale` must be true or false	`grayscale` phải là true hoặc false
+	`screening` must be 0 to 100	`screening` phải nằm trong 0 đến 100
+	`lineweight` must be 0 to 2.11 mm or null	`lineweight` phải nằm trong 0 đến 2.11 mm hoặc là null
+	`kind` must be colorDependent or named	`kind` phải là colorDependent hoặc named
+echo	a {value1} table's name ends in {ext}	tên bảng {value1} phải kết thúc bằng {ext}
+echo	plot style table `{name}` already exists	bảng kiểu in `{name}` đã tồn tại
+	a colour-dependent table always has 255 styles	bảng phụ thuộc màu luôn có 255 kiểu
+	the Normal style can't be removed	không thể bỏ kiểu Normal
+echo	`{name}` has no style `{rm}`	`{name}` không có kiểu `{rm}`
+	`style.name` is required	cần có `style.name`
+	the table has too many styles	bảng có quá nhiều kiểu
+echo	`{name}` has no style `{sname}` (colour-dependent styles are Color_1 to Color_255)	`{name}` không có kiểu `{sname}` (kiểu phụ thuộc màu là Color_1 đến Color_255)
+echo	the drawing keeps no plot style table `{name}` (built-in tables can't be deleted)	bản vẽ không chứa bảng kiểu in `{name}` (không thể xóa các bảng tích hợp sẵn)
+echo	{_path}: the plot style table file is too large	{_path}: tệp bảng kiểu in quá lớn
+	files can't be read here: pass `text`	không thể đọc tệp tại đây: hãy truyền `text`
+	`path` or `text` is required	cần có `path` hoặc `text`
+	the table has no name: pass `name`	bảng không có tên: hãy truyền `name`
+	files can't be written here: leave out `path` to get `text`	không thể ghi tệp tại đây: hãy bỏ `path` để nhận `text`
+echo	unknown action `{other}` (list, get, new, set, delete, load, save)	không nhận diện được thao tác `{other}` (list, get, new, set, delete, load, save)
+echo	LAYOUT {other} is not available yet.	LAYOUT {other} chưa khả dụng.
+echo	Active Layout: {current}	Bố cục đang dùng: {current}
+echo	No layout matches "{pat}".	Không có bố cục phù hợp với "{pat}".
+echo	Layout: {n}	Bố cục: {n}
+echo	Layout "{from}" copied to "{to}".	Đã sao chép bố cục "{from}" sang "{to}".
+echo	Layout "{gone}" deleted.	Đã xóa bố cục "{gone}".
+	`points` ([[x, y], …], at least three) is required	cần có `points` ([[x, y], …], ít nhất ba)
+echo	at most {MAX_VERTICES} points	tối đa {MAX_VERTICES} điểm
+	`points` must be [[x, y], …]	`points` phải là [[x, y], …]
+	`bulges` must be finite numbers	`bulges` phải là các số hữu hạn
+	`bulges` must be an array of numbers	`bulges` phải là mảng số
+	a polygonal viewport needs at least three distinct points	khung nhìn đa giác cần ít nhất ba điểm khác nhau
+echo	object {value1} is not in this layout	đối tượng {value1} không thuộc bố cục này
+	a viewport can't be a clip boundary	khung nhìn không thể là đường biên cắt xén
+	the object already clips a viewport	đối tượng đã cắt xén khung nhìn
+	the object must be a closed polyline, circle, ellipse or spline	đối tượng phải là đa tuyến kín, đường tròn, elip hoặc spline
+	the viewport is too large	khung nhìn quá lớn
+	the polygon has no area	đa giác không có diện tích
+	`object` (a closed object's handle) is required	cần có `object` (mã của đối tượng kín)
+	no viewport given (pass `handles` or select viewports)	không có khung nhìn được cung cấp (hãy truyền `handles` hoặc hãy chọn khung nhìn)
+	`locked` (true/false) is required	cần có `locked` (true/false)
+	not a layout	không phải bố cục
+echo	Could not find viewport configuration "{value1}".	Không tìm thấy cấu hình khung nhìn "{value1}".
+	the viewport has no area	khung nhìn không có diện tích
+echo	Viewport configuration "{name}" has no viewports to restore.	Cấu hình khung nhìn "{name}" không có khung nhìn để khôi phục.
+	option must be fit, polygonal, object, on, off, lock or restore	lựa chọn phải là fit, polygonal, object, on, off, lock hoặc restore
+	no viewport given (pass `handle` or select a viewport)	không có khung nhìn được cung cấp (hãy truyền `handle` hoặc hãy chọn khung nhìn)
+	not a viewport	không phải khung nhìn
+	the viewport is not clipped	khung nhìn chưa được cắt xén
+	`object` must be an object handle	`object` phải là mã đối tượng
+	pass `object`, `points` or `delete`	hãy truyền `object`, `points` hoặc `delete`
+echo	At most {MAX_VERTICES} points.	Tối đa {MAX_VERTICES} điểm.
+	A polygonal boundary needs at least three points.	Đường biên đa giác cần ít nhất ba điểm.
+echo	{value1} viewport(s) selected.	Đã chọn {value1} khung nhìn.
+echo	{n} viewport(s) created, zoomed to the model extents.	Đã tạo {n} khung nhìn, thu phóng toàn bộ mô hình.
+echo	{n} viewport(s) restored from "{name}".	Đã khôi phục {n} khung nhìn từ "{name}".
+	No saved viewport configurations.	Chưa lưu cấu hình khung nhìn nào.
+echo	Layers currently frozen in viewport {value1}:	Các lớp đang đóng băng trong khung nhìn {value1}:
+	`handle` is not a viewport in this layout	`handle` không phải khung nhìn trong bố cục này
+	no viewport at that point	không có khung nhìn tại điểm đó
+	There are no active model space viewports.	Không có khung nhìn không gian mô hình đang hoạt động.
+	layout name is empty	tên bố cục đang rỗng
+	layout name is longer than 255 characters	tên bố cục dài hơn 255 ký tự
+echo	invalid layout name `{n}`	tên bố cục không hợp lệ `{n}`
+	`Model` is reserved	`Model` được dành riêng
+echo	layout `{n}` already exists	bố cục `{n}` đã tồn tại
+echo	no layout `{name}`	không có bố cục `{name}`
+	a drawing must keep at least one layout	bản vẽ phải giữ ít nhất một bố cục
+	`from` is required in the Model tab	cần có `from` trong thẻ Model
+	no free name	không còn tên trống
+	no such layout	không có bố cục
+	layout.set is missing	thiếu lệnh layout.set
+	option must be new, copy, delete, rename, set or list	lựa chọn phải là new, copy, delete, rename, set hoặc list
+echo	no layout `{layout}`	không có bố cục `{layout}`
+	count must be 1, 2, 3 or 4	số lượng phải là 1, 2, 3 hoặc 4
+	`scale` must be a positive number or "a:b"	`scale` phải là số dương hoặc "a:b"
+	`viewHeight` must be positive	`viewHeight` phải dương
+	`center` must be [x, y]	`center` phải là [x, y]
+echo	bad colour for `{layer}`	màu không hợp lệ cho `{layer}`
+	colour index 1..255	chỉ số màu 1..255
+	`colors` values are colours or null	các giá trị `colors` phải là màu hoặc null
+	a viewport layer colour must be an index or true colour	màu lớp trong khung nhìn phải là chỉ số màu hoặc màu thực
+echo	viewport {value1} is locked	khung nhìn {value1} bị khóa
+	pass `layout` (model-space page setups are not stored yet)	hãy truyền `layout` (chưa lưu thiết lập trang in không gian mô hình)
+	`paper` must be a paper name	`paper` phải là tên khổ giấy
+echo	unknown paper size `{n}` (known: {value1})	không nhận diện được khổ giấy `{n}` (đã biết: {value1})
+echo	User ({w} x {h} MM)	Tùy chọn ({w} x {h} MM)
+echo	`width` and `height` (mm, 0-{value1}) are both required for a custom size	cần có `width` và `height` (mm, 0-{value1}) đều cho khổ tùy chọn
+	`margins` must be [left, bottom, right, top] in mm	`margins` phải là [left, bottom, right, top], tính bằng mm
+	`scale` must be positive	`scale` phải dương
+	`plotArea` must be layout, extents, display, window or limits	`plotArea` phải là layout, extents, display, window hoặc limits
+echo	plot area `{v}` is not available yet; layouts plot the whole sheet (`layout`)	chưa hỗ trợ vùng in `{v}`; bố cục in toàn bộ tờ bản vẽ (`layout`)
+	`layouts` must be a list of layout names or "all"	`layouts` phải là danh sách tên bố cục hoặc "all"
+	there are no sheets to plot	không có tờ bản vẽ để in
+echo	at most {MAX_PLOT_SHEETS} sheets fit in one PDF	một PDF chứa tối đa {MAX_PLOT_SHEETS} tờ bản vẽ
+	`offset` must contain exactly two finite millimetre values within ±100000	`offset` phải chứa đúng hai giá trị milimét hữu hạn trong khoảng ±100000
+	model-space plot offsets are not supported for SVG; choose PDF/PNG or center the plot	SVG không hỗ trợ độ lệch in không gian mô hình; hãy chọn PDF/PNG hoặc căn giữa bản in
+	`scale` must be positive: paper units per drawing unit, or a ratio such as "1:50"	`scale` phải dương: đơn vị giấy trên mỗi đơn vị bản vẽ, hoặc tỉ số chẳng hạn "1:50"
+	real scale must be finite and positive after unit conversion	tỉ lệ thực phải hữu hạn và dương sau khi đổi đơn vị
+	a layout plots its whole sheet: `plotArea` must be layout	bố cục in toàn bộ tờ bản vẽ: `plotArea` phải là layout
+	`plotArea` window needs `window`: [[x1, y1], [x2, y2]]	vùng in window của `plotArea` cần `window`: [[x1, y1], [x2, y2]]
+	`plotArea` must be extents, display, limits or window (layouts: layout)	`plotArea` phải là extents, display, limits hoặc window (bố cục: layout)
+	the plot area is empty	vùng in đang rỗng
+	`limit` must be a non-negative integer	`limit` phải là số nguyên không âm
+	`sha256` is required	cần có `sha256`
+	`sha256` must be 64 hexadecimal digits	`sha256` phải là 64 chữ số hệ mười sáu
+	the LISP approval list is full or unavailable	danh sách chấp nhận LISP đã đầy hoặc không khả dụng
+	`action` must be list, approve or revoke	`action` phải là list, approve hoặc revoke
+	`path` must contain 1 to 4096 bytes	`path` phải chứa 1 đến 4096 byte
+	`path` must be an existing directory	`path` phải là thư mục đã tồn tại
+echo	at most {MAX_WRITE_ROOTS} write folders are allowed	tối đa {MAX_WRITE_ROOTS} thư mục ghi được cho phép
+	`action` must be list, add or remove	`action` phải là list, add hoặc remove
+	`path`, or `name` with `data` (base64) or `text`, is required	cần có `path`, hoặc `name` với `data` (base64) hoặc `text`,
+echo	{path}: can't read the file	{path}: không thể đọc tệp
+	`code` is required	cần có `code`
+	Only the user can answer APPLOADTRUST	Chỉ người dùng mới có thể trả lời APPLOADTRUST
+echo	{n} found, {value1} total	Tìm thấy {n}, tổng cộng {value1}
+echo	{value1} total	Tổng cộng {value1}
+	`leaderType` must be "straight", "spline" or "none"	`leaderType` phải là "straight", "spline" hoặc "none"
+	`blockAttach` must be "center" or "insertion"	`blockAttach` phải là "center" hoặc "insertion"
+	`handle` is not a multileader	`handle` không phải đường ghi chú nhiều nhánh
+	the multileader is on a locked layer	đường ghi chú nhiều nhánh nằm trên lớp bị khóa
+echo	no leader {i} (the multileader has {value1})	không có đường ghi chú {i} (đường ghi chú nhiều nhánh có {value1} đường)
+	`handle` (a multileader) is required	cần có `handle` (đường ghi chú nhiều nhánh)
+	`points` must be [[x,y]...]	`points` phải là [[x,y]...]
+	`points` (arrowhead locations) is required	cần có `points` (vị trí đầu mũi tên)
+	`index` must be non-negative whole numbers	`index` phải là các số nguyên không âm
+	`index` must be a non-negative whole number	`index` phải là số nguyên không âm
+	`points` or `index` (the leaders to remove) is required	cần có `points` hoặc `index` (các đường ghi chú cần bỏ)
+	`mode` must be "add" or "remove"	`mode` phải là "add" hoặc "remove"
+echo	{value1} leader(s) {value2}.	{value1} đường ghi chú {value2}.
+	no multileaders to align	không có đường ghi chú nhiều nhánh để căn chỉnh
+	too many multileaders	quá nhiều đường ghi chú nhiều nhánh
+	`to` is not a multileader	`to` không phải đường ghi chú nhiều nhánh
+	`to` (the multileader to align to) is required	cần có `to` (đường ghi chú nhiều nhánh dùng làm chuẩn căn chỉnh)
+	the reference multileader has no leader	đường ghi chú nhiều nhánh tham chiếu không có đường ghi chú
+	`points` (first and last position) are required	cần có `points` (vị trí đầu và cuối)
+	the two points coincide	hai điểm trùng nhau
+	`direction` (two points or an angle) is required	cần có `direction` (hai điểm hoặc góc)
+	the direction is zero	hướng bằng không
+	`angle` must be a finite number	`angle` phải là số hữu hạn
+echo	`{key}` must be [[x,y],[x,y]]	`{key}` phải là [[x,y],[x,y]]
+echo	`{key}` needs two points	`{key}` cần hai điểm
+	`to` must be an object handle	`to` phải là mã đối tượng
+	`spacing` must be a non-negative number	`spacing` phải là số không âm
+	`spacing` (a number) is required	cần có `spacing` (số)
+	`option` must be current, distribute, parallel or spacing	`option` phải là current, distribute, parallel hoặc spacing
+echo	{r} multileader(s) aligned.	Đã căn chỉnh {r} đường ghi chú nhiều nhánh.
+	need two or more multileaders with block content	cần ít nhất hai đường ghi chú nhiều nhánh có nội dung khối
+	`width` (a positive number) is required for wrap	cần có `width` (số dương) cho wrap
+	`mode` must be horizontal, vertical or wrap	`mode` phải là horizontal, vertical hoặc wrap
+echo	{value1} multileader(s) collected.	Đã gom {value1} đường ghi chú nhiều nhánh.
+echo	`{key}` (number) is required	cần có `{key}` (số)
+echo	`{key}` must be {value1}	`{key}` phải là {value1}
+echo	`{key}` ([x, y]) is required	cần có `{key}` ([x, y])
+echo	`{key}`: {v} is not an object handle (a hex string such as "1A2")	`{key}`: {v} không phải mã đối tượng (chuỗi hệ mười sáu như "1A2")
+echo	`handles` must be an array of object handles, got {v}	`handles` phải là mảng mã đối tượng, đã nhận {v}
+	mirror line points coincide	các điểm của trục đối xứng trùng nhau
+echo	`{key}` needs {least} to {value1} finite points	`{key}` cần từ {least} đến {value1} điểm hữu hạn
+	`window` [[x,y],[x,y]], `polygon` or `fence` is required	cần có `window` [[x,y],[x,y]], `polygon` hoặc `fence`
+	cannot offset that object	không thể dời song song đối tượng đó
+	`layer` is "source" or "current"	`layer` là "source" hoặc "current"
+	Object does not intersect a cutting edge.	Đối tượng không giao với cạnh cắt.
+	Circle must intersect cutting edges at two or more points.	Đường tròn phải giao các cạnh cắt tại ít nhất hai điểm.
+	Object does not intersect an edge.	Đối tượng không giao với cạnh.
+	Lines are parallel.	Các đường thẳng song song.
+	`handle` (polyline) is required	cần có `handle` (đa tuyến)
+	`length` (>= 0) and `angle` (degrees, 0 to 180) go together	`length` (>= 0) và `angle` (độ, từ 0 đến 180) phải đi cùng nhau
+	Arc cannot be full 360 degrees.	Cung không thể đủ 360 độ.
+	Cannot break that object.	Không thể ngắt đối tượng đó.
+	An object is on a locked layer.	Có đối tượng nằm trên lớp bị khóa.
+	Objects are not connected.	Các đối tượng không nối nhau.
+echo	{n} objects joined into 1 {what}	Đã nối {n} đối tượng thành 1 {what}
+	Mirror line points must differ.	Các điểm của trục đối xứng phải khác nhau.
+echo	Current settings: Erase source={value1}  Layer={value2}  OFFSETGAPTYPE=0	Cài đặt hiện hành: Xóa nguồn={value1}  Lớp={value2}  OFFSETGAPTYPE=0
+echo	({mode} mode) Current chamfer Length = {value1}, Angle = {a}	(Chế độ {mode}) Chiều dài vát góc hiện hành = {value1}, Góc = {a}
+echo	({mode} mode) Current chamfer Dist1 = {value1}, Dist2 = {value2}	(Chế độ {mode}) Khoảng cách vát góc Dist1 = {value1}, Dist2 = {value2}
+echo	Current settings: Mode = {value1}, Radius = {value2}	Cài đặt hiện hành: Chế độ = {value1}, Bán kính = {value2}
+echo	{n} lines were chamfered	Đã vát góc {n} đường thẳng
+echo	{n} lines were filleted	Đã bo góc {n} đường thẳng
+	The chamfer angle does not fit this corner.	Góc vát không phù hợp với góc này.
+	Cannot extend a closed spline.	Không thể kéo dài spline kín.
+	The spline has no direction at that end.	Spline không có hướng ở đầu đó.
+	Cannot extend that spline.	Không thể kéo dài spline đó.
+	Spline must intersect cutting edges at two or more points.	Spline phải giao các cạnh cắt tại ít nhất hai điểm.
+	Cannot trim that spline.	Không thể cắt xén spline đó.
+	Lengthening would make the object zero length or negative.	Đổi chiều dài sẽ làm chiều dài đối tượng bằng không hoặc âm.
+	Cannot lengthen a closed ellipse.	Không thể đổi chiều dài elip kín.
+	Angle options apply to arcs.	Các lựa chọn góc áp dụng cho cung tròn.
+	The new elliptical arc would be a full ellipse or longer.	Cung elip mới sẽ bằng hoặc dài hơn elip đầy đủ.
+	Cannot lengthen a closed spline.	Không thể đổi chiều dài spline kín.
+	Cannot lengthen that spline.	Không thể đổi chiều dài spline đó.
+	Objects are not connected end to end.	Các đối tượng không nối đầu với nhau.
+	Only part of a polyline connects; join it whole or explode it first.	Chỉ một phần đa tuyến nối được; hãy nối cả đa tuyến hoặc phá khối trước.
+	Nothing to join.	Không có gì để nối.
+	Cannot join these objects into a spline.	Không thể nối các đối tượng này thành spline.
+	Fillet works on lines, arcs, circles, elliptical arcs and splines (and polylines with the Polyline option).	Bo góc áp dụng cho đường thẳng, cung tròn, đường tròn, cung elip và spline (và đa tuyến với lựa chọn Polyline).
+	Cannot fillet an object to itself.	Không thể bo góc đối tượng với chính nó.
+	The fillet radius must be zero or more.	Bán kính bo góc phải lớn hơn hoặc bằng không.
+	No fillet of that radius fits these objects.	Không có cung bo với bán kính đó phù hợp các đối tượng này.
+	The objects do not intersect.	Các đối tượng không giao nhau.
+	The segments meet at a kept end; nothing to cut.	Các đoạn gặp nhau ở đầu được giữ lại; không có gì để cắt.
+	The segments are parallel or in line.	Các đoạn song song hoặc thẳng hàng.
+	The chamfer distances are too large.	Khoảng cách vát góc quá lớn.
+	Radius is too large.	Bán kính quá lớn.
+	The segments must be adjacent or separated by one segment.	Các đoạn phải kề nhau hoặc cách nhau một đoạn.
+	Fillet and chamfer work on straight polyline segments.	Bo góc và vát góc áp dụng cho đoạn thẳng của đa tuyến.
+	The segments are parallel.	Các đoạn song song.
+	A line fillets or chamfers with an end segment of an open polyline.	Đường thẳng bo hoặc vát góc với đoạn đầu của đa tuyến hở.
+	A polyline fillets or chamfers with a line, or with another segment of itself.	Đa tuyến bo hoặc vát góc với đường thẳng hoặc đoạn khác của chính nó.
+	vertex index out of range	chỉ số đỉnh ngoài phạm vi
+	Cannot break a polyline at its end vertex.	Không thể ngắt đa tuyến tại đỉnh cuối.
+	Breaking there would remove the whole polyline.	Ngắt tại đó sẽ xóa toàn bộ đa tuyến.
+echo	`tangents` must be an array of {index, angle | direction}	`tangents` phải là mảng {index, angle | direction}
+	each tangent needs an `index`	mỗi tiếp tuyến cần `index`
+	each tangent needs an `angle` (degrees) or a `direction`	mỗi tiếp tuyến cần `angle` (độ) hoặc `direction`
+	a tangent direction can't be zero	vectơ hướng tiếp tuyến không được bằng không
+	tangent vertex index out of range	chỉ số đỉnh tiếp tuyến ngoài phạm vi
+	No vertex.	Không có đỉnh.
+	Object selected is not a spline.	Đối tượng đã chọn không phải spline.
+	`option` is required	cần có `option`
+echo	`{key}` must be a direction [dx, dy]	`{key}` phải là hướng [dx, dy]
+	The spline has no fit data; give `fit` points.	Spline không có dữ liệu khớp; hãy cung cấp các điểm `fit`.
+	`order` is required	cần có `order`
+	unknown option	không nhận diện được lựa chọn
+	fit point index out of range	chỉ số điểm khớp ngoài phạm vi
+	Too many fit points.	Quá nhiều điểm khớp.
+echo	A spline needs at least {min} fit points.	Spline cần ít nhất {min} điểm khớp.
+	control point index out of range	chỉ số điểm điều khiển ngoài phạm vi
+	The spline is invalid.	Spline không hợp lệ.
+echo	A closed spline of degree {p} needs more than {value1} control points.	Spline kín bậc {p} cần hơn {value1} điểm điều khiển.
+echo	A spline of degree {p} needs at least {value1} control points.	Spline bậc {p} cần ít nhất {value1} điểm điều khiển.
+	The start point of a closed spline can't be deleted.	Không thể xóa điểm đầu của spline kín.
+	Cannot delete that control point.	Không thể xóa điểm điều khiển đó.
+	Cannot add a control point to this spline.	Không thể thêm điểm điều khiển vào spline này.
+	Cannot elevate the order of this spline.	Không thể nâng bậc spline này.
+	No spline.	Không có spline.
+	The spline was erased.	Spline đã bị xóa.
+echo	{value1} object(s) joined into the spline	Đã nối {value1} đối tượng vào spline
+	The tangent needs a point away from the end point.	Tiếp tuyến cần điểm khác với điểm cuối.
+	The spline has no control points.	Spline không có điểm điều khiển.
+	no such space	không có không gian này
+	Cannot join to a closed polyline.	Không thể nối vào đa tuyến kín.
+	Cannot convert.	Không thể chuyển đổi.
+	Object selected is not a polyline.	Đối tượng đã chọn không phải đa tuyến.
+	width must be non-negative	chiều rộng phải không âm
+	too many vertices	quá nhiều đỉnh
+	action must be move, insert, straighten, break, width or regen	thao tác phải là move, insert, straighten, break, width hoặc regen
+	No object.	Không có đối tượng.
+echo	{n} segments added to polyline	Đã thêm {n} đoạn vào đa tuyến
+	Zero-length line.	Đường thẳng có chiều dài bằng không.
+	The new arc would be zero length or a full circle.	Cung mới sẽ có chiều dài bằng không hoặc thành đường tròn đầy đủ.
+	The end segment is an arc; explode the polyline or use an open line end.	Đoạn cuối là cung; hãy phá khối đa tuyến hoặc dùng đầu đoạn thẳng hở.
+	Zero-length end segment.	Đoạn cuối có chiều dài bằng không.
+echo	Current length: {l}, included angle: {value1}	Chiều dài hiện hành: {l}, góc xen giữa: {value1}
+echo	Current length: {l}	Chiều dài hiện hành: {l}
+	No lengthen mode.	Chưa có chế độ đổi chiều dài.
+	The ends coincide.	Hai đầu trùng nhau.
+echo	Continuity = {value1}	Độ liên tục = {value1}
+	No layout to move objects to.	Không có bố cục để chuyển đối tượng đến.
+echo	Layout "{name}" not found.	Không tìm thấy bố cục "{name}".
+echo	{n} object(s) direction has been reversed.	Đã đảo hướng {n} đối tượng.
+echo	{n} object(s) flattened.	Đã làm phẳng {n} đối tượng.
+echo	{n} object(s) changed from {value1} space to {value2} space.	Đã chuyển {n} đối tượng từ không gian {value1} sang không gian {value2}.
+	`handle` (block reference) is required	cần có `handle` (tham chiếu khối)
+	The block reference has no nested objects.	Tham chiếu khối không có đối tượng lồng.
+	Nothing nested there.	Không có đối tượng lồng tại đó.
+echo	Nested object: {value1}	Đối tượng lồng: {value1}
+	Ellipse must intersect cutting edges at two or more points.	Elip phải giao các cạnh cắt tại ít nhất hai điểm.
+	Cannot trim that object.	Không thể cắt xén đối tượng đó.
+	Cannot extend a closed ellipse.	Không thể kéo dài elip kín.
+	Cannot extend that object.	Không thể kéo dài đối tượng đó.
+	The path has no length.	Đường dẫn không có chiều dài.
+	`path` (handle) is required	cần có `path` (mã đối tượng)
+echo	Type = Path  Associative = No ({n} items)	Loại = Đường dẫn  Liên kết = No ({n} phần tử)
+	text is too long	văn bản quá dài
+echo	Text styles: {value1}	Kiểu chữ: {value1}
+echo	Cannot find text style "{name}".	Không tìm thấy kiểu chữ "{name}".
+	The columns and gutters don't fit in the total width.	Các cột và khe cột vượt quá tổng chiều rộng.
+echo	`{k}` must be a number	`{k}` phải là số
+	`list` must be bullet, number, lower or upper	`list` phải là bullet, number, lower hoặc upper
+	`align` must be left, center, right, justify or distributed	`align` phải là left, center, right, justify hoặc distributed
+	`tabs` must be an array of numbers	`tabs` phải là mảng số
+	`columns.type` must be static or dynamic	`columns.type` phải là static hoặc dynamic
+	columns need a `width` (the width of one column)	các cột cần `width` (chiều rộng một cột)
+	columns need a positive `height`	các cột cần `height` dương
+	expected an object of profile variables	cần đối tượng chứa các biến hồ sơ
+echo	{name} is not a profile setting	{name} không phải cài đặt hồ sơ
+echo	invalid value for {value1}: {e}	giá trị không hợp lệ cho {value1}: {e}
+	`reset` must be true or false	`reset` phải là true hoặc false
+echo	tolerance must be a number from 0 to {MAX_TOL}	dung sai phải là số từ 0 đến {MAX_TOL}
+	`tolerance` must be a number	`tolerance` phải là số
+echo	`ignore`: unknown property {x}	`ignore`: không nhận diện được thuộc tính {x}
+echo	`ignore` must be a list of property names, got {v}	`ignore` phải là danh sách tên thuộc tính, đã nhận {v}
+echo	`{key}` must be true or false	`{key}` phải là true hoặc false
+echo	{value1} duplicate(s) deleted	Đã xóa {value1} mục trùng
+echo	{value2} overlapping object(s) or segment(s) deleted	Đã xóa {value2} đối tượng hoặc đoạn chồng lấn
+echo	 ({value1} polyline segment(s))	 ({value1} đoạn đa tuyến)
+	The included angle must be between 0 and 360 degrees.	Góc xen giữa phải nằm trong khoảng 0 đến 360 độ.
+echo	{n}: no such file	{n}: không có tệp này
+echo	`{n}` is not a plotter configuration file name	`{n}` không phải tên tệp cấu hình thiết bị in
+echo	{n}: the plotter configuration file is too large	{n}: tệp cấu hình thiết bị in quá lớn
+echo	unknown plotter `{name}` (devices: {value1})	không nhận diện được thiết bị in `{name}` (thiết bị: {value1})
+	`device` must be a plotter name	`device` phải là tên thiết bị in
+echo	plotter `{value1}` has no paper `{name}` (papers: {value2})	thiết bị in `{value1}` không có khổ giấy `{name}` (khổ giấy: {value2})
+echo	Plotter `{value1}` is not installed; plotted to PDF instead	Chưa cài thiết bị in `{value1}`; đã in thành PDF
+	the window needs a width and a height	cửa sổ cần chiều rộng và chiều cao
+	`name` (a plotter name) is required	cần có `name` (tên thiết bị in)
+	the plotter has no name	thiết bị in không có tên
+echo	`{key}` must be a size in mm, up to {value1}	`{key}` phải là kích thước tính bằng mm, tối đa {value1}
+	`output` must be pdf, png or svg	`output` phải là pdf, png hoặc svg
+	`resolution` must be 50-2400 dpi	`resolution` phải là 50-2400 dpi
+	`orientation` must be portrait or landscape	`orientation` phải là portrait hoặc landscape
+echo	`{value1}` has no paper `{rm}`	`{value1}` không có khổ giấy `{rm}`
+	`paper.name` is required	cần có `paper.name`
+	`paper.width` and `paper.height` (mm) are both required	cần có `paper.width` và `paper.height` (mm) đều
+	`paper.margins` must be [left, bottom, right, top] in mm, leaving a printable area	`paper.margins` phải là [left, bottom, right, top], tính bằng mm, và phải chừa vùng in được
+	the plotter has too many papers	thiết bị in có quá nhiều khổ giấy
+echo	`{value1}` has no paper `{d}`	`{value1}` không có khổ giấy `{d}`
+echo	plotter `{name}` already exists	thiết bị in `{name}` đã tồn tại
+	`name` is empty	`name` đang rỗng
+echo	a plotter file `{file}` already exists	tệp thiết bị in `{file}` đã tồn tại
+echo	`{name}` is built in: make a copy with action new, from `{name}`	`{name}` được tích hợp sẵn: hãy tạo bản sao bằng thao tác new, from `{name}`
+	a plotter needs at least one paper	thiết bị in cần ít nhất một khổ giấy
+echo	`{name}` is built in and can't be deleted	`{name}` được tích hợp sẵn và không thể xóa
+	`text` (the file's contents) is required	cần có `text` (nội dung tệp)
+echo	`{value1}` is a built-in plotter's name: pass another `name`	`{value1}` là tên thiết bị in tích hợp sẵn: hãy truyền `name` khác
+	the plotter configuration has no papers	cấu hình thiết bị in không có khổ giấy
+echo	{value1} ({value2}, {kind}, {value3} paper sizes)	{value1} ({value2}, {kind}, {value3} khổ giấy)
+echo	Plotter "{n}" already exists.	Thiết bị in "{n}" đã tồn tại.
+echo	Plotter "{name}" created.	Đã tạo thiết bị in "{name}".
+echo	Plotter "{value1}" deleted.	Đã xóa thiết bị in "{value1}".
+echo	Plotter "{n}" not found.	Không tìm thấy thiết bị in "{n}".
+echo	"{value1}" is built in; create a new plotter first.	"{value1}" được tích hợp sẵn; hãy tạo thiết bị in mới trước.
+echo	Paper "{paper}" added to "{dev}".	Đã thêm khổ giấy "{paper}" vào "{dev}".
+echo	{value1} is a reserved name; not loaded	{value1} là tên dành riêng; chưa tải
+echo	{value1}: text style {st} is not in this drawing; its text uses the default style	{value1}: kiểu chữ {st} không có trong bản vẽ này; chữ dùng kiểu mặc định
+	`file` or `text` is required	cần có `file` hoặc `text`
+echo	no linetype matching `{names}` in {source}	không có kiểu đường phù hợp với `{names}` trong {source}
+echo	Linetype(s) {name} loaded.	Đã tải kiểu đường {name}.
+echo	Linetype {name} is already loaded.	Kiểu đường {name} đã được tải.
+echo	No linetype matching {value1} in {path}.	Không có kiểu đường phù hợp với {value1} trong {path}.
+echo	Linetype {n} loaded.	Đã tải kiểu đường {n}.
+echo	Current linetype: "{cur}"	Kiểu đường hiện hành: "{cur}"
+echo	Linetype {name} reloaded.	Đã tải lại kiểu đường {name}.
+echo	unknown property `{n}` (known: {value1})	không nhận diện được thuộc tính `{n}` (đã biết: {value1})
+echo	`properties` holds names, got {x}	`properties` chứa tên, đã nhận {x}
+echo	`properties.{n}` must be true or false	`properties.{n}` phải là true hoặc false
+echo	`properties` must be a list of names or {name: bool}, got {other}	`properties` phải là danh sách tên hoặc {name: bool}, đã nhận {other}
+	no such source object	không có đối tượng nguồn
+	`source` (object handle) is required	cần có `source` (mã đối tượng)
+	`source` is required	cần có `source`
+echo	Current active settings: {text}	Cài đặt đang dùng: {text}
+	no such block	không có khối
+	an anonymous block cannot be renamed	không thể đổi tên khối ẩn danh
+echo	a block `{to}` already exists	khối `{to}` đã tồn tại
+	the Standard style cannot be renamed	không thể đổi tên kiểu Standard
+	unsupported table	không hỗ trợ bảng
+echo	`{to}` already exists	`{to}` đã tồn tại
+echo	no {table} `{from}`	không có {table} `{from}`
+echo	No {noun} named "{name}".	Không có {noun} mang tên "{name}".
+echo	Renaming a {noun} is not available yet.	Chưa hỗ trợ đổi tên {noun}.
+	transparency must be ByLayer, ByBlock or a percentage from 0 to 90	độ trong suốt phải là ByLayer, ByBlock hoặc phần trăm từ 0 đến 90
+echo	linetype `{n}` is not loaded	kiểu đường `{n}` chưa được tải
+echo	dimension style `{n}` not found	Không tìm thấy kiểu kích thước `{n}`
+	`color` is required	cần có `color`
+echo	linetype `{load}` not found in the library	Không tìm thấy kiểu đường `{load}` trong thư viện
+echo	linetype `{cur}` is not loaded	kiểu đường `{cur}` chưa được tải
+	`lineweight` is required	cần có `lineweight`
+	scale must be positive	tỉ lệ phải dương
+	bad style name	tên kiểu không hợp lệ
+echo	no text style `{name}`	không có kiểu chữ `{name}`
+echo	a text style `{to}` already exists	kiểu chữ `{to}` đã tồn tại
+	no such style	không có kiểu
+	the Standard style cannot be deleted	không thể xóa kiểu Standard
+	the current text style cannot be deleted	không thể xóa kiểu chữ hiện hành
+echo	text style `{name}` is in use	kiểu chữ `{name}` đang được dùng
+echo	no dimension style `{n}`	không có kiểu kích thước `{n}`
+echo	no dimension style `{name}`	không có kiểu kích thước `{name}`
+echo	a dimension style `{to}` already exists	kiểu kích thước `{to}` đã tồn tại
+	no such dimension style	không có kiểu kích thước
+	the current dimension style cannot be deleted	không thể xóa kiểu kích thước hiện hành
+echo	dimension style `{name}` is in use	kiểu kích thước `{name}` đang được dùng
+echo	no valid dimension variables given (ignored: {value1})	chưa cung cấp biến kích thước hợp lệ nào (đã bỏ qua: {value1})
+	`pdmode` must be 0..4, plus 32 and/or 64	`pdmode` phải là 0..4, cộng 32 và/hoặc 64
+	no layer.set command	không có lệnh layer.set
+echo	the {from} linetype cannot be renamed	không thể đổi tên kiểu đường {from}
+echo	a linetype `{to}` already exists	kiểu đường `{to}` đã tồn tại
+	no such linetype	không có kiểu đường
+echo	unknown operator `{o}` (use =, !=, >, <, *)	không nhận diện được toán tử `{o}` (hãy dùng =, !=, >, <, *)
+	`value` is required with `property`	cần có `value` với `property`
+echo	unknown mode `{mode}` (use new, append or exclude)	không nhận diện được chế độ `{mode}` (hãy dùng new, append hoặc exclude)
+echo	{n} item(s) selected	Đã chọn {n} mục
+	`mode` must be a SELECTSIMILARMODE bit code from 0 to 255	`mode` phải là mã bit SELECTSIMILARMODE từ 0 đến 255
+	select objects to match	hãy chọn đối tượng để đối chiếu
+	none of the given objects exist in the current space	không có đối tượng được cung cấp nào tồn tại trong không gian hiện hành
+echo	{n} found	Tìm thấy {n}
+echo	{n} objects hidden	Đã ẩn {n} đối tượng
+	select objects to isolate	hãy chọn đối tượng để cô lập
+	none of the given objects exist	không có đối tượng được cung cấp nào tồn tại
+	select objects to hide	hãy chọn đối tượng để ẩn
+	No objects are isolated or hidden.	Không có đối tượng bị cô lập hoặc ẩn.
+	1 object shown	Đã hiển thị 1 đối tượng
+echo	{n} objects shown	Đã hiển thị {n} đối tượng
+echo	<Isodraft {}>	<Vẽ đẳng cự {}>
+	<Isodraft off>	<Vẽ đẳng cự tắt>
+	`plane` is left, top, right or orthographic	`plane` là left, top, right hoặc orthographic
+	`plane` is left, top or right	`plane` là left, top hoặc right
+	`isocircle` is required	cần có `isocircle`
+	an isocircle's `plane` is left, top or right	`plane` của đường tròn đẳng cự phải là left, top hoặc right
+	the isocircle needs a finite center and a positive radius	đường tròn đẳng cự cần tâm hữu hạn và bán kính dương
+echo	<{name} {value1}>	<{name} {value1}>
+echo	<Osnap {value1}>	<Truy bắt điểm {value1}>
+echo	Unknown variable {n}. Type SETVAR ? to list variables.	Không nhận diện được biến {n}. Nhập SETVAR ? để liệt kê biến.
+echo	{n} = {value1} (read only)	{n} = {value1} (chỉ đọc)
+echo	unknown variable `{name}`	không nhận diện được biến `{name}`
+	The tangent point must differ from the fit point.	Điểm tiếp tuyến phải khác điểm khớp.
+echo	{n} object(s) converted to splines	Đã chuyển {n} đối tượng thành spline
+	it has arc segments	có đoạn cung
+	it is not planar	không đồng phẳng
+	it is not a polyline	không phải đa tuyến
+	it has too few or too many vertices	có quá ít hoặc quá nhiều đỉnh
+	it has too few vertices to close	có quá ít đỉnh để đóng kín
+echo	Object not converted: {why}.	Chưa chuyển đổi đối tượng: {why}.
+	`knots` must be "chord", "sqrt" or "uniform"	`knots` phải là "chord", "sqrt" hoặc "uniform"
+echo	`{key}` must be a non-zero direction [dx, dy]	`{key}` phải là vectơ hướng [dx, dy] khác không
+	`tolerance` must be zero or positive	`tolerance` phải bằng không hoặc dương
+	`object` must be a handle or true	`object` phải là mã đối tượng hoặc true
+	`object` is required	cần có `object`
+	no polyline to convert: give `object` a handle or select polylines	không có đa tuyến để chuyển đổi: hãy cung cấp mã đối tượng qua `object` hoặc chọn đa tuyến
+echo	Object {value1} not converted: {why}.	Chưa chuyển đổi đối tượng {value1}: {why}.
+echo	invalid {k}: {v}	{k} không hợp lệ: {v}
+	`heights` must be non-negative numbers	`heights` phải là các số không âm
+echo	invalid heights: {v}	chiều cao không hợp lệ: {v}
+echo	invalid direction {d} (right, left, down)	hướng {d} không hợp lệ (right, left, down)
+	Requires a positive number or Off.	Cần nhập số dương hoặc Off.
+echo	Table in {value1} part(s).	Bảng gồm {value1} phần.
+	data links can't read files in the browser	không thể đọc tệp qua liên kết dữ liệu trong trình duyệt
+	the table has no data link	bảng không có liên kết dữ liệu
+	object is not a table	đối tượng không phải bảng
+	`path` of a CSV file is required	cần có `path` của tệp CSV
+	no table	không có bảng
+echo	{updated} data link(s) updated.	Đã cập nhật {updated} liên kết dữ liệu.
+echo	invalid border color {c}	màu viền {c} không hợp lệ
+echo	invalid lineweight {w}	độ dày nét {w} không hợp lệ
+echo	invalid textColor {c}	textColor {c} không hợp lệ
+echo	invalid fill {v}	màu tô {v} không hợp lệ
+echo	invalid align {a} (TL, TC, TR, ML, MC, MR, BL, BC, BR)	align {a} không hợp lệ (TL, TC, TR, ML, MC, MR, BL, BC, BR)
+echo	unknown border {k}	không nhận diện được đường viền {k}
+echo	invalid format {f} (general, decimal, percent, text)	định dạng {f} không hợp lệ (general, decimal, percent, text)
+echo	invalid precision {n} (0..8)	độ chính xác {n} không hợp lệ (0..8)
+	no such table style	không có kiểu bảng này
+	`name` of the cell style is required	cần có `name` của kiểu ô
+echo	no cell style {name}	không có kiểu ô {name}
+	too many cell styles	quá nhiều kiểu ô
+	`style` must be a cell style name	`style` phải là tên kiểu ô
+	`style` (cell style name) is required	cần có `style` (tên kiểu ô)
+echo	table style {value1} has no cell style {name} (it has {value2})	kiểu bảng {value1} không có kiểu ô {name} (có {value2})
+echo	row {r} is outside the table	hàng {r} nằm ngoài bảng
+echo	column {c} is outside the table	cột {c} nằm ngoài bảng
+	`row` is required	cần có `row`
+	`col` is required	cần có `col`
+	`range` is required (no data cells above this one)	cần có `range` (không có ô dữ liệu phía trên ô này)
+	`cell` (e.g. "A1") is required	cần có `cell` (ví dụ "A1")
+echo	invalid cell {cell}	ô {cell} không hợp lệ
+	`expression` is required	cần có `expression`
+echo	unknown function {other} (sum, average, count, min, max, cell, equation)	không nhận diện được hàm {other} (sum, average, count, min, max, cell, equation)
+	no table cell at that point	không có ô bảng tại điểm đó
+	files can't be written in this build; use the returned csv	không thể ghi tệp trong bản dựng này; hãy dùng csv được trả về
+	`handle` of a table is required	cần có `handle` của bảng
+echo	unsupported separator {other} (",", ";" or tab)	không hỗ trợ dấu phân cách {other} (",", ";" hoặc dấu tab)
+echo	Table exported to {path}.	Đã xuất bảng vào {path}.
+	Show borders? [On/Off]	Hiển thị đường viền? [On/Off]
+echo	rows must be ≤ {MAX_ROWS} and columns 1..={MAX_COLS}	số hàng phải ≤ {MAX_ROWS} và số cột phải nằm trong 1..={MAX_COLS}
+echo	cell ({r}, {c}) is outside the {value1}×{value2} table	ô ({r}, {c}) nằm ngoài bảng {value1}×{value2}
+echo	{e}: not a formula UbotCAD can evaluate: {f}	{e}: không phải công thức UbotCAD có thể tính: {f}
+	too many rows	quá nhiều hàng
+	no such row (a table keeps at least one row)	không có hàng này (bảng phải giữ ít nhất một hàng)
+	too many columns	quá nhiều cột
+	no such column (a table keeps at least one column)	không có cột này (bảng phải giữ ít nhất một cột)
+	merge at least two cells (`rows` / `cols`)	hãy gộp ít nhất hai ô (`rows` / `cols`)
+echo	unknown geometric characteristic `{s}`	không nhận diện được đặc trưng hình học `{s}`
+	the feature control frame is empty	khung dung sai hình học đang rỗng
+echo	no dimension style `{style}`	không có kiểu kích thước `{style}`
+	No objects found.	Không tìm thấy đối tượng.
+	`edgeMode` must be "extend" or "none"	`edgeMode` phải là "extend" hoặc "none"
+	`mode` must be "quick" or "standard"	`mode` phải là "quick" hoặc "standard"
+	`fence` needs two or more points [[x,y], ...]	`fence` cần ít nhất hai điểm [[x,y], ...]
+	`crossing` needs two corners [[x,y], [x,y]]	`crossing` cần hai góc [[x,y], [x,y]]
+	`crossing` needs two corners	`crossing` cần hai góc
+	`pick` ([x, y]) is required	cần có `pick` ([x, y])
+echo	Current settings: Projection={proj}, Edge={value1}, Mode={value2}	Cài đặt hiện hành: Phép chiếu={proj}, Cạnh={value1}, Chế độ={value2}
+	no scanned plan	chưa có kế hoạch đã quét
+echo	selection exceeds {MAX_SCAN_FRAMES} entries	vùng chọn vượt quá {MAX_SCAN_FRAMES} mục
+echo	selection exceeds {MAX_SCAN_FRAMES} frames	vùng chọn vượt quá {MAX_SCAN_FRAMES} khung bản vẽ
+	input text exceeds 64 MiB	văn bản đầu vào vượt quá 64 MiB
+	choose Block, Window, Layout or Last	hãy chọn Block, Window, Layout hoặc Last
+echo	selection exceeds {MAX_SCAN_FRAMES} windows	vùng chọn vượt quá {MAX_SCAN_FRAMES} cửa sổ
+	sheet window must have positive width and height	cửa sổ tờ bản vẽ phải có chiều rộng và chiều cao dương
+	specify a finite window corner	hãy chỉ định góc cửa sổ có tọa độ hữu hạn
+	enter layout names or *	hãy nhập tên bố cục hoặc *
+echo	selection exceeds {MAX_SCAN_FRAMES} layouts	vùng chọn vượt quá {MAX_SCAN_FRAMES} bố cục
+echo	{key} must be a string	{key} phải là chuỗi
+echo	{key} must be a boolean	{key} phải là giá trị logic
+echo	{key} must be an unsigned integer	{key} phải là số nguyên không dấu
+echo	{key} must be within {min}..={max}	{key} phải nằm trong khoảng {min}..={max}
+	path must contain 1 to 4096 bytes	đường dẫn phải chứa 1 đến 4096 byte
+	mode must be merged or split	chế độ phải là merged hoặc split
+	path needs a file name	đường dẫn cần tên tệp
+	path needs a file stem	đường dẫn cần tên tệp không có phần mở rộng
+	job source is missing	thiếu nguồn tác vụ
+	missing source	thiếu nguồn
+	job definition exceeds 64 MiB	định nghĩa tác vụ vượt quá 64 MiB
+	jobId already exists with a different plan or settings; remove it before publishing again	jobId đã tồn tại với kế hoạch hoặc cài đặt khác; hãy xóa trước khi xuất bản lại
+	job queue exceeds supported limits	hàng đợi tác vụ vượt giới hạn được hỗ trợ
+	Folder mode is only in the desktop app	chế độ Folder chỉ khả dụng trong ứng dụng máy tính
+	folder is required	cần có folder
+	out is required	cần có out
+	folder and out must contain 1 to 4096 bytes	folder và out phải chứa 1 đến 4096 byte
+	folder must be an existing directory	folder phải là thư mục đã tồn tại
+	out must be a directory	out phải là thư mục
+	out must differ from folder	out phải khác folder
+	file decoding and PDF queue rendering are not available in this build	bản dựng này chưa hỗ trợ giải mã tệp và kết xuất hàng đợi PDF
+	job sheet count overflow	số tờ bản vẽ của tác vụ vượt giới hạn số
+	job exceeds sheet limits	tác vụ vượt quá giới hạn tờ bản vẽ
+	skipped file count exceeds supported limits	số tệp bỏ qua vượt giới hạn được hỗ trợ
+echo	read_error: {error}	read_error: {error}
+echo	no readable drawings found; skipped_files: {value1}	không tìm thấy bản vẽ đọc được; skipped_files: {value1}
+	no previous UBPLOT plan	không có kế hoạch UBPLOT trước đó
+	PLAN_STALE: drawing changed since scan; scan again	PLAN_STALE: bản vẽ đã thay đổi từ khi quét; quét lại
+	PLAN_INVALID: there are no sheets to publish	PLAN_INVALID: không có tờ bản vẽ để xuất bản
+echo	WARN_NOT_APPROVED: {value1}	WARN_NOT_APPROVED: {value1}
+	unknown jobId	không nhận diện được jobId
+	stored manifest does not match jobId	bản kê đã lưu không khớp jobId
+	stored job definition is missing	thiếu định nghĩa tác vụ đã lưu
+	job sources must be an array	nguồn tác vụ phải là mảng
+	job exceeds source limits	tác vụ vượt giới hạn nguồn
+	source plan is missing	thiếu kế hoạch nguồn
+	stored job definition does not match jobId	định nghĩa tác vụ đã lưu không khớp jobId
+	parameters must be an object	tham số phải là đối tượng
+	action is required	cần có thao tác
+	unknown job action	không nhận diện được thao tác tác vụ
+	job listing exceeds supported limits	danh sách tác vụ vượt giới hạn được hỗ trợ
+	jobId is required	cần có jobId
+	PDF queue rendering is not available in this build	Không kết xuất được hàng đợi PDF trong bản dựng này
+	cancel requests exceed supported limits	số yêu cầu hủy vượt giới hạn được hỗ trợ
+	cannot remove a RUNNING job	không thể xóa tác vụ RUNNING
+	print profile JSON depth exceeds 32	độ sâu JSON của hồ sơ in vượt quá 32
+	executable paths are forbidden in print profiles	không được dùng đường dẫn thực thi trong hồ sơ in
+	executable keys are forbidden in print profiles	không được dùng khóa thực thi trong hồ sơ in
+	key exceeds 256 bytes	khóa vượt quá 256 byte
+	invalid key	khóa không hợp lệ
+	key must address a print setting	khóa phải trỏ đến cài đặt in
+	invalid JSON Pointer escape	chuỗi thoát JSON Pointer không hợp lệ
+	id must be a string	id phải là chuỗi
+	id is required for this level	cần có id cho cấp này
+	action must be effective, explain, get, set, unset, lock, unlock, import or export	thao tác phải là effective, explain, get, set, unset, lock, unlock, import hoặc export
+	text is required for import	cần có text để nhập
+	print profile exceeds 256 KiB	hồ sơ in vượt quá 256 KiB
+	set/unset require user, drawing or project level	set/unset cần cấp user, drawing hoặc project
+	lock/unlock require company level	lock/unlock cần cấp company
+	import level and id must match the document	cấp và id nhập vào phải khớp tài liệu
+	print profile exceeds 256 locks	hồ sơ in vượt quá 256 khóa
+	settings must be an object	cài đặt phải là đối tượng
+	unknown print setting	không nhận diện được cài đặt in
+	unset requires a top-level setting	unset cần cài đặt cấp cao nhất
+	value is required	cần có giá trị
+	key does not address an existing setting	khóa không trỏ đến cài đặt đang có
+	invalid action	thao tác không hợp lệ
+	profile revision overflow	bản sửa đổi hồ sơ vượt giới hạn số
+echo	LOCKED_BY_POLICY: {value1} ({value2})	LOCKED_BY_POLICY: {value1} ({value2})
+	missing profile setting	thiếu cài đặt hồ sơ
+	naming must be a string	quy tắc đặt tên phải là chuỗi
+	invalid plot scale	tỉ lệ in không hợp lệ
+	pages_per_file is outside the PDF page limits	pages_per_file nằm ngoài giới hạn số trang PDF
+	output must be merged or split	đầu ra phải là merged hoặc split
+	PLAN_INVALID: job_id is not safe for a temporary file name	PLAN_INVALID: job_id không an toàn để dùng làm tên tệp tạm
+	page count overflow	số trang vượt giới hạn số
+	output exceeds supported page limits	đầu ra vượt giới hạn số trang được hỗ trợ
+	web split output is limited to 20 files; use merged output	đầu ra chia trang trên web giới hạn 20 tệp; hãy dùng đầu ra gộp
+	a sheet exceeds pages_per_file; increase the page limit	tờ bản vẽ vượt quá pages_per_file; hãy tăng giới hạn số trang
+	missing output sheet	thiếu tờ bản vẽ đầu ra
+	missing output name	thiếu tên đầu ra
+	output needs a file name	đầu ra cần tên tệp
+echo	output file names collide; include {part}, {order} or {sheet_id} in naming	tên tệp đầu ra bị trùng; hãy thêm {part}, {order} hoặc {sheet_id} vào quy tắc đặt tên
+	output path is not UTF-8	đường dẫn đầu ra không phải UTF-8
+echo	BLOCKED: {value1}; plan={value2}	BLOCKED: {value1}; plan={value2}
+	PDF plotting is not available in this build	Không thể in PDF trong bản dựng này
+	missing output group	thiếu nhóm đầu ra
+echo	{error}; plan={value1}	{error}; plan={value1}
+echo	Sheet `{value1}` is published as `{name}`.	Tờ bản vẽ `{value1}` được xuất bản với tên `{name}`.
+	split piece count is outside the page limits	số phần chia nằm ngoài giới hạn số trang
+	layout splits are not available; choose PDF	chưa hỗ trợ chia bố cục; hãy chọn PDF
+	plot scale must be finite and positive after unit conversion	tỉ lệ in phải hữu hạn và dương sau khi đổi đơn vị
+	OUTPUT_IS_SOURCE: output would overwrite the source drawing	OUTPUT_IS_SOURCE: đầu ra sẽ ghi đè bản vẽ nguồn
+	action must be a string	thao tác phải là chuỗi
+	path must be a nonempty string	đường dẫn phải là chuỗi không rỗng
+	baseline import requires approve: true	nhập đường chuẩn cần approve: true
+	picks must be an array	picks phải là mảng
+	baseline import requires 1..=1000 picks	nhập đường chuẩn cần 1..=1000 lần chọn
+	sha256 is required for baseline import	cần có sha256 để nhập đường chuẩn
+	sha256 does not match the audited source	sha256 không khớp nguồn đã kiểm tra lỗi
+	action must be list, import, reset, audit, verify or exportLisp	thao tác phải là list, import, reset, audit, verify hoặc exportLisp
+echo	could not save frame template registry: {error}	không thể lưu danh mục mẫu khung: {error}
+	format must be json or csv	định dạng phải là json hoặc csv
+	plan is required	cần có kế hoạch
+	name is required with data	cần có name khi truyền data
+	path or name+data (base64) is required	cần có path hoặc name+data (base64)
+	template exceeds 64 MiB	mẫu bản vẽ vượt quá 64 MiB
+	paths are not available on the web; pass name+data	không hỗ trợ đường dẫn trên web; hãy truyền name+data
+echo	Baseline source {path} for {id} has changed since import.	Nguồn đường chuẩn {path} cho {id} đã thay đổi từ khi nhập.
+echo	Baseline source {path} for {id} could not be verified: {error}	Không thể xác minh nguồn đường chuẩn {path} cho {id}: {error}
+echo	{value1}: export path is a source drawing or template	{value1}: đường dẫn xuất là bản vẽ nguồn hoặc mẫu bản vẽ
+	refresh must be a boolean	refresh phải là giá trị logic
+	no previous UBPLOT plan for this drawing	chưa có kế hoạch UBPLOT trước đó cho bản vẽ này
+	by must be user or agent:<name>	by phải là user hoặc agent:<name>
+	approvals must be an array	approvals phải là mảng
+	split must be an array	split phải là mảng
+	approvals or split must be an array	approvals hoặc split phải là mảng
+echo	at most {MAX_APPROVALS} approvals are allowed	chỉ cho phép tối đa {MAX_APPROVALS} lượt chấp nhận
+	sheetKey must be a string	sheetKey phải là chuỗi
+	overlapMm must be 0..=200 mm	overlapMm phải là 0..=200 mm
+	code must be a string	code phải là chuỗi
+echo	{what} needs a number, not a point	{what} cần số, không phải điểm
+echo	{what} needs a point, not a number	{what} cần điểm, không phải số
+echo	missing {value1}	thiếu {value1}
+	expression too deeply nested	biểu thức lồng quá sâu
+echo	bad number `{t}`	số `{t}` không hợp lệ
+echo	too many arguments to `{name}`	quá nhiều đối số cho `{name}`
+echo	unknown name `{name}`	không nhận diện được tên `{name}`
+	expected a number	cần một số
+	can't add or subtract a number and a point	không thể cộng hoặc trừ một số với một điểm
+	division by zero	phép chia cho không
+	the lines are parallel	các đường thẳng song song
+echo	`{name}` needs more arguments	`{name}` cần thêm đối số
+echo	`{name}` takes {lo}{value1} argument(s)	`{name}` nhận {lo}{value1} đối số
+	vec1 of two equal points	vec1 có hai điểm trùng nhau
+	pld of two equal points	pld có hai điểm trùng nhau
+echo	unknown function `{name}`	không nhận diện được hàm `{name}`
+	expression too long	biểu thức quá dài
+echo	unexpected `{value1}`	`{value1}` không đúng tại đây
+	result is not a finite number	kết quả không phải số hữu hạn
+echo	unit type must be length, area, volume or angle, got `{k}`	loại đơn vị phải là length, area, volume hoặc angle, đã nhận `{k}`
+echo	can't convert `{from}` to `{to}`	không thể đổi `{from}` sang `{to}`
+echo	{value1} point(s) are needed	cần {value1} điểm
+	the result is a point, not a number	kết quả là điểm, không phải số
+echo	`convert.{k}` is required	cần có `convert.{k}`
+	`convert.value` must be a number or an expression	`convert.value` phải là số hoặc biểu thức
+	`convert.value` is required	cần có `convert.value`
+echo	{value1} {from} = {value2} {to}	{value1} {from} = {value2} {to}
+	`pick` must be point, distance, angle or intersection	`pick` phải là point, distance, angle hoặc intersection
+	`points` must be a list of [x, y] points	`points` phải là danh sách các điểm [x, y]
+	`expr` is required	cần có `expr`
+echo	CAL: {m}	CAL: {m}
+echo	QuickCalc: {m}	QuickCalc: {m}
+	`find` is required	cần có `find`
+echo	{total} replacement(s) in {n} object(s)	Đã thay {total} chỗ trong {n} đối tượng
+echo	{total} match(es) in {value1} object(s)	Tìm thấy {total} kết quả trong {value1} đối tượng
+	select an arc or circle	hãy chọn cung tròn hoặc đường tròn
+echo	Radius = {r}	Bán kính = {r}
+echo	Diameter = {value1}	Đường kính = {value1}
+echo	give {vertex,p1,p2} or {h1,h2}	hãy cung cấp {vertex,p1,p2} hoặc {h1,h2}
+	h1 is not a line	h1 không phải đường thẳng
+	h2 is not a line	h2 không phải đường thẳng
+	lines are parallel	đường thẳng song song
+echo	Angle = {ang}°	Góc = {ang}°
+	mode must be distance, radius, angle or area	chế độ phải là distance, radius, angle hoặc area
+	`p1` and `p2` (the window) are required	cần có `p1` và `p2` (cửa sổ)
+	option must be save, window, restore, delete, list or settings	lựa chọn phải là save, window, restore, delete, list hoặc settings
+echo	"{name}" is not a valid view name.	"{name}" không phải tên hướng nhìn hợp lệ.
+	The window has no area.	Cửa sổ không có diện tích.
+echo	View "{name}" replaced.	Đã thay thế hướng nhìn "{name}".
+echo	View "{name}" saved.	Đã lưu hướng nhìn "{name}".
+echo	Could not find view "{value1}".	Không tìm thấy hướng nhìn "{value1}".
+echo	View "{value1}" has no area.	Hướng nhìn "{value1}" không có diện tích.
+echo	View "{value1}" belongs to layout "{target}", which does not exist.	Hướng nhìn "{value1}" thuộc bố cục "{target}" không tồn tại.
+echo	View "{value1}" restored.	Đã khôi phục hướng nhìn "{value1}".
+echo	 Its layer snapshot "{state}" is missing.	 Thiếu bản chụp lớp "{state}" của hướng nhìn.
+	No matching views found.	Không tìm thấy hướng nhìn phù hợp.
+echo	{value1} view(s) deleted.	Đã xóa {value1} hướng nhìn.
+	A viewport configuration needs a viewport.	cần có Cấu hình khung nhìn khung nhìn.
+	Tiled viewports are for the Model tab; use MVIEW in a layout.	Khung nhìn xếp ô dành cho thẻ Model; hãy dùng MVIEW trong bố cục.
+echo	`{key}` must be a viewport number from 1 to {n}	`{key}` phải là số khung nhìn từ 1 đến {n}
+echo	unknown arrangement `{arrangement}` for {count} viewports	không nhận diện được cách sắp xếp `{arrangement}` cho {count} khung nhìn
+	The current viewport is too small to divide.	Khung nhìn hiện hành quá nhỏ để chia.
+echo	At most {MAX_TILES} viewports can be shown.	Có thể hiển thị tối đa {MAX_TILES} khung nhìn.
+	`join` (the viewport to join) is required	cần có `join` (khung nhìn cần nối)
+	There is only one viewport.	Chỉ có một khung nhìn.
+	The selected viewports do not form a rectangle.	Các khung nhìn đã chọn không tạo thành hình chữ nhật.
+echo	"{name}" is not a valid viewport configuration name.	"{name}" không phải tên cấu hình khung nhìn hợp lệ.
+echo	Viewport configuration "{name}" saved.	Đã lưu cấu hình khung nhìn "{name}".
+echo	Could not find viewport configuration "{name}".	Không tìm thấy cấu hình khung nhìn "{name}".
+	No matching viewport configurations found.	Không tìm thấy cấu hình khung nhìn phù hợp.
+echo	{value1} viewport configuration(s) deleted.	Đã xóa {value1} cấu hình khung nhìn.
+	option must be single, 2, 3, 4, join, save, restore, delete or list	lựa chọn phải là single, 2, 3, 4, join, save, restore, delete hoặc list
+	No such viewport.	Không có khung nhìn này.
+	unknown mode	không nhận diện được chế độ
+	the view is too large to show. Nothing was changed	hướng nhìn quá lớn để hiển thị. Không có thay đổi nào
+echo	the result is too large: object {value1} would get infinite or undefined coordinates. Nothing was changed	kết quả quá lớn: đối tượng {value1} sẽ có tọa độ vô hạn hoặc không xác định. Không có thay đổi nào
+echo	unknown command `{value1}`	không nhận diện được lệnh `{value1}`
+echo	command `{value1}` is not available right now: {value2}	lệnh `{value1}` hiện không khả dụng: {value2}
+echo	invalid parameters for `{cmd}`: {msg}	tham số không hợp lệ cho `{cmd}`: {msg}
+echo	internal error in `{value1}` (the drawing was kept as it was): {value2}	lỗi nội bộ trong `{value1}` (bản vẽ được giữ nguyên): {value2}
+echo	Command: {name}	Lệnh: {name}
+echo	Internal error in {id}: {m}	Lỗi nội bộ trong {id}: {m}
+echo	Resuming {value1} command.	Tiếp tục lệnh {value1}.
+echo	Invalid input: {value1}	Dữ liệu nhập không hợp lệ: {value1}
+	a script is already running; nested scripts are not supported	một kịch bản đang chạy; không hỗ trợ kịch bản lồng nhau
+echo	bad argument value: positive {start}	giá trị đối số không hợp lệ: cần số dương {start}
+echo	bad argument value: non-negative {n}	giá trị đối số không hợp lệ: cần số không âm {n}
+echo	bad argument value: file mode {mode}	giá trị đối số không hợp lệ: chế độ tệp {mode}
+echo	no function definition: {value1}	chưa có định nghĩa hàm: {value1}
+echo	bad function: {value1}	hàm không hợp lệ: {value1}
+echo	LOAD failed: "{name}"	LOAD thất bại: "{name}"
+echo	AutoCAD variable setting rejected: {value1} {value2}	Thiết lập biến AutoCAD bị từ chối: {value1} {value2}
+echo	bad DXF group: {kind} can't be made from this list	nhóm DXF không hợp lệ: không thể tạo {kind} từ danh sách này
+echo	bad argument value: ssget mode {m}	giá trị đối số không hợp lệ: chế độ ssget {m}
+echo	bad ssget filter: no {end}	bộ lọc ssget không hợp lệ: thiếu {end}
+echo	bad argument value: rtos mode {mode}	giá trị đối số không hợp lệ: chế độ rtos {mode}
+	Missed, try again.	Chọn trượt, hãy thử lại.
+	Value must be between -32768 and 32767.	Giá trị phải nằm trong khoảng -32768 đến 32767.
+	Value must be nonzero.	Giá trị phải khác không.
+echo	bad argument type: {pred}: {value1}	kiểu đối số không hợp lệ: {pred}: {value1}
+echo	; error: {value1}	; lỗi: {value1}
+	a LISP routine is already running	một chương trình LISP đang chạy
+echo	internal error: {value1}	lỗi nội bộ: {value1}
+echo	routine stopped after {BLOCKING_CAP} steps	chương trình đã dừng sau {BLOCKING_CAP} bước
+echo	internal error: {msg}	lỗi nội bộ: {msg}
+echo	; error: {msg}	; lỗi: {msg}
+echo	{shown} successfully loaded.	Đã tải thành công {shown}.
+echo	LISP write blocked: {path} is outside the allowed folders (LISPSANDBOX)	Đã chặn ghi LISP: {path} nằm ngoài các thư mục được phép (LISPSANDBOX)
+echo	LISP_NOT_REVIEWED: {name} (sha256 {sha})	LISP_NOT_REVIEWED: chưa duyệt {name} (sha256 {sha})
+echo	Only the user can change permissions with {id}	Chỉ người dùng mới có thể thay đổi quyền bằng {id}
+echo	bad argument value: property {property}	giá trị đối số không hợp lệ: thuộc tính {property}
+echo	handles exceeds {MAX_SCAN_FRAMES} entries	handles vượt quá {MAX_SCAN_FRAMES} mục
+echo	out of memory: string longer than {MAX_STRING} bytes	hết bộ nhớ: chuỗi dài hơn {MAX_STRING} byte
+echo	Angle Override: {value1}	Ghi đè góc: {value1}
+echo	No {value1} found for specified point.	Không tìm thấy {value1} cho điểm đã chỉ định.
+	by must be user or agent:<name>, with 1 to 64 characters	by phải là user hoặc agent:<name>, từ 1 đến 64 ký tự
+echo	audit count exceeds {MAX_AUDIT_ENTRIES}	số mục kiểm tra lỗi vượt quá {MAX_AUDIT_ENTRIES}
+echo	BLOCK_NOT_APPROVABLE: {key}:{value1}	BLOCK_NOT_APPROVABLE: không thể chấp nhận {key}:{value1}
+echo	only WARN issues can be approved: {key}:{value1}	chỉ có thể chấp nhận vấn đề WARN: {key}:{value1}
+echo	unknown sheetKey or issue code: {key}:{code}	không nhận diện được sheetKey hoặc mã vấn đề: {key}:{code}
+echo	APPROVAL_WITHOUT_AUDIT: {key}:{value1}	APPROVAL_WITHOUT_AUDIT: chưa kiểm tra lỗi {key}:{value1}
+echo	APPROVAL_WITHOUT_AUDIT: {value1}:split	APPROVAL_WITHOUT_AUDIT: chưa kiểm tra lỗi {value1}:split
+	printer splits are only available in the desktop app; choose PDF	chỉ hỗ trợ chia trang in trong ứng dụng máy tính; hãy chọn PDF
+echo	duplicate split sheetKey: {key}	sheetKey chia trang bị trùng: {key}
+echo	unknown sheetKey: {key}	không nhận diện được sheetKey: {key}
+echo	no split proposal for {key}; choose PDF	không có đề xuất chia trang cho {key}; hãy chọn PDF
+echo	cannot split {key}; overlap must be 0..=200 mm and the short side must fit; choose PDF	không thể chia {key}; chồng lấn phải trong 0..=200 mm và cạnh ngắn phải vừa giấy; hãy chọn PDF
+echo	PLAN_INVALID: {error}	PLAN_INVALID: {error}
+	paper choice exceeds 256 bytes	lựa chọn giấy vượt quá 256 byte
+echo	invalid paper `{text}`: use auto, a paper name, WIDTHxHEIGHT or roll:WIDTH[:MARGIN]	giấy `{text}` không hợp lệ: hãy dùng auto, tên khổ giấy, WIDTHxHEIGHT hoặc roll:WIDTH[:MARGIN]
+echo	Paper dimensions must be within 1..={MAX_PAPER_MM} mm.	Kích thước giấy phải trong 1..={MAX_PAPER_MM} mm.
+echo	Roll width must be within 1..={MAX_PAPER_MM} mm and margin within 0..=1000 mm.	Chiều rộng cuộn phải trong 1..={MAX_PAPER_MM} mm và lề trong 0..=1000 mm.
+echo	frame needs {value1} mm across roll including margins; roll {width} mm is too narrow; choose a wider roll or paper	khung cần {value1} mm theo chiều ngang cuộn gồm cả lề; cuộn {width} mm quá hẹp; hãy chọn cuộn hoặc khổ giấy rộng hơn
+echo	Roll length {length} mm exceeds {MAX_PAPER_MM} mm.	Chiều dài cuộn {length} mm vượt quá {MAX_PAPER_MM} mm.
+echo	frame needs {w}×{h} mm at selected scale; paper {name} prints {pw}×{ph} mm	khung cần {w}×{h} mm ở tỉ lệ đã chọn; giấy {name} in được {pw}×{ph} mm
+echo	{name} exceeds {MAX_SCAN_FRAMES} entries	{name} vượt quá {MAX_SCAN_FRAMES} mục
+echo	scan exceeds {MAX_SCAN_FRAMES} entries	kết quả quét vượt quá {MAX_SCAN_FRAMES} mục
+echo	Duplicate handle {value1} was selected once.	Mã đối tượng trùng {value1} chỉ được chọn một lần.
+echo	drawing exceeds {MAX_SCAN_FRAMES} layouts	bản vẽ vượt quá {MAX_SCAN_FRAMES} bố cục
+echo	unknown layout `{name}`	không nhận diện được bố cục `{name}`
+	layout paper dimensions must be finite and positive	kích thước giấy của bố cục phải hữu hạn và dương
+	layout plot scale must be finite and positive	tỉ lệ in của bố cục phải hữu hạn và dương
+	PLAN_INVALID: window outline must be a rectangle	PLAN_INVALID: đường bao cửa sổ phải là hình chữ nhật
+	last mode requires session state	chế độ last cần trạng thái phiên
+echo	Sheet {key} was excluded.	Đã loại trừ tờ bản vẽ {key}.
+	frame handle must be hexadecimal	mã khung bản vẽ phải ở hệ mười sáu
+	window must contain two corners or four vertices	cửa sổ phải chứa hai góc hoặc bốn đỉnh
+	window coordinates must be finite	tọa độ cửa sổ phải hữu hạn
+echo	External reference `{value1}` at `{value2}` is {value3}.	Tham chiếu ngoài `{value1}` tại `{value2}` có trạng thái {value3}.
+	Printer devices are only available in the desktop app; plotting to PDF.	Thiết bị in chỉ khả dụng trong ứng dụng máy tính; đang in thành PDF.
+	The requested device is unavailable; plotting to PDF.	Thiết bị được yêu cầu không khả dụng; đang in thành PDF.
+echo	Paper {value1} x {value2} mm exceeds device limits {max_short} x {max_long} mm; approve a split or choose PDF.	Giấy {value1} x {value2} mm vượt giới hạn thiết bị {max_short} x {max_long} mm; hãy chấp nhận chia trang hoặc chọn PDF.
+echo	Paper {value1} x {value2} mm is at least 95% of device limits {max_short} x {max_long} mm.	Giấy {value1} x {value2} mm đạt ít nhất 95% giới hạn thiết bị {max_short} x {max_long} mm.
+echo	{value1} is drawn with {replacement}	{value1} được vẽ bằng {replacement}
+echo	Sheet id `{value1}` is used by more than one sheet.	Id tờ bản vẽ `{value1}` được dùng cho nhiều tờ.
+echo	Template `{value1}` is superseded by `{successor}`.	Mẫu `{value1}` đã được thay thế bằng `{successor}`.
+echo	Revision `{revision}` is older than highest revision `{highest}` for sheet id `{value1}` in this plan.	Bản sửa đổi `{revision}` cũ hơn bản mới nhất `{highest}` cho id tờ bản vẽ `{value1}` trong kế hoạch này.
+echo	Revision `{revision}` compared with registered revision `{expected}`.	Đã so sánh bản sửa đổi `{revision}` với bản đã đăng ký `{expected}`.
+echo	Revision is missing; registered revision is `{expected}`.	Thiếu bản sửa đổi; bản đã đăng ký là `{expected}`.
+	Font traversal exceeded its safe layout limit.	Duyệt phông chữ đã vượt giới hạn bố cục an toàn.
+	Font traversal exceeded its safe visibility limit.	Duyệt phông chữ đã vượt giới hạn hiển thị an toàn.
+	Font traversal found a non-finite block transform.	Duyệt phông chữ phát hiện phép biến đổi khối không hữu hạn.
+	effective settings exceed 256 KiB	cài đặt có hiệu lực vượt quá 256 KiB
+echo	Skipped {value1} print profile: {reason}	Đã bỏ qua hồ sơ in {value1}: {reason}
+	naming exceeds 256 KiB	quy tắc đặt tên vượt quá 256 KiB
+echo	unknown naming token; allowed tokens are {stem}, {sheet_id}, {order}, {part}	không nhận diện được mã đặt tên; cho phép {stem}, {sheet_id}, {order}, {part}
+	retry_limit exceeds the supported limit	retry_limit vượt giới hạn hỗ trợ
+	unsupported print profile schema_version	không hỗ trợ schema_version của hồ sơ in
+	only drawing print profiles may carry project_id	chỉ hồ sơ in của bản vẽ mới được chứa project_id
+	invalid print profile lock pointer	con trỏ khóa hồ sơ in không hợp lệ
+	print profile settings must be an object	cài đặt hồ sơ in phải là đối tượng
+echo	print profile schema {value1} is newer than this application	lược đồ hồ sơ in {value1} mới hơn ứng dụng này
+echo	invalid print profile: {value1}	hồ sơ in không hợp lệ: {value1}
+echo	Locked by {level} policy	Bị khóa theo chính sách {level}
+	platform print settings are built into the application	cài đặt in của nền tảng được tích hợp trong ứng dụng
+	invalid drawing print profile id	id hồ sơ in bản vẽ không hợp lệ
+	reserved drawing print profile id	id hồ sơ in bản vẽ được dành riêng
+echo	print profile id must match [a-z0-9-]{1,64}	id hồ sơ in phải khớp [a-z0-9-]{1,64}
+	print profile level or id does not match its store key	cấp hoặc id hồ sơ in không khớp khóa lưu trữ
+echo	{error}; could not keep damaged copy: {archive_error}	{error}; không thể giữ bản sao bị hỏng: {archive_error}
+echo	Print profile {level} was damaged; restored the last good copy	Hồ sơ in {level} bị hỏng; đã khôi phục bản tốt gần nhất
+echo	Print profile {level} was damaged; no last good copy is available	Hồ sơ in {level} bị hỏng; không có bản tốt gần nhất để khôi phục
+	print profile store write failed	không thể ghi vào kho hồ sơ in
+	print profile store count limit reached	đã đạt giới hạn số hồ sơ in lưu trữ
+	damaged print profile exceeds 256 KiB	hồ sơ in bị hỏng vượt quá 256 KiB
+	damaged print profile count limit reached	đã đạt giới hạn số hồ sơ in bị hỏng
+	print profile store paths must not be symbolic links	đường dẫn kho hồ sơ in không được là liên kết tượng trưng
+	print profile path is not a regular file	đường dẫn hồ sơ in không phải tệp thông thường
+	damaged print profile archive collision	trùng tên tệp lưu trữ hồ sơ in bị hỏng
+	path exceeds 4096 bytes	đường dẫn vượt quá 4096 byte
+	read_error: path exceeds 4096 bytes	read_error: đường dẫn vượt quá 4096 byte
+	symlink: symbolic links and junctions are not followed	symlink: không theo liên kết tượng trưng và điểm nối
+	read_error: not a regular file	read_error: không phải tệp thông thường
+	empty: file has zero bytes	empty: tệp có kích thước 0 byte
+	invalid_magic: expected DWG or DXF content	invalid_magic: cần nội dung DWG hoặc DXF
+	size_limit: drawing exceeds native decoder limits	size_limit: bản vẽ vượt giới hạn bộ giải mã gốc
+	scan_limit: model entity limit exceeded	scan_limit: vượt giới hạn số đối tượng mô hình
+	scan_limit: frame count limit exceeded	scan_limit: vượt giới hạn số khung bản vẽ
+	scan_limit: frame and layout count limit exceeded	scan_limit: vượt giới hạn số khung bản vẽ và bố cục
+	SOURCE_CHANGED: the folder drawing differs from the queued source	SOURCE_CHANGED: bản vẽ trong thư mục khác nguồn đã xếp hàng
+echo	SOURCE_UNAVAILABLE: {error}	SOURCE_UNAVAILABLE: {error}
+echo	SHEET_TOO_LARGE: {value1} output bytes exceed {value2}	SHEET_TOO_LARGE: đầu ra {value1} byte vượt quá {value2}
+	SOURCE_UNAVAILABLE: the drawing snapshot has no source hash	SOURCE_UNAVAILABLE: bản chụp bản vẽ không có mã băm nguồn
+	SOURCE_CHANGED: the drawing snapshot differs from the queued source	SOURCE_CHANGED: bản chụp bản vẽ khác nguồn đã xếp hàng
+	split piece count exceeds the PDF page limit	số phần chia vượt giới hạn số trang PDF
+	sheet page count is outside the PDF page limits	số trang của tờ bản vẽ nằm ngoài giới hạn số trang PDF
+	output file names collide; use distinct sheet orders or IDs	tên tệp đầu ra bị trùng; hãy dùng thứ tự hoặc ID tờ bản vẽ khác nhau
+	job exceeds source or sheet limits	tác vụ vượt giới hạn nguồn hoặc tờ bản vẽ
+	sheet orders must be positive and unique within a source	thứ tự tờ bản vẽ phải dương và không trùng trong cùng nguồn
+	WARN_NOT_APPROVED: printer capabilities changed; scan and approve the plan again	WARN_NOT_APPROVED: khả năng thiết bị in đã thay đổi; hãy quét và chấp nhận lại kế hoạch
+	manifest does not match the queued job	bản kê không khớp tác vụ đã xếp hàng
+	manifest has an invalid or duplicate output file	bản kê có tệp đầu ra không hợp lệ hoặc bị trùng
+	manifest output sheets do not match the file	các tờ bản vẽ đầu ra trong bản kê không khớp tệp
+	manifest sheet names an undelivered file	tờ bản vẽ trong bản kê chỉ đến tệp chưa xuất
+	completed manifest is missing output files	bản kê đã hoàn tất còn thiếu tệp đầu ra
+	manifest contains a sheet that is not ready to run	bản kê có tờ bản vẽ chưa sẵn sàng chạy
+echo	missing artifact {name}	thiếu tệp kết quả {name}
+echo	artifact checksum mismatch: {name}	mã kiểm tra tệp kết quả không khớp: {name}
+echo	{value1} withheld; failed sheets: {value2}	Đã giữ lại {value1}; các tờ bản vẽ lỗi: {value2}
+echo	{value1} withheld; merge failed: {error}	Đã giữ lại {value1}; gộp thất bại: {error}
+echo	{value1} withheld; merged PDF exceeds byte limit	Đã giữ lại {value1}; PDF gộp vượt giới hạn byte
+echo	invalid output file name: {reason}	tên tệp đầu ra không hợp lệ: {reason}
+	job commit exceeds supported limits	lưu tác vụ vượt giới hạn hỗ trợ
+	artifact exceeds PDF byte limit	tệp kết quả vượt giới hạn kích thước PDF tính bằng byte
+	artifact count exceeds supported limits	số tệp kết quả vượt giới hạn hỗ trợ
+	job store write failed	không thể ghi vào kho tác vụ
+	job store paths must not be symbolic links	đường dẫn kho tác vụ không được là liên kết tượng trưng
+	stored path is not a regular file	đường dẫn lưu trữ không phải tệp thông thường
+	stored file exceeds supported byte limit	tệp lưu trữ vượt giới hạn kích thước được hỗ trợ tính bằng byte
+	path exceeds supported length	đường dẫn vượt chiều dài hỗ trợ
+	job source count exceeds supported limits	số nguồn tác vụ vượt giới hạn hỗ trợ
+	manifest exceeds 64 MiB	bản kê vượt quá 64 MiB
+echo	manifest {key} exceeds {cap} entries	bản kê {key} vượt quá {cap} mục
+echo	unsupported manifest schema_version {value1}	không hỗ trợ schema_version {value1} của bản kê
+	manifest contains an invalid sheet order or source index	bản kê có thứ tự tờ bản vẽ hoặc chỉ số nguồn không hợp lệ
+	manifest contains an invalid or duplicate sheet key	bản kê có khóa tờ bản vẽ không hợp lệ hoặc bị trùng
+	template id must be nonempty without @, and version must be positive	id mẫu không được rỗng hoặc chứa @, và phiên bản phải dương
+echo	template exceeds {MAX_BLOCK_NAMES} block names	mẫu vượt quá {MAX_BLOCK_NAMES} tên khối
+echo	template {value1} local rectangle must be finite with min < max on both axes	hình chữ nhật cục bộ của mẫu {value1} phải hữu hạn với min < max trên cả hai trục
+echo	template {value1} media dimensions must be finite and positive	kích thước giấy của mẫu {value1} phải hữu hạn và dương
+echo	Frame template registry could not be loaded; using builtins: {error}	Không thể tải danh mục mẫu khung; dùng mẫu tích hợp: {error}
+	registry import exceeds 2 MiB	dữ liệu nhập danh mục vượt quá 2 MiB
+echo	unsupported registry schema_version {schema}	không hỗ trợ schema_version {schema} của danh mục
+echo	registry import exceeds {MAX_TEMPLATES} templates	danh mục nhập vào vượt quá {MAX_TEMPLATES} mẫu
+echo	Frame template registry exceeds {MAX_TEMPLATES} templates; remaining entries were dropped	Danh mục mẫu khung vượt quá {MAX_TEMPLATES} mẫu; đã bỏ các mục còn lại
+echo	duplicate template {value1}	mẫu {value1} bị trùng
+echo	Frame template registry dropped {dropped} invalid or duplicate entries	Danh mục mẫu khung đã bỏ {dropped} mục không hợp lệ hoặc trùng
+echo	Frame template registry repaired {repaired} inconsistent superseded entries	Danh mục mẫu khung đã sửa {repaired} mục thay thế không nhất quán
+echo	Frame template persistence is unavailable: {error}	Không thể lưu lâu dài mẫu khung: {error}
+echo	Frame template registry could not be restored; using builtins: {reason}	Không thể khôi phục danh mục mẫu khung; dùng mẫu tích hợp: {reason}
+	frame template registry file exceeds 2 MiB	tệp danh mục mẫu khung vượt quá 2 MiB
+echo	{value1}: template exceeds audit limits	{value1}: mẫu vượt giới hạn kiểm tra lỗi
+echo	Font {font} is missing.	Thiếu phông chữ {font}.
+	baseline import requires 1..=1000 picks and a complete audit	nhập đường chuẩn cần 1..=1000 lần chọn và một bản kiểm tra lỗi hoàn chỉnh
+	baseline import requires a valid, complete audit	nhập đường chuẩn cần một bản kiểm tra lỗi hợp lệ và hoàn chỉnh
+echo	duplicate template id {value1}	id mẫu {value1} bị trùng
+echo	unknown audited block {value1}	không nhận diện được khối đã kiểm tra lỗi {value1}
+echo	no frame rule for {value1}	không có quy tắc khung cho {value1}
+	baseline import exceeds 1000 templates	nhập đường chuẩn vượt quá 1000 mẫu
+echo	PLAN_INVALID: {message}	PLAN_INVALID: {message}
+echo	sheet count exceeds {MAX_SCAN_FRAMES}	số tờ bản vẽ vượt quá {MAX_SCAN_FRAMES}
+echo	unsupported schema_version {value1}	không hỗ trợ schema_version {value1}
+echo	duplicate sheet order {value1}	thứ tự tờ bản vẽ {value1} bị trùng
+echo	plan nesting exceeds {MAX_DEPTH}	độ lồng kế hoạch vượt quá {MAX_DEPTH}
+	plan contains too many values	kế hoạch chứa quá nhiều giá trị
+	split piece count exceeds the page cap	số phần chia vượt giới hạn số trang
+	split requires at least two pieces and overlap within 0..=200 mm	chia trang cần ít nhất hai phần và chồng lấn trong 0..=200 mm
+	split pieces must be finite rectangles	các phần chia phải là hình chữ nhật hữu hạn
+	sheet order must be at least 1	thứ tự tờ bản vẽ phải ít nhất là 1
+	paper_mm dimensions must be finite and positive	kích thước paper_mm phải hữu hạn và dương
+	source is required for window and layout sheets	cần nguồn cho tờ bản vẽ dạng cửa sổ và bố cục
+	block_handle must be hexadecimal	block_handle phải là mã hệ mười sáu
+	sheet mode must match source kind	chế độ tờ bản vẽ phải khớp loại nguồn
+	source outline and rotation must be finite	đường bao và góc xoay nguồn phải hữu hạn
+echo	invalid value for {name} ({allowed})	giá trị không hợp lệ cho {name} ({allowed})
+	0 or 1	0 hoặc 1
+echo	{min} to {max}	{min} đến {max}
+echo	a number {value1} {min}	số {value1} {min}
+	a number	số
+	an angle	góc
+	a hatch pattern name	tên mẫu mặt cắt
+	a name, or . for none	tên, hoặc . để bỏ chọn
+echo	{name} is read-only	{name} chỉ đọc
+echo	{n} is read-only	{n} chỉ đọc
+echo	invalid value for {n}	giá trị không hợp lệ cho {n}
+	OBJECTISOLATIONMODE 1 (isolation saved with the drawing) is not available yet	OBJECTISOLATIONMODE 1 (lưu cô lập cùng bản vẽ) chưa khả dụng
+	1 object hidden	Đã ẩn 1 đối tượng
+echo	{n} block reference to "{name}", which has no definition	{n} tham chiếu khối đến "{name}" chưa có định nghĩa
+echo	{n} block references to "{name}", which has no definition	{n} tham chiếu khối đến "{name}" chưa có định nghĩa
+echo	{n} attribute selected.	Đã chọn {n} thuộc tính khối.
+echo	{n} attributes selected.	Đã chọn {n} thuộc tính khối.
+echo	{n} attribute changed.	Đã thay đổi {n} thuộc tính khối.
+echo	{n} attributes changed.	Đã thay đổi {n} thuộc tính khối.
+echo	ATTSYNC block {block}: {n} reference synchronized.	ATTSYNC khối {block}: đã đồng bộ {n} tham chiếu.
+echo	ATTSYNC block {block}: {n} references synchronized.	ATTSYNC khối {block}: đã đồng bộ {n} tham chiếu.
+echo	Block {value1}: {n} reference in the drawing.	Khối {value1}: có {n} tham chiếu trong bản vẽ.
+echo	Block {value1}: {n} references in the drawing.	Khối {value1}: có {n} tham chiếu trong bản vẽ.
+echo	ATTSYNC block {name}: {n} reference synchronized.	ATTSYNC khối {name}: đã đồng bộ {n} tham chiếu.
+echo	ATTSYNC block {name}: {n} references synchronized.	ATTSYNC khối {name}: đã đồng bộ {n} tham chiếu.
+echo	{n} row extracted.	Đã trích xuất {n} hàng.
+echo	{n} rows extracted.	Đã trích xuất {n} hàng.
+echo	`{name}` takes {lo} argument(s)	`{name}` nhận {lo} đối số

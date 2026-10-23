@@ -23,7 +23,7 @@ fn catalog_is_valid_and_preserves_placeholders_and_ellipses() {
         let (catalog, errors) = parse(language.source);
         assert!(errors.is_empty(), "{}: {errors:?}", language.code);
         for ((context, key), value) in catalog {
-            assert!(["", "menu", "ribbon", "@plural"].contains(&context), "unknown context: {context}");
+            assert!(["", "menu", "ribbon", "@plural", "echo"].contains(&context), "unknown context: {context}");
             let forms: Vec<_> = if context == "@plural" { value.split('|').collect() } else { vec![value] };
             if context == "@plural" {
                 assert_eq!(forms.len(), language.plural_forms, "{}: {key}", language.code);
@@ -275,6 +275,253 @@ fn every_engine_prompt_has_a_vietnamese_translation() {
     let catalog = catalog("vi").unwrap();
     let missing: Vec<_> = keys.into_iter().filter(|key| !catalog.contains_key(&("", key.as_str()))).collect();
     assert!(missing.is_empty(), "missing Vietnamese engine prompts: {missing:?}");
+}
+
+// These values contain no prose, or guard internal contracts rather than user input.
+const INTERNAL_ENGINE_TEXT: &[(&str, &str)] = &[
+    (", ", "list punctuation"),
+    ("  {l}", "indented user layer name"),
+    ("MSPACE", "command keyword"),
+    (">>{}", "transparent command marker and id"),
+    ("{:<24} {:<8} {:<12} {}", "tabular values only"),
+    ("{k:<12} {}", "variable name and value only"),
+    ("{PICKED}{}", "calculator expression and result only"),
+    ("{0}", "transparent thiserror wrapper"),
+    ("asynchronous print jobs require the frame pump", "internal native scheduler contract"),
+    ("plan must serialize as an object", "typed plan serialization invariant"),
+];
+
+fn engine_message_literals(source: &str) -> Vec<(usize, String, bool)> {
+    let tokens = production_ui_tokens(source);
+    let mut result = Vec::new();
+    for (i, token) in tokens.iter().enumerate() {
+        if (token.text == "msg" || token.literal.as_deref() == Some("message")) && tokens.get(i + 1).is_some_and(|t| t.text == ":") {
+            let start = i + 2;
+            let mut end = start;
+            while end < tokens.len() && !matches!(tokens[end].text, "," | "}" | ")") {
+                if matches!(tokens[end].text, "(" | "[" | "{") {
+                    end = closing_token(&tokens, end);
+                }
+                end += 1;
+            }
+            for (offset, text) in bound_text_literals(&tokens, start..end) {
+                let index = tokens.iter().position(|t| t.offset == offset).unwrap();
+                let formatted = index.checked_sub(3).is_some_and(|i| tokens[i].text == "format");
+                result.push((offset, text, formatted));
+            }
+        }
+        if !matches!(token.text, "Err" | "Other" | "other" | "bad" | "echo" | "notice" | "bail" | "error")
+            || i.checked_sub(1).and_then(|i| tokens.get(i)).is_some_and(|t| t.text == "fn")
+        {
+            continue;
+        }
+        let open = i + if tokens.get(i + 1).is_some_and(|t| t.text == "!") { 2 } else { 1 };
+        if !tokens.get(open).is_some_and(|t| t.text == "(") {
+            continue;
+        }
+        let arguments = ui_arguments(&tokens, open);
+        let position = usize::from(token.text == "bad" && arguments.len() > 1);
+        let Some(argument) = arguments.get(position) else { continue };
+        let Some(first) = tokens.get(argument.start) else { continue };
+        if let Some(text) = &first.literal {
+            result.push((first.offset, text.clone(), token.text == "error"));
+        } else if first.text == "format" && tokens.get(argument.start + 1).is_some_and(|t| t.text == "!") {
+            if let Some(format) = tokens.get(argument.start + 3)
+                && let Some(text) = &format.literal
+            {
+                result.push((format.offset, text.clone(), true));
+            }
+        } else if matches!(first.text, "if" | "match") {
+            for (offset, text) in text_literals(&tokens, argument.clone()) {
+                let index = tokens.iter().position(|t| t.offset == offset).unwrap();
+                let formatted = index.checked_sub(3).is_some_and(|i| tokens[i].text == "format");
+                result.push((offset, text, formatted));
+            }
+        }
+    }
+    result
+}
+
+fn message_shape(text: &str) -> String {
+    let mut result = String::new();
+    let mut rest = text;
+    while let Some((before, tail)) = rest.split_once('{') {
+        result.push_str(before);
+        if let Some(after) = tail.strip_prefix('{') {
+            result.push('{');
+            rest = after;
+        } else if let Some((field, after)) = tail.split_once('}') {
+            if field.contains(',') || (field.chars().any(char::is_whitespace) && field.chars().any(char::is_alphabetic)) {
+                result.push('{');
+                result.push_str(field);
+                result.push('}');
+            } else {
+                result.push_str("{}");
+            }
+            rest = after;
+        } else {
+            result.push('{');
+            rest = tail;
+        }
+    }
+    result.push_str(rest);
+    result.replace("}}", "}")
+}
+
+#[test]
+fn every_engine_error_and_notice_has_a_vietnamese_translation() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../engine/src");
+    let mut directories = vec![root.clone()];
+    let catalog = catalog("vi").unwrap();
+    let shapes: BTreeSet<_> =
+        catalog.keys().filter(|(context, key)| ["", "echo"].contains(context) && key.contains('{')).map(|(_, key)| message_shape(key)).collect();
+    let templates = echo_templates("vi");
+    let mut missing = BTreeSet::new();
+    let mut checked = 0;
+    while let Some(directory) = directories.pop() {
+        for entry in std::fs::read_dir(directory).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                directories.push(path);
+                continue;
+            }
+            let file = path.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
+            if path.extension().is_none_or(|extension| extension != "rs") || test_source(&file) {
+                continue;
+            }
+            let source = std::fs::read_to_string(&path).unwrap();
+            for (offset, message, formatted) in engine_message_literals(&source) {
+                if INTERNAL_ENGINE_TEXT.iter().any(|(internal, _)| *internal == message) {
+                    continue;
+                }
+                for key in message.lines().filter(|line| !line.is_empty()) {
+                    checked += 1;
+                    let covered = catalog.contains_key(&("", key))
+                        || catalog.contains_key(&("echo", key))
+                        || (formatted && shapes.contains(&message_shape(key)))
+                        || (!formatted && templates.iter().any(|template| template.capture(key).is_some()));
+                    if !covered {
+                        let line = source[..offset].bytes().filter(|b| *b == b'\n').count() + 1;
+                        missing.insert(format!("{file}:{line}: {key}"));
+                    }
+                }
+            }
+        }
+    }
+    assert!(checked > 1_000, "engine scan unexpectedly checked only {checked} messages");
+    assert!(missing.is_empty(), "missing Vietnamese engine errors/notices:\n{}", missing.into_iter().collect::<Vec<_>>().join("\n"));
+}
+
+#[test]
+fn engine_message_scan_catches_new_errors_and_ignores_test_fixtures() {
+    let source = r#"
+        fn run() {
+            Err("Brand new message".into());
+            EngineError::Other("Other message".into());
+            other("Helper message");
+            bad("line", "Parameter message");
+            session.echo(format!("Block {} missing", name));
+            session.echo(if ok { "Done" } else { "Failed" });
+        }
+        #[cfg(test)] mod tests { fn fixture() { Err("Test only".into()); } }
+    "#;
+    let found: BTreeSet<_> = engine_message_literals(source).into_iter().map(|(_, text, _)| text).collect();
+    assert_eq!(
+        found,
+        BTreeSet::from(
+            ["Brand new message", "Other message", "Helper message", "Parameter message", "Block {} missing", "Done", "Failed"].map(str::to_string)
+        )
+    );
+    assert!(!catalog("vi").unwrap().contains_key(&("", "Brand new message")));
+    assert!(echo_templates("vi").iter().all(|template| template.capture("Brand new message").is_none()));
+}
+
+#[test]
+fn echoed_templates_capture_whole_lines_with_shortest_nonempty_values() {
+    let template = EchoTemplate::new("Block {name} failed: {reason}", "Lỗi {reason}: {name}").unwrap();
+    let values = template.capture("Block A failed: B: C").unwrap();
+    assert_eq!(values, [("name", "A"), ("reason", "B: C")]);
+    assert_eq!(substitute(template.translated, &values), "Lỗi B: C: A");
+    assert!(template.capture("prefix Block A failed: B").is_none());
+    assert!(template.capture("Block  failed: B").is_none());
+    assert!(template.capture("Block A failed:").is_none());
+    assert!(template.capture("Block A failed: ").is_none());
+    let repeated = EchoTemplate::new("Object name {name}/{name}.", "Tên {name}/{name}.").unwrap();
+    assert!(repeated.capture("Object name A/B.").is_none());
+    assert!(repeated.capture("Object name A/A.").is_some());
+    let backtrack = EchoTemplate::new("Value {a}x{b}y", "Giá trị {a}/{b}").unwrap();
+    assert_eq!(backtrack.capture("Value axxby").unwrap(), [("a", "a"), ("b", "xb")]);
+    let unicode = EchoTemplate::new("Block name {name}.", "Tên khối {name}.").unwrap();
+    assert_eq!(unicode.capture("Block name Văn {phòng}.").unwrap(), [("name", "Văn {phòng}")]);
+    assert!(unicode.capture(&"x".repeat(16_385)).is_none());
+    assert!(EchoTemplate::new("{title} {message}", "{title} {message}").is_none());
+    assert!(EchoTemplate::new("Bad {}", "Lỗi {}").is_none());
+    for source in ["{min} to {max}", "{axes} of", "{snap} of", "{path}: {e}", "{value1} = {value2}", "{width} × {height} mm"] {
+        assert!(EchoTemplate::new(source, source).is_none(), "{source}");
+    }
+    assert!(EchoTemplate::new("Block {name}", "Khối {name}").is_none());
+    assert!(EchoTemplate::new("Blocks {name}", "Các khối {name}").is_some());
+    assert!(EchoTemplate::new("Áéíóúñ {name}", "Áéíóúñ {name}").is_some());
+    let braces = EchoTemplate::new("Use {name: bool}, got {value}", "Dùng {name: bool}, đã nhận {value}").unwrap();
+    assert_eq!(braces.capture("Use {name: bool}, got false").unwrap(), [("value", "false")]);
+}
+
+#[test]
+fn echoed_catalog_lookup_preserves_unknown_text_and_english_bytes() {
+    with_language("vi", || {
+        assert_eq!(echo("Command: LINE"), "Lệnh: LINE");
+        assert_eq!(echo("Block \"ROOM {name}\" not found."), "Không tìm thấy khối \"ROOM {name}\".");
+        assert_eq!(echo("Custom output {name}: LINE"), "Custom output {name}: LINE");
+        assert_eq!(echo("Moved 3 objects to Layer1"), "Moved 3 objects to Layer1");
+        assert_eq!(echo("a: b"), "a: b");
+        assert_eq!(echo("Current: RoutineName"), "Current: RoutineName");
+        assert_eq!(echo("Value must be positive and nonzero."), "Giá trị phải dương và khác không.");
+        assert_eq!(echo("Command: {name}"), "Lệnh: {name}");
+        assert_eq!(echo("invalid parameters for `circle`: radius must be positive"), "tham số không hợp lệ cho `circle`: bán kính phải dương");
+    });
+    for language in ["en", "unknown"] {
+        with_language(language, || {
+            for line in ["Command: LINE", "Value must be positive and nonzero.", "Block \"ROOM\" not found.", "Custom output {name}: LINE", " \n", ""]
+            {
+                assert_eq!(echo(line).as_bytes(), line.as_bytes());
+            }
+        });
+    }
+}
+
+#[test]
+fn echo_memo_is_bounded_and_separate_for_each_language() {
+    ECHO_MEMO.with(|memo| memo.borrow_mut().clear());
+    let source = "Command: LINE";
+    assert_eq!(translated_echo("vi", source), "Lệnh: LINE");
+    assert_eq!(translated_echo("uk", source), "Команда: LINE");
+    assert_eq!(translated_echo("vi", source), "Lệnh: LINE");
+    assert_eq!(translated_echo("uk", source), "Команда: LINE");
+    assert!(matches!(translated_echo("vi", "Value must be positive and nonzero."), Cow::Borrowed(_)));
+    assert!(matches!(translated_echo("vi", "Command: {name}"), Cow::Borrowed(_)));
+    for line in ["Moved 3 objects to Layer1", "a: b"] {
+        assert_eq!(translated_echo("vi", line), line);
+        assert_eq!(translated_echo("vi", line), line);
+        assert!(matches!(translated_echo("vi", line), Cow::Owned(_)));
+    }
+    ECHO_MEMO.with(|memo| {
+        let memo = memo.borrow();
+        assert_eq!(memo.get("vi").unwrap().get(source).map(String::as_str), Some("Lệnh: LINE"));
+        assert_eq!(memo.get("uk").unwrap().get(source).map(String::as_str), Some("Команда: LINE"));
+        assert_eq!(memo.get("vi").unwrap().get("a: b").map(String::as_str), Some("a: b"));
+        assert!(!memo.get("vi").unwrap().contains_key("Command: {name}"));
+    });
+    ECHO_MEMO.with(|memo| memo.borrow_mut().clear());
+    for index in 0..514 {
+        let line = format!("Unmatched routine output {index}");
+        assert_eq!(translated_echo("vi", &line), line.as_str());
+    }
+    ECHO_MEMO.with(|memo| {
+        let memo = memo.borrow();
+        let lines = memo.get("vi").unwrap();
+        assert_eq!(lines.len(), 2);
+        assert!(!lines.contains_key("Unmatched routine output 0"));
+    });
 }
 
 fn missing_commands_menus_tools_and_snap_labels(language: &str) -> Vec<String> {
@@ -1098,7 +1345,7 @@ fn missing_marked_ui_literals(language: &str) -> BTreeSet<String> {
     ui_literal_audit()
         .translated
         .iter()
-        .filter(|(_, _, key)| !catalog.contains_key(&("", key.as_str())))
+        .filter(|(_, _, key)| !catalog.contains_key(&("", key.as_str())) && !catalog.contains_key(&("echo", key.as_str())))
         .map(|(file, line, key)| format!("{file}:{line}: {key}"))
         .collect()
 }

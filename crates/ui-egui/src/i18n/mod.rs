@@ -2,7 +2,8 @@
 //! English strings remain lookup keys; command IDs, drawing data and automation stay unchanged.
 //! Add a catalog, a `LANGUAGES` row and a preference variant to introduce another language.
 
-use std::cell::Cell;
+use std::borrow::Cow;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
@@ -158,12 +159,19 @@ pub struct Language {
     /// Number of `|`-separated forms every `@plural` row must carry.
     pub plural_forms: usize,
     catalog: OnceLock<Catalog<'static>>,
+    templates: OnceLock<Vec<EchoTemplate<'static>>>,
 }
 
 pub static LANGUAGES: [Language; 14] = [
-    Language { code: "en", name: "English", source: "", plural: plural_en, plural_forms: 2, catalog: OnceLock::new() },
+    Language { code: "en", name: "English", source: "", plural: plural_en, plural_forms: 2, catalog: OnceLock::new(), templates: OnceLock::new() },
     Language {
-        code: "uk", name: "Українська", source: include_str!("uk.tsv"), plural: plural_uk, plural_forms: 3, catalog: OnceLock::new()
+        code: "uk",
+        name: "Українська",
+        source: include_str!("uk.tsv"),
+        plural: plural_uk,
+        plural_forms: 3,
+        catalog: OnceLock::new(),
+        templates: OnceLock::new(),
     },
     Language {
         code: "pt-BR",
@@ -172,30 +180,119 @@ pub static LANGUAGES: [Language; 14] = [
         plural: plural_pt,
         plural_forms: 2,
         catalog: OnceLock::new(),
+        templates: OnceLock::new(),
     },
     // German plurals follow the English rule: one (1), other.
-    Language { code: "de", name: "Deutsch", source: include_str!("de.tsv"), plural: plural_en, plural_forms: 2, catalog: OnceLock::new() },
+    Language {
+        code: "de",
+        name: "Deutsch",
+        source: include_str!("de.tsv"),
+        plural: plural_en,
+        plural_forms: 2,
+        catalog: OnceLock::new(),
+        templates: OnceLock::new(),
+    },
     // Spanish integer plurals follow the English rule too.
-    Language { code: "es", name: "Español", source: include_str!("es.tsv"), plural: plural_en, plural_forms: 2, catalog: OnceLock::new() },
-    Language { code: "cs", name: "Čeština", source: include_str!("cs.tsv"), plural: plural_cs, plural_forms: 3, catalog: OnceLock::new() },
+    Language {
+        code: "es",
+        name: "Español",
+        source: include_str!("es.tsv"),
+        plural: plural_en,
+        plural_forms: 2,
+        catalog: OnceLock::new(),
+        templates: OnceLock::new(),
+    },
+    Language {
+        code: "cs",
+        name: "Čeština",
+        source: include_str!("cs.tsv"),
+        plural: plural_cs,
+        plural_forms: 3,
+        catalog: OnceLock::new(),
+        templates: OnceLock::new(),
+    },
     // Russian integer plurals follow the Ukrainian rule: one (1, 21), few (2–4), many.
-    Language { code: "ru", name: "Русский", source: include_str!("ru.tsv"), plural: plural_uk, plural_forms: 3, catalog: OnceLock::new() },
+    Language {
+        code: "ru",
+        name: "Русский",
+        source: include_str!("ru.tsv"),
+        plural: plural_uk,
+        plural_forms: 3,
+        catalog: OnceLock::new(),
+        templates: OnceLock::new(),
+    },
     // French integer plurals (CLDR `fr`): one (0, 1), other, the Portuguese rule.
-    Language { code: "fr", name: "Français", source: include_str!("fr.tsv"), plural: plural_pt, plural_forms: 2, catalog: OnceLock::new() },
+    Language {
+        code: "fr",
+        name: "Français",
+        source: include_str!("fr.tsv"),
+        plural: plural_pt,
+        plural_forms: 2,
+        catalog: OnceLock::new(),
+        templates: OnceLock::new(),
+    },
     // Chinese has no grammatical plural: both `@plural` forms read the same. Its glyphs come from
     // an installed CJK font (`theme::cjk_font`); without one the interface stays English.
-    Language { code: "zh", name: "简体中文", source: include_str!("zh.tsv"), plural: plural_en, plural_forms: 2, catalog: OnceLock::new() },
+    Language {
+        code: "zh",
+        name: "简体中文",
+        source: include_str!("zh.tsv"),
+        plural: plural_en,
+        plural_forms: 2,
+        catalog: OnceLock::new(),
+        templates: OnceLock::new(),
+    },
     // Italian integer plurals (CLDR `it`) follow the English rule: one (1), other.
-    Language { code: "it", name: "Italiano", source: include_str!("it.tsv"), plural: plural_en, plural_forms: 2, catalog: OnceLock::new() },
+    Language {
+        code: "it",
+        name: "Italiano",
+        source: include_str!("it.tsv"),
+        plural: plural_en,
+        plural_forms: 2,
+        catalog: OnceLock::new(),
+        templates: OnceLock::new(),
+    },
     // Korean has one integer plural form and needs a Hangul-capable interface font.
-    Language { code: "ko", name: "한국어", source: include_str!("ko.tsv"), plural: plural_single, plural_forms: 1, catalog: OnceLock::new() },
+    Language {
+        code: "ko",
+        name: "한국어",
+        source: include_str!("ko.tsv"),
+        plural: plural_single,
+        plural_forms: 1,
+        catalog: OnceLock::new(),
+        templates: OnceLock::new(),
+    },
     // Swedish plurals follow the English rule: one (1), other.
-    Language { code: "sv", name: "Svenska", source: include_str!("sv.tsv"), plural: plural_en, plural_forms: 2, catalog: OnceLock::new() },
+    Language {
+        code: "sv",
+        name: "Svenska",
+        source: include_str!("sv.tsv"),
+        plural: plural_en,
+        plural_forms: 2,
+        catalog: OnceLock::new(),
+        templates: OnceLock::new(),
+    },
     // العربية (Arabic) is right-to-left; an installed Arabic font (`theme::arabic_font`)
     // covers its glyphs, and the shell keeps egui's left-to-right run order. Six plural
     // forms: zero, one, two, few, many, other.
-    Language { code: "ar", name: "العربية", source: include_str!("ar.tsv"), plural: plural_arabic, plural_forms: 6, catalog: OnceLock::new() },
-    Language { code: "vi", name: "Tiếng Việt", source: include_str!("vi.tsv"), plural: plural_single, plural_forms: 1, catalog: OnceLock::new() },
+    Language {
+        code: "ar",
+        name: "العربية",
+        source: include_str!("ar.tsv"),
+        plural: plural_arabic,
+        plural_forms: 6,
+        catalog: OnceLock::new(),
+        templates: OnceLock::new(),
+    },
+    Language {
+        code: "vi",
+        name: "Tiếng Việt",
+        source: include_str!("vi.tsv"),
+        plural: plural_single,
+        plural_forms: 1,
+        catalog: OnceLock::new(),
+        templates: OnceLock::new(),
+    },
 ];
 
 /// BCP 47 and POSIX locale tags, including `uk-UA`, `uk_UA.UTF-8` and `pt_BR.UTF-8`.
@@ -208,6 +305,7 @@ pub fn locale_language(tag: &str) -> Option<&'static str> {
 thread_local! {
     // Scoped to a single app's render. Headless calls and parallel tests default to English.
     static CURRENT: Cell<&'static str> = const { Cell::new("en") };
+    static ECHO_MEMO: RefCell<HashMap<String, HashMap<String, String>>> = RefCell::new(HashMap::new());
 }
 
 pub fn with_language<R>(language: &'static str, draw: impl FnOnce() -> R) -> R {
@@ -222,6 +320,199 @@ pub fn with_language<R>(language: &'static str, draw: impl FnOnce() -> R) -> R {
 }
 
 type Catalog<'a> = HashMap<(&'a str, &'a str), &'a str>;
+
+#[derive(Debug)]
+enum EchoPart<'a> {
+    Literal(&'a str),
+    Capture(&'a str),
+}
+
+#[derive(Debug)]
+struct EchoTemplate<'a> {
+    source: &'a str,
+    translated: &'a str,
+    parts: Vec<EchoPart<'a>>,
+    literal_bytes: usize,
+}
+
+impl<'a> EchoTemplate<'a> {
+    fn new(source: &'a str, translated: &'a str) -> Option<Self> {
+        let mut parts = Vec::new();
+        let mut rest = source;
+        let mut literal_bytes = 0;
+        let mut captures = 0;
+        while let Some((literal, tail)) = rest.split_once('{') {
+            let (name, after) = tail.split_once('}')?;
+            parts.push(EchoPart::Literal(literal));
+            literal_bytes += literal.len();
+            if !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+                parts.push(EchoPart::Capture(name));
+                captures += 1;
+            } else {
+                let braces = rest.get(literal.len()..literal.len() + name.len() + 2)?;
+                parts.push(EchoPart::Literal(braces));
+                literal_bytes += braces.len();
+            }
+            rest = after;
+        }
+        parts.push(EchoPart::Literal(rest));
+        literal_bytes += rest.len();
+        // Short literal fragments can match arbitrary output from user routines.
+        let letters: usize = parts
+            .iter()
+            .map(|part| match part {
+                EchoPart::Literal(text) => text.chars().filter(|ch| ch.is_alphabetic()).count(),
+                EchoPart::Capture(_) => 0,
+            })
+            .sum();
+        (captures > 0 && captures <= 16 && parts.len() <= 64 && source.len() <= 4096 && letters >= 6).then_some(Self {
+            source,
+            translated,
+            parts,
+            literal_bytes,
+        })
+    }
+
+    fn capture<'s>(&self, line: &'s str) -> Option<Vec<(&'a str, &'s str)>> {
+        fn visit<'a, 's>(parts: &[EchoPart<'a>], rest: &'s str, values: &mut Vec<(&'a str, &'s str)>, budget: &mut usize) -> bool {
+            if *budget == 0 {
+                return false;
+            }
+            *budget -= 1;
+            match parts.split_first() {
+                None => rest.is_empty(),
+                Some((EchoPart::Literal(literal), tail)) => rest.strip_prefix(*literal).is_some_and(|rest| visit(tail, rest, values, budget)),
+                Some((EchoPart::Capture(name), tail)) => {
+                    if let Some((_, previous)) = values.iter().find(|(key, _)| key == name).copied() {
+                        return rest.strip_prefix(previous).is_some_and(|rest| visit(tail, rest, values, budget));
+                    }
+                    for end in rest.char_indices().map(|(i, _)| i).skip(1).chain(std::iter::once(rest.len())) {
+                        if *budget == 0 {
+                            break;
+                        }
+                        if let Some((value, after)) = rest.get(..end).zip(rest.get(end..)) {
+                            if value.is_empty() {
+                                continue;
+                            }
+                            values.push((*name, value));
+                            if visit(tail, after, values, budget) {
+                                return true;
+                            }
+                            values.pop();
+                        }
+                    }
+                    false
+                }
+            }
+        }
+
+        if line.len() > 16_384 {
+            return None;
+        }
+        let mut values = Vec::new();
+        let mut budget = 16_384;
+        visit(&self.parts, line, &mut values, &mut budget).then_some(values)
+    }
+}
+
+fn echo_templates(language: &str) -> &'static [EchoTemplate<'static>] {
+    let Some(language) = LANGUAGES.iter().find(|entry| entry.code == language) else { return &[] };
+    language.templates.get_or_init(|| {
+        let mut templates: Vec<_> = catalog(language.code)
+            .into_iter()
+            .flat_map(|catalog| catalog.iter())
+            .filter(|((context, _), _)| *context == "echo")
+            .filter_map(|((_, source), translated)| EchoTemplate::new(source, translated))
+            .collect();
+        templates.sort_by(|a, b| b.literal_bytes.cmp(&a.literal_bytes).then_with(|| a.source.cmp(b.source)));
+        templates
+    })
+}
+
+/// Engine logs retain their English bytes; only displayed whole lines use template lookup.
+pub fn echo(source: &str) -> Cow<'_, str> {
+    CURRENT.with(|language| translated_echo(language.get(), source))
+}
+
+fn translated_echo<'a>(language: &str, source: &'a str) -> Cow<'a, str> {
+    let Some(catalog) = catalog(language) else { return Cow::Borrowed(source) };
+    if let Some(translated) = catalog.get(&("", source)).or_else(|| catalog.get(&("echo", source))) {
+        return Cow::Borrowed(translated);
+    }
+    if let Some(translated) =
+        ECHO_MEMO.with(|memo| memo.try_borrow().ok().and_then(|memo| memo.get(language).and_then(|lines| lines.get(source)).cloned()))
+    {
+        return Cow::Owned(translated);
+    }
+    let translated = translated_echo_inner(language, source, 0);
+    if source.len() <= 4096 && translated.len() <= 16_384 {
+        ECHO_MEMO.with(|memo| {
+            if let Ok(mut memo) = memo.try_borrow_mut() {
+                let lines = memo.entry(language.to_string()).or_default();
+                if lines.len() >= 512 {
+                    lines.clear();
+                }
+                lines.insert(source.to_string(), translated.to_string());
+            }
+        });
+    }
+    translated
+}
+
+fn translated_echo_inner<'a>(language: &str, source: &'a str, depth: usize) -> Cow<'a, str> {
+    let Some(catalog) = catalog(language) else { return Cow::Borrowed(source) };
+    if let Some(translated) = catalog.get(&("", source)).or_else(|| catalog.get(&("echo", source))) {
+        return Cow::Borrowed(translated);
+    }
+    for template in echo_templates(language) {
+        if let Some(values) = template.capture(source) {
+            // Only engine error envelopes contain another message; names and ids remain opaque.
+            let nested = match template.source {
+                "invalid parameters for `{cmd}`: {msg}" | "; error: {msg}" => Some("msg"),
+                "command `{value1}` is not available right now: {value2}"
+                | "internal error in `{value1}` (the drawing was kept as it was): {value2}" => Some("value2"),
+                "Internal error in {id}: {m}" | "CAL: {m}" | "QuickCalc: {m}" => Some("m"),
+                "Object not converted: {why}." | "Object {value1} not converted: {why}." => Some("why"),
+                "; error: {value1}" => Some("value1"),
+                _ => None,
+            };
+            let localized: Vec<_> = values
+                .iter()
+                .map(|(name, value)| {
+                    let value =
+                        if depth < 4 && nested == Some(*name) { translated_echo_inner(language, value, depth + 1) } else { Cow::Borrowed(*value) };
+                    (*name, value)
+                })
+                .collect();
+            let values: Vec<_> = localized.iter().map(|(name, value)| (*name, value.as_ref())).collect();
+            return Cow::Owned(substitute(template.translated, &values));
+        }
+    }
+    Cow::Borrowed(source)
+}
+
+fn substitute(text: &str, values: &[(&str, &str)]) -> String {
+    let mut result = String::new();
+    let mut rest = text;
+    while let Some((before, tail)) = rest.split_once('{') {
+        result.push_str(before);
+        let Some((key, after)) = tail.split_once('}') else {
+            result.push('{');
+            rest = tail;
+            break;
+        };
+        if let Some((_, value)) = values.iter().find(|(name, _)| *name == key) {
+            result.push_str(value);
+        } else {
+            result.push('{');
+            result.push_str(key);
+            result.push('}');
+        }
+        rest = after;
+    }
+    result.push_str(rest);
+    result
+}
 
 /// Malformed rows are ignored at runtime and diagnosed by the catalog tests.
 fn parse(source: &str) -> (Catalog<'_>, Vec<String>) {

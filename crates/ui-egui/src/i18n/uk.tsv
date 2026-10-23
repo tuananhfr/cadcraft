@@ -2190,3 +2190,1706 @@ ribbon	Plot	Друк креслення
 	Close {label}	Закрити {label}
 	{name} options	Параметри {name}
 	{id} is only available in the desktop app	{id} доступно лише в настільному застосунку
+
+# --- UbotCAD uk batch W5 (AI-assisted, review pending) ---
+echo	… and {value1} more	… і ще {value1}
+echo	Audit: {n} error{value1} found, {fixed} fixed.	Перевірка: знайдено помилок: {n}{value1}, виправлено: {fixed}.
+echo	the {what} "{name}" is missing	відсутній {what} "{name}"
+echo	layer "{value1}" uses linetype "{value2}", which doesn't exist	шар "{value1}" використовує тип лінії "{value2}", якого не існує
+echo	dimension style "{value1}" uses text style "{value2}", which doesn't exist	стиль розмірів "{value1}" використовує стиль тексту "{value2}", якого не існує
+echo	multileader style "{value1}" uses text style "{value2}", which doesn't exist	стиль мультивиносок "{value1}" використовує стиль тексту "{value2}", якого не існує
+echo	the current {what} ({var}) is {shown}, which doesn't exist	поточний {what} ({var}) — {shown}, якого не існує
+echo	set to {default}	встановлено {default}
+echo	the next handle ({value1}) is not above the largest one in use ({value2})	наступний ідентифікатор ({value1}) не перевищує найбільший використаний ({value2})
+echo	{n} block reference{value1} to "{name}", which has no definition	посилань на блок "{name}" без визначення: {n}{value1}
+echo	layer "{n}" is used by objects but doesn't exist	шар "{n}" використовується об’єктами, але не існує
+echo	dimension's block "{b}" doesn't exist	блок розміру "{b}" не існує
+echo	{n} object{value1} {what} {shown}, which doesn't exist	об’єктів із неіснуючим {what} {shown}: {n}{value1}
+	block contains a reference to itself	блок містить посилання на себе
+echo	reference to block "{to}" makes the block contain itself	посилання на блок "{to}" змушує блок містити самого себе
+echo	group "{value1}" lists {gone} object{value2} exist	група "{value1}" містить у списку об’єктів: {gone}{value2} існує
+echo	constraint {value1} refers to an object that doesn't exist	обмеження {value1} посилається на неіснуючий об’єкт
+echo	Block "{name}" not found.	Блок "{name}" не знайдено.
+echo	"{value1}" is an external reference; open its drawing (XOPEN) to edit it.	"{value1}" є зовнішнім посиланням; відкрийте його креслення (XOPEN) для редагування.
+echo	"{value1}" is an anonymous block made by another object; it can't be edited in the Block Editor.	"{value1}" є анонімним блоком іншого об’єкта; його неможливо редагувати в редакторі блоків.
+	The current drawing can't be saved as a block from the Block Editor; use WBLOCK or BLOCK.	Поточне креслення неможливо зберегти як блок у редакторі блоків; скористайтеся WBLOCK або BLOCK.
+echo	Block "{name}" can't contain a reference to itself.	Блок "{name}" не може містити посилання на себе.
+echo	The Block Editor is already open on "{open}"; close it first (BCLOSE).	Редактор блоків уже відкрито для "{open}"; спочатку закрийте його (BCLOSE).
+	The Block Editor is not open.	Редактор блоків не відкрито.
+	scale names must be strings	назви масштабів мають бути рядками
+	expected a scale name or an array of scale names	очікується назва масштабу або масив назв масштабів
+echo	`{name}` is not in the scale list	`{name}` відсутній у списку масштабів
+	nothing selected	нічого не вибрано
+echo	{changed} of {total} object(s) changed	Змінено об’єктів: {changed} із {total}
+echo	, {value1} not annotative	, неанотативних: {value1}
+echo	, {last} scale(s) kept as an object's only scale	, збережено як єдиний масштаб об’єкта: {last}
+echo	{value1} annotative object(s) synchronized	Синхронізовано анотативних об’єктів: {value1}
+echo	{value1} object(s) updated	Оновлено об’єктів: {value1}
+	a scale name has 1 to 255 characters	назва масштабу містить від 1 до 255 символів
+	paper and drawing units must be positive	одиниці паперу та креслення мають бути додатними
+echo	a scale named `{name}` already exists	масштаб з назвою `{name}` уже існує
+	the scale list is full	список масштабів заповнений
+echo	`{value1}` is the current annotation scale	`{value1}` є поточним масштабом анотацій
+echo	`{value1}` is used by annotative objects	`{value1}` використовується анотативними об’єктами
+	`reset` is true, "metric" or "imperial"	`reset` є true, "metric" або "imperial"
+	`add.name` is required	потрібно `add.name`
+echo	`{r}` is not a ratio such as 1:50	`{r}` не є відношенням на кшталт 1:50
+echo	  {value1}  ({value2} paper = {value3} drawing)	  {value1}  ({value2} на папері = {value3} у кресленні)
+echo	A scale named "{text}" already exists.	Масштаб з назвою "{text}" уже існує.
+echo	Scales of the selected objects: {value1}	Масштаби вибраних об’єктів: {value1}
+	`object` must be a line, arc, circle or polyline segment	`object` має бути лінія, дуга, коло або сегмент полілінії
+echo	`handle` of a circle/arc, or {center, point}	потрібен `handle` кола/дуги або {center, point}
+	object is not a circle or arc	об’єкт не є коло або дуга
+	`point` must differ from `center`	`point` має відрізнятися від `center`
+	`lines` needs two line handles	`lines` потребує два ідентифікатори ліній
+	objects must be two non-parallel lines	потрібні два об’єкти — непаралельні лінії
+	object is not an arc	об’єкт не є дуга
+	`p1` and `p2` must differ from `vertex`	`p1` і `p2` має відрізнятися від `vertex`
+	`handle` of an arc is required	потрібен `handle` дуги
+	`points` is required	потрібно `points`
+echo	at most {MAX_CHAIN} `points` per call	щонайбільше {MAX_CHAIN} `points` на виклик
+	`points` must be a list of points	`points` має бути списком точки
+	no linear dimension to continue	немає лінійного розміру для продовження
+	`points` (arrow … landing) is required	потрібно `points` (стрілка … полиця)
+	need an arrowhead and a landing point	потрібно вістря стрілки і точка полиці
+	bad points	некоректні точки
+	need 2+ points	потрібно 2+ точки
+echo	{n} of {value1} dimension(s) associated.	Пов’язано розмірів: {n} із {value1}.
+echo	{n} disassociated.	Від’єднано: {n}.
+	select dimensions	виберіть розміри
+	`angle` (degrees) is required	потрібно `angle` (градуси)
+	`base` dimension is required	потрібен базовий розмір `base`
+	`base` is not a dimension	`base` не є розмір
+	base must be a linear or aligned dimension	базовий розмір має бути лінійним або паралельним
+echo	{value1} dimension(s) spaced.	Розподілено розмірів: {value1}.
+echo	{value1} dimension(s) changed.	Змінено розмірів: {value1}.
+echo	Unknown dimension variable "{t}".	Невідома змінна розміру "{t}".
+echo	Dimension text = {value1}	Текст розміру = {value1}
+	no linear dimension	немає лінійного розміру
+	bad leader	некоректна виноска
+	`angle` must be a number (degrees)	`angle` має бути числом (градуси)
+echo	unknown mode `{other}` (home, new, rotate, oblique)	невідомий режим `{other}` (home, new, rotate, oblique)
+	`handle` of an arc or circle is required	потрібен `handle` дуги або кола
+	`at` must differ from the centre	`at` має відрізнятися від центра
+	`handle` of a linear or aligned dimension is required	потрібен `handle` лінійного або паралельного розміру
+	not a dimension	не є розміром
+	only linear and aligned dimensions take a jog	злам підтримують лише лінійні та паралельні розміри
+	`first` and `second` must differ	`first` і `second` мають відрізнятися
+	no current space	немає поточного простору
+echo	unknown mode `{other}` (auto, manual, remove)	невідомий режим `{other}` (auto, manual, remove)
+echo	unknown shape `{other}` (round, angular, none)	невідома форма `{other}` (round, angular, none)
+echo	at most {MAX_CHAIN} distinct points per call	щонайбільше {MAX_CHAIN} різні точки на виклик
+	select circles or arcs for radius or diameter dimensions	виберіть кола або дуги для радіальних або діаметральних розмірів
+	select objects with points to dimension	виберіть об’єкти з точками для нанесення розмірів
+	select objects with at least two distinct points	виберіть об’єкти щонайменше з двома різними точками
+echo	at most {MAX_CHAIN} objects per call	щонайбільше {MAX_CHAIN} об’єкти на виклик
+echo	unknown mode `{m}` (continuous, staggered, baseline, ordinate, radius, diameter)	невідомий режим `{m}` (continuous, staggered, baseline, ordinate, radius, diameter)
+echo	{n} dimension(s) created.	Створено розмірів: {n}.
+	No such object.	Такого об’єкта немає.
+	The object is not an associative array.	Об’єкт не є асоціативним масивом.
+	The array's block is missing.	Блок масиву відсутній.
+	An array's source objects are being edited; enter ARRAYCLOSE first.	Вихідні об’єкти масиву редагуються; спочатку введіть ARRAYCLOSE.
+	The array has no such item.	У масиві немає такого елемента.
+	The array parameters are not valid.	Параметри масиву некоректні.
+	The array's source block is missing.	Вихідний блок масиву відсутній.
+	The array's scale is zero.	Масштаб масиву дорівнює нулю.
+	An array's items can't contain the array itself.	Елементи масиву не можуть містити сам масив.
+echo	The objects nest block references too deeply (more than {MAX_BLOCK_DEPTH} levels).	Посилання на блоки вкладено надто глибоко (понад {MAX_BLOCK_DEPTH} рівнів).
+	No array is being edited.	Жоден масив не редагується.
+	The source would have no objects; enter ARRAYCLOSE No to discard the changes, or erase the array.	Джерело залишиться без об’єктів; введіть ARRAYCLOSE No, щоб відкинути зміни, або видаліть масив.
+echo	`{key}` must be a whole number of at least 1	`{key}` має бути цілим числом щонайменше 1
+echo	`{key}` must be a number	`{key}` має бути числом
+	The items would span more than 360 degrees; enter a smaller angle or fewer items.	Елементи охоплять понад 360 градусів; введіть менший кут або меншу кількість елементів.
+	`handle` (the array) is required	потрібно `handle` (масив)
+	`replace.items` holds [i, j, level] item numbers	`replace.items` містить номери елементів [i, j, level]
+	`replace.items` must be a list of [i, j, level] or "source"	`replace.items` має бути списком [i, j, level] або "source"
+	`source.item` is [i, j, level]	`source.item` є [i, j, level]
+	No array selected.	Масив не вибрано.
+	No array item there; select an item of the array.	Тут немає елемента масиву; виберіть елемент масиву.
+	No replacement objects.	Немає об’єктів для заміни.
+	No objects to array (objects on locked layers are left out).	Немає об’єктів для масиву (об’єкти на заблокованих шарах пропускаються).
+echo	The objects nest block references too deeply to array (more than {MAX_BLOCK_DEPTH} levels).	Посилання на блоки вкладено надто глибоко для масиву (понад {MAX_BLOCK_DEPTH} рівнів).
+	The array base point is not a valid point.	Базова точка масиву некоректна.
+echo	The array would create {total} objects; the limit is {max} (MAXARRAY). Use fewer items or select fewer objects.	Масив створить {total} об’єктів; обмеження — {max} (MAXARRAY). Зменште кількість елементів або вибраних об’єктів.
+	`type` must be "rectangular", "polar" or "path"	`type` має бути "rectangular", "polar" або "path"
+echo	Type = Rectangular  Associative = {value1}	Тип = Прямокутний  Асоціативність = {value1}
+	Editing the array with grips is not available yet; choose an option.	Редагування масиву ручками ще недоступне; виберіть параметр.
+	The unit cell must have a width and a height.	Елементарна комірка повинна мати ширину й висоту.
+echo	Type = Polar  Associative = {value1}	Тип = Круговий  Асоціативність = {value1}
+	`path` is required	потрібно `path`
+echo	{path} is not a recoverable autosave file	{path} не є файл автозбереження, який можна відновити
+echo	unknown action `{other}` (list, open or discard)	невідома дія `{other}` (list, open або discard)
+	invalid base64	некоректний base64
+	`path` or `data` (base64) is required	потрібно `path` або `data` (base64)
+	file formats are not available in this build	формати файлів недоступні в цій збірці
+echo	{name} can't be read: {e}	неможливо прочитати {name}: {e}
+echo	{path}: {e}	{path}: {e}
+	paths are not available on the web; pass `data`	шляхи недоступні у вебверсії; передайте `data`
+	answer Yes or No	відповідайте Yes або No
+	`handle` is required	потрібно `handle`
+	`find` (a non-empty string) is required	потрібно `find` (непорожній рядок)
+echo	{n} attribute{value1} selected.	Вибрано атрибутів: {n}{value1}.
+echo	{k} is not available yet.	{k} ще недоступно.
+echo	Cannot find layer "{t}".	Не знайдено шар "{t}".
+echo	{n} attribute{value1} changed.	Змінено атрибутів: {n}{value1}.
+	`mode` ("normal", "on" or "off") is required	потрібно `mode` ("normal", "on" або "off")
+	`name` (or `handle` of a block reference) is required	потрібно `name` (або `handle` з посилання на блок)
+	`handle` is not a block reference	`handle` не є посилання на блок
+echo	Block "{name}" has no attribute definitions.	Блок "{name}" не має визначень атрибутів.
+echo	ATTSYNC block {block}: {n} reference{value1} synchronized.	ATTSYNC блок {block}: синхронізовано посилань: {n}{value1}.
+	No blocks with attributes match.	Відповідних блоків з атрибутами немає.
+echo	Blocks with attributes: {value1}	Блоки з атрибутами: {value1}
+echo	Block "{b}" has no attribute definitions.	Блок "{b}" не має визначень атрибутів.
+	That object is not a block reference.	Цей об’єкт не є посиланням на блок.
+echo	Block "{value1}" has no attribute tagged "{value2}".	Блок "{value1}" не має атрибута з тегом "{value2}".
+	A tag must be non-empty and without spaces.	Тег не може бути порожнім або містити пробіли.
+	The text height must be a positive number.	Висота тексту має бути додатним числом.
+echo	Layer "{value1}" not found.	Шар "{value1}" не знайдено.
+echo	Block "{value1}" already has an attribute tagged "{t}".	Блок "{value1}" уже має атрибут з тегом "{t}".
+echo	"{t}" is listed twice.	"{t}" зазначено двічі.
+echo	The order must list each of the {all} attribute tags once.	Порядок має містити всі {all} тегів атрибутів по одному разу.
+	`name` is required	потрібно `name`
+echo	`tag` is required for "{action}"	для "{action}" потрібен `tag`
+	`height` must be a number	`height` має бути числом
+	`order` (an array of tags) is required	потрібен `order` (масив тегів)
+	`order` must hold tags (strings)	`order` має містити теги (рядки)
+echo	unknown action "{other}" (list, edit, remove, up, down, order or sync)	невідома дія "{other}" (list, edit, remove, up, down, order або sync)
+echo	Block {value1}: {n} reference{value2} in the drawing.	Блок {value1}: посилань у кресленні: {n}{value2}.
+echo	  {value1}  prompt "{value2}"  default "{value3}"{modes}	  {value1}  запит "{value2}"  типово "{value3}"{modes}
+	No blocks with attributes.	Немає блоків з атрибутами.
+echo	Block "{value1}" has no attribute definitions.	Блок "{value1}" не має визначень атрибутів.
+echo	ATTSYNC block {name}: {n} reference{value1} synchronized.	ATTSYNC блок {name}: синхронізовано посилань: {n}{value1}.
+	The Block Editor is open on the current drawing; there is no block to save under another name.	Редактор блоків відкрито для поточного креслення; немає блоку для збереження під іншим ім’ям.
+echo	The Block Editor is already open on "{name}"; close it first (BCLOSE).	Редактор блоків уже відкрито для "{name}"; спочатку закрийте його (BCLOSE).
+echo	Not available in the Block Editor (editing "{name}"); close it first (BCLOSE).	Недоступно в редакторі блоків (редагування "{name}"); спочатку закрийте його (BCLOSE).
+echo	Block Editor: new block "{name}". BSAVE creates it in the drawing; BCLOSE closes the editor.	Редактор блоків: новий блок "{name}". BSAVE створює його в кресленні; BCLOSE закриває редактор.
+echo	Block Editor: editing "{name}". BSAVE saves it into the drawing; BCLOSE closes the editor.	Редактор блоків: редагування "{name}". BSAVE зберігає його в кресленні; BCLOSE закриває редактор.
+	`handle` must be a handle	`handle` має бути ідентифікатором
+	`name` or `handle` is required (or select one block reference)	`name` або `handle` потрібно (або виберіть один посилання на блок)
+echo	"{name}" is not a valid block name	"{name}" не є коректною назвою блоку
+echo	Block "{name}" saved.	Блок "{name}" збережено.
+echo	Block "{name}" already exists; pass `replace: true` to redefine it	блок "{name}" уже існує; передайте `replace: true` щоб перевизначити його
+echo	Block "{name}" saved; the Block Editor now edits it.	Блок "{name}" збережено; редактор блоків тепер редагує його.
+	No blocks to edit.	Немає блоків для редагування.
+	`node` (a parameter's graph id) is required	потрібно `node` (id графа параметра)
+	`part` must be base, end or at	`part` має бути base, end або at
+	`to` [x, y] is required	потрібно `to` [x, y]
+	the reference is on a locked layer	посилання розташовано на заблокованому шарі
+	no such grip	такої ручки немає
+	a list grip is chosen from, not dragged	ручка списку призначена для вибору, а не перетягування
+echo	{path}: files can't be written in the browser	{path}: запис файлів у браузері неможливий
+echo	Too much data for a table ({value1} rows, {value2} columns).	Забагато даних для таблиці (рядків: {value1}, стовпців: {value2}).
+	`at` must be a point [x, y]	`at` має бути точкою [x, y]
+echo	{n} row{value1} extracted.	Видобуто рядків: {n}{value1}.
+echo	Written to {f}.	Записано до {f}.
+echo	{p}: {e}	{p}: {e}
+echo	{path}: file not found	{path}: файл не знайдено
+echo	{_path}: {e}	{_path}: {e}
+	paths are not available on the web	шляхи недоступні у вебверсії
+echo	Block "{name}" references itself.	блок "{name}" посилання себе.
+	no such object	такого об’єкта немає
+echo	No unreferenced {noun}s found.	Не знайдено {noun} без посилань.
+echo	unknown type `{ty}`	невідомий тип `{ty}`
+	no block reference is being edited (REFEDIT)	жодне посилання на блок не редагується (REFEDIT)
+	the space of the reference is gone	простір з посилання більше не існує
+	a reference is already being edited; finish with REFCLOSE	посилання вже редагується; завершіть через REFCLOSE
+	select a block reference	виберіть посилання на блок
+	the reference is in no space	посилання не належить до жодного простору
+echo	block "{value1}" not found	Не знайдено блок "{value1}"
+echo	"{value1}" is an external reference: editing it in place would write its source drawing, which is not available yet. Open it with XOPEN, edit and save it, then reload.	"{value1}" є зовнішнім посиланням: редагування на місці запише вихідне креслення, що ще недоступно. Відкрийте його через XOPEN, відредагуйте, збережіть і перезавантажте.
+echo	"{value1}" is generated geometry and can't be edited in place	"{value1}" є згенерована геометрія і неможливо редагувати на місці
+	the reference must be scaled equally in X and Y (and not flat) to be edited in place	для редагування на місці посилання має бути однаково масштабоване по X та Y і не сплющене
+echo	`objects`: {v} is not an object handle	`objects`: {v} не є ідентифікатором об’єкта
+echo	object {value1} is not in block "{value2}"	об’єкт {value1} не належить до блоку "{value2}"
+	`objects` is empty	`objects` порожній
+echo	`objects` must be "all" or an array of handles, got {v}	`objects` має бути "all" або масив з ідентифікатори, отримано {v}
+echo	`{key}`: {v} is not an object handle	`{key}`: {v} не є ідентифікатором об’єкта
+echo	`{key}` must be an array of object handles, got {v}	`{key}` має бути масивом ідентифікатори об’єктів, отримано {v}
+	the reference can't be inverted	посилання неможливо обернути
+echo	no object {value1}	немає об’єкт {value1}
+echo	object {value1} is not in the working set	об’єкт {value1} не належить до робочого набору
+echo	block "{value1}" is gone; REFCLOSE Discard	блок "{value1}" більше не існує; REFCLOSE Discard
+echo	unknown option "{o}" (save or discard)	невідомий параметр "{o}" (save або discard)
+echo	block "{value1}" is gone; use REFCLOSE Discard	блок "{value1}" більше не існує; скористайтеся REFCLOSE Discard
+	the reference can't be inverted; use REFCLOSE Discard	посилання неможливо обернути; скористайтеся REFCLOSE Discard
+echo	Block "{value1}" would reference itself; remove that reference or use REFCLOSE Discard.	Блок "{value1}" посилатиметься на себе; вилучіть це посилання або скористайтеся REFCLOSE Discard.
+echo	{value1} object(s) in the working set.	Об’єктів у робочому наборі: {value1}.
+	Reference changes saved.	Зміни посилання збережено.
+	Reference changes discarded.	Зміни посилання відкинуто.
+	too many block references	забагато посилання на блоки
+	no block references selected	посилання на блоки не вибрано
+echo	no block `{name}`	немає блок `{name}`
+	external references cannot be replaced	неможливо замінити зовнішні посилання
+	too many replacement attributes	забагато атрибути заміни
+echo	{value1} is not a block reference	{value1} не є посилання на блок
+echo	no xref "{key}"	немає зовнішнє посилання "{key}"
+echo	"{key}" is not an xref	"{key}" не є зовнішнім посиланням
+echo	xref "{key}" is not loaded	зовнішнє посилання "{key}" не завантажено
+	blocks are nested too deeply	блоки вкладено надто глибоко
+echo	"{name}" is not an xref-dependent name	"{name}" не є назвою, залежною від зовнішнього посилання
+echo	no symbol "{name}"	немає символу "{name}"
+echo	no layer "{name}"	немає шару "{name}"
+echo	no linetype "{name}"	немає типу лінії "{name}"
+echo	no text style "{name}"	немає стилю тексту "{name}"
+echo	no dimension style "{name}"	немає стилю розмірів "{name}"
+echo	no block "{name}"	немає блоку "{name}"
+	only blocks, dimension styles, layers, linetypes and text styles can be bound	приєднати можна лише блоки, стилі розмірів, шари, типи ліній і стилі тексту
+echo	"{value1}" loaded from {value2}.	"{value1}" завантажено з {value2}.
+echo	Xref "{value1}" not loaded: {value2}.	Зовнішнє посилання "{value1}" не завантажено: {value2}.
+echo	{path}: not opened, {r}	{path}: не відкрито, {r}
+echo	the referenced files are larger than {value1} MB together	сумарний розмір файлів посилань перевищує {value1} MB
+echo	the file is larger than {value1} MB	файл перевищує {value1} MB
+	files are not available on the web	файли недоступні у вебверсії
+echo	nested xref "{n}" not loaded: {detail}	вкладене зовнішнє посилання "{n}" не завантажено: {detail}
+echo	more than {MAX_XREF_OBJECTS} objects	понад {MAX_XREF_OBJECTS} об’єктів
+echo	"{name}" is not a valid xref name	"{name}" не є коректною назвою зовнішнього посилання
+echo	an xref named "{value1}" is already attached from another file	зовнішнє посилання з назвою "{value1}" уже приєднано з іншого файлу
+echo	a block named "{value1}" already exists	блок з назвою "{value1}" уже існує
+echo	{path} can't be attached: {value1}	неможливо приєднати {path}: {value1}
+echo	{path} can't be attached	неможливо приєднати {path}
+	`scale` must be a number or [x, y]	`scale` має бути числом або [x, y]
+	scale must be a non-zero number	масштаб має бути ненульовим числом
+	`rotation` must be a number	`rotation` має бути числом
+echo	no xref matches "{pattern}"	немає зовнішнього посилання, що відповідає "{pattern}"
+echo	Xref "{n}" unloaded.	Зовнішнє посилання "{n}" вивантажено.
+echo	Xref "{n}" detached.	Зовнішнє посилання "{n}" від’єднано.
+echo	Xref "{n}" bound.	Зовнішнє посилання "{n}" приєднано.
+echo	unknown option "{option}"	невідомий параметр "{option}"
+	`type` must be block, dimstyle, layer, linetype or style	`type` має бути block, dimstyle, layer, linetype або style
+	`names` is required	потрібно `names`
+echo	no xref-dependent symbol matches "{pattern}"	немає залежного від зовнішнього посилання символу, що відповідає "{pattern}"
+echo	{value1} symbol(s) bound.	Приєднано символів: {value1}.
+	the selected object is not an xref	вибраний об’єкт не є зовнішнє посилання
+echo	no xref "{name}"	немає зовнішнє посилання "{name}"
+echo	"{name}" is not an xref	"{name}" не є зовнішнє посилання
+echo	No xref matches "{t}".	Немає зовнішніх посилань, що відповідають "{t}".
+echo	{value1} {value2} {value3} Path	{value1} {value2} {value3} Шлях
+echo	Total xref(s): {value1}	Усього зовнішніх посилань: {value1}
+	invalid block name	некоректна назва блоку
+	no objects selected	об’єкти не вибрано
+echo	Block "{name}" is being edited in place; finish with REFCLOSE first.	блок "{name}" редагується на місці; спочатку завершіть через REFCLOSE.
+	scale cannot be 0	масштаб не може дорівнювати 0
+	`tag` is required	потрібно `tag`
+	tag must be non-empty without spaces	тег має бути непорожнім і не містити пробіли
+	`value` is required	потрібно `value`
+echo	Defined blocks: {value1}	Визначені блоки: {value1}
+echo	Block "{name}" defined with {value1} object(s).	Блок "{name}" визначено з об’єктами: {value1}.
+	The corner must not be level with the insertion point.	Кут не може бути на одному рівні з точкою вставлення.
+	the clipboard is empty	буфер обміну порожній
+	the clipboard holds objects from this drawing; Paste to Original Coordinates pastes into another drawing	буфер обміну містить об’єкти з цього креслення; вставлення у вихідні координати призначене для іншого креслення
+	no free block name	немає вільної назви блоку
+echo	`{key}`: unknown point `{t}`	`{key}`: невідома точка `{t}`
+echo	`{key}` must be a point name or [x, y]	`{key}` має бути назвою точки або [x, y]
+echo	no such object {value1}	немає такого об’єкта {value1}
+echo	{value1} objects cannot be constrained	неможливо накласти обмеження на об’єкти: {value1}
+echo	cannot use this {value1} here	тут неможливо використати цей {value1}
+echo	{value1} needs {value2} object(s)	{value1} потребує об’єктів: {value2}
+	`type` is required	потрібно `type`
+echo	unknown constraint type `{t}`	невідомий тип обмеження `{t}`
+	`h1` is required	потрібно `h1`
+echo	{value1} constraint #{id} applied.	Застосовано обмеження {value1} #{id}.
+echo	unknown type `{t}`	невідомий тип `{t}`
+echo	{value1} = {value2}	{value1} = {value2}
+	select objects (or pass `handles`)	виберіть об’єкти (або передайте `handles`)
+echo	{value1} constraint(s) applied to {value2} object(s)	Застосовано обмежень: {value1}, до об’єктів: {value2}
+	select objects (or pass `handles` / `ids`)	виберіть об’єкти (або передайте `handles` / `ids`)
+echo	`{used}` is used by `{value1}`	`{used}` використовується в `{value1}`
+echo	{n} constraint(s) removed	Вилучено обмежень: {n}
+echo	`{name}` belongs to a dimensional constraint; delete the constraint instead	`{name}` належить розмірному обмеженню; видаліть саме обмеження
+echo	no parameter `{name}`	немає параметра `{name}`
+echo	`{name}` is used by `{value1}`	`{name}` використовується в `{value1}`
+	`expr` or `value` is required	потрібно `expr` або `value`
+	No parameters.	Немає параметрів.
+echo	unknown mode `{other}`	невідомий режим `{other}`
+echo	{what}: {mode}	{what}: {mode}
+	`value` must be 0 or 1	`value` має бути 0 або 1
+echo	CONSTRAINTINFER = {value1}	CONSTRAINTINFER = {value1}
+echo	{value1} constraint(s) removed with their objects.	Разом з об’єктами вилучено обмежень: {value1}.
+echo	Constraints could not be satisfied: {e}	Неможливо задовольнити обмеження: {e}
+	`points` [[x,y],...] (2 or more) is required	потрібно `points` [[x,y],...] (2 або більше)
+	need at least 2 points	потрібно щонайменше 2 точки
+	need at least 2 different points	потрібно щонайменше 2 різні точки
+	`vertices` needs at least 2 points	`vertices` потребує щонайменше 2 точки
+	`radius` or `diameter` is required	потрібно `radius` або `diameter`
+	points are collinear	точки колінеарні
+echo	give {center, radius} or {p1, p2[, p3]}	задайте {center, radius} або {p1, p2[, p3]}
+	radius must be positive	радіус має бути додатним
+	`radius` must be positive	`radius` має бути додатним
+echo	give {p1,p2,p3}, {start,center,end} or {center,radius,start,end}	задайте {p1,p2,p3}, {start,center,end} або {center,radius,start,end}
+	these values do not define an arc	ці значення не визначають дугу
+	sides must be 3..1024	кількість сторін має бути 3..1024
+	edge needs 2 points	кромка потребує 2 точки
+	edge endpoints must differ	кінці ребра мають відрізнятися
+	`radius` (number) is required	потрібно `radius` (число)
+	ratio must be in (0, 1] and major non-zero	відношення має бути в межах (0, 1], а велика піввісь — ненульовою
+	`at` or `points` is required	потрібно `at` або `points`
+	through point equals base	прохідна точка збігається з базовою
+	need 2+ different fit points	потрібні щонайменше 2 різні точки апроксимації
+	need 2+ control points	потрібно 2+ контрольні точки
+	`fit` or `control` points are required	потрібні точки `fit` або `control`
+	`inside` must not be larger than `outside`	`inside` не може бути більшим за `outside`
+	`text` is required	потрібно `text`
+	height must be positive	висота має бути додатною
+	unknown justification	невідоме вирівнювання
+echo	no text style "{n}"	немає стиль тексту "{n}"
+	`justify` must be TL, TC, TR, ML, MC, MR, BL, BC or BR	`justify` має бути TL, TC, TR, ML, MC, MR, BL, BC або BR
+echo	No {what} line through that point; pick another point.	Через цю точку не проходить лінія {what}; виберіть іншу точку.
+	No tangent or perpendicular from the last point.	З останньої точки немає дотичної або перпендикуляра.
+	Point or option keyword required.	Потрібна точка або ключове слово параметра.
+echo	Current line-width is {value1}	Поточна ширина лінії: {value1}
+	Value must be positive and nonzero.	Значення має бути додатним і ненульовим.
+	Edge endpoints must differ.	Кінці ребра мають відрізнятися.
+echo	Current point modes:  PDMODE={m}  PDSIZE={sz}	Поточні режими точок:  PDMODE={m}  PDSIZE={sz}
+echo	Current settings: Method=Fit   Knots={value1}	Поточні налаштування: Method=Fit   Knots={value1}
+	CV: not available yet	CV: ще недоступно
+echo	Current text style:  "{style}"  Text height:  {value1}  Annotative:  {anno}  Justify:  Left	Поточний стиль тексту:  "{style}"  Висота тексту:  {value1}  Анотативність:  {anno}  Вирівнювання:  Left
+echo	Current text style:  "{value1}"  Text height:  {value2}  Annotative:  {value3}	Поточний стиль тексту:  "{value1}"  Висота тексту:  {value2}  Анотативність:  {value3}
+echo	Cannot find multiline style "{value1}".	Не знайдено стиль мультилінії "{value1}".
+	`points` (2 or more) is required	потрібно `points` (2 або більше)
+	need 2 or more distinct points	потрібні щонайменше 2 різні точки
+	justification must be top, zero or bottom	вирівнювання має бути top, zero або bottom
+	scale is out of range	масштаб поза діапазоном
+	need 2 or more points	потрібні щонайменше 2 точки
+echo	Current settings: Justification = {value1}, Scale = {value2}, Style = {value3}	Поточні налаштування: Вирівнювання = {value1}, Масштаб = {value2}, Стиль = {value3}
+echo	Loaded multiline styles: {value1}	Завантажені стилі мультиліній: {value1}
+echo	`{key}` must be an object	`{key}` має бути об’єктом
+	cap angles must be 10..170 degrees	кути торців мають бути в межах 10..170 градусів
+	`elements` must be an array	`elements` має бути масив
+echo	a style has 1 to {MAX_MLINE_ELEMENTS} elements	стиль містить від 1 до {MAX_MLINE_ELEMENTS} елементів
+	each element needs a finite `offset`	кожен елемент потребує скінченного `offset`
+echo	unknown colour {c}	невідомий колір {c}
+echo	Cannot find multiline style "{name}".	Не знайдено стиль мультилінії "{name}".
+echo	The STANDARD and the current multiline style can't be deleted ({st}).	Неможливо видалити STANDARD і поточний стиль мультилінії ({st}).
+echo	Multiline style {st} is in use and can't be deleted.	Стиль мультилінії {st} використовується, його неможливо видалити.
+	style names have up to 31 characters and none of <>/\":;?*|,=`	назва стилю містить до 31 символу та не може містити <>/\":;?*|,=`
+	`rename` needs a name of up to 31 characters	`rename` потребує назву довжиною до 31 символи
+	The STANDARD multiline style can't be renamed.	Неможливо перейменувати стиль мультилінії STANDARD.
+echo	A multiline style named {to} already exists.	Стиль мультилінії з назвою {to} уже існує.
+echo	Multiline style {from} is in use and can't be renamed.	Стиль мультилінії {from} використовується, його неможливо перейменувати.
+echo	unknown fill colour {c}	невідомий колір заливки {c}
+echo	Multiline style {value1} is in use: its elements and properties can't be changed.	Стиль мультилінії {value1} використовується: його елементи й властивості неможливо змінити.
+	`tool` must be one of CC OC MC CT OT MT CJ AV DV CS CA WA	`tool` має бути одним із CC OC MC CT OT MT CJ AV DV CS CA WA
+echo	`{k}` (multiline handle) is required	потрібно `{k}` (ідентифікатор мультилінії)
+	The first multiline has no segments.	Перша мультилінія не має сегментів.
+	The second multiline has no segments.	Друга мультилінія не має сегментів.
+	Merged tee is not available yet.	Об’єднане Т-з’єднання ще недоступне.
+	The multilines are parallel.	Мультилінії паралельні.
+	Nothing would be left of the first multiline.	Від першої мультилінії нічого не залишиться.
+	Corner joints need open multilines.	Для кутових з’єднань потрібні відкриті мультилінії.
+	Nothing would be left of the second multiline.	Від другої мультилінії нічого не залишиться.
+	Too many vertices.	Забагато вершин.
+	A vertex is already there.	Тут уже є вершина.
+	The multiline has too few vertices to delete one.	У мультилінії замало вершин для видалення однієї.
+	Point required.	Потрібна точка.
+	Point or value required.	Потрібна точка або значення.
+	start+center needs `end`, `angle` or `length`	`start`+`center` потребує `end`, `angle` або `length`
+	start+end needs `angle`, `direction` or `radius`	`start`+`end` потребує `angle`, `direction` або `radius`
+	give start with center and/or end (see params)	задайте початок із центром та/або кінцем (див. параметри)
+	no line or arc to continue from	немає лінія або дуга для продовження
+	end point is on the tangent line	кінцева точка лежить на дотичній
+echo	give {center, diameter}, {p1, p2} or {p1, p2, p3}	задайте {center, diameter}, {p1, p2} або {p1, p2, p3}
+echo	`{hk}` is required	потрібно `{hk}`
+	degenerate ellipse	вироджений еліпс
+	Cannot divide/measure that object.	Неможливо поділити або виміряти цей об’єкт.
+echo	Block "{b}" not found.	Блок "{b}" не знайдено.
+	`segments` (2..32767) is required	потрібно `segments` (2..32767)
+	segments must be 2..32767	кількість сегментів має бути в межах 2..32767
+	length must be positive (and not tiny)	довжина має бути додатним (і не надто малий)
+echo	give {p1, p2}, {points}, {freehand} or {handle}	задайте {p1, p2}, {points}, {freehand} або {handle}
+	too many points	забагато точки
+	the boundary needs an area	межа потребує площа
+	The revision cloud needs at least three points enclosing an area.	Хмарка змін потребує щонайменше трьох точок, що охоплюють площу.
+echo	Minimum arc length: {value1}   Maximum arc length: {value1}   Style: Normal   Type: {t}	Мінімальна довжина дуги: {value1}   Максимальна довжина дуги: {value1}   Стиль: Normal   Тип: {t}
+	The object has no area.	Об’єкт не має площі.
+	Frames mode must be ON, OFF or Display.	Режим рамок має бути ON, OFF або Display.
+	The polyline must be closed with at least three vertices.	Полілінія має бути замкненою та мати щонайменше три вершини.
+	Polylines with arc segments cannot be used for wipeouts.	Полілінії з дуговими сегментами не можна використати для маскування.
+	`points` (3 or more) or `handle` is required	потрібно `points` (3 або більше) або `handle`
+	need 3+ points enclosing an area	потрібно 3+ точки що охоплюють площу
+	No polyline.	Немає полілінії.
+	A wipeout needs three or more points enclosing an area.	Маскування потребує щонайменше трьох точок, що охоплюють площу.
+	degenerate angle	вироджений кут
+	`base` is required	потрібно `base`
+	No line selected.	Лінію не вибрано.
+	`chamfer` distances must be zero or positive	відстані `chamfer` мають бути невід’ємними
+	dimensions: [length, width]	розміри: [length, width]
+	area must be positive	площа має бути додатним
+	area needs `length` or `breadth`	площа потребує `length` або `breadth`
+	rectangle has no area	прямокутник не має площі
+	The rectangle has no area.	Прямокутник не має площі.
+	Value must be positive.	Значення має бути додатним.
+	No first corner.	Немає першого кута.
+	`points` needs 2 or more [x,y,z] points	`points` потребує щонайменше 2 точок [x,y,z]
+	radii must be positive and turns in (0, 500]	радіуси має бути додатним і кількість витків у (0, 500]
+	sizes are out of range	розміри поза діапазоном
+echo	Number of turns = {value1}     Twist=CCW	Кількість витків = {value1}     Twist=CCW
+	Turns must be in (0, 500].	Кількість витків має бути в межах (0, 500].
+	`control` points are required	потрібні точки `control`
+echo	Current settings: Method=CV   Degree={value1}	Поточні налаштування: Method=CV   Степінь={value1}
+	Degree must be 1..10.	Степінь має бути в межах 1..10.
+echo	{k}: use SPLINE for fit points.	{k}: для точок апроксимації скористайтеся SPLINE.
+	The lines do not define a center line.	Ці лінії не визначають осьову лінію.
+	`handle` or `handles` is required	потрібно `handle` або `handles`
+	`h2` is required	потрібно `h2`
+	no reference objects	немає опорних об’єктів
+echo	`order` must be "front", "back", "above" or "under", got {v}	`order` має бути "front", "back", "above" або "under", отримано {v}
+	`reference` (object handles) is required	потрібно `reference` (ідентифікатори об’єктів)
+echo	{n} object(s) brought to front.	Переміщено на передній план об’єктів: {n}.
+echo	`objects` must be "text", "dimensions", "leaders" or "all", got {v}	`objects` має бути "text", "dimensions", "leaders" або "all", отримано {v}
+echo	{n} hatch object(s) sent to back.	Переміщено на задній план штрихувань: {n}.
+	Undo is turned off (UNDO Control None); UNDO Control All turns it on.	Скасування вимкнено (UNDO Control None); UNDO Control All вмикає його.
+	mode: count, mark, back, begin, end, auto or control	режим: count, mark, back, begin, end, auto або control
+echo	UNDO {mode} needs UNDO Control All.	UNDO {mode} потребує UNDO Control All.
+	`on` (true/false) is required for mode auto	для режиму auto потрібен `on` (true/false)
+echo	UNDO Auto {value1}	UNDO Auto {value1}
+	UNDO Control All	UNDO Control All
+	UNDO Control None: undo is off	UNDO Control None: скасування вимкнено
+	UNDO Control One: only the last step can be undone	UNDO Control One: можна скасувати лише останній крок
+	UNDO Control Combine set	Встановлено UNDO Control Combine
+	UNDO Control Layer set	Встановлено UNDO Control Layer
+	control: all, none, one, combine or layer	керування: all, none, one, combine або layer
+	Back at the mark	Повернуто до позначки
+	Answer Yes or No.	Відповідайте Yes або No.
+	Nothing to redo	Немає дій для повторення
+	window needs 2 corners	вікно потребує 2 кути
+	ATTACH is not available yet: raster images and PDF/DWF/DGN underlays can't be shown yet	ATTACH ще недоступно: растрові зображення та підкладки PDF/DWF/DGN поки не відображаються
+	SHARE is not available yet: there is no online service to share through; EXPORT or PUBLISH the drawing and send the file	SHARE ще недоступно: немає онлайн-служби обміну; скористайтеся EXPORT або PUBLISH і надішліть файл
+	3DORBIT is not available yet: UbotCAD draws in 2D (plan view) only	3DORBIT ще недоступно: UbotCAD підтримує лише 2D (вигляд у плані)
+	`format` must be dxf, dwg, svg, png or pdf (or give a `path` with one of those extensions)	`format` має бути dxf, dwg, svg, png або pdf (або задайте `path` з одним із цих розширень)
+echo	Exported to {path}	Експортовано до {path}
+	`scale` must be a non-zero number	`scale` має бути ненульовим числом
+echo	{value1} objects imported from {file}	Імпортовано об’єктів із {file}: {value1}
+echo	no layout `{n}`	немає аркуш `{n}`
+	outline must contain exactly four finite rectangle vertices	контур має містити рівно чотири скінченні вершини прямокутника
+echo	unknown paper size `{name}`	невідомий формат паперу `{name}`
+	custom paper dimensions must be finite and positive	власні розміри паперу має бути скінченним і додатним
+	the drawing is too large to preview at this scale	креслення надто велике для перегляду в цьому масштабі
+	rendering the preview failed	не вдалося створити попередній перегляд
+	`layouts` must be a list of layout names	`layouts` має бути списком назви аркушів
+	there are no sheets to publish	немає аркушів для публікації
+echo	at most {MAX_SHEETS} sheets can be published at once	щонайбільше {MAX_SHEETS} аркуші можна опублікувати одночасно
+echo	{name}: {e}	{name}: {e}
+echo	Published {value1} sheet(s): {value2}	Опубліковано аркушів: {value1} — {value2}
+echo	Published {value1} sheet(s)	Опубліковано аркушів: {value1}
+echo	Frame {number} has non-finite or out-of-range coordinates or dimensions; it was not plotted	Рамка {number} має нескінченні або недопустимі координати чи розміри; її не надруковано
+echo	Frame {number} ({w} x {h} mm) matches no paper size; it was not plotted	Рамка {number} ({w} x {h} mm) не відповідає жодному формату паперу; її не надруковано
+echo	Frame scan stopped after {MAX_FRAMES} model-space entities; additional frames may not have been plotted	Сканування рамок зупинено після {MAX_FRAMES} сутностей простору моделі; інші рамки могли не потрапити до друку
+	plotting is not available in this build	друк недоступний у цій збірці
+echo	no closed polylines {frame_height} mm high (sheet frames) in model space	у просторі моделі немає замкнених поліліній заввишки {frame_height} mm (рамок аркушів)
+echo	; and {value1} more	; і ще {value1}
+echo	Plotted {value1} book(s), {value2} sheet(s)	Надруковано книг: {value1}, аркушів: {value2}
+echo	; {skipped} frames were not plotted	; не надруковано рамок: {skipped}
+echo	; frame scan stopped after {MAX_FRAMES} model-space entities; additional frames may not have been plotted	; сканування рамок зупинено після {MAX_FRAMES} сутностей простору моделі; інші рамки могли не потрапити до друку
+echo	no open drawing {d}	немає відкритого креслення {d}
+	`path`, `data` (base64) or `document` is required	потрібно `path`, `data` (base64) або `document`
+	paths are not available on the web: open the other drawing and compare with it by name (`document`)	шляхи недоступні у вебверсії: відкрийте інше креслення та порівняйте за назвою (`document`)
+	a drawing can't be compared with itself	неможливо порівняти креслення із самим собою
+echo	Compared with {name}: {value1} only in this drawing, {value2} only in {name}, {value3} changed, {common} the same{value4}.	Порівняно з {name}: {value1} лише в цьому кресленні, {value2} лише в {name}, {value3} змінено, однакових: {common}{value4}.
+echo	 (only the first {MAX_OBJECTS} objects of each were compared)	 (порівняно лише перші {MAX_OBJECTS} об’єктів кожного креслення)
+	no comparison: run COMPARE first	немає порівняння: спочатку виконайте COMPARE
+	No differences.	Відмінностей немає.
+	no such area	немає такого площа
+echo	Change area {value1} of {n}.	Область змін {value1} із {n}.
+echo	`{a}` can't be an alias	`{a}` не може бути псевдонімом
+echo	{a} is a command name; it stays the command	{a} є назвою команди й залишається командою
+echo	`{line}` is not ALIAS, *COMMAND; skipped	`{line}` не відповідає ALIAS, *COMMAND; пропущено
+echo	{value1} is an external command; UbotCAD doesn't run programs from alias files	{value1} є зовнішньою командою; UbotCAD не запускає програми з файлів псевдонімів
+echo	{value1}: unknown command {value2}; skipped	{value1}: невідома команда {value2}; пропущено
+echo	more than {MAX_ALIASES} aliases; the rest are skipped	понад {MAX_ALIASES} псевдонімів; решту пропущено
+echo	{alias}: the command must be a name	{alias}: команда має бути назвою
+echo	{alias}: unknown command {target}	{alias}: невідома команда {target}
+echo	more than {MAX_ALIASES} aliases	понад {MAX_ALIASES} псевдоніми
+echo	`set` is an object {alias: command}	`set` є об’єкт {alias: command}
+	`remove` is a list of aliases	`remove` є списком псевдонімів
+echo	{n} command alias(es) loaded.	Завантажено псевдонімів команд: {n}.
+	no alias file	файл псевдонімів не завантажено
+echo	{n} command alias(es) loaded from {path}.	Завантажено псевдонімів команд із {path}: {n}.
+	`template` must be a file path	`template` має бути шляхом до файлу
+echo	template {path}: {e}	шаблон {path}: {e}
+echo	template {path}: paths are not available on the web	шаблон {path}: шляхи недоступні у вебверсії
+	paths are not available on the web; omit `path` to get the file as base64 `data`	шляхи недоступні у вебверсії; пропустіть `path` щоб отримати файл у base64 `data`
+echo	unknown version `{name}` (use {value1})	невідома версія `{name}` (скористайтеся {value1})
+	`binary` must be true or false	`binary` має бути true або false
+	binary applies to DXF files only	двійковий режим застосовується лише до файлів DXF
+	saving at a chosen version or as binary DXF is not available in this build	ця збірка не підтримує збереження у вибраній версії або у двійковому DXF
+echo	{path}: the file could not be read	{path}: не вдалося прочитати файл
+echo	{name}: the file could not be read	{name}: не вдалося прочитати файл
+	no such drawing	немає такого креслення
+	A block reference is being edited in place: finish with REFCLOSE (Save or Discard) before saving.	посилання на блок редагується на місці: перед збереженням завершіть через REFCLOSE (Save або Discard).
+	saving files is not available in this build; use document.bytes	ця збірка не підтримує збереження файлів; скористайтеся document.bytes
+echo	drawing has no file name yet; use saveas {path}	креслення ще не має назви файлу; скористайтеся saveas {path}
+	`index` is required	потрібно `index`
+echo	Not saved in the DWG file (its writer can't write these object types yet; DXF keeps them): {value1}	Не збережено у DWG (запис цих типів об’єктів ще не підтримується; DXF їх зберігає): {value1}
+	expected an object	очікується об’єкт
+echo	the replacement for `{k}` must be text	заміна для `{k}` має бути текстом
+	a font name in `map` is empty	назва шрифту у `map` порожній
+	`map` must be an object of font → replacement	`map` має бути об’єктом відповідностей шрифт → заміна
+echo	`{key}` must be text	`{key}` має бути текстом
+	`index` (grip number) is required	потрібно `index` (номер ручки)
+	index out of range	індекс поза діапазоном
+	The object is on a locked layer.	Об’єкт розташований на заблокованому шарі.
+	no such grip, or the result would be degenerate	немає такої ручки, або результат буде виродженим
+	`base` or `baseHandle` + `index` is required	потрібно `base` або `baseHandle` + `index`
+	`grips` must be an array of [handle, index] pairs	`grips` має бути масивом пар [handle, index]
+echo	`grips`: {g} is not a [handle, index] pair	`grips`: {g} не є парою [handle, index]
+	`grips` is empty	`grips` порожній
+	no grip could be stretched (locked, missing, or the result would be degenerate)	жодну ручку неможливо розтягнути (заблоковано, відсутня або результат буде виродженим)
+	`option` must be addVertex, removeVertex, toArc, toLine, lengthen or radius	`option` має бути addVertex, removeVertex, toArc, toLine, lengthen або radius
+	that option doesn't apply to this grip, or the result would be degenerate	цей параметр не застосовується до цієї ручки або результат буде виродженим
+	GRIP is interactive; use grip.stretch, grip.move, grip.rotate, grip.scale or grip.mirror	GRIP є інтерактивною командою; скористайтеся grip.stretch, grip.move, grip.rotate, grip.scale або grip.mirror
+	invalid point	некоректна точка
+	factor must be positive	коефіцієнт має бути додатним
+	scale factor would be zero	коефіцієнт масштабу дорівнюватиме нулю
+	the mirror line needs two distinct points	вісь віддзеркалення потребує два різні точки
+	That would make a degenerate object.	Це створить вироджений об’єкт.
+	The objects can't be edited that way (locked, or the result would be degenerate).	Об’єкти неможливо редагувати так (заблоковано або результат буде виродженим).
+	The two points must differ.	Дві точки мають відрізнятися.
+	No grip of a selected object there.	Тут немає ручки вибраного об’єкта.
+	no grip	немає ручки
+echo	no group named "{name}"	немає група з назвою "{name}"
+echo	positions must be within 0-{value1}	позиції мають бути в межах 0-{value1}
+echo	`{key}` must be a whole number from 0	`{key}` має бути цілим числом від 0
+	`from` is required	потрібно `from`
+	`to` is required	потрібно `to`
+	no such group	немає такого група
+	`newName` is required	потрібно `newName`
+echo	unknown option `{other}`	невідомий параметр `{other}`
+echo	no group named "{n}"	немає група з назвою "{n}"
+echo	Group {n} ungrouped.	Групу {n} розгруповано.
+echo	Group {n} created with {value1} object(s).	Створено групу {n} з об’єктами: {value1}.
+echo	{n} object(s) added.	Додано об’єктів: {n}.
+echo	{n} object(s) removed.	Вилучено об’єктів: {n}.
+echo	Requires a whole number between 0 and {value1}.	Потрібне ціле число від 0 до {value1}.
+echo	"{n}" is not a valid group name.	"{n}" не є коректною назвою групи.
+echo	A group named "{n}" already exists.	Група з назвою "{n}" уже існує.
+echo	No group named "{t}".	Немає групи з назвою "{t}".
+echo	Group {value1} renamed to {new}.	Групу {value1} перейменовано на {new}.
+echo	Requires a whole number between 1 and {value1}.	Потрібне ціле число від 1 до {value1}.
+	`value` must be 0, 1, 2 or 3	`value` має бути 0, 1, 2 або 3
+echo	<Group selection {value1}>	<Вибір груп {value1}>
+	no objects to group	немає об’єктів для групування
+	the drawing has too many groups	креслення містить забагато групи
+echo	"{n}" is not a valid group name	"{n}" не є коректною назвою групи
+echo	a group named "{n}" already exists	група з назвою "{n}" уже існує
+echo	"{new}" is not a valid group name	"{new}" не є коректною назвою групи
+echo	a group named "{new}" already exists	група з назвою "{new}" уже існує
+	`name` must hold group names	`name` має містити назви груп
+echo	`name` must be a group name or an array of names, got {v}	`name` має бути назва групи або масив з назви, отримано {v}
+	the objects are not in a group	об’єкти не належать до жодної групи
+echo	`add`: no object with handle {value1}	`add`: немає об’єкт з ідентифікатором {value1}
+echo	"{n}" is not a valid new group name, or a group of that name exists	"{n}" не є коректною новою назвою групи або група з такою назвою вже існує
+echo	Unnamed group {n} created with {value1} object(s).	Створено безіменну групу {n} з об’єктами: {value1}.
+echo	Group "{n}" created with {value1} object(s).	Створено групу "{n}" з об’єктами: {value1}.
+echo	No group named "{value1}".	Немає групи з назвою "{value1}".
+	The object is not a member of any group.	Об’єкт не належить до жодної групи.
+echo	no group named "{value1}"	немає група з назвою "{value1}"
+echo	{n} object(s) added to group {value1}.	До групи {value1} додано об’єктів: {n}.
+echo	{n} object(s) removed from group {value1}.	Із групи {value1} вилучено об’єктів: {n}.
+echo	Group {value1} has no objects left and was deleted.	Група {value1} не містить об’єктів і була видалена.
+echo	Group {value1} renamed to {value2}.	Групу {value1} перейменовано на {value2}.
+echo	Hatch {value1}: its boundary {why}; the hatch is no longer associative.	Штрихування {value1}: його межа {why}; штрихування більше не асоціативне.
+	select one or more hatches	виберіть одне або кілька штрихувань
+echo	a hatch with more than {MAX_LOOPS} loops can't be separated	неможливо розділити штрихування з понад {MAX_LOOPS} контурами
+echo	`gradient` is an object {name?, color1?, color2?, angle?, centered?}	`gradient` є об’єкт {name?, color1?, color2?, angle?, centered?}
+echo	unknown gradient `name`; use one of {value1}	невідоме `name` градієнта; виберіть одне з {value1}
+echo	`gradient.{k}` is a colour such as "5", "red" or "255,128,0"	`gradient.{k}` є колір на кшталт "5", "red" або "255,128,0"
+	`gradient.angle` is a number of degrees	`gradient.angle` задає кут у градусах
+	`gradient.centered` is true or false	`gradient.centered` є true або false
+	`angle` must be a number of degrees	`angle` має бути числом градусів
+	`style` is "normal", "outer" or "ignore"	`style` є "normal", "outer" або "ignore"
+	unknown `originMode`	невідомо `originMode`
+	region boundaries are not available yet; use "polyline"	межі областей ще недоступні; скористайтеся "polyline"
+	`recreate` is "polyline"	`recreate` є "polyline"
+	give `pattern` or `gradient`, not both	задайте `pattern` або `gradient`, але не обидва
+echo	unknown pattern {up}	невідомий зразок штрихування {up}
+	`boundary` is an array of object handles	`boundary` є масив з ідентифікатори об’єктів
+echo	Hatch {value1}: no boundary object found for {missing} loop(s); it stays non-associative.	Штрихування {value1}: не знайдено граничних об’єктів для контурів: {missing}; воно залишається неасоціативним.
+echo	{n} object(s) created.	Створено об’єктів: {n}.
+echo	Unknown pattern {up}.	Невідомий зразок штрихування {up}.
+echo	{value1} is a built-in pattern; the built-in definition is kept	{value1} є вбудованим зразком; збережено вбудоване визначення
+echo	more than {MAX_USER_PATTERNS} user patterns; {value1} not loaded	понад {MAX_USER_PATTERNS} користувацьких зразків; {value1} не завантажено
+echo	no hatch pattern could be read from {source}: {value1}	не вдалося прочитати зразок штрихування з {source}: {value1}
+echo	{value1} pattern(s) loaded from {t}: {value2}	Завантажено зразків із {t}: {value1} — {value2}
+	give internal `points` or boundary `handles`	задайте внутрішні точки через `points` або ідентифікатори межі через `handles`
+	`points` is an array of [x, y]	`points` є масив з [x, y]
+echo	at most {MAX_PICKS} points	щонайбільше {MAX_PICKS} точки
+echo	no closed boundary around [{value1}, {value2}]	немає замкнена межа навколо [{value1}, {value2}]
+echo	at most {MAX_PICKS} objects	щонайбільше {MAX_PICKS} об’єкти
+echo	{value1} is not a closed object	{value1} не є замкнений об’єкт
+echo	At most {MAX_PICKS} picks.	Щонайбільше виборів: {MAX_PICKS}.
+echo	Analyzing the selected data... {value1} loop(s)	Аналіз вибраних даних... контурів: {value1}
+echo	{value1} found	Знайдено: {value1}
+echo	{value1} found, {others} not closed	Знайдено: {value1}, незамкнених: {others}
+	Valid hatch boundary not found.	Коректну межу штрихування не знайдено.
+	No closed boundary objects selected.	Замкнені граничні об’єкти не вибрано.
+echo	at most {MAX_BOUNDARY_POINTS} points per call (got {value1})	щонайбільше {MAX_BOUNDARY_POINTS} точки на виклик (отримано {value1})
+echo	more than {MAX_BOUNDARY_OUTPUT} boundary polylines in one call; split the work	один виклик містить понад {MAX_BOUNDARY_OUTPUT} поліліній межі; розділіть роботу
+echo	BOUNDARY created {value1} polyline(s)	BOUNDARY створено поліліній: {value1}
+echo	{n} Region(s) created.	Створено областей: {n}.
+echo	Unknown pattern {up}. Available: {value1}	Невідомий зразок {up}. Доступні: {value1}
+echo	Current pattern: {value1}  Scale: {value2}  Angle: {value3}	Поточний зразок: {value1}  Масштаб: {value2}  Кут: {value3}
+	Separate hatches: on	Окремі штрихування: увімкнено
+	Separate hatches: off	Окремі штрихування: вимкнено
+echo	`{text_key}` is larger than {value1} MB	`{text_key}` більший за {value1} MB
+echo	`{path_key}` must be a file path	`{path_key}` має бути шляхом до файлу
+echo	{path}: larger than {value1} MB	{path}: більше за {value1} MB
+	paths are not available on the web; pass the file's contents	шляхи недоступні у вебверсії; передайте вміст файлу
+echo	`space` must be current, model, all or a layout name, got {v}	`space` має бути current, model, all або назва аркуша, отримано {v}
+echo	no layout named "{name}"	немає аркуш з назвою "{name}"
+echo	No block references in {wh}.	немає посилання на блоки у {wh}.
+echo	Block references in {wh}:	Посилання на блоки в {wh}:
+echo	  Total: {}	  Усього: {}
+	  (nesting too large: counts are partial)	  (вкладеність надто велика: кількості часткові)
+echo	Block {name}: {n} in {wh} ({k} nested).	Блок {name}: у {wh}: {n} (вкладених: {k}).
+echo	Block {name}: {n} in {wh}.	Блок {name}: у {wh}: {n}.
+echo	no object with handle {value1}	немає об’єкт з ідентифікатором {value1}
+echo	a {ty} can't be counted by shape	неможливо порахувати {ty} за формою
+echo	{ty}: {n} like the selected one in {value1}.	{ty}: подібних до вибраного у {value1}: {n}.
+echo	`object`: {v} is not an object handle	`object`: {v} не є ідентифікатором об’єкта
+echo	No block references in {value1}.	немає посилання на блоки у {value1}.
+echo	Table of {value1} block(s) inserted.	Вставлено таблицю для блоків: {value1}.
+	These regions are too complex to combine.	Ці області надто складні для об’єднання.
+	Too many loops.	Забагато контурів.
+	The result is empty: the regions were erased.	Результат порожній: області видалено.
+echo	`{key}` (array of handles) is required	потрібно `{key}` (масив з ідентифікатори)
+echo	`{key}`: {v} is not a handle	`{key}`: {v} не є ідентифікатором
+	A region can't be subtracted from itself.	Неможливо відняти область від самої себе.
+	----------------   REGIONS   ----------------	----------------   ОБЛАСТІ   ----------------
+echo	Area:                    {value1}	Площа:                    {value1}
+echo	Perimeter:               {value2}	Периметр:               {value2}
+echo	Bounding box:         X: {value3}  --  {value4}	Габаритна рамка:         X: {value3}  --  {value4}
+echo	                      Y: {value5}  --  {value6}	                      Y: {value5}  --  {value6}
+echo	Centroid:             X: {value7}	Центр ваги:             X: {value7}
+echo	                      Y: {value8}	                      Y: {value8}
+echo	Moments of inertia:   X: {value9}	Моменти інерції:   X: {value9}
+echo	                      Y: {value10}	                      Y: {value10}
+echo	Product of inertia:  XY: {value11}	Добуток інерції:  XY: {value11}
+echo	Radii of gyration:    X: {value12}	Радіуси інерції:    X: {value12}
+echo	                      Y: {value13}	                      Y: {value13}
+	Principal moments and X-Y directions about centroid:	Головні моменти та напрями X-Y відносно центра ваги:
+echo	                      I: {value14} along [{value15} {value16}]	                      I: {value14} уздовж [{value15} {value16}]
+echo	                      J: {value17} along [{value18} {value19}]	                      J: {value17} уздовж [{value18} {value19}]
+echo	Distance = {value1},  Angle in XY Plane = {value2},  Angle from XY Plane = 0	Відстань = {value1},  Кут у площині XY = {value2},  Кут від площини XY = 0
+echo	Delta X = {value3},  Delta Y = {value4},   Delta Z = {value5}	Приріст X = {value3},  Приріст Y = {value4},   Приріст Z = {value5}
+echo	X = {value1}     Y = {value2}     Z = {value3}	X = {value1}     Y = {value2}     Z = {value3}
+echo	                  {value1}     Layer: "{value2}"	                  {value1}     Шар: "{value2}"
+echo	                            Space: {value3}	                            Простір: {value3}
+echo	                   Handle = {value4}	                   Ідентифікатор = {value4}
+echo	              from point, X={value1}  Y={value2}  Z={value3}	              від точки, X={value1}  Y={value2}  Z={value3}
+echo	                to point, X={value4}  Y={value5}  Z={value6}	                до точки, X={value4}  Y={value5}  Z={value6}
+echo	          Length = {value1},  Angle in XY Plane = {value2}	          Довжина = {value1},  Кут у площині XY = {value2}
+echo	            center point, X={value1}  Y={value2}  Z={value3}	            центр, X={value1}  Y={value2}  Z={value3}
+echo	            radius {value4}	            радіус {value4}
+echo	     circumference {value5}	     довжина кола {value5}
+echo	             area {value6}	             площа {value6}
+echo	            start angle {value5}	            початковий кут {value5}
+echo	              end angle {value6}	              кінцевий кут {value6}
+echo	            {value1}	            {value1}
+echo	    Constant width    {value2}	    Стала ширина    {value2}
+echo	             area   {value1}	             площа   {value1}
+echo	        perimeter   {value2}	        периметр   {value2}
+echo	          at point  X={value1}  Y={value2}  Z={value3}	          у точці  X={value1}  Y={value2}  Z={value3}
+echo	            Style = "{value1}"	            Стиль = "{value1}"
+echo	       start point, X={value2}  Y={value3}	       початкова точка, X={value2}  Y={value3}
+echo	          height {value4}	          висота {value4}
+echo	           text {value5}	           текст {value5}
+echo	        rotation angle {value6}	        кут повороту {value6}
+	`points` or `handle` is required	потрібно `points` або `handle`
+echo	Area = {value1}, Perimeter = {value2}	Площа = {value1}, Периметр = {value2}
+	object has no area	об’єкт не має площі
+echo	Drawing revision: {rev}	Редакція креслення: {rev}
+echo	Edits recorded: {value1}	Записано змін: {value1}
+echo	{value1} objects in {value2}	Об’єктів у {value1}: {value2}
+echo	Model space limits are X: {value3}  Y: {value4}  (Off)	Межі простору моделі X: {value3}  Y: {value4}  (Off)
+echo	Model space uses X: {value5}  Y: {value6}	Простір моделі використовує X: {value5}  Y: {value6}
+echo	                 X: {value7}  Y: {value8}	                 X: {value7}  Y: {value8}
+echo	Current layer: {value9}	Поточний шар: {value9}
+echo	Current color: {value10}	Поточний колір: {value10}
+echo	Current linetype: {value11}	Поточний тип лінії: {value11}
+echo	`{k}` must be a string	`{k}` має бути рядком
+echo	`{k}` must be a whole number, 0 or more	`{k}` має бути невід’ємним цілим числом
+	`window` must be two corner points [[x0, y0], [x1, y1]]	`window` має бути дві кутові точки [[x0, y0], [x1, y1]]
+	`crossing` must be true or false	`crossing` має бути true або false
+	the next point is too large	наступна точка надто великий
+echo	Distance = {value1}	Відстань = {value1}
+echo	{k}: not available yet	{k}: ще недоступно
+echo	Total area = {value1}	Загальна площа = {value1}
+echo	Cannot {verb} layer "{name}" (layer 0 and Defpoints always stay).	Неможливо {verb} шар "{name}" (шари 0 і Defpoints завжди зберігаються).
+echo	Cannot {verb} xref-dependent layer "{name}".	Неможливо {verb} шар "{name}", залежний від зовнішнього посилання.
+echo	Cannot delete the current layer "{name}".	Неможливо видалити поточний шар "{name}".
+echo	no layer `{value1}`	немає шар `{value1}`
+echo	no layer `{to}`	немає шар `{to}`
+echo	cannot merge into xref-dependent layer "{target}"	неможливо об’єднати із залежним від зовнішнього посилання шаром "{target}"
+echo	cannot merge layer "{target}" into itself	неможливо об’єднати шар "{target}" до себе
+echo	Merged {value1} into "{target}": {value2} moved.	Об’єднано {value1} з "{target}": переміщено {value2}.
+echo	Layer "{target}" is now current.	Шар "{target}" тепер поточний.
+echo	Deleted {value1} and {value2}.	Видалено {value1} та {value2}.
+echo	Selected layers: {value1}.	Вибрані шари: {value1}.
+echo	Cannot merge into xref-dependent layer "{name}".	Неможливо об’єднати із залежним від зовнішнього посилання шаром "{name}".
+echo	Cannot merge layer "{name}" into itself.	Неможливо об’єднати шар "{name}" із самим собою.
+echo	You are about to merge {value1} into layer "{t}".	Буде об’єднано {value1} із шаром "{t}".
+echo	You are about to delete {value1} and every object on it from this drawing.	Буде видалено {value1} та всі об’єкти на ньому з цього креслення.
+echo	Cannot find layer "{m}".	Не знайдено шар "{m}".
+echo	-LAYER {other} is not available yet.	-LAYER {other} ще недоступно.
+echo	Current layer:  "{cur}"	Поточний шар:  "{cur}"
+echo	Layer "{n}": {value1}	Шар "{n}": {value1}
+echo	Cannot freeze layer "{cur}". It is the CURRENT layer.	Неможливо заморозити шар "{cur}". Це ПОТОЧНИЙ шар.
+echo	Cannot find layer "{n}".	Не знайдено шар "{n}".
+echo	Loaded linetypes: {value1}	Завантажені типи ліній: {value1}
+echo	Linetype "{t}" is not loaded. Load it with the LINETYPE command.	Тип лінії "{t}" не завантажено. Завантажте його командою LINETYPE.
+	a layer's plot style is a style name (such as Normal)	стиль друку шару має бути назвою стилю (наприклад Normal)
+	bad colour	некоректний колір
+	a layer colour must be an index or true colour	колір шару має бути індексом або істинним кольором
+	bad lineweight	некоректна товщина лінії
+	a layer linetype cannot be ByLayer or ByBlock	тип лінії шару не може бути ByLayer або ByBlock
+echo	linetype `{lt}` is not loaded (load it with LINETYPE)	тип лінії `{lt}` не завантажено (завантажте за допомогою LINETYPE)
+	invalid layer name	некоректна назва шару
+echo	layer `{name}` already exists	шар `{name}` уже існує
+echo	no layer `{name}`	немає шар `{name}`
+	cannot freeze the current layer	неможливо заморозити поточний шар
+	cannot rename layer 0 or Defpoints	неможливо перейменувати шар 0 або Defpoints
+echo	layer `{nn}` already exists	шар `{nn}` уже існує
+	No previous layer state.	немає попереднього стану шарів.
+	Restored previous layer states.	Відновлено попередні стани шарів.
+	cannot delete layer 0, Defpoints or the current layer	неможливо видалити шар 0, Defpoints або поточний шар
+	layer has objects on it	шар містить об’єкти
+	select an object	виберіть об’єкт
+echo	{l} is now the current layer.	{l} тепер поточний шар.
+	`layer` is required	потрібно `layer`
+	select objects on the layers to isolate	виберіть об’єкти на шарах для ізоляції
+echo	Layer(s) {value1} have been isolated.	Ізольовано шари {value1}.
+	No isolated layers.	Немає ізольованих шарів.
+	no such layer state	немає такого стану шарів
+	No saved layer states.	Немає збережених станів шарів.
+	invalid name	некоректна назва
+echo	layer state `{to}` already exists	стан шарів `{to}` уже існує
+	the plot style name is empty	назва стилю друку порожній
+	`name` must be a plot style name	`name` має бути назва стилю друку
+	`name` (the table) is required	потрібно `name` (таблиця)
+echo	no plot style table `{name}`	немає таблиця стилів друку `{name}`
+echo	`{k}` must be a string or null	`{k}` має бути рядком або null
+	`color` must be "#rrggbb" or null	`color` має бути "#rrggbb" або null
+	`grayscale` must be true or false	`grayscale` має бути true або false
+	`screening` must be 0 to 100	`screening` має бути в межах від 0 до 100
+	`lineweight` must be 0 to 2.11 mm or null	`lineweight` має бути в межах від 0 до 2.11 mm або null
+	`kind` must be colorDependent or named	`kind` має бути colorDependent або named
+echo	a {value1} table's name ends in {ext}	назва таблиці {value1} має закінчуватися на {ext}
+echo	plot style table `{name}` already exists	таблиця стилів друку `{name}` уже існує
+	a colour-dependent table always has 255 styles	таблиця залежних від кольору стилів завжди має 255 стилі
+	the Normal style can't be removed	неможливо вилучити стиль Normal
+echo	`{name}` has no style `{rm}`	`{name}` не має стиль `{rm}`
+	`style.name` is required	потрібно `style.name`
+	the table has too many styles	таблиця містить забагато стилі
+echo	`{name}` has no style `{sname}` (colour-dependent styles are Color_1 to Color_255)	`{name}` не має стиль `{sname}` (залежні від кольору стилі є Color_1 до Color_255)
+echo	the drawing keeps no plot style table `{name}` (built-in tables can't be deleted)	креслення не містить таблиці стилів друку `{name}` (вбудовані таблиці неможливо видалити)
+echo	{_path}: the plot style table file is too large	{_path}: файл таблиці стилів друку надто великий
+	files can't be read here: pass `text`	неможливо прочитати файли тут: передайте `text`
+	`path` or `text` is required	потрібно `path` або `text`
+	the table has no name: pass `name`	таблиця не має назви: передайте `name`
+	files can't be written here: leave out `path` to get `text`	неможливо записати файли тут: пропустіть `path`, щоб отримати `text`
+echo	unknown action `{other}` (list, get, new, set, delete, load, save)	невідома дія `{other}` (list, get, new, set, delete, load, save)
+echo	LAYOUT {other} is not available yet.	LAYOUT {other} ще недоступно.
+echo	Active Layout: {current}	Активний аркуш: {current}
+echo	No layout matches "{pat}".	Немає аркуша, що відповідає "{pat}".
+echo	Layout: {n}	Аркуш: {n}
+echo	Layout "{from}" copied to "{to}".	Аркуш "{from}" скопійовано до "{to}".
+echo	Layout "{gone}" deleted.	Аркуш "{gone}" видалено.
+	`points` ([[x, y], …], at least three) is required	потрібно `points` ([[x, y], …], щонайменше три)
+echo	at most {MAX_VERTICES} points	щонайбільше {MAX_VERTICES} точки
+	`points` must be [[x, y], …]	`points` має бути [[x, y], …]
+	`bulges` must be finite numbers	`bulges` має містити скінченні числа
+	`bulges` must be an array of numbers	`bulges` має бути масивом числа
+	a polygonal viewport needs at least three distinct points	багатокутний видовий екран потребує щонайменше три різні точки
+echo	object {value1} is not in this layout	об’єкт {value1} не належить до цього аркуша
+	a viewport can't be a clip boundary	видовий екран неможливо бути межа обрізання
+	the object already clips a viewport	об’єкт уже обрізає видовий екран
+	the object must be a closed polyline, circle, ellipse or spline	об’єкт має бути замкненою полілінією, колом, еліпсом або сплайном
+	the viewport is too large	видовий екран надто великий
+	the polygon has no area	багатокутник не має площі
+	`object` (a closed object's handle) is required	потрібен `object` (ідентифікатор замкненого об’єкта)
+	no viewport given (pass `handles` or select viewports)	немає видовий екран заданий (передайте `handles` або виберіть видові екрани)
+	`locked` (true/false) is required	потрібно `locked` (true/false)
+	not a layout	не є аркушем
+echo	Could not find viewport configuration "{value1}".	Не знайдено конфігурацію видових екранів "{value1}".
+	the viewport has no area	видовий екран не має площі
+echo	Viewport configuration "{name}" has no viewports to restore.	Конфігурація "{name}" не містить видових екранів для відновлення.
+	option must be fit, polygonal, object, on, off, lock or restore	параметр має бути fit, polygonal, object, on, off, lock або restore
+	no viewport given (pass `handle` or select a viewport)	немає видовий екран заданий (передайте `handle` або виберіть видовий екран)
+	not a viewport	не є видовим екраном
+	the viewport is not clipped	видовий екран не обрізаний
+	`object` must be an object handle	`object` має бути ідентифікатором об’єкта
+	pass `object`, `points` or `delete`	передайте `object`, `points` або `delete`
+echo	At most {MAX_VERTICES} points.	Щонайбільше точок: {MAX_VERTICES}.
+	A polygonal boundary needs at least three points.	Багатокутна межа потребує щонайменше трьох точок.
+echo	{value1} viewport(s) selected.	Вибрано видових екранів: {value1}.
+echo	{n} viewport(s) created, zoomed to the model extents.	Створено видових екранів: {n}, масштабовано до меж моделі.
+echo	{n} viewport(s) restored from "{name}".	Відновлено видових екранів із "{name}": {n}.
+	No saved viewport configurations.	Немає збережених конфігурацій видових екранів.
+echo	Layers currently frozen in viewport {value1}:	Шари, заморожені у видовому екрані {value1}:
+	`handle` is not a viewport in this layout	`handle` не є видовий екран на цьому аркуші
+	no viewport at that point	немає видовий екран у цій точці
+	There are no active model space viewports.	Немає активних видових екранів простору моделі.
+	layout name is empty	назва аркуша порожній
+	layout name is longer than 255 characters	назва аркуша довший за 255 символи
+echo	invalid layout name `{n}`	некоректна назва аркуша `{n}`
+	`Model` is reserved	`Model` зарезервовано
+echo	layout `{n}` already exists	аркуш `{n}` уже існує
+echo	no layout `{name}`	немає аркуш `{name}`
+	a drawing must keep at least one layout	креслення має зберігати щонайменше один аркуш
+	`from` is required in the Model tab	`from` потрібно в вкладка Model
+	no free name	немає вільної назви
+	no such layout	немає такого аркуш
+	layout.set is missing	відсутня команда layout.set
+	option must be new, copy, delete, rename, set or list	параметр має бути new, copy, delete, rename, set або list
+echo	no layout `{layout}`	немає аркуш `{layout}`
+	count must be 1, 2, 3 or 4	кількість має бути 1, 2, 3 або 4
+	`scale` must be a positive number or "a:b"	`scale` має бути додатним числом або "a:b"
+	`viewHeight` must be positive	`viewHeight` має бути додатним
+	`center` must be [x, y]	`center` має бути [x, y]
+echo	bad colour for `{layer}`	некоректний колір для `{layer}`
+	colour index 1..255	індекс кольору 1..255
+	`colors` values are colours or null	значення `colors` мають бути кольорами або null
+	a viewport layer colour must be an index or true colour	колір шару у видовому екрані має бути індекс або істинний колір
+echo	viewport {value1} is locked	видовий екран {value1} заблоковано
+	pass `layout` (model-space page setups are not stored yet)	передайте `layout` (налаштування сторінки простору моделі ще не зберігаються)
+	`paper` must be a paper name	`paper` має бути назва формату паперу
+echo	unknown paper size `{n}` (known: {value1})	невідомий формат паперу `{n}` (відомі: {value1})
+echo	User ({w} x {h} MM)	Користувацький ({w} x {h} MM)
+echo	`width` and `height` (mm, 0-{value1}) are both required for a custom size	`width` і `height` (mm, 0-{value1}) обидва потрібні для власний розмір
+	`margins` must be [left, bottom, right, top] in mm	`margins` має бути [left, bottom, right, top] у mm
+	`scale` must be positive	`scale` має бути додатним
+	`plotArea` must be layout, extents, display, window or limits	`plotArea` має бути layout, extents, display, window або limits
+echo	plot area `{v}` is not available yet; layouts plot the whole sheet (`layout`)	область друку `{v}` ще недоступна; аркуші друкуються повністю (`layout`)
+	`layouts` must be a list of layout names or "all"	`layouts` має бути списком назви аркушів або "all"
+	there are no sheets to plot	немає аркушів для друку
+echo	at most {MAX_PLOT_SHEETS} sheets fit in one PDF	один PDF вміщує щонайбільше {MAX_PLOT_SHEETS} аркушів
+	`offset` must contain exactly two finite millimetre values within ±100000	`offset` має містити рівно два скінченні значення в міліметрах у межах ±100000
+	model-space plot offsets are not supported for SVG; choose PDF/PNG or center the plot	SVG не підтримує зсуви друку простору моделі; виберіть PDF/PNG або центруйте друк
+	`scale` must be positive: paper units per drawing unit, or a ratio such as "1:50"	`scale` має бути додатним: одиниці паперу на одиницю креслення, або відношення наприклад "1:50"
+	real scale must be finite and positive after unit conversion	фактичний масштаб має бути скінченним і додатним після перетворення одиниць
+	a layout plots its whole sheet: `plotArea` must be layout	аркуш друкується повністю: `plotArea` має бути layout
+	`plotArea` window needs `window`: [[x1, y1], [x2, y2]]	для області window у `plotArea` потрібен `window`: [[x1, y1], [x2, y2]]
+	`plotArea` must be extents, display, limits or window (layouts: layout)	`plotArea` має бути extents, display, limits або window (аркуші: layout)
+	the plot area is empty	область друку порожня
+	`limit` must be a non-negative integer	`limit` має бути невід’ємним цілим числом
+	`sha256` is required	потрібно `sha256`
+	`sha256` must be 64 hexadecimal digits	`sha256` має бути 64 шістнадцяткові цифри
+	the LISP approval list is full or unavailable	список схвалень LISP заповнений або недоступний
+	`action` must be list, approve or revoke	`action` має бути list, approve або revoke
+	`path` must contain 1 to 4096 bytes	`path` має містити 1 до 4096 байти
+	`path` must be an existing directory	`path` має бути наявним каталогом
+echo	at most {MAX_WRITE_ROOTS} write folders are allowed	щонайбільше {MAX_WRITE_ROOTS} теки для запису дозволено
+	`action` must be list, add or remove	`action` має бути list, add або remove
+	`path`, or `name` with `data` (base64) or `text`, is required	потрібно `path`, або `name` з `data` (base64) або `text`,
+echo	{path}: can't read the file	{path}: неможливо прочитати файл
+	`code` is required	потрібно `code`
+	Only the user can answer APPLOADTRUST	Лише користувач може відповісти на APPLOADTRUST
+echo	{n} found, {value1} total	Знайдено: {n}, усього: {value1}
+echo	{value1} total	Усього: {value1}
+	`leaderType` must be "straight", "spline" or "none"	`leaderType` має бути "straight", "spline" або "none"
+	`blockAttach` must be "center" or "insertion"	`blockAttach` має бути "center" або "insertion"
+	`handle` is not a multileader	`handle` не є мультивиноска
+	the multileader is on a locked layer	мультивиноска розташовано на заблокованому шарі
+echo	no leader {i} (the multileader has {value1})	немає виноски {i} (мультивиноска містить {value1})
+	`handle` (a multileader) is required	потрібно `handle` (мультивиноска)
+	`points` must be [[x,y]...]	`points` має бути [[x,y]...]
+	`points` (arrowhead locations) is required	потрібні `points` (положення вістря стрілки)
+	`index` must be non-negative whole numbers	`index` мають бути невід’ємними цілими числами
+	`index` must be a non-negative whole number	`index` має бути невід’ємним цілим числом
+	`points` or `index` (the leaders to remove) is required	потрібні `points` або `index` (виноски для вилучення)
+	`mode` must be "add" or "remove"	`mode` має бути "add" або "remove"
+echo	{value1} leader(s) {value2}.	Виносок: {value1} — {value2}.
+	no multileaders to align	немає мультивиносок для вирівнювання
+	too many multileaders	забагато мультивиноски
+	`to` is not a multileader	`to` не є мультивиноска
+	`to` (the multileader to align to) is required	потрібно `to` (опорна мультивиноска для вирівнювання)
+	the reference multileader has no leader	опорна мультивиноска не має виносок
+	`points` (first and last position) are required	потрібні `points` (перше та останнє положення)
+	the two points coincide	дві точки збігаються
+	`direction` (two points or an angle) is required	потрібно `direction` (два точки або кут)
+	the direction is zero	напрям дорівнює нулю
+	`angle` must be a finite number	`angle` має бути скінченним числом
+echo	`{key}` must be [[x,y],[x,y]]	`{key}` має бути [[x,y],[x,y]]
+echo	`{key}` needs two points	`{key}` потребує два точки
+	`to` must be an object handle	`to` має бути ідентифікатором об’єкта
+	`spacing` must be a non-negative number	`spacing` має бути невід’ємним числом
+	`spacing` (a number) is required	потрібно `spacing` (число)
+	`option` must be current, distribute, parallel or spacing	`option` має бути current, distribute, parallel або spacing
+echo	{r} multileader(s) aligned.	Вирівняно мультивиносок: {r}.
+	need two or more multileaders with block content	потрібно щонайменше дві мультивиноски з блоковим вмістом
+	`width` (a positive number) is required for wrap	для wrap потрібна додатна ширина `width`
+	`mode` must be horizontal, vertical or wrap	`mode` має бути horizontal, vertical або wrap
+echo	{value1} multileader(s) collected.	Зібрано мультивиносок: {value1}.
+echo	`{key}` (number) is required	потрібно `{key}` (число)
+echo	`{key}` must be {value1}	`{key}` має бути {value1}
+echo	`{key}` ([x, y]) is required	потрібно `{key}` ([x, y])
+echo	`{key}`: {v} is not an object handle (a hex string such as "1A2")	`{key}`: {v} не є ідентифікатором об’єкта (шістнадцятковим рядком на кшталт "1A2")
+echo	`handles` must be an array of object handles, got {v}	`handles` має бути масивом ідентифікаторів об’єктів, отримано {v}
+	mirror line points coincide	точки осі віддзеркалення збігаються
+echo	`{key}` needs {least} to {value1} finite points	`{key}` потребує від {least} до {value1} скінченних точок
+	`window` [[x,y],[x,y]], `polygon` or `fence` is required	потрібно `window` [[x,y],[x,y]], `polygon` або `fence`
+	cannot offset that object	неможливо змістити цей об’єкт
+	`layer` is "source" or "current"	`layer` є "source" або "current"
+	Object does not intersect a cutting edge.	Об’єкт не перетинає різальну кромку.
+	Circle must intersect cutting edges at two or more points.	Коло має перетинати різальні кромки щонайменше у двох точках.
+	Object does not intersect an edge.	Об’єкт не перетинає кромку.
+	Lines are parallel.	Лінії паралельні.
+	`handle` (polyline) is required	потрібно `handle` (полілінія)
+	`length` (>= 0) and `angle` (degrees, 0 to 180) go together	`length` (>= 0) і `angle` (градуси, від 0 до 180) мають задаватися разом
+	Arc cannot be full 360 degrees.	Дуга не може охоплювати повні 360 градусів.
+	Cannot break that object.	Неможливо розірвати цей об’єкт.
+	An object is on a locked layer.	Об’єкт розташований на заблокованому шарі.
+	Objects are not connected.	Об’єкти не з’єднані.
+echo	{n} objects joined into 1 {what}	Об’єднано об’єктів: {n}, результат: 1 {what}
+	Mirror line points must differ.	Точки осі віддзеркалення мають відрізнятися.
+echo	Current settings: Erase source={value1}  Layer={value2}  OFFSETGAPTYPE=0	Поточні налаштування: Видалення джерела={value1}  Шар={value2}  OFFSETGAPTYPE=0
+echo	({mode} mode) Current chamfer Length = {value1}, Angle = {a}	(Режим {mode}) Поточна довжина фаски = {value1}, Кут = {a}
+echo	({mode} mode) Current chamfer Dist1 = {value1}, Dist2 = {value2}	(Режим {mode}) Відстані фаски Dist1 = {value1}, Dist2 = {value2}
+echo	Current settings: Mode = {value1}, Radius = {value2}	Поточні налаштування: Режим = {value1}, Радіус = {value2}
+echo	{n} lines were chamfered	Виконано фаску для ліній: {n}
+echo	{n} lines were filleted	Виконано спряження для ліній: {n}
+	The chamfer angle does not fit this corner.	Кут фаски не підходить для цього кута.
+	Cannot extend a closed spline.	Неможливо подовжити замкнений сплайн.
+	The spline has no direction at that end.	Сплайн не має напряму на цьому кінці.
+	Cannot extend that spline.	Неможливо подовжити цей сплайн.
+	Spline must intersect cutting edges at two or more points.	Сплайн має перетинати різальні кромки щонайменше у двох точках.
+	Cannot trim that spline.	Неможливо обрізати цей сплайн.
+	Lengthening would make the object zero length or negative.	Зміна довжини зробить довжину об’єкта нульовою або від’ємною.
+	Cannot lengthen a closed ellipse.	Неможливо змінити довжину замкненого еліпса.
+	Angle options apply to arcs.	Параметри кута застосовуються до дуг.
+	The new elliptical arc would be a full ellipse or longer.	Нова еліптична дуга дорівнюватиме повному еліпсу або перевищить його.
+	Cannot lengthen a closed spline.	Неможливо змінити довжину замкненого сплайна.
+	Cannot lengthen that spline.	Неможливо змінити довжину цього сплайна.
+	Objects are not connected end to end.	Об’єкти не з’єднані кінцями.
+	Only part of a polyline connects; join it whole or explode it first.	З’єднується лише частина полілінії; приєднайте її повністю або спочатку розчленуйте.
+	Nothing to join.	Немає об’єктів для об’єднання.
+	Cannot join these objects into a spline.	Неможливо об’єднати ці об’єкти у сплайн.
+	Fillet works on lines, arcs, circles, elliptical arcs and splines (and polylines with the Polyline option).	Спряження працює з лініями, дугами, колами, еліптичними дугами та сплайнами (і полілініями з параметром Polyline).
+	Cannot fillet an object to itself.	Неможливо спрягти об’єкт із самим собою.
+	The fillet radius must be zero or more.	Радіус спряження має бути невід’ємним.
+	No fillet of that radius fits these objects.	Спряження з таким радіусом не підходить для цих об’єктів.
+	The objects do not intersect.	Об’єкти не перетинаються.
+	The segments meet at a kept end; nothing to cut.	Сегменти сходяться на збереженому кінці; обрізати нічого.
+	The segments are parallel or in line.	Сегменти паралельні або колінеарні.
+	The chamfer distances are too large.	Відстані фаски надто великі.
+	Radius is too large.	Радіус надто великий.
+	The segments must be adjacent or separated by one segment.	Сегменти мають бути суміжними або розділеними одним сегментом.
+	Fillet and chamfer work on straight polyline segments.	Спряження та фаска працюють із прямими сегментами полілінії.
+	The segments are parallel.	Сегменти паралельні.
+	A line fillets or chamfers with an end segment of an open polyline.	Лінію можна спрягти або зняти фаску з кінцевим сегментом відкритої полілінії.
+	A polyline fillets or chamfers with a line, or with another segment of itself.	Полілінію можна спрягти або зняти фаску з лінією чи іншим власним сегментом.
+	vertex index out of range	індекс вершини поза діапазоном
+	Cannot break a polyline at its end vertex.	Неможливо розірвати полілінію в її кінцевій вершині.
+	Breaking there would remove the whole polyline.	Розрив тут видалить усю полілінію.
+echo	`tangents` must be an array of {index, angle | direction}	`tangents` має бути масивом {index, angle | direction}
+	each tangent needs an `index`	кожен дотична потребує `index`
+	each tangent needs an `angle` (degrees) or a `direction`	кожен дотична потребує `angle` (градуси) або `direction`
+	a tangent direction can't be zero	вектор напряму дотичної не може бути нульовим
+	tangent vertex index out of range	індекс вершини дотичної поза діапазоном
+	No vertex.	Немає вершини.
+	Object selected is not a spline.	Вибраний об’єкт не є сплайном.
+	`option` is required	потрібно `option`
+echo	`{key}` must be a direction [dx, dy]	`{key}` має бути напрям [dx, dy]
+	The spline has no fit data; give `fit` points.	Сплайн не має даних апроксимації; задайте точки `fit`.
+	`order` is required	потрібно `order`
+	unknown option	невідомий параметр
+	fit point index out of range	індекс точки апроксимації поза діапазоном
+	Too many fit points.	Забагато точок апроксимації.
+echo	A spline needs at least {min} fit points.	Сплайн потребує щонайменше {min} точок апроксимації.
+	control point index out of range	індекс контрольної точки поза діапазоном
+	The spline is invalid.	Сплайн некоректний.
+echo	A closed spline of degree {p} needs more than {value1} control points.	Замкнений сплайн степеня {p} потребує понад {value1} контрольних точок.
+echo	A spline of degree {p} needs at least {value1} control points.	Сплайн степеня {p} потребує щонайменше {value1} контрольних точок.
+	The start point of a closed spline can't be deleted.	Неможливо видалити початкову точку замкненого сплайна.
+	Cannot delete that control point.	Неможливо видалити цю контрольну точку.
+	Cannot add a control point to this spline.	Неможливо додати контрольну точку до цього сплайна.
+	Cannot elevate the order of this spline.	Неможливо підвищити порядок цього сплайна.
+	No spline.	Немає сплайна.
+	The spline was erased.	Сплайн видалено.
+echo	{value1} object(s) joined into the spline	До сплайна приєднано об’єктів: {value1}
+	The tangent needs a point away from the end point.	Для дотичної потрібна точка на відстані від кінцевої точки.
+	The spline has no control points.	Сплайн не має контрольних точок.
+	no such space	такого простору немає
+	Cannot join to a closed polyline.	Неможливо приєднати до замкненої полілінії.
+	Cannot convert.	Неможливо перетворити.
+	Object selected is not a polyline.	Вибраний об’єкт не є полілінією.
+	width must be non-negative	ширина має бути невід’ємною
+	too many vertices	забагато вершин
+	action must be move, insert, straighten, break, width or regen	дія має бути move, insert, straighten, break, width або regen
+	No object.	Немає об’єкта.
+echo	{n} segments added to polyline	До полілінії додано сегментів: {n}
+	Zero-length line.	Лінія нульової довжини.
+	The new arc would be zero length or a full circle.	Нова дуга матиме нульову довжину або стане повним колом.
+	The end segment is an arc; explode the polyline or use an open line end.	Кінцевий сегмент є дугою; розчленуйте полілінію або використайте відкритий кінець лінії.
+	Zero-length end segment.	Кінцевий сегмент нульової довжини.
+echo	Current length: {l}, included angle: {value1}	Поточна довжина: {l}, внутрішній кут: {value1}
+echo	Current length: {l}	Поточна довжина: {l}
+	No lengthen mode.	Немає режиму зміни довжини.
+	The ends coincide.	Кінці збігаються.
+echo	Continuity = {value1}	Неперервність = {value1}
+	No layout to move objects to.	Немає аркуша для перенесення об’єктів.
+echo	Layout "{name}" not found.	Аркуш "{name}" не знайдено.
+echo	{n} object(s) direction has been reversed.	Напрям змінено для об’єктів: {n}.
+echo	{n} object(s) flattened.	Спроєктовано на площину об’єктів: {n}.
+echo	{n} object(s) changed from {value1} space to {value2} space.	Перенесено об’єктів із простору {value1} до простору {value2}: {n}.
+	`handle` (block reference) is required	потрібно `handle` (посилання на блок)
+	The block reference has no nested objects.	Посилання на блок не містить вкладених об’єктів.
+	Nothing nested there.	Тут немає вкладених об’єктів.
+echo	Nested object: {value1}	Вкладений об’єкт: {value1}
+	Ellipse must intersect cutting edges at two or more points.	Еліпс має перетинати різальні кромки щонайменше у двох точках.
+	Cannot trim that object.	Неможливо обрізати цей об’єкт.
+	Cannot extend a closed ellipse.	Неможливо подовжити замкнений еліпс.
+	Cannot extend that object.	Неможливо подовжити цей об’єкт.
+	The path has no length.	Траєкторія не має довжини.
+	`path` (handle) is required	потрібно `path` (ідентифікатор)
+echo	Type = Path  Associative = No ({n} items)	Тип = Траєкторія  Асоціативність = No (елементів: {n})
+	text is too long	текст надто довгий
+echo	Text styles: {value1}	Стилі тексту: {value1}
+echo	Cannot find text style "{name}".	Не знайдено стиль тексту "{name}".
+	The columns and gutters don't fit in the total width.	Стовпці та проміжки не вміщуються в загальну ширину.
+echo	`{k}` must be a number	`{k}` має бути числом
+	`list` must be bullet, number, lower or upper	`list` має бути bullet, number, lower або upper
+	`align` must be left, center, right, justify or distributed	`align` має бути left, center, right, justify або distributed
+	`tabs` must be an array of numbers	`tabs` має бути масивом числа
+	`columns.type` must be static or dynamic	`columns.type` має бути static або dynamic
+	columns need a `width` (the width of one column)	для стовпців потрібно `width` (ширина одного стовпця)
+	columns need a positive `height`	для стовпців потрібна додатна `height`
+	expected an object of profile variables	очікується об’єкт зі змінними профілю
+echo	{name} is not a profile setting	{name} не є налаштуванням профілю
+echo	invalid value for {value1}: {e}	некоректне значення для {value1}: {e}
+	`reset` must be true or false	`reset` має бути true або false
+echo	tolerance must be a number from 0 to {MAX_TOL}	допуск має бути числом від 0 до {MAX_TOL}
+	`tolerance` must be a number	`tolerance` має бути числом
+echo	`ignore`: unknown property {x}	`ignore`: невідомо властивість {x}
+echo	`ignore` must be a list of property names, got {v}	`ignore` має бути списком назви властивостей, отримано {v}
+echo	`{key}` must be true or false	`{key}` має бути true або false
+echo	{value1} duplicate(s) deleted	Видалено дублікатів: {value1}
+echo	{value2} overlapping object(s) or segment(s) deleted	Видалено накладених об’єктів або сегментів: {value2}
+echo	 ({value1} polyline segment(s))	 (сегментів полілінії: {value1})
+	The included angle must be between 0 and 360 degrees.	Внутрішній кут має бути між 0 і 360 градусами.
+echo	{n}: no such file	{n}: такого файлу немає
+echo	`{n}` is not a plotter configuration file name	`{n}` не є назвою файлу конфігурації плотера
+echo	{n}: the plotter configuration file is too large	{n}: файл конфігурації плотера надто великий
+echo	unknown plotter `{name}` (devices: {value1})	невідомо плотер `{name}` (пристрої: {value1})
+	`device` must be a plotter name	`device` має бути назва плотера
+echo	plotter `{value1}` has no paper `{name}` (papers: {value2})	плотер `{value1}` не має формату паперу `{name}` (формати паперу: {value2})
+echo	Plotter `{value1}` is not installed; plotted to PDF instead	Плотер `{value1}` не встановлено; натомість надруковано до PDF
+	the window needs a width and a height	вікно потребує ширини й висоти
+	`name` (a plotter name) is required	потрібно `name` (назва плотера)
+	the plotter has no name	плотер не має назви
+echo	`{key}` must be a size in mm, up to {value1}	`{key}` має бути розмір у mm, до {value1}
+	`output` must be pdf, png or svg	`output` має бути pdf, png або svg
+	`resolution` must be 50-2400 dpi	`resolution` має бути 50-2400 dpi
+	`orientation` must be portrait or landscape	`orientation` має бути portrait або landscape
+echo	`{value1}` has no paper `{rm}`	`{value1}` не має формату паперу `{rm}`
+	`paper.name` is required	потрібно `paper.name`
+	`paper.width` and `paper.height` (mm) are both required	`paper.width` і `paper.height` (mm) обидва потрібні
+	`paper.margins` must be [left, bottom, right, top] in mm, leaving a printable area	`paper.margins` має бути [left, bottom, right, top] у mm зі збереженням області друку
+	the plotter has too many papers	плотер містить забагато формати паперу
+echo	`{value1}` has no paper `{d}`	`{value1}` не має формату паперу `{d}`
+echo	plotter `{name}` already exists	плотер `{name}` уже існує
+	`name` is empty	`name` порожній
+echo	a plotter file `{file}` already exists	файл плотера `{file}` уже існує
+echo	`{name}` is built in: make a copy with action new, from `{name}`	`{name}` є вбудованим: створіть копію дією new, from `{name}`
+	a plotter needs at least one paper	плотер потребує щонайменше одного формату паперу
+echo	`{name}` is built in and can't be deleted	`{name}` є вбудованим і неможливо видалити
+	`text` (the file's contents) is required	потрібно `text` (вміст файлу)
+echo	`{value1}` is a built-in plotter's name: pass another `name`	`{value1}` є назвою вбудованого плотера: передайте інше `name`
+	the plotter configuration has no papers	конфігурація плотера не має форматів паперу
+echo	{value1} ({value2}, {kind}, {value3} paper sizes)	{value1} ({value2}, {kind}, форматів паперу: {value3})
+echo	Plotter "{n}" already exists.	Плотер "{n}" уже існує.
+echo	Plotter "{name}" created.	Плотер "{name}" створено.
+echo	Plotter "{value1}" deleted.	Плотер "{value1}" видалено.
+echo	Plotter "{n}" not found.	Плотер "{n}" не знайдено.
+echo	"{value1}" is built in; create a new plotter first.	"{value1}" є вбудованим; спочатку створіть новий плотер.
+echo	Paper "{paper}" added to "{dev}".	Папір "{paper}" додано до "{dev}".
+echo	{value1} is a reserved name; not loaded	{value1} є зарезервованою назвою; не завантажено
+echo	{value1}: text style {st} is not in this drawing; its text uses the default style	{value1}: стиль тексту {st} відсутній у цьому кресленні; текст використовує типовий стиль
+	`file` or `text` is required	потрібно `file` або `text`
+echo	no linetype matching `{names}` in {source}	у {source} немає типу лінії, що відповідає `{names}`
+echo	Linetype(s) {name} loaded.	Типи ліній {name} завантажено.
+echo	Linetype {name} is already loaded.	Тип лінії {name} уже завантажено.
+echo	No linetype matching {value1} in {path}.	У {path} немає типу лінії, що відповідає {value1}.
+echo	Linetype {n} loaded.	Тип лінії {n} завантажено.
+echo	Current linetype: "{cur}"	Поточний тип лінії: "{cur}"
+echo	Linetype {name} reloaded.	Тип лінії {name} перезавантажено.
+echo	unknown property `{n}` (known: {value1})	невідомо властивість `{n}` (відомі: {value1})
+echo	`properties` holds names, got {x}	`properties` містить назви, отримано {x}
+echo	`properties.{n}` must be true or false	`properties.{n}` має бути true або false
+echo	`properties` must be a list of names or {name: bool}, got {other}	`properties` має бути списком назв або {name: bool}, отримано {other}
+	no such source object	немає такого вихідний об’єкт
+	`source` (object handle) is required	потрібно `source` (ідентифікатор об’єкта)
+	`source` is required	потрібно `source`
+echo	Current active settings: {text}	Поточні активні налаштування: {text}
+	no such block	немає такого блок
+	an anonymous block cannot be renamed	неможливо перейменувати анонімний блок
+echo	a block `{to}` already exists	блок `{to}` уже існує
+	the Standard style cannot be renamed	неможливо перейменувати стиль Standard
+	unsupported table	непідтримуваний таблиця
+echo	`{to}` already exists	`{to}` уже існує
+echo	no {table} `{from}`	немає {table} `{from}`
+echo	No {noun} named "{name}".	Немає {noun} з назвою "{name}".
+echo	Renaming a {noun} is not available yet.	Перейменування {noun} ще недоступне.
+	transparency must be ByLayer, ByBlock or a percentage from 0 to 90	прозорість має бути ByLayer, ByBlock або відсотком від 0 до 90
+echo	linetype `{n}` is not loaded	тип лінії `{n}` не завантажено
+echo	dimension style `{n}` not found	Не знайдено стиль розмірів `{n}`
+	`color` is required	потрібно `color`
+echo	linetype `{load}` not found in the library	У бібліотеці не знайдено тип лінії `{load}`
+echo	linetype `{cur}` is not loaded	тип лінії `{cur}` не завантажено
+	`lineweight` is required	потрібно `lineweight`
+	scale must be positive	масштаб має бути додатним
+	bad style name	некоректна назва стилю
+echo	no text style `{name}`	немає стиль тексту `{name}`
+echo	a text style `{to}` already exists	стиль тексту `{to}` уже існує
+	no such style	немає такого стиль
+	the Standard style cannot be deleted	неможливо видалити стиль Standard
+	the current text style cannot be deleted	неможливо видалити поточний стиль тексту
+echo	text style `{name}` is in use	стиль тексту `{name}` використовується
+echo	no dimension style `{n}`	немає стиль розмірів `{n}`
+echo	no dimension style `{name}`	немає стиль розмірів `{name}`
+echo	a dimension style `{to}` already exists	стиль розмірів `{to}` уже існує
+	no such dimension style	немає такого стиль розмірів
+	the current dimension style cannot be deleted	неможливо видалити поточний стиль розмірів
+echo	dimension style `{name}` is in use	стиль розмірів `{name}` використовується
+echo	no valid dimension variables given (ignored: {value1})	не задано коректних змінних розміру (пропущено: {value1})
+	`pdmode` must be 0..4, plus 32 and/or 64	`pdmode` має бути 0..4, плюс 32 та/або 64
+	no layer.set command	немає команди layer.set
+echo	the {from} linetype cannot be renamed	неможливо перейменувати тип лінії {from}
+echo	a linetype `{to}` already exists	тип лінії `{to}` уже існує
+	no such linetype	немає такого тип лінії
+echo	unknown operator `{o}` (use =, !=, >, <, *)	невідомий оператор `{o}` (використовуйте =, !=, >, <, *)
+	`value` is required with `property`	`value` потрібно з `property`
+echo	unknown mode `{mode}` (use new, append or exclude)	невідомий режим `{mode}` (використовуйте new, append або exclude)
+echo	{n} item(s) selected	Вибрано елементів: {n}
+	`mode` must be a SELECTSIMILARMODE bit code from 0 to 255	`mode` має бути бітовим кодом SELECTSIMILARMODE від 0 до 255
+	select objects to match	виберіть об’єкти для зіставлення
+	none of the given objects exist in the current space	жоден із заданих об’єктів не існує в поточному просторі
+echo	{n} found	Знайдено: {n}
+echo	{n} objects hidden	Приховано об’єктів: {n}
+	select objects to isolate	виберіть об’єкти для ізоляції
+	none of the given objects exist	жоден із заданих об’єктів не існує
+	select objects to hide	виберіть об’єкти для приховування
+	No objects are isolated or hidden.	Немає ізольованих або прихованих об’єктів.
+	1 object shown	Показано 1 об’єкт
+echo	{n} objects shown	Показано об’єктів: {n}
+echo	<Isodraft {}>	<Ізометричне креслення {}>
+	<Isodraft off>	<Ізометричне креслення вимкнено>
+	`plane` is left, top, right or orthographic	`plane` є left, top, right або orthographic
+	`plane` is left, top or right	`plane` є left, top або right
+	`isocircle` is required	потрібно `isocircle`
+	an isocircle's `plane` is left, top or right	`plane` ізометричного кола має бути left, top або right
+	the isocircle needs a finite center and a positive radius	ізометричне коло потребує скінченного центра й додатного радіуса
+echo	<{name} {value1}>	<{name} {value1}>
+echo	<Osnap {value1}>	<Об’єктна прив’язка {value1}>
+echo	Unknown variable {n}. Type SETVAR ? to list variables.	Невідома змінна {n}. Введіть SETVAR ?, щоб переглянути змінні.
+echo	{n} = {value1} (read only)	{n} = {value1} (лише читання)
+echo	unknown variable `{name}`	невідомо змінна `{name}`
+	The tangent point must differ from the fit point.	Точка дотичної має відрізнятися від точки апроксимації.
+echo	{n} object(s) converted to splines	Перетворено на сплайни об’єктів: {n}
+	it has arc segments	містить дугові сегменти
+	it is not planar	не є плоским
+	it is not a polyline	не є полілінією
+	it has too few or too many vertices	має замало або забагато вершин
+	it has too few vertices to close	має замало вершин для замикання
+echo	Object not converted: {why}.	Об’єкт не перетворено: {why}.
+	`knots` must be "chord", "sqrt" or "uniform"	`knots` має бути "chord", "sqrt" або "uniform"
+echo	`{key}` must be a non-zero direction [dx, dy]	`{key}` має бути ненульовим вектором напряму [dx, dy]
+	`tolerance` must be zero or positive	`tolerance` має бути невід’ємним
+	`object` must be a handle or true	`object` має бути ідентифікатором або true
+	`object` is required	потрібно `object`
+	no polyline to convert: give `object` a handle or select polylines	немає полілінії для перетворення: задайте ідентифікатор через `object` або виберіть полілінії
+echo	Object {value1} not converted: {why}.	Об’єкт {value1} не перетворено: {why}.
+echo	invalid {k}: {v}	некоректне {k}: {v}
+	`heights` must be non-negative numbers	`heights` має містити невід’ємні числа
+echo	invalid heights: {v}	некоректні висоти: {v}
+echo	invalid direction {d} (right, left, down)	некоректний напрям {d} (right, left, down)
+	Requires a positive number or Off.	Потрібне додатне число або Off.
+echo	Table in {value1} part(s).	Таблиця містить частин: {value1}.
+	data links can't read files in the browser	зв’язки даних не можуть читати файли в браузері
+	the table has no data link	таблиця не має зв’язку даних
+	object is not a table	об’єкт не є таблиця
+	`path` of a CSV file is required	потрібен `path` файлу CSV
+	no table	немає таблиця
+echo	{updated} data link(s) updated.	Оновлено зв’язків даних: {updated}.
+echo	invalid border color {c}	некоректний колір межі {c}
+echo	invalid lineweight {w}	некоректна товщина лінії {w}
+echo	invalid textColor {c}	некоректний textColor {c}
+echo	invalid fill {v}	некоректна заливка {v}
+echo	invalid align {a} (TL, TC, TR, ML, MC, MR, BL, BC, BR)	некоректне align {a} (TL, TC, TR, ML, MC, MR, BL, BC, BR)
+echo	unknown border {k}	невідома межа {k}
+echo	invalid format {f} (general, decimal, percent, text)	некоректний формат {f} (general, decimal, percent, text)
+echo	invalid precision {n} (0..8)	некоректна точність {n} (0..8)
+	no such table style	немає такого стилю таблиці
+	`name` of the cell style is required	потрібно `name` з стиль комірки
+echo	no cell style {name}	немає стиль комірки {name}
+	too many cell styles	забагато стилі комірок
+	`style` must be a cell style name	`style` має бути назва стилю комірки
+	`style` (cell style name) is required	потрібно `style` (назва стилю комірки)
+echo	table style {value1} has no cell style {name} (it has {value2})	стиль таблиці {value1} не має стилю комірки {name} (наявні: {value2})
+echo	row {r} is outside the table	рядок {r} поза таблицею
+echo	column {c} is outside the table	стовпець {c} поза таблицею
+	`row` is required	потрібно `row`
+	`col` is required	потрібно `col`
+	`range` is required (no data cells above this one)	`range` потрібно (немає комірки даних над цією коміркою)
+	`cell` (e.g. "A1") is required	потрібно `cell` (наприклад "A1")
+echo	invalid cell {cell}	некоректна комірка {cell}
+	`expression` is required	потрібно `expression`
+echo	unknown function {other} (sum, average, count, min, max, cell, equation)	невідомо функція {other} (sum, average, count, min, max, cell, equation)
+	no table cell at that point	немає комірка таблиці у цій точці
+	files can't be written in this build; use the returned csv	у цій збірці неможливо записати файли; скористайтеся поверненим csv
+	`handle` of a table is required	потрібно `handle` з таблиця
+echo	unsupported separator {other} (",", ";" or tab)	непідтримуваний роздільник {other} (",", ";" або табуляція)
+echo	Table exported to {path}.	Таблицю експортовано до {path}.
+	Show borders? [On/Off]	Показати межі? [On/Off]
+echo	rows must be ≤ {MAX_ROWS} and columns 1..={MAX_COLS}	кількість рядків має бути ≤ {MAX_ROWS}, а стовпців — у межах 1..={MAX_COLS}
+echo	cell ({r}, {c}) is outside the {value1}×{value2} table	комірка ({r}, {c}) поза таблицею {value1}×{value2}
+echo	{e}: not a formula UbotCAD can evaluate: {f}	{e}: не є формулою, яку може обчислити UbotCAD: {f}
+	too many rows	забагато рядків
+	no such row (a table keeps at least one row)	такого рядка немає (таблиця зберігає щонайменше один рядок)
+	too many columns	забагато стовпців
+	no such column (a table keeps at least one column)	такого стовпця немає (таблиця зберігає щонайменше один стовпець)
+	merge at least two cells (`rows` / `cols`)	об’єднайте щонайменше дві комірки (`rows` / `cols`)
+echo	unknown geometric characteristic `{s}`	невідомо геометрична характеристика `{s}`
+	the feature control frame is empty	рамка геометричного допуску порожній
+echo	no dimension style `{style}`	немає стиль розмірів `{style}`
+	No objects found.	Об’єктів не знайдено.
+	`edgeMode` must be "extend" or "none"	`edgeMode` має бути "extend" або "none"
+	`mode` must be "quick" or "standard"	`mode` має бути "quick" або "standard"
+	`fence` needs two or more points [[x,y], ...]	`fence` потребує щонайменше двох точок [[x,y], ...]
+	`crossing` needs two corners [[x,y], [x,y]]	`crossing` потребує два кути [[x,y], [x,y]]
+	`crossing` needs two corners	`crossing` потребує два кути
+	`pick` ([x, y]) is required	потрібно `pick` ([x, y])
+echo	Current settings: Projection={proj}, Edge={value1}, Mode={value2}	Поточні налаштування: Проєкція={proj}, Кромка={value1}, Режим={value2}
+	no scanned plan	немає просканованого плану
+echo	selection exceeds {MAX_SCAN_FRAMES} entries	вибір перевищує {MAX_SCAN_FRAMES} записи
+echo	selection exceeds {MAX_SCAN_FRAMES} frames	вибір перевищує {MAX_SCAN_FRAMES} рамки
+	input text exceeds 64 MiB	вхідний текст перевищує 64 MiB
+	choose Block, Window, Layout or Last	виберіть Block, Window, Layout або Last
+echo	selection exceeds {MAX_SCAN_FRAMES} windows	вибір перевищує {MAX_SCAN_FRAMES} вікна
+	sheet window must have positive width and height	вікно аркуша має мати додатну ширину й висоту
+	specify a finite window corner	задайте кут вікна зі скінченними координатами
+	enter layout names or *	введіть назви аркушів або *
+echo	selection exceeds {MAX_SCAN_FRAMES} layouts	вибір перевищує {MAX_SCAN_FRAMES} аркуші
+echo	{key} must be a string	{key} має бути рядком
+echo	{key} must be a boolean	{key} має бути логічне значення
+echo	{key} must be an unsigned integer	{key} має бути беззнакове ціле число
+echo	{key} must be within {min}..={max}	{key} має бути в межах {min}..={max}
+	path must contain 1 to 4096 bytes	шлях має містити 1 до 4096 байти
+	mode must be merged or split	режим має бути merged або split
+	path needs a file name	шлях потребує назва файлу
+	path needs a file stem	шлях потребує назви файлу без розширення
+	job source is missing	відсутнє джерело завдання
+	missing source	відсутній джерело
+	job definition exceeds 64 MiB	визначення завдання перевищує 64 MiB
+	jobId already exists with a different plan or settings; remove it before publishing again	jobId уже існує з іншим планом або налаштуваннями; видаліть його перед повторною публікацією
+	job queue exceeds supported limits	черга завдань перевищує підтримувані обмеження
+	Folder mode is only in the desktop app	режим Folder доступний лише в настільному застосунку
+	folder is required	потрібно folder
+	out is required	потрібно out
+	folder and out must contain 1 to 4096 bytes	folder і out має містити 1 до 4096 байти
+	folder must be an existing directory	folder має бути наявним каталогом
+	out must be a directory	out має бути каталог
+	out must differ from folder	out має відрізнятися від folder
+	file decoding and PDF queue rendering are not available in this build	ця збірка не підтримує декодування файлів і рендеринг черги PDF
+	job sheet count overflow	кількість аркушів завдання переповнення
+	job exceeds sheet limits	завдання перевищує обмеження аркушів
+	skipped file count exceeds supported limits	кількість пропущених файлів перевищує підтримувані обмеження
+echo	read_error: {error}	read_error: {error}
+echo	no readable drawings found; skipped_files: {value1}	читабельних креслень не знайдено; skipped_files: {value1}
+	no previous UBPLOT plan	немає попереднього плану UBPLOT
+	PLAN_STALE: drawing changed since scan; scan again	PLAN_STALE: креслення змінено відколи сканування; сканування знову
+	PLAN_INVALID: there are no sheets to publish	PLAN_INVALID: немає аркушів для публікації
+echo	WARN_NOT_APPROVED: {value1}	WARN_NOT_APPROVED: {value1}
+	unknown jobId	невідомо jobId
+	stored manifest does not match jobId	збережений маніфест не відповідає jobId
+	stored job definition is missing	відсутнє збережене визначення завдання
+	job sources must be an array	джерела завдання має бути масив
+	job exceeds source limits	завдання перевищує обмеження джерел
+	source plan is missing	відсутній план джерела
+	stored job definition does not match jobId	збережене визначення завдання не відповідає jobId
+	parameters must be an object	параметри має бути об’єктом
+	action is required	потрібно дія
+	unknown job action	невідомо дія завдання
+	job listing exceeds supported limits	список завдань перевищує підтримувані обмеження
+	jobId is required	потрібно jobId
+	PDF queue rendering is not available in this build	Рендеринг черги PDF недоступний у цій збірці
+	cancel requests exceed supported limits	кількість запитів на скасування перевищує підтримувані обмеження
+	cannot remove a RUNNING job	неможливо видалити завдання RUNNING
+	print profile JSON depth exceeds 32	глибина JSON профілю друку перевищує 32
+	executable paths are forbidden in print profiles	шляхи до виконуваних файлів заборонені в профілях друку
+	executable keys are forbidden in print profiles	ключі виконання заборонені в профілях друку
+	key exceeds 256 bytes	ключ перевищує 256 байти
+	invalid key	некоректний ключ
+	key must address a print setting	ключ має вказувати на налаштування друку
+	invalid JSON Pointer escape	некоректне екранування JSON Pointer
+	id must be a string	id має бути рядком
+	id is required for this level	для цього рівня потрібен id
+	action must be effective, explain, get, set, unset, lock, unlock, import or export	дія має бути effective, explain, get, set, unset, lock, unlock, import або export
+	text is required for import	для імпорту потрібен text
+	print profile exceeds 256 KiB	профіль друку перевищує 256 KiB
+	set/unset require user, drawing or project level	set/unset потребують рівня user, drawing або project
+	lock/unlock require company level	lock/unlock потребують рівня company
+	import level and id must match the document	рівень та id імпорту мають відповідати документу
+	print profile exceeds 256 locks	профіль друку перевищує 256 блокувань
+	settings must be an object	налаштування має бути об’єктом
+	unknown print setting	невідомо налаштування друку
+	unset requires a top-level setting	unset потребує налаштування верхнього рівня
+	value is required	потрібно значення
+	key does not address an existing setting	ключ не вказує на наявне налаштування
+	invalid action	некоректна дія
+	profile revision overflow	редакція профілю переповнення
+echo	LOCKED_BY_POLICY: {value1} ({value2})	LOCKED_BY_POLICY: {value1} ({value2})
+	missing profile setting	відсутній налаштування профілю
+	naming must be a string	найменування має бути рядком
+	invalid plot scale	некоректний масштаб друку
+	pages_per_file is outside the PDF page limits	pages_per_file поза межами кількості сторінок PDF
+	output must be merged or split	результат має бути merged або split
+	PLAN_INVALID: job_id is not safe for a temporary file name	PLAN_INVALID: job_id небезпечний для назви тимчасового файлу
+	page count overflow	кількість сторінок переповнення
+	output exceeds supported page limits	результат перевищує підтримувані обмеження кількості сторінок
+	web split output is limited to 20 files; use merged output	поділений результат у вебверсії обмежено 20 файлами; скористайтеся об’єднаним результатом
+	a sheet exceeds pages_per_file; increase the page limit	аркуш перевищує pages_per_file; збільште обмеження кількості сторінок
+	missing output sheet	відсутній вихідний аркуш
+	missing output name	відсутня назва результату
+	output needs a file name	результат потребує назва файлу
+echo	output file names collide; include {part}, {order} or {sheet_id} in naming	назви вихідних файлів конфліктують; додайте {part}, {order} або {sheet_id} до правил найменування
+	output path is not UTF-8	вихідний шлях не є UTF-8
+echo	BLOCKED: {value1}; plan={value2}	BLOCKED: {value1}; plan={value2}
+	PDF plotting is not available in this build	Друк PDF недоступний у цій збірці
+	missing output group	відсутня група результатів
+echo	{error}; plan={value1}	{error}; plan={value1}
+echo	Sheet `{value1}` is published as `{name}`.	Аркуш `{value1}` опубліковано як `{name}`.
+	split piece count is outside the page limits	кількість частин поділу поза межами кількості сторінок
+	layout splits are not available; choose PDF	поділ аркушів недоступний; виберіть PDF
+	plot scale must be finite and positive after unit conversion	масштаб друку після перетворення одиниць має бути скінченним і додатним
+	OUTPUT_IS_SOURCE: output would overwrite the source drawing	OUTPUT_IS_SOURCE: результат перезапише вихідне креслення
+	action must be a string	дія має бути рядком
+	path must be a nonempty string	шлях має бути непорожній рядок
+	baseline import requires approve: true	імпорт базового рівня потребує approve: true
+	picks must be an array	picks має бути масивом
+	baseline import requires 1..=1000 picks	імпорт базового рівня потребує 1..=1000 вибори
+	sha256 is required for baseline import	для імпорту базового рівня потрібен sha256
+	sha256 does not match the audited source	sha256 не відповідає перевірене джерело
+	action must be list, import, reset, audit, verify or exportLisp	дія має бути list, import, reset, audit, verify або exportLisp
+echo	could not save frame template registry: {error}	не вдалося зберегти реєстр шаблонів рамок: {error}
+	format must be json or csv	формат має бути json або csv
+	plan is required	потрібно план
+	name is required with data	разом із data потрібен name
+	path or name+data (base64) is required	потрібно path або name+data (base64)
+	template exceeds 64 MiB	шаблон перевищує 64 MiB
+	paths are not available on the web; pass name+data	шляхи недоступні у вебверсії; передайте name+data
+echo	Baseline source {path} for {id} has changed since import.	Джерело базового рівня {path} для {id} змінилося після імпорту.
+echo	Baseline source {path} for {id} could not be verified: {error}	Не вдалося перевірити джерело базового рівня {path} для {id}: {error}
+echo	{value1}: export path is a source drawing or template	{value1}: шлях експорту є вихідне креслення або шаблон
+	refresh must be a boolean	refresh має бути логічним значенням
+	no previous UBPLOT plan for this drawing	немає попереднього плану UBPLOT для цього креслення
+	by must be user or agent:<name>	by має бути user або agent:<name>
+	approvals must be an array	approvals має бути масивом
+	split must be an array	split має бути масивом
+	approvals or split must be an array	approvals або split має бути масивом
+echo	at most {MAX_APPROVALS} approvals are allowed	дозволено щонайбільше схвалень: {MAX_APPROVALS}
+	sheetKey must be a string	sheetKey має бути рядком
+	overlapMm must be 0..=200 mm	overlapMm має бути 0..=200 mm
+	code must be a string	code має бути рядком
+echo	{what} needs a number, not a point	{what} потребує числа, а не точки
+echo	{what} needs a point, not a number	{what} потребує точки, а не числа
+echo	missing {value1}	бракує {value1}
+	expression too deeply nested	вираз вкладено надто глибоко
+echo	bad number `{t}`	некоректне число `{t}`
+echo	too many arguments to `{name}`	забагато аргументів для `{name}`
+echo	unknown name `{name}`	невідома назва `{name}`
+	expected a number	очікується число
+	can't add or subtract a number and a point	неможливо додавати або віднімати число й точку
+	division by zero	ділення на нуль
+	the lines are parallel	лінії паралельні
+echo	`{name}` needs more arguments	`{name}` потребує більше аргументів
+echo	`{name}` takes {lo}{value1} argument(s)	`{name}` приймає аргументів: {lo}{value1}
+	vec1 of two equal points	vec1 для двох однакових точок
+	pld of two equal points	pld для двох однакових точок
+echo	unknown function `{name}`	невідома функція `{name}`
+	expression too long	вираз надто довгий
+echo	unexpected `{value1}`	неочікуване `{value1}`
+	result is not a finite number	результат не є скінченним числом
+echo	unit type must be length, area, volume or angle, got `{k}`	тип одиниці має бути length, area, volume або angle, отримано `{k}`
+echo	can't convert `{from}` to `{to}`	неможливо перетворити `{from}` на `{to}`
+echo	{value1} point(s) are needed	потрібно точок: {value1}
+	the result is a point, not a number	результат є точкою, а не числом
+echo	`convert.{k}` is required	потрібно `convert.{k}`
+	`convert.value` must be a number or an expression	`convert.value` має бути числом або вираз
+	`convert.value` is required	потрібно `convert.value`
+echo	{value1} {from} = {value2} {to}	{value1} {from} = {value2} {to}
+	`pick` must be point, distance, angle or intersection	`pick` має бути point, distance, angle або intersection
+	`points` must be a list of [x, y] points	`points` має бути списком точок [x, y]
+	`expr` is required	потрібно `expr`
+echo	CAL: {m}	CAL: {m}
+echo	QuickCalc: {m}	QuickCalc: {m}
+	`find` is required	потрібно `find`
+echo	{total} replacement(s) in {n} object(s)	Замін: {total}, в об’єктах: {n}
+echo	{total} match(es) in {value1} object(s)	Збігів: {total}, в об’єктах: {value1}
+	select an arc or circle	виберіть дуга або коло
+echo	Radius = {r}	Радіус = {r}
+echo	Diameter = {value1}	Діаметр = {value1}
+echo	give {vertex,p1,p2} or {h1,h2}	задайте {vertex,p1,p2} або {h1,h2}
+	h1 is not a line	h1 не є лінія
+	h2 is not a line	h2 не є лінія
+	lines are parallel	лінії паралельні
+echo	Angle = {ang}°	Кут = {ang}°
+	mode must be distance, radius, angle or area	режим має бути distance, radius, angle або area
+	`p1` and `p2` (the window) are required	`p1` і `p2` (вікно) потрібні
+	option must be save, window, restore, delete, list or settings	параметр має бути save, window, restore, delete, list або settings
+echo	"{name}" is not a valid view name.	"{name}" не є коректною назвою виду.
+	The window has no area.	Вікно не має площі.
+echo	View "{name}" replaced.	Вид "{name}" замінено.
+echo	View "{name}" saved.	Вид "{name}" збережено.
+echo	Could not find view "{value1}".	Не знайдено вид "{value1}".
+echo	View "{value1}" has no area.	Вид "{value1}" не має площі.
+echo	View "{value1}" belongs to layout "{target}", which does not exist.	Вид "{value1}" належить до аркуша "{target}", якого не існує.
+echo	View "{value1}" restored.	Вид "{value1}" відновлено.
+echo	 Its layer snapshot "{state}" is missing.	 Його знімок шарів "{state}" відсутній.
+	No matching views found.	Відповідних видів не знайдено.
+echo	{value1} view(s) deleted.	Видалено видів: {value1}.
+	A viewport configuration needs a viewport.	Конфігурація видових екранів потребує видового екрана.
+	Tiled viewports are for the Model tab; use MVIEW in a layout.	Мозаїчні видові екрани призначені для вкладки Model; на аркуші скористайтеся MVIEW.
+echo	`{key}` must be a viewport number from 1 to {n}	`{key}` має бути номером видового екрана від 1 до {n}
+echo	unknown arrangement `{arrangement}` for {count} viewports	невідомо розташування `{arrangement}` для {count} видові екрани
+	The current viewport is too small to divide.	Поточний видовий екран надто малий для поділу.
+echo	At most {MAX_TILES} viewports can be shown.	Можна показати щонайбільше видових екранів: {MAX_TILES}.
+	`join` (the viewport to join) is required	потрібно `join` (видовий екран для об’єднання)
+	There is only one viewport.	Є лише один видовий екран.
+	The selected viewports do not form a rectangle.	Вибрані видові екрани не утворюють прямокутника.
+echo	"{name}" is not a valid viewport configuration name.	"{name}" не є коректною назвою конфігурації видових екранів.
+echo	Viewport configuration "{name}" saved.	Конфігурацію видових екранів "{name}" збережено.
+echo	Could not find viewport configuration "{name}".	Не знайдено конфігурацію видових екранів "{name}".
+	No matching viewport configurations found.	Відповідних конфігурацій видових екранів не знайдено.
+echo	{value1} viewport configuration(s) deleted.	Видалено конфігурацій видових екранів: {value1}.
+	option must be single, 2, 3, 4, join, save, restore, delete or list	параметр має бути single, 2, 3, 4, join, save, restore, delete або list
+	No such viewport.	Такого видового екрана немає.
+	unknown mode	невідомий режим
+	the view is too large to show. Nothing was changed	вид надто великий для відображення. Нічого не змінено
+echo	the result is too large: object {value1} would get infinite or undefined coordinates. Nothing was changed	результат надто великий: об’єкт {value1} матиме нескінченні або невизначені координати. Нічого не змінено
+echo	unknown command `{value1}`	невідома команда `{value1}`
+echo	command `{value1}` is not available right now: {value2}	команда `{value1}` зараз недоступна: {value2}
+echo	invalid parameters for `{cmd}`: {msg}	некоректні параметри для `{cmd}`: {msg}
+echo	internal error in `{value1}` (the drawing was kept as it was): {value2}	внутрішня помилка в `{value1}` (креслення збережено без змін): {value2}
+echo	Command: {name}	Команда: {name}
+echo	Internal error in {id}: {m}	Внутрішня помилка в {id}: {m}
+echo	Resuming {value1} command.	Продовження команди {value1}.
+echo	Invalid input: {value1}	некоректний вхідні дані: {value1}
+	a script is already running; nested scripts are not supported	сценарій уже виконується; вкладені сценарії не підтримуються
+echo	bad argument value: positive {start}	некоректне значення аргументу: потрібне додатне {start}
+echo	bad argument value: non-negative {n}	некоректне значення аргументу: потрібне невід’ємне {n}
+echo	bad argument value: file mode {mode}	некоректне значення аргументу: режим файлу {mode}
+echo	no function definition: {value1}	немає визначення функції: {value1}
+echo	bad function: {value1}	некоректна функція: {value1}
+echo	LOAD failed: "{name}"	Не вдалося виконати LOAD: "{name}"
+echo	AutoCAD variable setting rejected: {value1} {value2}	Налаштування змінної AutoCAD відхилено: {value1} {value2}
+echo	bad DXF group: {kind} can't be made from this list	некоректна група DXF: неможливо створити {kind} із цього списку
+echo	bad argument value: ssget mode {m}	некоректне значення аргументу: режим ssget {m}
+echo	bad ssget filter: no {end}	некоректний фільтр ssget: немає {end}
+echo	bad argument value: rtos mode {mode}	некоректне значення аргументу: режим rtos {mode}
+	Missed, try again.	Не влучили, спробуйте ще раз.
+	Value must be between -32768 and 32767.	Значення має бути між -32768 і 32767.
+	Value must be nonzero.	Значення має бути ненульовим.
+echo	bad argument type: {pred}: {value1}	некоректний тип аргументу: {pred}: {value1}
+echo	; error: {value1}	; помилка: {value1}
+	a LISP routine is already running	програма LISP уже виконується
+echo	internal error: {value1}	внутрішня помилка: {value1}
+echo	routine stopped after {BLOCKING_CAP} steps	програму зупинено після {BLOCKING_CAP} кроків
+echo	internal error: {msg}	внутрішня помилка: {msg}
+echo	; error: {msg}	; помилка: {msg}
+echo	{shown} successfully loaded.	{shown} успішно завантажено.
+echo	LISP write blocked: {path} is outside the allowed folders (LISPSANDBOX)	Запис LISP заблоковано: {path} поза дозволеними теками (LISPSANDBOX)
+echo	LISP_NOT_REVIEWED: {name} (sha256 {sha})	LISP_NOT_REVIEWED: {name} не перевірено (sha256 {sha})
+echo	Only the user can change permissions with {id}	Лише користувач може змінити дозволи через {id}
+echo	bad argument value: property {property}	некоректне значення аргументу: властивість {property}
+echo	handles exceeds {MAX_SCAN_FRAMES} entries	handles перевищує {MAX_SCAN_FRAMES} записів
+echo	out of memory: string longer than {MAX_STRING} bytes	бракує пам’яті: рядок довший за {MAX_STRING} байтів
+echo	Angle Override: {value1}	Перевизначення кута: {value1}
+echo	No {value1} found for specified point.	Для вказаної точки не знайдено {value1}.
+	by must be user or agent:<name>, with 1 to 64 characters	by має бути user або agent:<name>, від 1 до 64 символів
+echo	audit count exceeds {MAX_AUDIT_ENTRIES}	кількість записів перевірки перевищує {MAX_AUDIT_ENTRIES}
+echo	BLOCK_NOT_APPROVABLE: {key}:{value1}	BLOCK_NOT_APPROVABLE: неможливо схвалити {key}:{value1}
+echo	only WARN issues can be approved: {key}:{value1}	схвалити можна лише проблеми WARN: {key}:{value1}
+echo	unknown sheetKey or issue code: {key}:{code}	невідомий sheetKey або код проблеми: {key}:{code}
+echo	APPROVAL_WITHOUT_AUDIT: {key}:{value1}	APPROVAL_WITHOUT_AUDIT: немає перевірки для {key}:{value1}
+echo	APPROVAL_WITHOUT_AUDIT: {value1}:split	APPROVAL_WITHOUT_AUDIT: немає перевірки для {value1}:split
+	printer splits are only available in the desktop app; choose PDF	поділ для принтера доступний лише в настільному застосунку; виберіть PDF
+echo	duplicate split sheetKey: {key}	повторний sheetKey поділу: {key}
+echo	unknown sheetKey: {key}	невідомий sheetKey: {key}
+echo	no split proposal for {key}; choose PDF	немає пропозиції поділу для {key}; виберіть PDF
+echo	cannot split {key}; overlap must be 0..=200 mm and the short side must fit; choose PDF	неможливо поділити {key}; перекриття має бути 0..=200 mm, а коротка сторона має вміщуватися; виберіть PDF
+echo	PLAN_INVALID: {error}	PLAN_INVALID: {error}
+	paper choice exceeds 256 bytes	вибір паперу перевищує 256 байтів
+echo	invalid paper `{text}`: use auto, a paper name, WIDTHxHEIGHT or roll:WIDTH[:MARGIN]	некоректний папір `{text}`: задайте auto, назву формату, WIDTHxHEIGHT або roll:WIDTH[:MARGIN]
+echo	Paper dimensions must be within 1..={MAX_PAPER_MM} mm.	Розміри паперу мають бути в межах 1..={MAX_PAPER_MM} mm.
+echo	Roll width must be within 1..={MAX_PAPER_MM} mm and margin within 0..=1000 mm.	Ширина рулону має бути в межах 1..={MAX_PAPER_MM} mm, а поле — 0..=1000 mm.
+echo	frame needs {value1} mm across roll including margins; roll {width} mm is too narrow; choose a wider roll or paper	рамка потребує {value1} mm поперек рулону разом із полями; рулон {width} mm надто вузький; виберіть ширший рулон або папір
+echo	Roll length {length} mm exceeds {MAX_PAPER_MM} mm.	Довжина рулону {length} mm перевищує {MAX_PAPER_MM} mm.
+echo	frame needs {w}×{h} mm at selected scale; paper {name} prints {pw}×{ph} mm	рамка потребує {w}×{h} mm у вибраному масштабі; папір {name} друкує {pw}×{ph} mm
+echo	{name} exceeds {MAX_SCAN_FRAMES} entries	{name} перевищує {MAX_SCAN_FRAMES} записів
+echo	scan exceeds {MAX_SCAN_FRAMES} entries	сканування перевищує {MAX_SCAN_FRAMES} записів
+echo	Duplicate handle {value1} was selected once.	Повторний ідентифікатор {value1} вибрано один раз.
+echo	drawing exceeds {MAX_SCAN_FRAMES} layouts	креслення перевищує {MAX_SCAN_FRAMES} аркушів
+echo	unknown layout `{name}`	невідомий аркуш `{name}`
+	layout paper dimensions must be finite and positive	розміри паперу аркуша мають бути скінченними й додатними
+	layout plot scale must be finite and positive	масштаб друку аркуша має бути скінченним і додатним
+	PLAN_INVALID: window outline must be a rectangle	PLAN_INVALID: контур вікна має бути прямокутником
+	last mode requires session state	режим last потребує стану сеансу
+echo	Sheet {key} was excluded.	Аркуш {key} виключено.
+	frame handle must be hexadecimal	ідентифікатор рамки має бути шістнадцятковим
+	window must contain two corners or four vertices	вікно має містити два кути або чотири вершини
+	window coordinates must be finite	координати вікна мають бути скінченними
+echo	External reference `{value1}` at `{value2}` is {value3}.	Зовнішнє посилання `{value1}` у `{value2}` має стан {value3}.
+	Printer devices are only available in the desktop app; plotting to PDF.	Принтери доступні лише в настільному застосунку; друк до PDF.
+	The requested device is unavailable; plotting to PDF.	Потрібний пристрій недоступний; друк до PDF.
+echo	Paper {value1} x {value2} mm exceeds device limits {max_short} x {max_long} mm; approve a split or choose PDF.	Папір {value1} x {value2} mm перевищує обмеження пристрою {max_short} x {max_long} mm; схваліть поділ або виберіть PDF.
+echo	Paper {value1} x {value2} mm is at least 95% of device limits {max_short} x {max_long} mm.	Папір {value1} x {value2} mm сягає щонайменше 95% обмежень пристрою {max_short} x {max_long} mm.
+echo	{value1} is drawn with {replacement}	{value1} накреслено з {replacement}
+echo	Sheet id `{value1}` is used by more than one sheet.	Id аркуша `{value1}` використовується кількома аркушами.
+echo	Template `{value1}` is superseded by `{successor}`.	Шаблон `{value1}` замінено на `{successor}`.
+echo	Revision `{revision}` is older than highest revision `{highest}` for sheet id `{value1}` in this plan.	Редакція `{revision}` старіша за найвищу редакцію `{highest}` для id аркуша `{value1}` у цьому плані.
+echo	Revision `{revision}` compared with registered revision `{expected}`.	Редакцію `{revision}` порівняно із зареєстрованою редакцією `{expected}`.
+echo	Revision is missing; registered revision is `{expected}`.	Редакція відсутня; зареєстрована редакція — `{expected}`.
+	Font traversal exceeded its safe layout limit.	Обхід шрифтів перевищив безпечне обмеження компонування.
+	Font traversal exceeded its safe visibility limit.	Обхід шрифтів перевищив безпечне обмеження видимості.
+	Font traversal found a non-finite block transform.	Обхід шрифтів виявив нескінченне перетворення блоку.
+	effective settings exceed 256 KiB	чинні налаштування перевищують 256 KiB
+echo	Skipped {value1} print profile: {reason}	Пропущено профіль друку {value1}: {reason}
+	naming exceeds 256 KiB	правила найменування перевищують 256 KiB
+echo	unknown naming token; allowed tokens are {stem}, {sheet_id}, {order}, {part}	невідомий маркер найменування; дозволено {stem}, {sheet_id}, {order}, {part}
+	retry_limit exceeds the supported limit	retry_limit перевищує підтримуване обмеження
+	unsupported print profile schema_version	непідтримувана schema_version профілю друку
+	only drawing print profiles may carry project_id	лише профілі друку креслення можуть містити project_id
+	invalid print profile lock pointer	некоректний вказівник блокування профілю друку
+	print profile settings must be an object	налаштування профілю друку мають бути об’єктом
+echo	print profile schema {value1} is newer than this application	схема профілю друку {value1} новіша за цей застосунок
+echo	invalid print profile: {value1}	некоректний профіль друку: {value1}
+echo	Locked by {level} policy	Заблоковано політикою {level}
+	platform print settings are built into the application	налаштування друку платформи вбудовано в застосунок
+	invalid drawing print profile id	некоректний id профілю друку креслення
+	reserved drawing print profile id	зарезервований id профілю друку креслення
+echo	print profile id must match [a-z0-9-]{1,64}	id профілю друку має відповідати [a-z0-9-]{1,64}
+	print profile level or id does not match its store key	рівень або id профілю друку не відповідає ключу сховища
+echo	{error}; could not keep damaged copy: {archive_error}	{error}; не вдалося зберегти пошкоджену копію: {archive_error}
+echo	Print profile {level} was damaged; restored the last good copy	Профіль друку {level} пошкоджено; відновлено останню справну копію
+echo	Print profile {level} was damaged; no last good copy is available	Профіль друку {level} пошкоджено; немає останньої справної копії
+	print profile store write failed	не вдалося записати до сховища профілів друку
+	print profile store count limit reached	досягнуто обмеження кількості профілів друку
+	damaged print profile exceeds 256 KiB	пошкоджений профіль друку перевищує 256 KiB
+	damaged print profile count limit reached	досягнуто обмеження кількості пошкоджених профілів друку
+	print profile store paths must not be symbolic links	шляхи сховища профілів друку не можуть бути символічними посиланнями
+	print profile path is not a regular file	шлях профілю друку не є звичайним файлом
+	damaged print profile archive collision	конфлікт архівного файлу пошкодженого профілю друку
+	path exceeds 4096 bytes	шлях перевищує 4096 байтів
+	read_error: path exceeds 4096 bytes	read_error: шлях перевищує 4096 байтів
+	symlink: symbolic links and junctions are not followed	symlink: символічні посилання та точки з’єднання не обробляються
+	read_error: not a regular file	read_error: не є звичайним файлом
+	empty: file has zero bytes	empty: розмір файлу — 0 байтів
+	invalid_magic: expected DWG or DXF content	invalid_magic: очікується вміст DWG або DXF
+	size_limit: drawing exceeds native decoder limits	size_limit: креслення перевищує обмеження власного декодера
+	scan_limit: model entity limit exceeded	scan_limit: перевищено обмеження сутностей моделі
+	scan_limit: frame count limit exceeded	scan_limit: перевищено обмеження кількості рамок
+	scan_limit: frame and layout count limit exceeded	scan_limit: перевищено обмеження кількості рамок і аркушів
+	SOURCE_CHANGED: the folder drawing differs from the queued source	SOURCE_CHANGED: креслення в теці відрізняється від джерела в черзі
+echo	SOURCE_UNAVAILABLE: {error}	SOURCE_UNAVAILABLE: {error}
+echo	SHEET_TOO_LARGE: {value1} output bytes exceed {value2}	SHEET_TOO_LARGE: вихідний розмір {value1} байтів перевищує {value2}
+	SOURCE_UNAVAILABLE: the drawing snapshot has no source hash	SOURCE_UNAVAILABLE: знімок креслення не має хешу джерела
+	SOURCE_CHANGED: the drawing snapshot differs from the queued source	SOURCE_CHANGED: знімок креслення відрізняється від джерела в черзі
+	split piece count exceeds the PDF page limit	кількість частин поділу перевищує обмеження сторінок PDF
+	sheet page count is outside the PDF page limits	кількість сторінок аркуша поза межами кількості сторінок PDF
+	output file names collide; use distinct sheet orders or IDs	назви вихідних файлів конфліктують; задайте різні порядки або ID аркушів
+	job exceeds source or sheet limits	завдання перевищує обмеження джерел або аркушів
+	sheet orders must be positive and unique within a source	порядки аркушів мають бути додатними й унікальними в межах джерела
+	WARN_NOT_APPROVED: printer capabilities changed; scan and approve the plan again	WARN_NOT_APPROVED: можливості принтера змінилися; проскануйте й схваліть план знову
+	manifest does not match the queued job	маніфест не відповідає завданню в черзі
+	manifest has an invalid or duplicate output file	маніфест містить некоректний або повторний вихідний файл
+	manifest output sheets do not match the file	вихідні аркуші маніфесту не відповідають файлу
+	manifest sheet names an undelivered file	аркуш маніфесту посилається на недоставлений файл
+	completed manifest is missing output files	у завершеному маніфесті бракує вихідних файлів
+	manifest contains a sheet that is not ready to run	маніфест містить аркуш, не готовий до виконання
+echo	missing artifact {name}	відсутній артефакт {name}
+echo	artifact checksum mismatch: {name}	контрольна сума артефакту не збігається: {name}
+echo	{value1} withheld; failed sheets: {value2}	{value1} утримано; помилкові аркуші: {value2}
+echo	{value1} withheld; merge failed: {error}	{value1} утримано; помилка об’єднання: {error}
+echo	{value1} withheld; merged PDF exceeds byte limit	{value1} утримано; об’єднаний PDF перевищує обмеження байтів
+echo	invalid output file name: {reason}	некоректна назва вихідного файлу: {reason}
+	job commit exceeds supported limits	збереження завдання перевищує підтримувані обмеження
+	artifact exceeds PDF byte limit	артефакт перевищує обмеження розміру PDF у байтах
+	artifact count exceeds supported limits	кількість артефактів перевищує підтримувані обмеження
+	job store write failed	не вдалося записати до сховища завдань
+	job store paths must not be symbolic links	шляхи сховища завдань не можуть бути символічними посиланнями
+	stored path is not a regular file	збережений шлях не є звичайним файлом
+	stored file exceeds supported byte limit	збережений файл перевищує підтримуване обмеження розміру в байтах
+	path exceeds supported length	шлях перевищує підтримувану довжину
+	job source count exceeds supported limits	кількість джерел завдання перевищує підтримувані обмеження
+	manifest exceeds 64 MiB	маніфест перевищує 64 MiB
+echo	manifest {key} exceeds {cap} entries	маніфест {key} перевищує {cap} записів
+echo	unsupported manifest schema_version {value1}	непідтримувана schema_version маніфесту: {value1}
+	manifest contains an invalid sheet order or source index	маніфест містить некоректний порядок аркуша або індекс джерела
+	manifest contains an invalid or duplicate sheet key	маніфест містить некоректний або повторний ключ аркуша
+	template id must be nonempty without @, and version must be positive	id шаблону має бути непорожнім, без @, а версія — додатною
+echo	template exceeds {MAX_BLOCK_NAMES} block names	шаблон перевищує {MAX_BLOCK_NAMES} назв блоків
+echo	template {value1} local rectangle must be finite with min < max on both axes	локальний прямокутник шаблону {value1} має бути скінченним з min < max на обох осях
+echo	template {value1} media dimensions must be finite and positive	розміри носія шаблону {value1} мають бути скінченними й додатними
+echo	Frame template registry could not be loaded; using builtins: {error}	Не вдалося завантажити реєстр шаблонів рамок; використано вбудовані: {error}
+	registry import exceeds 2 MiB	імпортовані дані реєстру перевищують 2 MiB
+echo	unsupported registry schema_version {schema}	непідтримувана schema_version реєстру: {schema}
+echo	registry import exceeds {MAX_TEMPLATES} templates	імпортований реєстр перевищує {MAX_TEMPLATES} шаблонів
+echo	Frame template registry exceeds {MAX_TEMPLATES} templates; remaining entries were dropped	Реєстр шаблонів рамок перевищує {MAX_TEMPLATES} шаблонів; решту записів відкинуто
+echo	duplicate template {value1}	повторний шаблон {value1}
+echo	Frame template registry dropped {dropped} invalid or duplicate entries	Реєстр шаблонів рамок відкинув некоректних або повторних записів: {dropped}
+echo	Frame template registry repaired {repaired} inconsistent superseded entries	Реєстр шаблонів рамок виправив неузгоджених замінених записів: {repaired}
+echo	Frame template persistence is unavailable: {error}	Постійне збереження шаблонів рамок недоступне: {error}
+echo	Frame template registry could not be restored; using builtins: {reason}	Не вдалося відновити реєстр шаблонів рамок; використано вбудовані: {reason}
+	frame template registry file exceeds 2 MiB	файл реєстру шаблонів рамок перевищує 2 MiB
+echo	{value1}: template exceeds audit limits	{value1}: шаблон перевищує обмеження перевірки
+echo	Font {font} is missing.	Шрифт {font} відсутній.
+	baseline import requires 1..=1000 picks and a complete audit	імпорт базового рівня потребує 1..=1000 виборів і повної перевірки
+	baseline import requires a valid, complete audit	імпорт базового рівня потребує коректної повної перевірки
+echo	duplicate template id {value1}	повторний id шаблону {value1}
+echo	unknown audited block {value1}	невідомий перевірений блок {value1}
+echo	no frame rule for {value1}	немає правила рамки для {value1}
+	baseline import exceeds 1000 templates	імпорт базового рівня перевищує 1000 шаблонів
+echo	PLAN_INVALID: {message}	PLAN_INVALID: {message}
+echo	sheet count exceeds {MAX_SCAN_FRAMES}	кількість аркушів перевищує {MAX_SCAN_FRAMES}
+echo	unsupported schema_version {value1}	непідтримувана schema_version {value1}
+echo	duplicate sheet order {value1}	повторний порядок аркуша {value1}
+echo	plan nesting exceeds {MAX_DEPTH}	вкладеність плану перевищує {MAX_DEPTH}
+	plan contains too many values	план містить забагато значень
+	split piece count exceeds the page cap	кількість частин поділу перевищує обмеження сторінок
+	split requires at least two pieces and overlap within 0..=200 mm	поділ потребує щонайменше двох частин і перекриття в межах 0..=200 mm
+	split pieces must be finite rectangles	частини поділу мають бути скінченними прямокутниками
+	sheet order must be at least 1	порядок аркуша має бути щонайменше 1
+	paper_mm dimensions must be finite and positive	розміри paper_mm мають бути скінченними й додатними
+	source is required for window and layout sheets	для аркушів вікна та компонування потрібне джерело
+	block_handle must be hexadecimal	block_handle має бути шістнадцятковим
+	sheet mode must match source kind	режим аркуша має відповідати типу джерела
+	source outline and rotation must be finite	контур і поворот джерела мають бути скінченними
+echo	invalid value for {name} ({allowed})	некоректне значення для {name} ({allowed})
+	0 or 1	0 або 1
+echo	{min} to {max}	{min} до {max}
+echo	a number {value1} {min}	число {value1} {min}
+	a number	число
+	an angle	кут
+	a hatch pattern name	назва зразка штрихування
+	a name, or . for none	назва, або . для скасування вибору
+echo	{name} is read-only	{name} лише для читання
+echo	{n} is read-only	{n} лише для читання
+echo	invalid value for {n}	некоректне значення для {n}
+	OBJECTISOLATIONMODE 1 (isolation saved with the drawing) is not available yet	OBJECTISOLATIONMODE 1 (ізоляція, збережена з кресленням) ще недоступно
+	1 object hidden	Приховано 1 об’єкт
+echo	{n} block reference to "{name}", which has no definition	посилань на блок "{name}" без визначення: {n}
+echo	{n} block references to "{name}", which has no definition	посилань на блок "{name}" без визначення: {n}
+echo	{n} attribute selected.	Вибрано атрибутів: {n}.
+echo	{n} attributes selected.	Вибрано атрибутів: {n}.
+echo	{n} attribute changed.	Змінено атрибутів: {n}.
+echo	{n} attributes changed.	Змінено атрибутів: {n}.
+echo	ATTSYNC block {block}: {n} reference synchronized.	ATTSYNC блок {block}: синхронізовано посилань: {n}.
+echo	ATTSYNC block {block}: {n} references synchronized.	ATTSYNC блок {block}: синхронізовано посилань: {n}.
+echo	Block {value1}: {n} reference in the drawing.	Блок {value1}: посилань у кресленні: {n}.
+echo	Block {value1}: {n} references in the drawing.	Блок {value1}: посилань у кресленні: {n}.
+echo	ATTSYNC block {name}: {n} reference synchronized.	ATTSYNC блок {name}: синхронізовано посилань: {n}.
+echo	ATTSYNC block {name}: {n} references synchronized.	ATTSYNC блок {name}: синхронізовано посилань: {n}.
+echo	{n} row extracted.	Видобуто рядків: {n}.
+echo	{n} rows extracted.	Видобуто рядків: {n}.
+echo	`{name}` takes {lo} argument(s)	`{name}` приймає аргументів: {lo}
