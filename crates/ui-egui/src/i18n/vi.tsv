@@ -2115,3 +2115,297 @@ ribbon	Fonts	Phông chữ
 	The requested printer is missing or offline; keeping PDF files.	Máy in được yêu cầu không có hoặc ngoại tuyến; giữ lại các tệp PDF.
 	The printer has no recognised paper sizes; keeping PDF files.	Máy in không có khổ giấy được nhận dạng; giữ lại các tệp PDF.
 	The PDF handler does not expose PrintTo; keeping PDF files.	Trình xử lý PDF không hỗ trợ PrintTo; giữ lại các tệp PDF.
+
+# --- UbotCAD vi batch W1: UI strings ---
+	Linetype scale	Tỉ lệ kiểu đường
+	Lineweight	Độ dày nét
+	Transparency	Độ trong suốt
+	Thickness	Độ dày
+	Dimension style	Kiểu kích thước
+	Multileader style	Kiểu đường ghi chú nhiều nhánh
+	Table style	Kiểu bảng
+	Annotation scale	Tỉ lệ chú thích
+	Plot style	Kiểu in
+	Plot style attached to	Kiểu in gắn với
+	Plot table type	Loại bảng kiểu in
+	Color-dependent	Theo màu
+	Named	Có tên
+	Not available	Chưa khả dụng
+	General	Chung
+	Misc	Khác
+	Geometry	Hình học
+	Start X	X đầu
+	Start Y	Y đầu
+	Start Z	Z đầu
+	End X	X cuối
+	End Y	Y cuối
+	End Z	Z cuối
+	Delta X	Chênh lệch X
+	Delta Y	Chênh lệch Y
+	Delta Z	Chênh lệch Z
+	Center X	Tâm X
+	Center Y	Tâm Y
+	Center Z	Tâm Z
+	Circumference	Chu vi
+	Start angle	Góc đầu
+	End angle	Góc cuối
+	Rotation	Góc xoay
+	Defined width	Chiều rộng xác định
+	Global width	Chiều rộng toàn cục
+	Closed	Khép kín
+	Dim style	Kiểu kích thước
+	Position X	Vị trí X
+	Position Y	Vị trí Y
+	Position Z	Vị trí Z
+	Width	Chiều rộng
+	Custom	Tùy chỉnh
+	*VARIES*	*KHÁC NHAU*
+	Red	Đỏ
+	Yellow	Vàng
+	Green	Xanh lá
+	Cyan	Lục lam
+	Blue	Xanh dương
+	Magenta	Đỏ tía
+	White	Trắng
+	Color 8	Màu 8
+	Color 9	Màu 9
+	Drafting	Vẽ kỹ thuật
+	Modeling	Dựng mô hình
+	Hide Layer List	Ẩn danh sách lớp
+	Show Layer List	Hiện danh sách lớp
+	Layer Properties	Thuộc tính lớp
+	Match Layer	Khớp lớp
+	Turn Off Layer	Tắt lớp
+	Turn On Layer	Bật lớp
+	Thaw Layer	Rã băng lớp
+	Index Color	Màu theo chỉ số
+	True Color	Màu thực
+	Layer Properties Manager — current viewport	Trình quản lý thuộc tính lớp — khung nhìn hiện hành
+	All Used Layers	Tất cả lớp đã dùng
+	Freeze	Đóng băng
+	VP Freeze	Đóng băng trong khung nhìn
+	VP Color	Màu trong khung nhìn
+	New VP Freeze	Đóng băng trong khung nhìn mới
+	Current layer	Lớp hiện hành
+	Layer contains objects (double-click to make current)	Lớp có đối tượng (nhấp đúp để đặt làm lớp hiện hành)
+	Layer is empty (double-click to make current)	Lớp trống (nhấp đúp để đặt làm lớp hiện hành)
+	Freeze/Thaw in all viewports	Đóng băng/rã băng trong mọi khung nhìn
+	Plot (click: do not plot)	In (nhấp để không in)
+	Do not plot (click: plot)	Không in (nhấp để in)
+	Freeze/Thaw in the current viewport	Đóng băng/rã băng trong khung nhìn hiện hành
+	Freeze in new viewports	Đóng băng trong khung nhìn mới
+	Coordinates	Tọa độ
+	Dynamic Input (F12)	Nhập động (F12)
+	Grid (F7)	Lưới (F7)
+	Layout tabs	Thẻ bố cục
+	Ortho Mode (F8)	Chế độ vuông góc (F8)
+	Object Snap (F3)	Truy bắt điểm (F3)
+	Object Snap Tracking (F11)	Dò theo truy bắt điểm (F11)
+	Polar Tracking (F10)	Dò theo góc cực (F10)
+	Snap Mode (F9)	Chế độ bắt lưới (F9)
+	New (metric)	Mới (hệ mét)
+	Open sample drawing	Mở bản vẽ mẫu
+	Dock command line at top	Neo dòng lệnh ở trên
+	Dock command line at bottom	Neo dòng lệnh ở dưới
+	Float command line	Thả nổi dòng lệnh
+	Command line grip	Tay nắm dòng lệnh
+	Save changes to {title}?	Lưu thay đổi vào {title}?
+	Your changes will be lost if you don't save them.	Các thay đổi sẽ bị mất nếu bạn không lưu.
+	Don't Save	Không lưu
+	{title} was not saved ({e}); it stays open.	Chưa lưu {title} ({e}); bản vẽ vẫn mở.
+	{title} was not saved; it stays open.	Chưa lưu {title}; bản vẽ vẫn mở.
+	Close: no drawing to close	Close: không có bản vẽ để đóng
+	Float panel	Thả nổi bảng
+	Close panel	Đóng bảng
+	Move to group	Chuyển sang nhóm
+	Panels	Các bảng
+	Resize panels	Đổi kích thước các bảng
+	Resize panel window	Đổi kích thước cửa sổ bảng
+	Show {panel}	Hiện {panel}
+	Panel layout could not be restored: {error}	Không thể khôi phục bố trí bảng: {error}
+	Panel move was not applied: {error}	Không thể di chuyển bảng: {error}
+	Username	Tên người dùng
+	Display name	Tên hiển thị
+	Real name	Tên thật
+	Name (A–Z)	Tên (A–Z)
+	Merged PRs	PR đã hợp nhất
+	PRs	PR
+	Commits	Lần commit
+	Lines added	Dòng thêm
+	Lines deleted	Dòng xóa
+	Line delta	Chênh lệch số dòng
+	Binary assets added	Tài nguyên nhị phân đã thêm
+	Binary assets removed	Tài nguyên nhị phân đã xóa
+	First commit	Commit đầu
+	Last commit	Commit cuối
+	First	Đầu tiên
+	Last	Cuối cùng
+	Version	Phiên bản
+	Lines +/−	Dòng +/−
+	+LOC	+Dòng
+	−LOC	−Dòng
+	ΔLOC	ΔDòng
+	+Bin	+Nhị phân
+	−Bin	−Nhị phân
+	About	Giới thiệu
+	Contributors	Người đóng góp
+	Models	Mô hình AI
+	Not available: {reason}	Chưa khả dụng: {reason}
+	Check the input: {reason}	Kiểm tra dữ liệu nhập: {reason}
+	This drawing	Bản vẽ này
+	Copy Selection	Sao chép vùng chọn
+	Recent Commands	Lệnh gần đây
+	Edit Attributes...	Sửa thuộc tính khối...
+	Polyline Edit	Sửa đa tuyến
+	Spline Edit	Sửa spline
+	Enter	Nhập
+	Recent Input	Dữ liệu nhập gần đây
+	Snap Overrides	Ghi đè truy bắt điểm
+	Temporary track point	Điểm dò tạm thời
+	Mid Between 2 Points	Trung điểm giữa 2 điểm
+	Point Filters	Bộ lọc điểm
+	Osnap Settings...	Cài đặt truy bắt điểm...
+	Repeat {command}	Lặp lại {command}
+	Lines of Command History	Số dòng lịch sử lệnh
+	Copy History	Sao chép lịch sử
+	Close All Other Drawings	Đóng tất cả bản vẽ khác
+	Copy Full File Path	Sao chép đường dẫn tệp đầy đủ
+	From Template...	Từ mẫu...
+	Hide Palette	Ẩn bảng công cụ
+	Open Recent	Mở gần đây
+	Clear Recent Files	Xóa danh sách tệp gần đây
+	Sheet Set (not available in this version)	Bộ bản vẽ (chưa khả dụng trong phiên bản này)
+	{name} (not available in this version)	{name} (chưa khả dụng trong phiên bản này)
+	Plotted to {path}	Đã in ra {path}
+	Plotted {layout} to {path}	Đã in {layout} ra {path}
+	Plotted {layout} ({bytes} bytes of PDF; there is no file dialog here)	Đã in {layout} ({bytes} byte PDF; không có hộp thoại tệp ở đây)
+	New drawings will be saved as version {v}	Bản vẽ mới sẽ được lưu ở phiên bản {v}
+	New drawings will be saved as {format}	Bản vẽ mới sẽ được lưu dạng {format}
+	Animation effects follow the system setting ({shown})	Hiệu ứng chuyển động theo cài đặt hệ thống ({shown})
+	Animation effects are {shown}	Hiệu ứng chuyển động: {shown}
+	The font could not be kept for the next run: {e}	Không thể giữ phông chữ cho lần chạy sau: {e}
+	{name}: there is no file dialog here; run it with parameters, e.g. {example}	{name}: không có hộp thoại tệp ở đây; hãy chạy với tham số, ví dụ: {example}
+	Startup files load from <settings>/support only	Chỉ tải tệp khởi động từ <settings>/support
+	No applications loaded in this session	Chưa tải ứng dụng nào trong phiên này
+	Plot Style Manager	Trình quản lý kiểu in
+	Keep an editable copy of this table in the drawing	Giữ một bản sao có thể sửa của bảng này trong bản vẽ
+	New CTB	CTB mới
+	New STB	STB mới
+	Use for this layout	Dùng cho bố cục này
+	Display plot styles	Hiển thị kiểu in
+	No plot style tables.	Chưa có bảng kiểu in.
+	A built-in table: editing it keeps an edited copy in the drawing.	Bảng có sẵn: khi sửa, một bản sao đã sửa sẽ được giữ trong bản vẽ.
+	Grayscale	Thang xám
+	Screening	Mức độ đậm
+	Use object linetype	Dùng kiểu đường của đối tượng
+	Use object lineweight	Dùng độ dày nét của đối tượng
+	New style	Kiểu mới
+	Layout {name}: {table}	Bố cục {name}: {table}
+	3D Mouse	Chuột 3D
+	No supported 3D mouse found	Không tìm thấy chuột 3D được hỗ trợ
+	Release the 3D mouse to calibrate its resting position	Thả chuột 3D để hiệu chuẩn vị trí nghỉ
+	Connect a 3D mouse before calibrating	Kết nối chuột 3D trước khi hiệu chuẩn
+	Enable 3D mouse navigation	Bật điều hướng bằng chuột 3D
+	Pan sensitivity	Độ nhạy dịch chuyển
+	Zoom sensitivity	Độ nhạy thu phóng
+	Reverse zoom direction	Đảo chiều thu phóng
+	Calibrate	Hiệu chuẩn
+	Move sideways to pan; push/pull or twist to zoom.	Di chuyển ngang để dịch chuyển; đẩy/kéo hoặc vặn để thu phóng.
+	Left device button: zoom extents. Right device button: calibrate.	Nút trái thiết bị: thu phóng toàn bộ. Nút phải thiết bị: hiệu chuẩn.
+	Open and Save	Mở và lưu
+	Selection	Vùng chọn
+	User Preferences	Tùy chọn người dùng
+	Profiles	Hồ sơ
+	Dimensional Constraint Parameters	Tham số ràng buộc kích thước
+	User Parameters	Tham số người dùng
+	= Equals	= Bằng
+	<> Not Equal	<> Không bằng
+	> Greater than	> Lớn hơn
+	< Less than	< Nhỏ hơn
+	* Wildcard Match	* Khớp ký tự đại diện
+	Standard	Chuẩn
+	Save As	Lưu thành
+	Print	In
+	Batch Publish	Xuất bản hàng loạt
+	Export	Xuất
+	Measure Distance	Đo khoảng cách
+	Volume	Thể tích
+	Workspace (JSON)	Không gian làm việc (JSON)
+	The tool bars cannot be stored: {reason}	Không thể lưu các thanh công cụ: {reason}
+	Could not save workspace: {error}	Không thể lưu không gian làm việc: {error}
+	Workspace could not be read; using SIMPLE. The damaged copy was kept.	Không thể đọc không gian làm việc; đang dùng SIMPLE. Đã giữ lại bản bị hỏng.
+	Workspace could not be read; using SIMPLE. The damaged copy could not be kept, so it is not overwritten until it can be.	Không thể đọc không gian làm việc; đang dùng SIMPLE. Chưa thể giữ lại bản bị hỏng nên sẽ không ghi đè cho đến khi giữ được bản đó.
+	The workspace policy could not be read and was ignored	Không thể đọc chính sách không gian làm việc nên đã bỏ qua
+	Workspace changed in another tab	Không gian làm việc đã thay đổi trong thẻ khác
+	Quantities and QA	Khối lượng và kiểm tra chất lượng
+	Sheets	Tờ bản vẽ
+	Survey	Khảo sát
+	SAVETIME must be from 0 to {max} minutes	SAVETIME phải từ 0 đến {max} phút
+	Stretch Vertex	Kéo giãn đỉnh
+	Unknown workspace: {id}	Không có không gian làm việc: {id}
+	A workspace name has at most {max} characters	Tên không gian làm việc có tối đa {max} ký tự
+	At most {max} saved workspaces; delete one first	Chỉ được lưu tối đa {max} không gian làm việc; hãy xóa một mục trước
+	A workspace named {name} already exists	Đã có không gian làm việc tên {name}
+	This workspace cannot be exported: {error}	Không thể xuất không gian làm việc này: {error}
+	This workspace cannot be imported: {error}	Không thể nhập không gian làm việc này: {error}
+	Could not read {path}: {error}	Không thể đọc {path}: {error}
+	No saved workspace revision {revision}	Không có phiên bản không gian làm việc đã lưu {revision}
+	Revision {revision} cannot be read: {error}	Không thể đọc phiên bản {revision}: {error}
+	Revision {revision} was restored but could not be saved: {error}	Đã khôi phục phiên bản {revision} nhưng không thể lưu: {error}
+	No workspace storage is attached	Chưa kết nối bộ lưu trữ không gian làm việc
+	No workspace tab conflict to resolve	Không có xung đột thẻ không gian làm việc cần giải quyết
+	No layout change to undo	Không có thay đổi bố trí để hoàn tác
+	No layout change to redo	Không có thay đổi bố trí để làm lại
+	Reading a workspace file by path is not available in the browser; pass its text	Trình duyệt không hỗ trợ đọc tệp không gian làm việc theo đường dẫn; hãy truyền nội dung văn bản
+	Unknown toolbar: {id}	Không có thanh công cụ: {id}
+	A tool bar docks to the top, bottom, left or right edge	Thanh công cụ được neo vào cạnh trên, dưới, trái hoặc phải
+	Unknown panel: {id}	Không có bảng: {id}
+	The drawing cannot auto-hide	Bản vẽ không thể tự động ẩn
+	The panel is not in auto-hide mode	Bảng không ở chế độ tự động ẩn
+	Auto-hide needs a dock edge	Tự động ẩn cần có cạnh neo
+	Panel placement is missing	Thiếu vị trí bảng
+	The panel layout must contain its document view and bounded hidden panels	Bố trí bảng phải có vùng xem bản vẽ và số bảng ẩn trong giới hạn
+	The document view cannot float	Vùng xem bản vẽ không thể thả nổi
+	The document view cannot share a tab group	Vùng xem bản vẽ không thể dùng chung nhóm thẻ
+	The document view cannot be collapsed	Vùng xem bản vẽ không thể thu gọn
+	A hidden panel has an invalid or duplicate identity	Một bảng ẩn có mã không hợp lệ hoặc trùng lặp
+	A hidden panel cannot restore over the document view	Không thể khôi phục bảng ẩn đè lên vùng xem bản vẽ
+	SAVEFILEPATH must be a folder path	SAVEFILEPATH phải là đường dẫn thư mục
+	{key} must be "#rrggbb" or null	{key} phải là "#rrggbb" hoặc null
+	SOURCE_CHANGED: open the same source drawing before resuming this print job	SOURCE_CHANGED: mở đúng bản vẽ nguồn trước khi tiếp tục công việc in này
+	 and {n} more	 và {n} phông khác
+	{n} fonts missing: {shown}{more}. Tools > Fonts... lets you choose what to draw instead.	Thiếu {n} phông chữ: {shown}{more}. Vào Công cụ > Phông chữ... để chọn phông thay thế.
+	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{binary_added} / −{binary_deleted} binary assets, {first} – {last}	@{login}: {prs} PR, {commits} lần commit, +{added} / −{deleted} dòng (Δ {delta}), +{binary_added} / −{binary_deleted} tài nguyên nhị phân, {first} – {last}
+	APPLOAD: can't read {path}	APPLOAD: không thể đọc {path}
+	Open: {name} is {mb} MB; the browser opens DWG files up to {max} MB. Open it in the desktop app.	Mở: {name} có dung lượng {mb} MB; trình duyệt mở được tệp DWG tối đa {max} MB. Hãy mở bằng ứng dụng máy tính.
+	Open: {name} is {mb} MB, larger than the {max} MB UbotCAD opens in the browser	Mở: {name} có dung lượng {mb} MB, vượt quá giới hạn {max} MB mà UbotCAD mở được trong trình duyệt
+	% of all commits	% tổng số commit
+	ByColor	Theo màu
+	3D mouse input is unavailable on this platform	Nền tảng này không hỗ trợ đầu vào chuột 3D
+	3D mouse connected	Đã kết nối chuột 3D
+	3D mouse busy, possibly 3DxWare or missing device permissions	Chuột 3D đang bận, có thể do 3DxWare hoặc thiếu quyền truy cập thiết bị
+	3D mouse disconnected	Đã ngắt kết nối chuột 3D
+	3D mouse input could not be started	Không thể khởi động đầu vào chuột 3D
+	No font covers the Korean interface, so it stays in English. Install a Hangul font (Malgun Gothic or Nanum Gothic), or build with a Hang/Kore craft-fonts face.	Chưa có phông chữ hỗ trợ giao diện tiếng Hàn nên giao diện vẫn dùng tiếng Anh. Hãy cài phông Hangul (Malgun Gothic hoặc Nanum Gothic), hoặc biên dịch với phông Hang/Kore từ craft-fonts.
+	No Chinese font is installed, so the interface stays in English. Install one (Noto Sans CJK, for example) to use Chinese.	Chưa cài phông chữ tiếng Trung nên giao diện vẫn dùng tiếng Anh. Hãy cài một phông (ví dụ Noto Sans CJK) để dùng tiếng Trung.
+	Clipboard	Bộ nhớ tạm
+	ViewCube: rotating the view needs a view twist, which the 2D plan view doesn't support yet.	ViewCube: xoay góc nhìn cần xoay khung nhìn, chức năng mà chế độ mặt bằng 2D chưa hỗ trợ.
+	On/Off	Bật/tắt
+	Freeze/Thaw	Đóng băng/rã băng
+	Lock/Unlock	Khóa/mở khóa
+	{name} contains authoring elements. Open in Block Editor?	{name} chứa thành phần tạo khối động. Mở trong Trình sửa khối?
+	{n} font missing: {shown}{more}. Tools > Fonts... lets you choose what to draw instead.	Thiếu {n} phông chữ: {shown}{more}. Vào Công cụ > Phông chữ... để chọn phông thay thế.
+@plural	{n} commit	{n} lần commit
+	Xline	Đường dựng
+	MText	Chữ nhiều dòng
+	Attribute Definition	Định nghĩa thuộc tính khối
+	Block Reference	Tham chiếu khối
+	MLine	Đường nhiều nét
+	2D Solid	Miền tô 2D
+	Trace	Dải nét
+	3D Face	Mặt 3D
+	Raster Image	Ảnh raster
+	Tolerance	Dung sai
+	Proxy	Đối tượng đại diện
+	Visible	Hiển thị
+	Handle	Mã định danh

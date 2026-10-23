@@ -462,7 +462,11 @@ pub fn show_docked(app: &mut CadApp, ui: &mut egui::Ui) {
 
 fn dock_menu(app: &mut CadApp, response: &egui::Response) {
     egui::Popup::menu(response).show(|ui| {
-        for (dock, label) in [("top", "Dock command line at top"), ("bottom", "Dock command line at bottom"), ("floating", "Float command line")] {
+        for (dock, label) in [
+            ("top", crate::tl!("Dock command line at top")),
+            ("bottom", crate::tl!("Dock command line at bottom")),
+            ("floating", crate::tl!("Float command line")),
+        ] {
             if ui.button(crate::i18n::t(label)).clicked() {
                 if let Err(error) = app.run("ui.workspace.set", serde_json::json!({"pointer": "/command_line/dock", "value": dock})) {
                     app.set_status(error);

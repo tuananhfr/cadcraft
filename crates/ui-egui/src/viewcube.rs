@@ -110,12 +110,12 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, l: &Layout) {
             Some(Part::Face | Part::Home) => {
                 let _ = app.run("zoom.extents", json!({}));
             }
-            Some(Part::Ring) => app.session.echo(NO_TWIST),
+            Some(Part::Ring) => app.session.echo(crate::i18n::t(NO_TWIST)),
             None => {}
         }
     }
     if resp.drag_started() && pressed_on == Some(Part::Ring) {
-        app.session.echo(NO_TWIST);
+        app.session.echo(crate::i18n::t(NO_TWIST));
     }
     let mut action = None;
     resp.context_menu(|ui| {

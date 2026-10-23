@@ -226,7 +226,7 @@ impl Services {
     /// A file of `kind` to open: the host's dialog for that kind, else its drawing dialog. `None` when cancelled.
     pub fn open_file(&self, kind: &FileKind) -> Option<String> {
         match &self.pick_open_kind {
-            Some(pick) => pick(kind),
+            Some(pick) => pick(&FileKind { label: i18n::t(kind.label), ..*kind }),
             None => self.pick_open.as_ref().and_then(|pick| pick()),
         }
     }
@@ -234,7 +234,7 @@ impl Services {
     /// Where to save `name` as `kind`, chosen the same way.
     pub fn save_file(&self, name: &str, kind: &FileKind) -> Option<String> {
         match &self.pick_save_kind {
-            Some(pick) => pick(name, kind),
+            Some(pick) => pick(name, &FileKind { label: i18n::t(kind.label), ..*kind }),
             None => self.pick_save.as_ref().and_then(|pick| pick(name)),
         }
     }
@@ -520,7 +520,7 @@ impl CadApp {
         if is_lisp_file(path) {
             match cadcraft_engine::lisp::builtins::read_text_file(path) {
                 Some(text) => self.load_lisp(path, &text),
-                None => self.open_failed(format!("APPLOAD: can't read {path}")),
+                None => self.open_failed(crate::tf!("APPLOAD: can't read {path}", path = path)),
             }
             return;
         }
@@ -576,13 +576,21 @@ impl CadApp {
     fn size_error(name: &str, len: u64, dwg: bool) -> Option<String> {
         let mb = len as f64 / 1048576.0;
         if dwg && len > Self::MAX_OPEN_DWG_BYTES {
-            return Some(format!(
-                "Open: {name} is {mb:.1} MB; the browser opens DWG files up to {} MB. Open it in the desktop app.",
-                Self::MAX_OPEN_DWG_BYTES >> 20
+            return Some(crate::tf!(
+                "Open: {name} is {mb} MB; the browser opens DWG files up to {max} MB. Open it in the desktop app.",
+                name = name,
+                mb = format!("{mb:.1}"),
+                max = Self::MAX_OPEN_DWG_BYTES >> 20
             ));
         }
-        (len > Self::MAX_OPEN_BYTES)
-            .then(|| format!("Open: {name} is {mb:.1} MB, larger than the {} MB UbotCAD opens in the browser", Self::MAX_OPEN_BYTES >> 20))
+        (len > Self::MAX_OPEN_BYTES).then(|| {
+            crate::tf!(
+                "Open: {name} is {mb} MB, larger than the {max} MB UbotCAD opens in the browser",
+                name = name,
+                mb = format!("{mb:.1}"),
+                max = Self::MAX_OPEN_BYTES >> 20
+            )
+        })
     }
 
     /// Open a drawing from its contents where there is no path to open (on the web: the file

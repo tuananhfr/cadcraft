@@ -13,14 +13,16 @@ use crate::theme::{ThemePref, Tokens};
 use crate::wsprofile::schema::Density;
 
 /// The tabs: (id in the dialog name, label).
-pub(super) const TABS: [(&str, &str); 6] = [
-    ("display", "Display"),
-    ("files", "Open and Save"),
-    ("drafting", "Drafting"),
-    ("selection", "Selection"),
-    ("preferences", "User Preferences"),
-    ("profiles", "Profiles"),
-];
+pub(super) fn tabs() -> [(&'static str, &'static str); 6] {
+    [
+        ("display", crate::tl!("Display")),
+        ("files", crate::tl!("Open and Save")),
+        ("drafting", crate::tl!("Drafting")),
+        ("selection", crate::tl!("Selection")),
+        ("preferences", crate::tl!("User Preferences")),
+        ("profiles", crate::tl!("Profiles")),
+    ]
+}
 
 const WIDTH: f32 = 580.0;
 const MIN_TAB_HEIGHT: f32 = 200.0;
@@ -31,7 +33,8 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, name: &str, open: &mut bool
         *open = false;
         return;
     }
-    let tab = name.strip_prefix("options:").and_then(|t| TABS.iter().find(|(id, _)| *id == t)).map_or("display", |(id, _)| *id);
+    let tabs = tabs();
+    let tab = name.strip_prefix("options:").and_then(|t| tabs.iter().find(|(id, _)| *id == t)).map_or("display", |(id, _)| *id);
     let mut changes = Map::new();
     let mut next_tab = None;
     let mut start = None;
@@ -47,7 +50,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, name: &str, open: &mut bool
         .show(ctx, |ui| {
             ui.set_width(WIDTH);
             ui.horizontal_wrapped(|ui| {
-                for (id, label) in TABS {
+                for (id, label) in tabs {
                     if ui.selectable_label(tab == id, crate::i18n::t(label)).clicked() {
                         next_tab = Some(id);
                     }

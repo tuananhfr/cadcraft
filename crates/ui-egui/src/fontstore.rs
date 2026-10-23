@@ -88,7 +88,7 @@ impl FontStore {
                 FontChange::Removed { stem } => self.delete(stem),
             };
             if let Err(e) = r {
-                app.font_add_failed(format!("The font could not be kept for the next run: {e}"));
+                app.font_add_failed(crate::tf!("The font could not be kept for the next run: {e}", e = e));
                 // Keep event order so a failed add cannot replay after a later removal.
                 let mut pending = vec![change];
                 pending.extend(changes);

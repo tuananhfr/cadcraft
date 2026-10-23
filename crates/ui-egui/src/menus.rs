@@ -307,9 +307,9 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
                 app.set_status(if preference.resolve(&app.system_languages) == "vi" {
                     crate::tl!("No font covers the Vietnamese interface")
                 } else if preference.resolve(&app.system_languages) == "ko" {
-                    "No font covers the Korean interface, so it stays in English. Install a Hangul font (Malgun Gothic or Nanum Gothic), or build with a Hang/Kore craft-fonts face."
+                    crate::tl!("No font covers the Korean interface, so it stays in English. Install a Hangul font (Malgun Gothic or Nanum Gothic), or build with a Hang/Kore craft-fonts face.")
                 } else {
-                    "No Chinese font is installed, so the interface stays in English. Install one (Noto Sans CJK, for example) to use Chinese."
+                    crate::tl!("No Chinese font is installed, so the interface stays in English. Install one (Noto Sans CJK, for example) to use Chinese.")
                 });
             }
             Ok(json!({"interfaceLanguage": preference.code(), "shown": shown}))
@@ -366,7 +366,7 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
             };
             let r = app.session.execute("exportpdf", &json!({ "path": path })).map_err(|e| e.to_string());
             app.session.echo(match &r {
-                Ok(_) => format!("Plotted to {path}"),
+                Ok(_) => crate::tf!("Plotted to {path}", path = path),
                 Err(e) => e.clone(),
             });
             r
@@ -473,7 +473,7 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
                 Some(name) => match crate::SaveVersion::parse(&name) {
                     Some(v) => {
                         app.ui.save_version = v.year().to_string();
-                        app.session.echo(format!("New drawings will be saved as version {v}"));
+                        app.session.echo(crate::tf!("New drawings will be saved as version {v}", v = v));
                         Ok(json!({ "saveVersion": app.ui.save_version }))
                     }
                     None => Err(format!("unknown version \"{}\" (2000, 2004, 2007, 2010, 2013 or 2018)", name.chars().take(40).collect::<String>())),
@@ -608,7 +608,7 @@ fn saveas_params(ui: &crate::UiState, session: &cadcraft_engine::Session, path: 
 
 fn set_save_format(app: &mut CadApp, format: crate::SaveFormat) -> Value {
     app.ui.save_format = format;
-    app.session.echo(format!("New drawings will be saved as {}", format.as_str().to_ascii_uppercase()));
+    app.session.echo(crate::tf!("New drawings will be saved as {format}", format = format.as_str().to_ascii_uppercase()));
     json!({ "saveFormat": format.as_str() })
 }
 
@@ -629,10 +629,10 @@ fn theme_json(app: &CadApp) -> Value {
 
 fn set_animations(app: &mut CadApp, pref: crate::animation::AnimationPref) -> Value {
     app.ui.animations = pref;
-    let shown = if app.shows_animations() { "on" } else { "off" };
+    let shown = if app.shows_animations() { crate::tl!("On") } else { crate::tl!("Off") };
     app.session.echo(match pref {
-        crate::animation::AnimationPref::System => format!("Animation effects follow the system setting ({shown})"),
-        _ => format!("Animation effects are {shown}"),
+        crate::animation::AnimationPref::System => crate::tf!("Animation effects follow the system setting ({shown})", shown = shown),
+        _ => crate::tf!("Animation effects are {shown}", shown = shown),
     });
     animations_json(app)
 }
@@ -698,11 +698,11 @@ pub fn tree(app: &CadApp) -> Vec<(String, Vec<Entry>)> {
     if let Some((_, window)) = out.iter_mut().find(|(m, _)| m == "Window") {
         let at = window.iter().position(|e| matches!(e, Entry::Item { id, .. } if id == "ui.toggle.toolbar")).map_or(window.len(), |i| i + 1);
         window.insert(at, Entry::Sub { label: "Toolbars".into(), children: crate::toolbars::menu_entries(app) });
-        window.push(Entry::Sub { label: "Panels".into(), children: panel_entries(app) });
+        window.push(Entry::Sub { label: crate::tl!("Panels").into(), children: panel_entries(app) });
     }
     if let Some((_, file)) = out.iter_mut().find(|(m, _)| m == "File") {
         let at = file.iter().position(|e| matches!(e, Entry::Item { id, .. } if id == "open")).map_or(0, |i| i + 1);
-        file.insert(at, Entry::Sub { label: OPEN_RECENT.into(), children: recent_entries(app) });
+        file.insert(at, Entry::Sub { label: crate::tl!("Open Recent").into(), children: recent_entries(app) });
     }
     out
 }
@@ -717,7 +717,7 @@ pub fn recent_entries(app: &CadApp) -> Vec<Entry> {
         .map(|(i, path)| Entry::Item { label: file_name(path), id: format!("{RECENT_ITEM}{i}"), shortcut: None, enabled: true })
         .collect();
     let enabled = !app.ui.recent_files.is_empty();
-    entries.push(Entry::Item { label: "Clear Recent Files".into(), id: RECENT_CLEAR.into(), shortcut: None, enabled });
+    entries.push(Entry::Item { label: crate::tl!("Clear Recent Files").into(), id: RECENT_CLEAR.into(), shortcut: None, enabled });
     entries
 }
 
@@ -882,7 +882,7 @@ pub fn panel_entries(app: &CadApp) -> Vec<Entry> {
         .collect();
     for id in &app.ws.report.unknown_panels {
         let label = if id.eq_ignore_ascii_case("sheetset") {
-            "Sheet Set (not available in this version)".to_string()
+            crate::tl!("Sheet Set (not available in this version)").to_string()
         } else {
             crate::tf!("{name} (not available in this version)", name = id)
         };

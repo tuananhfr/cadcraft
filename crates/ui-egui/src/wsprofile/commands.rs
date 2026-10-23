@@ -81,7 +81,7 @@ fn save_outgoing(app: &mut CadApp) -> Result<(), String> {
 fn safe_mode(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     let on = if params.is_null() { !app.ws.safe_mode } else { params.get("on").and_then(Value::as_bool).ok_or("on must be a boolean")? };
     if on != app.ws.safe_mode {
-        let store = app.ws.store.take().ok_or("No workspace storage is attached")?;
+        let store = app.ws.store.take().ok_or(crate::tl!("No workspace storage is attached"))?;
         if on {
             app.attach_profile_store_safe(store);
         } else {
@@ -100,7 +100,7 @@ fn rollback(app: &mut CadApp) -> Result<Value, String> {
         return Err("safe mode".into());
     }
     let policy = app.ws.policy();
-    let store = app.ws.store.as_mut().ok_or("No workspace storage is attached")?;
+    let store = app.ws.store.as_mut().ok_or(crate::tl!("No workspace storage is attached"))?;
     let raw = store.read_backup("1.0.0").ok_or(crate::tl!("No 1.0.0 workspace backup is available"))?;
     let set = startup::parse_set_with(&raw, &policy).map_err(|fallback| startup::describe(&fallback))?;
     store.write_current(&raw)?;
@@ -153,7 +153,7 @@ fn select(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         return Ok(json!({"active": app.ws.active, "base_id": app.ws.user.base_id, "saved": saved}));
     }
     if preset_json(id).is_none() && !app.ws.profiles.iter().any(|profile| profile.profile_id == id) {
-        return Err(format!("Unknown workspace: {}", id.chars().take(MAX_NAME).collect::<String>()));
+        return Err(crate::tf!("Unknown workspace: {id}", id = id.chars().take(MAX_NAME).collect::<String>()));
     }
     observe(app, true);
     save_outgoing(app)?;
@@ -162,7 +162,7 @@ fn select(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     } else if let Some(saved) = app.ws.profiles.iter().find(|profile| profile.profile_id == id) {
         saved.clone()
     } else {
-        return Err(format!("Unknown workspace: {}", id.chars().take(MAX_NAME).collect::<String>()));
+        return Err(crate::tf!("Unknown workspace: {id}", id = id.chars().take(MAX_NAME).collect::<String>()));
     };
     let revision = app.ws.user.revision.max(next.revision);
     let next = WorkspaceProfile { revision, ..next };
@@ -228,13 +228,13 @@ fn save_as(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     }
     let name = params.get("name").and_then(Value::as_str).map(str::trim).filter(|name| !name.is_empty()).ok_or("name is required")?;
     if name.chars().count() > MAX_NAME {
-        return Err(format!("A workspace name has at most {MAX_NAME} characters"));
+        return Err(crate::tf!("A workspace name has at most {max} characters", max = MAX_NAME));
     }
     if app.ws.profiles.len() >= MAX_USER_PROFILES {
-        return Err(format!("At most {MAX_USER_PROFILES} saved workspaces; delete one first"));
+        return Err(crate::tf!("At most {max} saved workspaces; delete one first", max = MAX_USER_PROFILES));
     }
     if app.ws.profiles.iter().any(|profile| profile.name.to_lowercase() == name.to_lowercase()) {
-        return Err(format!("A workspace named {name} already exists"));
+        return Err(crate::tf!("A workspace named {name} already exists", name = name));
     }
     observe(app, true);
     save_outgoing(app)?;
@@ -264,7 +264,7 @@ fn export_text(app: &CadApp) -> Result<(String, Vec<String>), String> {
     let (value, ignored) = portable_profile(value);
     let value = with_checksum(super::wire::to_wire(&value));
     let text = serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?;
-    validate(&text, Mode::Import).map_err(|issues| format!("This workspace cannot be exported: {}", issues_text(&issues)))?;
+    validate(&text, Mode::Import).map_err(|issues| crate::tf!("This workspace cannot be exported: {error}", error = issues_text(&issues)))?;
     Ok((text, ignored))
 }
 
@@ -289,16 +289,18 @@ fn write_file(path: &str, text: &str) -> Result<(), String> {
 #[cfg(not(target_arch = "wasm32"))]
 fn read_file(path: &str) -> Result<String, String> {
     use std::io::Read;
-    let file = std::fs::File::open(path).map_err(|error| format!("Could not read {path}: {error}"))?;
+    let file = std::fs::File::open(path).map_err(|error| crate::tf!("Could not read {path}: {error}", path = path, error = error))?;
     let mut text = String::new();
     // One byte over the limit is enough for validation to report the file as too large.
-    file.take(super::validate::MAX_BYTES as u64 + 1).read_to_string(&mut text).map_err(|error| format!("Could not read {path}: {error}"))?;
+    file.take(super::validate::MAX_BYTES as u64 + 1)
+        .read_to_string(&mut text)
+        .map_err(|error| crate::tf!("Could not read {path}: {error}", path = path, error = error))?;
     Ok(text)
 }
 
 #[cfg(target_arch = "wasm32")]
 fn read_file(_path: &str) -> Result<String, String> {
-    Err("Reading a workspace file by path is not available in the browser; pass its text".into())
+    Err(crate::tl!("Reading a workspace file by path is not available in the browser; pass its text").into())
 }
 
 fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
@@ -315,27 +317,29 @@ fn import(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         (None, None) => return Err("text or path is required".into()),
     };
     // Bound parsing before hashing; field-name conversion would invalidate the original checksum.
-    let mut value = validate(&text, Mode::Local).map_err(|issues| format!("This workspace cannot be imported: {}", issues_text(&issues)))?;
+    let mut value =
+        validate(&text, Mode::Local).map_err(|issues| crate::tf!("This workspace cannot be imported: {error}", error = issues_text(&issues)))?;
     let warnings = match verify_checksum(&value) {
         ChecksumCheck::Valid => Vec::<String>::new(),
         ChecksumCheck::Missing => vec![CHECKSUM_MISSING.into()],
         ChecksumCheck::Mismatch { .. } => return Err(CHECKSUM_MISMATCH.into()),
     };
-    validate(&text, Mode::Import).map_err(|issues| format!("This workspace cannot be imported: {}", issues_text(&issues)))?;
+    validate(&text, Mode::Import).map_err(|issues| crate::tf!("This workspace cannot be imported: {error}", error = issues_text(&issues)))?;
     if let Some(fields) = value.as_object_mut() {
         fields.remove(CHECKSUM_KEY);
     }
     let (value, mut ignored) = portable_profile(value);
     let (value, normalized_ignored) = portable_profile(super::wire::from_wire(&value));
     ignored.extend(normalized_ignored);
-    let migrated = migrate(value).map_err(|error| format!("This workspace cannot be imported: {error}"))?;
+    let migrated = migrate(value).map_err(|error| crate::tf!("This workspace cannot be imported: {error}", error = error))?;
     let (value, migrated_ignored) = portable_profile(migrated.value);
     ignored.extend(migrated_ignored);
-    let mut profile: WorkspaceProfile = serde_json::from_value(value).map_err(|error| format!("This workspace cannot be imported: {error}"))?;
+    let mut profile: WorkspaceProfile =
+        serde_json::from_value(value).map_err(|error| crate::tf!("This workspace cannot be imported: {error}", error = error))?;
     if let Some(tree) = &mut profile.layout.dock_tree {
         strip_nulls(tree);
     }
-    startup::check_profile(&profile, &app.ws.policy()).map_err(|error| format!("This workspace cannot be imported: {error}"))?;
+    startup::check_profile(&profile, &app.ws.policy()).map_err(|error| crate::tf!("This workspace cannot be imported: {error}", error = error))?;
     let mut changes = changed_pointers(&split_geometry(diff_patch(&app.ws.user.layout, &profile.layout)).0);
     if profile.theme != app.ws.user.theme {
         changes.push("/theme".into());
@@ -372,10 +376,14 @@ fn restore_revision(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         return Err("safe mode".into());
     }
     let revision = params.get("revision").and_then(Value::as_u64).ok_or("revision is required")?;
-    let raw =
-        app.ws.store.as_ref().and_then(|store| store.read_snapshot(revision)).ok_or_else(|| format!("No saved workspace revision {revision}"))?;
+    let raw = app
+        .ws
+        .store
+        .as_ref()
+        .and_then(|store| store.read_snapshot(revision))
+        .ok_or_else(|| crate::tf!("No saved workspace revision {revision}", revision = revision))?;
     let set = startup::parse_set_with(&raw, &app.ws.policy())
-        .map_err(|fallback| format!("Revision {revision} cannot be read: {}", startup::describe(&fallback)))?;
+        .map_err(|fallback| crate::tf!("Revision {revision} cannot be read: {error}", revision = revision, error = startup::describe(&fallback)))?;
     observe(app, true);
     let restored = match set.user.clone() {
         Some(user) => user,
@@ -404,8 +412,10 @@ fn restore_revision(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     app.ws.mark_changed();
     if !commit_now(app)? {
         return Err(match &app.ws.status {
-            SaveStatus::Failed(error) => format!("Revision {revision} was restored but could not be saved: {error}"),
-            _ => "No workspace storage is attached".into(),
+            SaveStatus::Failed(error) => {
+                crate::tf!("Revision {revision} was restored but could not be saved: {error}", revision = revision, error = error)
+            }
+            _ => crate::tl!("No workspace storage is attached").into(),
         });
     }
     Ok(json!({"revision": app.ws.user.revision, "from": revision}))
@@ -480,12 +490,12 @@ fn resolve(app: &mut CadApp, params: &Value) -> Result<Value, String> {
         return Err("keep must be mine or theirs".into());
     }
     if app.ws.status != SaveStatus::TabConflict {
-        return Err("No workspace tab conflict to resolve".into());
+        return Err(crate::tl!("No workspace tab conflict to resolve").into());
     }
     if keep == "theirs" {
         app.adopt_stored_workspace()?;
     } else {
-        let store = app.ws.store.as_ref().ok_or("No workspace storage is attached")?;
+        let store = app.ws.store.as_ref().ok_or(crate::tl!("No workspace storage is attached"))?;
         app.ws.known_revision = store.read_current().as_deref().and_then(startup::stored_revision).unwrap_or(0);
         app.ws.status = SaveStatus::Unsaved;
         app.commit_workspace(false)?;
@@ -517,7 +527,7 @@ fn step_history(app: &mut CadApp, undo: bool) -> Result<Value, String> {
     };
     let step = if undo { app.ws.history.undo(now) } else { app.ws.history.redo(now) };
     match step {
-        None => return Err(if undo { "No layout change to undo".into() } else { "No layout change to redo".into() }),
+        None => return Err(if undo { crate::tl!("No layout change to undo").into() } else { crate::tl!("No layout change to redo").into() }),
         Some(Entry::Layout(layout)) => app.ws.keep_layout(layout),
         Some(Entry::Switch { active, user }) => {
             // Revisions only grow, so the restored workspace cannot be older than a stored one.

@@ -587,7 +587,7 @@ mod frame {
             }
             let loader = snapshot(session)?;
             if job.sources.len() != 1 || job.sources.first().is_none_or(|source| source.source_hash != loader.1) {
-                return Err("SOURCE_CHANGED: open the same source drawing before resuming this print job".into());
+                return Err(crate::tl!("SOURCE_CHANGED: open the same source drawing before resuming this print job").into());
             }
             let mut manifest = manifest;
             manifest.status = JobStatus::Queued;

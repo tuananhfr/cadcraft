@@ -44,11 +44,11 @@ pub fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value,
 fn command(app: &mut CadApp, id: &str, params: &Value) -> Result<Value, String> {
     let panel = Panel::parse(params.get("panel").and_then(Value::as_str).ok_or("panel is required")?)?;
     if panel == Panel::Canvas {
-        return Err("The drawing cannot auto-hide".into());
+        return Err(crate::tl!("The drawing cannot auto-hide").into());
     }
     if id == "ui.panel.peek" {
         if !edge_panels(app).iter().any(|state| state.id == panel.id()) {
-            return Err("The panel is not in auto-hide mode".into());
+            return Err(crate::tl!("The panel is not in auto-hide mode").into());
         }
         if app.autohide.active != Some(panel) {
             app.autohide = State { active: Some(panel), ..State::default() };
@@ -64,7 +64,7 @@ fn command(app: &mut CadApp, id: &str, params: &Value) -> Result<Value, String> 
     }
     let side: Option<Dock> = params.get("side").cloned().map(serde_json::from_value).transpose().map_err(|error| error.to_string())?;
     if side == Some(Dock::Floating) {
-        return Err("Auto-hide needs a dock edge".into());
+        return Err(crate::tl!("Auto-hide needs a dock edge").into());
     }
     let before = app.ws.effective.layout.panels.iter().find(|state| state.id == panel.id());
     let default_side = if panel == Panel::ToolSets { Dock::Left } else { Dock::Right };
@@ -92,7 +92,7 @@ fn command(app: &mut CadApp, id: &str, params: &Value) -> Result<Value, String> 
     crate::wsprofile::edit_layout(app, |layout| {
         layout.panels = panels;
         layout.dock_tree = Some(tree);
-        let state = layout.panels.iter_mut().find(|state| state.id == panel.id()).ok_or("Panel placement is missing")?;
+        let state = layout.panels.iter_mut().find(|state| state.id == panel.id()).ok_or(crate::tl!("Panel placement is missing"))?;
         state.side = Some(dock);
         state.mode = if pin { PanelMode::Dock } else { PanelMode::AutoHide };
         state.visible = true;
@@ -200,7 +200,7 @@ pub fn overlay(app: &mut CadApp, ctx: &egui::Context) {
                 ui.set_max_size(size);
                 ui.horizontal(|ui| {
                     ui.label(crate::i18n::t(panel.label()));
-                    let response = ui.add_enabled(can_change(app, panel), egui::Button::new(crate::i18n::t("Pin panel")));
+                    let response = ui.add_enabled(can_change(app, panel), egui::Button::new(crate::tl!("Pin panel")));
                     pin = response.clicked();
                     response.on_disabled_hover_text(crate::i18n::t(crate::wsprofile::LOCKED_MESSAGE));
                 });

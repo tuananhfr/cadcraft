@@ -254,7 +254,7 @@ fn edit(toolbars: &mut Vec<ToolbarState>, op: &str, id: &str, params: &Value, fr
         if op == "hide" && BUILTIN.iter().any(|(shipped, _)| *shipped == id) {
             return Ok(());
         }
-        return Err(format!("Unknown toolbar: {}", id.chars().take(64).collect::<String>()));
+        return Err(crate::tf!("Unknown toolbar: {id}", id = id.chars().take(64).collect::<String>()));
     };
     let locked = toolbars.get(i).is_some_and(|bar| bar.locked);
     if locked && matches!(op, "dock" | "float" | "move") {

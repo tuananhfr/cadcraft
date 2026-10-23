@@ -1104,8 +1104,12 @@ fn plot(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Action {
         match app.run("plot", params) {
             Ok(r) => {
                 let msg = match r.get("path").and_then(Value::as_str) {
-                    Some(path) => format!("Plotted {} to {path}", st.target),
-                    None => format!("Plotted {} ({} bytes of PDF; there is no file dialog here)", st.target, r["bytes"]),
+                    Some(path) => crate::tf!("Plotted {layout} to {path}", layout = st.target, path = path),
+                    None => crate::tf!(
+                        "Plotted {layout} ({bytes} bytes of PDF; there is no file dialog here)",
+                        layout = st.target,
+                        bytes = r.get("bytes").unwrap_or(&Value::Null)
+                    ),
                 };
                 app.session.echo(msg);
             }

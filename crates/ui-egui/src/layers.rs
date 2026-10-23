@@ -67,7 +67,7 @@ pub fn color_palette(ui: &mut egui::Ui, id: egui::Id, current: Color, by: bool) 
     let mut tab = ui.data_mut(|d| d.get_temp::<u8>(tab_id)).unwrap_or(if matches!(current, Color::True(_)) { 1 } else { 0 });
     let mut out = None;
     ui.horizontal(|ui| {
-        for (i, l) in ["Index Color", "True Color"].iter().enumerate() {
+        for (i, l) in [crate::tl!("Index Color"), crate::tl!("True Color")].iter().enumerate() {
             if ui.selectable_label(tab == i as u8, crate::i18n::t(l)).clicked() {
                 tab = i as u8;
             }
@@ -234,7 +234,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         .filter(|l| q.is_empty() || crate_wild(&q, &l.name.to_lowercase()))
         .collect();
     let title = match &vp {
-        Some(_) => "Layer Properties Manager — current viewport",
+        Some(_) => crate::tl!("Layer Properties Manager — current viewport"),
         None => "Layer Properties Manager",
     };
     egui::Window::new(crate::i18n::t(title))
@@ -320,7 +320,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                 ui.allocate_ui_with_layout(vec2(150.0, avail), egui::Layout::top_down(egui::Align::Min), |ui| {
                     ui.set_min_width(150.0);
                     ui.label(RichText::new(crate::tl!("Filters")).small().color(t.text_dim));
-                    for (i, l) in ["All", "All Used Layers"].iter().enumerate() {
+                    for (i, l) in [crate::tl!("All"), crate::tl!("All Used Layers")].iter().enumerate() {
                         ui.horizontal(|ui| {
                             ui.add_space(if i == 0 { 0.0 } else { 14.0 });
                             if ui.selectable_label(st.filter == i as u8, crate::i18n::t(l)).clicked() {
@@ -337,17 +337,27 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                 // ----- the table -----
                 ui.vertical(|ui| {
                     egui::ScrollArea::both().id_salt("lpm_table").auto_shrink([false, false]).max_height(avail).show(ui, |ui| {
-                        let mut cols: Vec<&str> =
-                            vec!["Status", "Name", "On", "Freeze", "Lock", "Plot", "Color", "Linetype", "Lineweight", "Transparency"];
+                        let mut cols: Vec<&str> = vec![
+                            crate::tl!("Status"),
+                            crate::tl!("Name"),
+                            crate::tl!("On"),
+                            crate::tl!("Freeze"),
+                            crate::tl!("Lock"),
+                            crate::tl!("Plot"),
+                            crate::tl!("Color"),
+                            crate::tl!("Linetype"),
+                            crate::tl!("Lineweight"),
+                            crate::tl!("Transparency"),
+                        ];
                         if vp.is_some() {
-                            cols.extend(["VP Freeze", "VP Color"]);
+                            cols.extend([crate::tl!("VP Freeze"), crate::tl!("VP Color")]);
                         }
-                        cols.extend(["New VP Freeze", "Description"]);
+                        cols.extend([crate::tl!("New VP Freeze"), crate::tl!("Description")]);
                         egui::Grid::new("lpm_grid").striped(true).num_columns(cols.len()).spacing(vec2(10.0, 3.0)).min_row_height(22.0).show(
                             ui,
                             |ui| {
                                 for h in &cols {
-                                    if *h == "Name" {
+                                    if *h == crate::tl!("Name") {
                                         let arrow = if st.sort_desc { " ▼" } else { " ▲" };
                                         if ui
                                             .add(
@@ -416,11 +426,11 @@ fn row(
     }
     status_icon(ui.painter(), sr.shrink(2.0), current, is_used);
     let tip = if current {
-        "Current layer"
+        crate::tl!("Current layer")
     } else if is_used {
-        "Layer contains objects (double-click to make current)"
+        crate::tl!("Layer contains objects (double-click to make current)")
     } else {
-        "Layer is empty (double-click to make current)"
+        crate::tl!("Layer is empty (double-click to make current)")
     };
     if sresp.on_hover_text(crate::i18n::t(tip)).double_clicked() {
         actions.push(("layer.current", json!({ "name": name })));
@@ -474,16 +484,22 @@ fn row(
         }
     }
     // On / Freeze / Lock / Plot.
-    if icons::button(ui, if l.on { Icon::Bulb } else { Icon::BulbOff }, 20.0, "On/Off", false).clicked() {
+    if icons::button(ui, if l.on { Icon::Bulb } else { Icon::BulbOff }, 20.0, crate::tl!("On/Off"), false).clicked() {
         actions.push(("layer.set", json!({ "name": name, "on": !l.on })));
     }
-    if icons::button(ui, if l.frozen { Icon::Snowflake } else { Icon::Sun }, 20.0, "Freeze/Thaw in all viewports", false).clicked() {
+    if icons::button(ui, if l.frozen { Icon::Snowflake } else { Icon::Sun }, 20.0, crate::tl!("Freeze/Thaw in all viewports"), false).clicked() {
         actions.push(("layer.set", json!({ "name": name, "frozen": !l.frozen })));
     }
-    if icons::button(ui, if l.locked { Icon::Lock } else { Icon::Unlock }, 20.0, "Lock/Unlock", false).clicked() {
+    if icons::button(ui, if l.locked { Icon::Lock } else { Icon::Unlock }, 20.0, crate::tl!("Lock/Unlock"), false).clicked() {
         actions.push(("layer.set", json!({ "name": name, "locked": !l.locked })));
     }
-    let pr = icons::button(ui, Icon::Plot, 20.0, if l.plot { "Plot (click: do not plot)" } else { "Do not plot (click: plot)" }, false);
+    let pr = icons::button(
+        ui,
+        Icon::Plot,
+        20.0,
+        if l.plot { crate::tl!("Plot (click: do not plot)") } else { crate::tl!("Do not plot (click: plot)") },
+        false,
+    );
     if !l.plot {
         let r = pr.rect.shrink(3.0);
         ui.painter().line_segment([r.left_bottom(), r.right_top()], Stroke::new(1.6, Color32::from_rgb(0xe0, 0x50, 0x50)));
@@ -615,7 +631,7 @@ fn row(
     // VP Freeze / VP Color (inside a layout viewport).
     if let Some((h, v)) = vp {
         let vf = v.frozen_layers.iter().any(|f| f.eq_ignore_ascii_case(&name));
-        if icons::button(ui, if vf { Icon::Snowflake } else { Icon::Sun }, 20.0, "Freeze/Thaw in the current viewport", false).clicked() {
+        if icons::button(ui, if vf { Icon::Snowflake } else { Icon::Sun }, 20.0, crate::tl!("Freeze/Thaw in the current viewport"), false).clicked() {
             let key = if vf { "thaw" } else { "freeze" };
             actions.push(("vplayer", json!({ "handle": h.hex(), key: [name] })));
         }
@@ -630,7 +646,7 @@ fn row(
         });
     }
     // New VP Freeze.
-    let nvf = icons::button(ui, if l.vp_freeze_new { Icon::Snowflake } else { Icon::Sun }, 20.0, "Freeze in new viewports", false);
+    let nvf = icons::button(ui, if l.vp_freeze_new { Icon::Snowflake } else { Icon::Sun }, 20.0, crate::tl!("Freeze in new viewports"), false);
     {
         // A small "new" mark distinguishes it from the Freeze column.
         let r = nvf.rect;

@@ -40,13 +40,13 @@ pub enum Status {
 impl Status {
     pub fn message(self) -> &'static str {
         match self {
-            Self::Unavailable => "3D mouse input is unavailable on this platform",
-            Self::Searching => "No supported 3D mouse found",
-            Self::Calibrating => "Release the 3D mouse to calibrate its resting position",
-            Self::Connected => "3D mouse connected",
-            Self::OpenFailed => "3D mouse busy, possibly 3DxWare or missing device permissions",
-            Self::Disconnected => "3D mouse disconnected",
-            Self::Error => "3D mouse input could not be started",
+            Self::Unavailable => crate::tl!("3D mouse input is unavailable on this platform"),
+            Self::Searching => crate::tl!("No supported 3D mouse found"),
+            Self::Calibrating => crate::tl!("Release the 3D mouse to calibrate its resting position"),
+            Self::Connected => crate::tl!("3D mouse connected"),
+            Self::OpenFailed => crate::tl!("3D mouse busy, possibly 3DxWare or missing device permissions"),
+            Self::Disconnected => crate::tl!("3D mouse disconnected"),
+            Self::Error => crate::tl!("3D mouse input could not be started"),
         }
     }
 }
@@ -94,7 +94,7 @@ pub fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value,
         }
         "ui.spacemouse.calibrate" => {
             if !matches!(app.spacemouse.status, Status::Connected | Status::Calibrating) {
-                return Some(Err("Connect a 3D mouse before calibrating".into()));
+                return Some(Err(crate::tl!("Connect a 3D mouse before calibrating").into()));
             }
             app.spacemouse.calibrate_requested = true;
             Some(Ok(Value::Null))

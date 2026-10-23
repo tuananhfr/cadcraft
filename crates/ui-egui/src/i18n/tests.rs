@@ -100,6 +100,23 @@ fn translations_cover_commands_menus_tools_and_snap_labels() {
 }
 
 const MARKED_UI_SOURCES: &[(&str, &str)] = &[
+    ("lib.rs", include_str!("../lib.rs")),
+    ("ubplot/worker.rs", include_str!("../ubplot/worker.rs")),
+    ("toolbars/drag.rs", include_str!("../toolbars/drag.rs")),
+    ("wsprofile/commands.rs", include_str!("../wsprofile/commands.rs")),
+    ("options/mod.rs", include_str!("../options/mod.rs")),
+    ("exchange.rs", include_str!("../exchange.rs")),
+    ("fontstore.rs", include_str!("../fontstore.rs")),
+    ("menus.rs", include_str!("../menus.rs")),
+    ("chrome/annoscale.rs", include_str!("../chrome/annoscale.rs")),
+    ("autohide.rs", include_str!("../autohide.rs")),
+    ("lisp_panel.rs", include_str!("../lisp_panel.rs")),
+    ("dispatch.rs", include_str!("../dispatch.rs")),
+    ("shortcut_menus.rs", include_str!("../shortcut_menus.rs")),
+    ("context_menu.rs", include_str!("../context_menu.rs")),
+    ("spacemouse.rs", include_str!("../spacemouse.rs")),
+    ("plotstyles.rs", include_str!("../plotstyles.rs")),
+    ("closing.rs", include_str!("../closing.rs")),
     ("xrefs.rs", include_str!("../xrefs.rs")),
     ("canvas.rs", include_str!("../canvas.rs")),
     ("chrome.rs", include_str!("../chrome.rs")),
@@ -216,6 +233,34 @@ fn marked_ui_sources(file: &str, source: &str) -> BTreeSet<String> {
                 .chain(crate::dialogs::INSERTION_UNITS)
                 .chain(["Text Style", "Table Style", "Multileader Style"])
                 .map(str::to_string),
+        );
+    }
+    if file == "toolbars/mod.rs" {
+        for (id, label) in crate::toolbars::BUILTIN {
+            sources.insert((*label).to_string());
+            if let Some(groups) = crate::toolbars::builtin_groups(id) {
+                sources.extend(groups.into_iter().flatten().map(|(_, _, label, _)| label.to_string()));
+            }
+        }
+        for id in crate::wsprofile::presets::PRESET_IDS {
+            if let Some(profile) = crate::wsprofile::presets::preset(id) {
+                sources.extend(profile.layout.toolbars.into_iter().map(|bar| bar.label));
+            }
+        }
+    }
+    if file == "viewcube.rs" {
+        sources.insert(crate::viewcube::NO_TWIST.to_string());
+    }
+    if file == "wsprofile/mod.rs" {
+        sources.extend(
+            [
+                crate::wsprofile::WORKSPACE_FILE.label,
+                crate::wsprofile::startup::FALLBACK_MESSAGE,
+                crate::wsprofile::startup::NOT_KEPT_MESSAGE,
+                crate::wsprofile::startup::POLICY_MESSAGE,
+                crate::wsprofile::store::TAB_CONFLICT_MESSAGE,
+            ]
+            .map(str::to_string),
         );
     }
     sources

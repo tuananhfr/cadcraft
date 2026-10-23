@@ -156,12 +156,22 @@ impl CadApp {
             }
         }
         let shown = names.iter().take(4).copied().collect::<Vec<_>>().join(", ");
-        let more = if names.len() > 4 { format!(" and {} more", names.len() - 4) } else { String::new() };
-        let text = format!(
-            "{} font{} missing: {shown}{more}. Tools > Fonts... lets you choose what to draw instead.",
-            names.len(),
-            if names.len() == 1 { "" } else { "s" }
-        );
+        let more = if names.len() > 4 { crate::tf!(" and {n} more", n = names.len() - 4) } else { String::new() };
+        let text = if names.len() == 1 {
+            crate::tf!(
+                "{n} font missing: {shown}{more}. Tools > Fonts... lets you choose what to draw instead.",
+                n = names.len(),
+                shown = shown,
+                more = more
+            )
+        } else {
+            crate::tf!(
+                "{n} fonts missing: {shown}{more}. Tools > Fonts... lets you choose what to draw instead.",
+                n = names.len(),
+                shown = shown,
+                more = more
+            )
+        };
         self.session.echo(text.clone());
         self.set_status(text);
     }
