@@ -51,10 +51,9 @@ mod web {
     impl eframe::App for Shell {
         fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
             let Ok(mut app) = self.0.try_borrow_mut() else { return };
-            if self.6.as_ref().and_then(crate::fullscreen::WebFullscreen::take_event) == Some(false)
-                && app.fullscreen.phase == cadcraft_ui_egui::fullscreen::Phase::Requested
-            {
-                cadcraft_ui_egui::fullscreen::rejected(&mut app);
+            cadcraft_ui_egui::fullscreen::escape::handle(&mut app, ctx);
+            if self.6.as_ref().and_then(crate::fullscreen::WebFullscreen::take_event) == Some(false) {
+                cadcraft_ui_egui::fullscreen::host_inactive(&mut app);
             }
             self.1.take_dropped(ctx);
             self.1.drain(&mut app);
@@ -84,6 +83,7 @@ mod web {
         fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
             if let Ok(mut app) = self.0.try_borrow_mut() {
                 app.raw_input_hook(raw);
+                cadcraft_ui_egui::fullscreen::escape::capture(&mut app, ctx, raw);
             }
             cadcraft_ui_egui::cmdline::capture_tab(ctx, raw);
         }

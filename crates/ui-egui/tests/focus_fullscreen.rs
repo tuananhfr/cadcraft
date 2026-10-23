@@ -164,6 +164,91 @@ fn browser_exit_resets_the_phase() {
 }
 
 #[test]
+fn cancelled_pending_fullscreen_exits_late_confirmation() {
+    let host = FakeHost::default();
+    let mut app = with_host(&host);
+    let ctx = egui::Context::default();
+    assert_eq!(fullscreen::toggle(&mut app, &ctx, true), Outcome::Success);
+    assert_eq!(app.fullscreen.phase, Phase::Requested);
+    assert_eq!(fullscreen::toggle(&mut app, &ctx, true), Outcome::Success);
+    assert_eq!(app.fullscreen.phase, Phase::Off);
+    assert_eq!(host.exits.get(), 1);
+    fullscreen::sync(&mut app, &ctx);
+    fullscreen::sync(&mut app, &ctx);
+    assert_eq!(app.fullscreen.phase, Phase::Off);
+    host.active.set(true);
+    fullscreen::sync(&mut app, &ctx);
+    assert_eq!(host.exits.get(), 2);
+    assert!(!host.active.get());
+    assert_eq!(app.fullscreen.phase, Phase::Off);
+    fullscreen::sync(&mut app, &ctx);
+    host.active.set(true);
+    fullscreen::sync(&mut app, &ctx);
+    assert_eq!(app.fullscreen.phase, Phase::On);
+    assert_eq!(host.exits.get(), 2);
+}
+
+#[test]
+fn cancellation_after_host_confirmation_clears_when_inactive() {
+    let host = FakeHost::default();
+    let mut app = with_host(&host);
+    let ctx = egui::Context::default();
+    fullscreen::toggle(&mut app, &ctx, true);
+    host.active.set(true);
+    fullscreen::toggle(&mut app, &ctx, true);
+    assert_eq!(app.fullscreen.phase, Phase::Off);
+    fullscreen::sync(&mut app, &ctx);
+    host.active.set(true);
+    fullscreen::sync(&mut app, &ctx);
+    assert_eq!(app.fullscreen.phase, Phase::On);
+    assert_eq!(host.exits.get(), 1);
+}
+
+#[test]
+fn fullscreen_without_a_pending_request_is_adopted() {
+    let host = FakeHost::default();
+    let mut app = with_host(&host);
+    host.active.set(true);
+    fullscreen::sync(&mut app, &egui::Context::default());
+    assert_eq!(app.fullscreen.phase, Phase::On);
+    assert_eq!(host.requests.get(), 0);
+    assert_eq!(host.exits.get(), 0);
+}
+
+#[test]
+fn a_new_fullscreen_request_clears_pending_cancellation() {
+    let host = FakeHost::default();
+    let mut app = with_host(&host);
+    let ctx = egui::Context::default();
+    fullscreen::toggle(&mut app, &ctx, true);
+    fullscreen::toggle(&mut app, &ctx, true);
+    assert_eq!(app.fullscreen.phase, Phase::Off);
+    fullscreen::toggle(&mut app, &ctx, true);
+    assert_eq!(app.fullscreen.phase, Phase::Requested);
+    host.active.set(true);
+    fullscreen::sync(&mut app, &ctx);
+    assert_eq!(app.fullscreen.phase, Phase::On);
+    assert_eq!(host.requests.get(), 2);
+    assert_eq!(host.exits.get(), 1);
+}
+
+#[test]
+fn cancelled_request_rejection_allows_external_fullscreen() {
+    let host = FakeHost::default();
+    let mut app = with_host(&host);
+    let ctx = egui::Context::default();
+    fullscreen::toggle(&mut app, &ctx, true);
+    fullscreen::toggle(&mut app, &ctx, true);
+    fullscreen::host_inactive(&mut app);
+    assert_eq!(app.fullscreen.phase, Phase::Off);
+    assert!(!app.focus.active());
+    host.active.set(true);
+    fullscreen::sync(&mut app, &ctx);
+    assert_eq!(app.fullscreen.phase, Phase::On);
+    assert_eq!(host.exits.get(), 1);
+}
+
+#[test]
 fn escape_exits_desktop_fullscreen_only_when_idle() {
     let mut h = harness(app());
     h.state_mut().fullscreen.phase = Phase::On;
