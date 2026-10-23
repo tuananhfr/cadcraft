@@ -1,7 +1,7 @@
 //! The command line: history, the active prompt with clickable keywords, typed input
 //! (keyboard focus stays on the drawing — typing anywhere goes here) and AutoComplete.
 
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 use cadcraft_engine::Input;
 use egui::{Key, Pos2, Rect, Sense, Stroke, pos2, vec2};
@@ -502,6 +502,40 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
     show_at(app, ui, canvas, bar);
 }
 
+fn prompt_galley(painter: &egui::Painter, text: &str, font: &egui::FontId, color: egui::Color32, width: f32) -> Arc<egui::Galley> {
+    let layout = |text| painter.layout_no_wrap(text, font.clone(), color);
+    let full = layout(text.to_string());
+    if full.size().x <= width {
+        return full;
+    }
+    let mut best = layout(String::new());
+    let ellipsis = layout("…".into());
+    if ellipsis.size().x > width {
+        return best;
+    }
+    best = ellipsis;
+    // Bound candidate allocations even when a prompt contains a hostile file name.
+    let head: String = text.chars().take(86).collect();
+    let tail: Vec<char> = text.chars().rev().take(171).collect();
+    let mut low = 0;
+    let mut high = text.chars().take(257).count().saturating_sub(1).min(256);
+    while low < high {
+        let keep = low + (high - low).div_ceil(2);
+        // The end of a prompt carries what the user must answer, so it gets two thirds of the room.
+        let mut candidate: String = head.chars().take(keep / 3).collect();
+        candidate.push('…');
+        candidate.extend(tail.iter().take(keep - keep / 3).rev().copied());
+        let galley = layout(candidate);
+        if galley.size().x <= width {
+            best = galley;
+            low = keep;
+        } else {
+            high = keep - 1;
+        }
+    }
+    best
+}
+
 fn show_at(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect, bar: Rect) {
     let t = Tokens::get();
     let (w, h) = (bar.width(), bar.height());
@@ -564,69 +598,94 @@ fn show_at(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect, bar: Rect) {
             }
         }
     }
+    let p = p.with_clip_rect(bar.intersect(ui.clip_rect()));
     // Prompt glyph.
     p.text(pos2(bar.left() + 8.0, bar.center().y), egui::Align2::LEFT_CENTER, ">_", crate::theme::mono(), t.text_dim);
-    let mut x = bar.left() + 30.0;
-    let prompt = app.session.current_prompt();
+    let mut x = (bar.left() + 30.0).min(bar.right());
+    let input_right = (bar.right() - if app.focus.active() { 6.0 } else { 28.0 }).max(x);
     let font = crate::theme::body();
+    // The input grows from a caret-sized slot to 120 px as the user types, so an empty answer leaves the prompt more room.
+    let typed_width = p.layout_no_wrap(app.cmd.buffer.clone(), font.clone(), t.text).size().x;
+    let input_room = (typed_width + 24.0).clamp(60.0, 120.0);
+    let prompt_right = (input_right - input_room.min((input_right - x) * 0.5)).max(x);
+    let prompt_rect = Rect::from_min_max(pos2(x, bar.top()), pos2(prompt_right, bar.bottom()));
+    let prompt = app.session.current_prompt();
     match &prompt {
         Some(pr) => {
             // The grip modes name themselves ("** STRETCH **…").
             let name = app.session.running.as_ref().filter(|r| r.id != "grip").map(|r| r.id.to_ascii_uppercase() + " ").unwrap_or_default();
-            let g = p.layout_no_wrap(name, font.clone(), t.text_faint);
-            let gw = g.size().x;
-            p.galley(pos2(x, bar.center().y - g.size().y / 2.0), g, t.text_faint);
-            x += gw;
             // A LISP `get…` prompt shows as the routine wrote it (no keywords, default or colon added).
-            let message = if pr.raw { pr.display() } else { crate::i18n::prompt_message(pr) };
-            let g = p.layout_no_wrap(message, font.clone(), t.text);
-            let gw = g.size().x;
-            p.galley(pos2(x, bar.center().y - g.size().y / 2.0), g, t.text);
-            x += gw;
-            if !pr.raw && !pr.keywords.is_empty() {
-                let g = p.layout_no_wrap(if pr.message.is_empty() { " [".into() } else { crate::tl!(" or [").into() }, font.clone(), t.text);
-                let gw = g.size().x;
-                p.galley(pos2(x, bar.center().y - g.size().y / 2.0), g, t.text);
-                x += gw;
-                let kws = pr.keywords.clone();
-                for (i, k) in kws.iter().enumerate() {
-                    let g = p.layout_no_wrap(k.clone(), font.clone(), t.cmd_keyword);
-                    let r = Rect::from_min_size(pos2(x, bar.top() + 3.0), vec2(g.size().x, h - 6.0));
-                    let resp = ui.interact(r, ui.id().with(("kw", i)), Sense::click());
-                    if resp.hovered() {
-                        p.rect_filled(r, 2.0, t.cmd_keyword_hover);
+            let mut message = if pr.raw { pr.display() } else { crate::i18n::prompt_message(pr) };
+            let mut tail = Vec::new();
+            if pr.raw {
+                // A routine that follows the "… [Yes/No] <No>: " convention keeps its answers visible like a native prompt.
+                if let Some(at) = message.rfind(" [").filter(|&at| message[at..].chars().count() <= 64) {
+                    let answers = message.split_off(at);
+                    tail.push((p.layout_no_wrap(answers, font.clone(), t.text), None));
+                }
+            } else {
+                if !pr.keywords.is_empty() {
+                    let opening = if pr.message.is_empty() { " [".into() } else { crate::tl!(" or [").into() };
+                    tail.push((p.layout_no_wrap(opening, font.clone(), t.text), None));
+                    for (i, keyword) in pr.keywords.iter().enumerate() {
+                        if i > 0 {
+                            tail.push((p.layout_no_wrap("/".into(), font.clone(), t.text), None));
+                        }
+                        tail.push((p.layout_no_wrap(keyword.clone(), font.clone(), t.cmd_keyword), Some(keyword)));
                     }
-                    let gw = g.size().x;
-                    p.galley(pos2(x, bar.center().y - g.size().y / 2.0), g, t.cmd_keyword);
-                    x += gw;
-                    if resp.clicked() {
-                        let _ = app.session.input(Input::Keyword(k.clone()));
-                    }
-                    if i + 1 < kws.len() {
-                        let g = p.layout_no_wrap("/".into(), font.clone(), t.text);
-                        let gw = g.size().x;
-                        p.galley(pos2(x, bar.center().y - g.size().y / 2.0), g, t.text);
-                        x += gw;
+                    tail.push((p.layout_no_wrap("]".into(), font.clone(), t.text), None));
+                }
+                if let Some(default) = &pr.default {
+                    tail.push((p.layout_no_wrap(format!(" <{default}>"), font.clone(), t.text), None));
+                }
+                tail.push((p.layout_no_wrap(": ".into(), font.clone(), t.text), None));
+            }
+            let tail_width: f32 = tail.iter().map(|(galley, _)| galley.size().x).sum();
+            let prefix_width = (prompt_right - x - tail_width).max(0.0);
+            // The command name is context only; it gives way before the message is cut to nothing.
+            let combined_width = p.layout_no_wrap(format!("{name}{message}"), font.clone(), t.text).size().x;
+            let shown_name = if combined_width > prefix_width && p.layout_no_wrap(name.clone(), font.clone(), t.text).size().x > prefix_width / 3.0 {
+                ""
+            } else {
+                name.as_str()
+            };
+            let name_galley = prompt_galley(&p, shown_name, &font, t.text_faint, prefix_width);
+            let message_galley = prompt_galley(&p, &message, &font, t.text, (prefix_width - name_galley.size().x).max(0.0));
+            let full = format!("{name}{message}{}", tail.iter().map(|(galley, _)| galley.text()).collect::<String>());
+            let visible =
+                format!("{}{}{}", name_galley.text(), message_galley.text(), tail.iter().map(|(galley, _)| galley.text()).collect::<String>());
+            let pp = p.with_clip_rect(prompt_rect.intersect(p.clip_rect()));
+            for galley in [name_galley, message_galley] {
+                let width = galley.size().x;
+                pp.galley(pos2(x, bar.center().y - galley.size().y / 2.0), galley, t.text);
+                x += width;
+            }
+            // An unusually wide keyword list still keeps its default at the right edge.
+            x = x.min(prompt_right - tail_width);
+            for (i, (galley, keyword)) in tail.into_iter().enumerate() {
+                let width = galley.size().x;
+                if let Some(keyword) = keyword {
+                    let rect = Rect::from_min_size(pos2(x, bar.top() + 3.0), vec2(width, h - 6.0)).intersect(prompt_rect);
+                    if rect.is_positive() {
+                        let response = ui.interact(rect, ui.id().with(("kw", i)), Sense::click());
+                        if response.hovered() {
+                            pp.rect_filled(rect, 2.0, t.cmd_keyword_hover);
+                        }
+                        if response.clicked() {
+                            let _ = app.session.input(Input::Keyword(keyword.clone()));
+                        }
                     }
                 }
-                let g = p.layout_no_wrap("]".into(), font.clone(), t.text);
-                let gw = g.size().x;
-                p.galley(pos2(x, bar.center().y - g.size().y / 2.0), g, t.text);
-                x += gw;
+                pp.galley(pos2(x, bar.center().y - galley.size().y / 2.0), galley, t.text);
+                x += width;
             }
-            if let Some(d) = pr.default.as_ref().filter(|_| !pr.raw) {
-                let g = p.layout_no_wrap(format!(" <{d}>"), font.clone(), t.text);
-                let gw = g.size().x;
-                p.galley(pos2(x, bar.center().y - g.size().y / 2.0), g, t.text);
-                x += gw;
-            }
-            if !pr.raw {
-                let g = p.layout_no_wrap(": ".into(), font.clone(), t.text);
-                let gw = g.size().x;
-                p.galley(pos2(x, bar.center().y - g.size().y / 2.0), g, t.text);
-                x += gw;
-            } else if !pr.message.ends_with(' ') {
-                x += 4.0;
+            x = x.clamp(prompt_rect.left(), prompt_right);
+            let rect = Rect::from_min_max(prompt_rect.min, pos2(x, bar.bottom()));
+            let response = ui.interact(rect, ui.id().with("cmdline_prompt"), Sense::hover());
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &visible));
+            response.on_hover_text(full);
+            if pr.raw && !pr.message.ends_with(' ') {
+                x = (x + 4.0).min(prompt_right);
             }
         }
         None => {
@@ -643,11 +702,15 @@ fn show_at(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect, bar: Rect) {
     }
     let g = p.layout_no_wrap(app.cmd.buffer.clone(), font, t.text);
     let gw = g.size().x;
-    p.galley(pos2(x, bar.center().y - g.size().y / 2.0), g, t.text);
+    let input_rect = Rect::from_min_max(pos2(x, bar.top()), pos2(input_right, bar.bottom()));
+    let input_painter = p.with_clip_rect(input_rect.intersect(p.clip_rect()));
+    let input_x = x - (gw + 2.0 - input_rect.width()).max(0.0);
+    input_painter.galley(pos2(input_x, bar.center().y - g.size().y / 2.0), g, t.text);
     // Caret.
     let blink = (ui.input(|i| i.time) * 2.0).floor() as i64 % 2 == 0;
     if blink {
-        p.line_segment([pos2(x + gw + 1.0, bar.top() + 5.0), pos2(x + gw + 1.0, bar.bottom() - 5.0)], Stroke::new(1.0, t.text));
+        input_painter
+            .line_segment([pos2(input_x + gw + 1.0, bar.top() + 5.0), pos2(input_x + gw + 1.0, bar.bottom() - 5.0)], Stroke::new(1.0, t.text));
     }
     if !app.focus.active() {
         // History chevron.
