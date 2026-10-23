@@ -21,6 +21,8 @@ mod graphics;
 mod logging;
 #[cfg(target_os = "macos")]
 mod native_menu;
+#[cfg(not(target_arch = "wasm32"))]
+mod printers;
 mod profile_store;
 mod spacemouse;
 mod system_animations;
@@ -162,6 +164,8 @@ fn lisp_audit_sink(record: &cadcraft_engine::lisp::audit::LispAudit) {
 
 /// File format hooks for the engine (it stays I/O-agnostic).
 pub fn install_io() {
+    #[cfg(not(target_arch = "wasm32"))]
+    printers::install();
     cadcraft_engine::lisp::audit::set_audit_sink(lisp_audit_sink);
     #[cfg(not(target_arch = "wasm32"))]
     cadcraft_engine::sheetplan::registry_store::set_registry_store_factory(|| {

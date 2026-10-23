@@ -416,6 +416,7 @@ UI-only recovery status: `ui.recovery.status` (registered in `ui-egui::menus::UI
 | `ubplot.compare` | `cad.other.ubplot.compare` | Other | model, paper | available | read |  |
 | `ubplot.folder` | `cad.other.ubplot.folder` | Other | model, paper | available | file |  |
 | `ubplot.jobs` | `cad.other.ubplot.jobs` | Other | model, paper | available | file |  |
+| `ubplot.printers` | `cad.other.ubplot.printers` | Other | model, paper | available | read |  |
 | `ubplot.profile` | `cad.other.ubplot.profile` | Other | model, paper | available | file |  |
 | `ubplot.publish` | `cad.other.ubplot.publish` | Other | model, paper | available | file |  |
 | `ubplot.report` | `cad.other.ubplot.report` | Other | model, paper | available | file |  |

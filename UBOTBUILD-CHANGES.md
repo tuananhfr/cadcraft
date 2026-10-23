@@ -176,8 +176,8 @@ Web `0055a51` and Windows `d490620` smoke supplement the Linux gate recorded und
 ## Smart Plotter: batch jobs
 
 2026-10-23 · GĐ5 queue, workers, Folder mode and CLI source coverage, with scoped runtime
-QA below. Real printer submission, T12 printer survey and T13 benchmarks remain pending
-(user decisions on T12 and T13B; T13 is not merged).
+QA below. T12 adds desktop printer discovery and checked queue submission with PDF
+fallback; physical-printer QA and T13 benchmarks remain pending (T13 is not merged).
 
 - `ubplot.publish {background: true}` queues a persisted job and returns `jobId`/`QUEUED`;
   the default synchronous publish retains its existing result. Desktop runs a worker thread;
@@ -192,9 +192,16 @@ QA below. Real printer submission, T12 printer survey and T13 benchmarks remain 
   recursive DWG/DXF discovery, records skipped paths/reasons and rereads source hashes before
   rendering. `folder.json` selects its file loader on resume.
 - `cadcraft-cli ubplot` accepts a drawing or `--folder`, output grouping and job-store options;
-  `--templates FILE` supplies a strict registry for that run only. Real printer submission is
-  not implemented in this checkout. See [plotters](docs/plotters.md#batch-jobs) for the manifest
-  excerpt, limits, storage and CLI syntax; no batch performance numbers are claimed.
+  `--templates FILE` supplies a strict registry for that run only. CLI has no printer host.
+  See [plotters](docs/plotters.md#batch-jobs) for the manifest excerpt, limits, storage and
+  CLI syntax; no batch performance numbers are claimed.
+- `ubplot.printers {refresh?: false}` lists desktop printers with a 60-second discovery cache.
+  System-printer papers feed existing device checks; built-ins and plotter files keep precedence.
+  Background publish records the system printer. Missing/offline devices and missing PDF
+  PrintTo handlers retain PDFs with manifest WARNs; successful submissions record `printer:<name>`.
+  Windows uses CIM paper names and PrintTo; CUPS uses `lpstat`/`lpoptions`/`lp`. Profiles are
+  unchanged. Processes are bounded at 20 seconds and 4 MiB output. Added tests await CI;
+  the surveyed Edge handler lacks PrintTo, and no physical-print pass is claimed.
 
 ### QA 2026-10-23
 
@@ -206,7 +213,7 @@ gate recorded under GĐ3. These are correctness checks, not benchmark measuremen
 | Web interruption / resume | Block → all → Quick Plot 100 sheets, merged at 64 pages/file. Plot Jobs shows progress, current sheet and Cancel. Closing mid-job and reopening shows Interrupted with Resume/Discard. Resume without the source reports `SOURCE_CHANGED`; with it open, Done 100/100 yields 64 + 36 pages without duplicates. |
 | Job panel / keyboard | `UBPLOT.JOBS` opens the left panel clear of ViewCube and focuses the first job action; Enter resumes, providing the Cancel/Resume keyboard path. Status bar shows Done after resume. |
 | Desktop publish / Folder | Background publish of 20 sheets at 8 pages/file finishes DONE 20/20, PDFs 8 + 8 + 4. Folder mode on three DXFs × four approved A1 frames finishes DONE 12/12 with 12 split PDFs and no drawing open. Jobs panel is on the left with a keyboard hint and per-file Open folder. |
-| Remaining gates | Real browser quota exhaustion, real printer submission, T12 printer survey (user decision) and benchmark numbers remain pending. T13 is not merged, awaiting the user decision on T13B. |
+| Remaining gates | Real browser quota exhaustion, physical-printer submission and benchmark numbers remain pending. T13 is not merged, awaiting the user decision on T13B. |
 
 ## V2.2 GĐ6
 

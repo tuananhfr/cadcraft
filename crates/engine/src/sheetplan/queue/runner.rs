@@ -8,7 +8,8 @@ use super::render::{RenderFailure, SheetBudget, SheetRenderer};
 use super::store::{JobStore, artifact_name, validate_name, validate_output_file_name};
 use super::types::*;
 use crate::hash::sha256_hex;
-use crate::sheetplan::codes::issue;
+use crate::sheetplan::codes::{self, issue};
+use crate::sheetplan::device::{PrintOutcome, find_printer, plotter_config, printer_host};
 use crate::sheetplan::{Severity, Sheet, SheetStatus};
 
 pub trait SourceLoader {
@@ -70,6 +71,7 @@ pub struct JobRunner {
     cancel: Arc<AtomicBool>,
     loaded: Option<(u32, Arc<Drawing>)>,
     finished: bool,
+    printer_ready: Option<String>,
 }
 
 fn page_count(sheet: &Sheet) -> Result<u32, String> {
@@ -150,7 +152,7 @@ fn runtime_issue(code: &str) -> bool {
 }
 
 impl JobRunner {
-    pub fn open(job: PrintJob, store: &mut dyn JobStore, now_ms: u64) -> Result<JobRunner, String> {
+    pub fn open(mut job: PrintJob, store: &mut dyn JobStore, now_ms: u64) -> Result<JobRunner, String> {
         if job.sources.len() > MAX_JOB_SOURCES {
             return Err("job exceeds source limits".into());
         }
@@ -168,8 +170,37 @@ impl JobRunner {
                 }
             }
         }
+        let mut printer_issue = None;
+        let printer_ready = job.printer.as_deref().and_then(|name| {
+            let printer = find_printer(name);
+            let Some(printer) = printer.filter(|printer| !printer.offline) else {
+                printer_issue =
+                    Some(issue(Severity::Warn, codes::PRINTER_MISSING, "The requested printer is missing or offline; keeping PDF files.", None));
+                return None;
+            };
+            let device = plotter_config(&printer);
+            if crate::sheetplan::split::device_limits(&device).is_none() {
+                printer_issue =
+                    Some(issue(Severity::Warn, codes::DEVICE_UNAVAILABLE, "The printer has no recognised paper sizes; keeping PDF files.", None));
+                return None;
+            }
+            for source in &mut job.sources {
+                let previous = source.plan.clone();
+                crate::sheetplan::preflight::check_devices(&mut source.plan, Some(&device), false, false);
+                crate::sheetplan::approval::carry_over(&previous, &mut source.plan);
+            }
+            Some(printer.name)
+        });
         PrintJob::new(job.sources.clone(), job.output.clone(), job.retry_limit)
             .map_err(|issues| issues.iter().map(|issue| format!("{}: {}", issue.code, issue.message)).collect::<Vec<_>>().join("; "))?;
+        if printer_ready.is_some() {
+            for source in &job.sources {
+                crate::sheetplan::approval::validate_approvals(&source.plan)?;
+                if crate::sheetplan::approval::issues(&source.plan).any(|(_, issue)| issue.severity == Severity::Warn && !issue.approved_by_user) {
+                    return Err("WARN_NOT_APPROVED: printer capabilities changed; scan and approve the plan again".into());
+                }
+            }
+        }
         let sheets: Vec<_> = ordered.into_values().collect();
         let groups = groups(&job, &sheets)?;
         let expected = PublishManifest::new(&job, now_ms);
@@ -212,6 +243,11 @@ impl JobRunner {
             return Err("completed manifest is missing output files".into());
         }
         if !finished {
+            if let Some(entry) = printer_issue
+                && !manifest.issues.iter().any(|issue| issue.code == entry.code)
+            {
+                manifest.issues.push(entry);
+            }
             manifest.issues.retain(|issue| !runtime_issue(&issue.code));
             for source in &mut manifest.sources {
                 source.issues.retain(|issue| !runtime_issue(&issue.code));
@@ -261,6 +297,7 @@ impl JobRunner {
             cancel: Arc::new(AtomicBool::new(false)),
             loaded: None,
             finished,
+            printer_ready,
         })
     }
 
@@ -559,7 +596,7 @@ impl JobRunner {
                 return self.commit(store, pending);
             }
         };
-        let destination = match store.deliver(&self.job, &group.name, &bytes) {
+        let mut destination = match store.deliver(&self.job, &group.name, &bytes) {
             Ok(destination) => destination,
             Err(error) => {
                 self.write_failures = self.write_failures.saturating_add(1);
@@ -571,6 +608,17 @@ impl JobRunner {
                 return StepOutcome::Worked;
             }
         };
+        if let Some(printer) = &self.printer_ready {
+            let outcome = printer_host()
+                .map(|host| (host.print_pdf)(printer, &destination))
+                .unwrap_or_else(|| PrintOutcome::NotSupported("Printer host is unavailable.".into()));
+            match outcome {
+                PrintOutcome::Spooled { printer } => destination = format!("printer:{printer}"),
+                PrintOutcome::NotSupported(reason) => {
+                    manifest.issues.push(issue(Severity::Warn, codes::PRINTER_HANDLER_MISSING, reason, None));
+                }
+            }
+        }
         manifest.files.push(OutputFile {
             name: group.name.clone(),
             pages: group.pages,

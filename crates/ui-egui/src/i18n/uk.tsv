@@ -2106,3 +2106,10 @@ ribbon	Plot	Друк креслення
 	Modified: {n}	Змінено: {n}
 	Deleted: {n}	Видалено: {n}
 	Undo: {label}	Скасування: {label}
+	Printers	Принтери
+	printers are only in the desktop app	принтери доступні лише в настільному застосунку
+	PRINTER_MISSING	Принтер відсутній або не в мережі
+	PRINTER_HANDLER_MISSING	Немає обробника друку PDF
+	The requested printer is missing or offline; keeping PDF files.	Запитаний принтер відсутній або не в мережі; файли PDF збережено.
+	The printer has no recognised paper sizes; keeping PDF files.	Принтер не має розпізнаних розмірів паперу; файли PDF збережено.
+	The PDF handler does not expose PrintTo; keeping PDF files.	Обробник PDF не підтримує PrintTo; файли PDF збережено.
