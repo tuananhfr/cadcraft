@@ -2,6 +2,7 @@ pub mod approval;
 pub mod codes;
 pub mod compare;
 pub mod detect;
+pub mod device;
 pub mod ids;
 pub mod outline;
 pub mod paper;

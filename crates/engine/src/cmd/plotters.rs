@@ -205,6 +205,23 @@ pub fn device_names() -> Vec<String> {
 
 /// The device called `name` (any case; a `.plotter.json` suffix is ignored).
 pub fn find_device(name: &str) -> Option<PlotterConfig> {
+    if name.trim().is_empty() || name.trim().eq_ignore_ascii_case(NO_DEVICE) {
+        return None;
+    }
+    find_file_device(name).or_else(|| {
+        let printer = crate::sheetplan::device::find_printer(name)?;
+        Some(crate::sheetplan::device::plotter_config(&printer))
+    })
+}
+
+pub(crate) fn system_printer_name(name: &str) -> Option<String> {
+    if find_file_device(name).is_some() {
+        return None;
+    }
+    crate::sheetplan::device::find_printer(name).map(|printer| printer.name)
+}
+
+fn find_file_device(name: &str) -> Option<PlotterConfig> {
     let n = name.trim();
     let n = n.strip_suffix(cadcraft_doc::PLOTTER_FILE_EXT).unwrap_or(n);
     if n.is_empty() || n.eq_ignore_ascii_case(NO_DEVICE) {
@@ -559,7 +576,7 @@ fn run_plottermanager(_s: &mut Session, p: &Value) -> Result<Value> {
         }
         "new" => {
             let name = device_name(cmd, p)?;
-            if find_device(&name).is_some() {
+            if find_file_device(&name).is_some() {
                 return Err(bad(cmd, format!("plotter `{name}` already exists")));
             }
             let file = cadcraft_doc::plotter_file_name(&name).ok_or_else(|| bad(cmd, "`name` is empty"))?;
@@ -722,7 +739,7 @@ impl Interactive for PlotterManagerM {
             }
             Stage::NewName => {
                 let n = need(t)?;
-                if find_device(&n).is_some() {
+                if find_file_device(&n).is_some() {
                     return Err(EngineError::Other(format!("Plotter \"{n}\" already exists.")));
                 }
                 self.stage = Stage::NewOutput(n);

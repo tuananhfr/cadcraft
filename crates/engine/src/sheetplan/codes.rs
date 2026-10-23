@@ -1,6 +1,8 @@
 pub const DEVICE_LIMIT_NEAR: &str = "DEVICE_LIMIT_NEAR";
 pub const DEVICE_LIMIT_EXCEEDED: &str = "DEVICE_LIMIT_EXCEEDED";
 pub const DEVICE_UNAVAILABLE: &str = "DEVICE_UNAVAILABLE";
+pub const PRINTER_MISSING: &str = "PRINTER_MISSING";
+pub const PRINTER_HANDLER_MISSING: &str = "PRINTER_HANDLER_MISSING";
 use super::types::{PreflightIssue, Severity};
 
 pub const XREF_MISSING: &str = "XREF_MISSING";

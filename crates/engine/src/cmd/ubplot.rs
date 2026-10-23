@@ -55,6 +55,18 @@ pub struct LastPlan {
     pub plan: SheetPlan,
 }
 
+fn run_printers(s: &mut Session, params: &Value) -> Result<Value> {
+    let refresh = match params.get("refresh") {
+        Some(value) => value.as_bool().ok_or_else(|| bad("ubplot.printers", "refresh must be a boolean"))?,
+        None => false,
+    };
+    if crate::sheetplan::device::printer_host().is_none() {
+        s.echo("printers are only in the desktop app");
+    }
+    let printers = crate::sheetplan::device::list_printers(refresh).map_err(|error| bad("ubplot.printers", error))?;
+    Ok(json!(printers))
+}
+
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("ubplot", "Quick Plot...", run_ubplot)
@@ -77,6 +89,10 @@ pub fn specs() -> Vec<CommandSpec> {
             .enabled(always),
         CommandSpec::new("ubplot.jobs", "Plot Jobs", jobs::run_jobs)
             .params("{action: list|status|manifest|resume|cancel|remove, jobId?} → job summaries, {manifest}, or action result; resume runs synchronously")
+            .noundo()
+            .enabled(always),
+        CommandSpec::new("ubplot.printers", "Printers", run_printers)
+            .params("{refresh?: false} → installed desktop PrinterInfo[]; no host returns []")
             .noundo()
             .enabled(always),
         CommandSpec::new("ubplot.profile", "Print Profile", profile::run_profile)

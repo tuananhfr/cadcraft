@@ -2108,3 +2108,10 @@ ribbon	Fonts	Phông chữ
 	Modified: {n}	Đã sửa: {n}
 	Deleted: {n}	Đã xóa: {n}
 	Undo: {label}	Hoàn tác: {label}
+	Printers	Máy in
+	printers are only in the desktop app	máy in chỉ có trong ứng dụng máy tính
+	PRINTER_MISSING	Máy in không có hoặc ngoại tuyến
+	PRINTER_HANDLER_MISSING	Thiếu trình xử lý in PDF
+	The requested printer is missing or offline; keeping PDF files.	Máy in được yêu cầu không có hoặc ngoại tuyến; giữ lại các tệp PDF.
+	The printer has no recognised paper sizes; keeping PDF files.	Máy in không có khổ giấy được nhận dạng; giữ lại các tệp PDF.
+	The PDF handler does not expose PrintTo; keeping PDF files.	Trình xử lý PDF không hỗ trợ PrintTo; giữ lại các tệp PDF.

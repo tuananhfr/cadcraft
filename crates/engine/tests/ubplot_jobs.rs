@@ -340,3 +340,225 @@ fn jobs_resume_changed_drawing_fails_pending_sheets() {
         assert!(sheet["issues"].as_array().unwrap().iter().any(|issue| issue["code"] == "SOURCE_CHANGED"));
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+mod printers {
+    use std::path::{Path, PathBuf};
+    use std::sync::OnceLock;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use cadcraft_engine::cmd::plotters::{PlotterStore, find_device, set_plotter_store};
+    use cadcraft_engine::sheetplan::device::{PrintOutcome, PrinterHost, PrinterInfo, set_printer_host};
+    use cadcraft_engine::sheetplan::{SheetPlan, codes};
+
+    use super::*;
+
+    static SPOOLED: AtomicUsize = AtomicUsize::new(0);
+    static MISDIRECTED: AtomicUsize = AtomicUsize::new(0);
+
+    fn setup() {
+        static HOST: OnceLock<()> = OnceLock::new();
+        HOST.get_or_init(|| {
+            set_plotter_store(PlotterStore::memory());
+            set_printer_host(PrinterHost {
+                list: || {
+                    Ok(["Office A3", "Bare", "Offline", "Handlerless", "Spooler", "CADCraft PDF", "File wins"]
+                        .into_iter()
+                        .map(|name| PrinterInfo {
+                            name: name.into(),
+                            is_default: name == "Spooler",
+                            offline: name == "Offline",
+                            papers: if name == "Bare" { Vec::new() } else { vec![("A3".into(), 297.0, 420.0)] },
+                        })
+                        .collect())
+                },
+                print_pdf: |printer, path| {
+                    assert!(Path::new(path).is_file());
+                    assert!(std::fs::read(path).unwrap().starts_with(b"%PDF-"));
+                    match printer {
+                        "Spooler" => {
+                            SPOOLED.fetch_add(1, Ordering::Relaxed);
+                            PrintOutcome::Spooled { printer: printer.into() }
+                        }
+                        "Handlerless" => PrintOutcome::NotSupported("No PDF PrintTo handler.".into()),
+                        _ => {
+                            MISDIRECTED.fetch_add(1, Ordering::Relaxed);
+                            PrintOutcome::NotSupported("Unexpected printer submission.".into())
+                        }
+                    }
+                },
+            });
+        });
+    }
+
+    struct Temp(PathBuf);
+
+    impl Temp {
+        fn new() -> Self {
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let path = std::env::temp_dir().join(format!("cadcraft-printers-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+            std::fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for Temp {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn window(s: &mut Session, width: f64, height: f64, device: &str) -> SheetPlan {
+        s.doc_mut().unwrap().header.set_i64("INSUNITS", 4);
+        serde_json::from_value(
+            s.execute(
+                "ubplot.scan",
+                &json!({"mode": "window", "windows": [[[0, 0], [width, height]]],
+                    "paper": format!("{width}x{height}"), "scale": "1:1", "device": device}),
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn approve_warnings(s: &mut Session, plan: &SheetPlan) {
+        let approvals: Vec<_> = plan
+            .sheets
+            .iter()
+            .flat_map(|sheet| {
+                sheet
+                    .issues
+                    .iter()
+                    .filter(|issue| issue.severity == Severity::Warn)
+                    .map(|issue| json!({"sheetKey": format!("{}@{}", sheet.sheet_id, sheet.order), "code": issue.code}))
+            })
+            .collect();
+        s.execute("ubplot.approve", &json!({"approvals": approvals, "by": "user"})).unwrap();
+    }
+
+    #[test]
+    fn system_printer_limits_use_existing_device_checks() {
+        setup();
+        let mut s = session(frames_drawing(1));
+        let oversized = window(&mut s, 594.0, 841.0, "Office A3");
+        assert!(oversized.sheets[0].issues.iter().any(|issue| issue.code == codes::DEVICE_LIMIT_EXCEEDED && issue.severity == Severity::Block));
+        assert_eq!(oversized.sheets[0].status, SheetStatus::Blocked);
+        let error = s.execute("ubplot.publish", &json!({"background": true})).unwrap_err();
+        assert!(error.to_string().contains("PLAN_HAS_BLOCKED"));
+        assert!(s.take_queued_job().is_none());
+        let a3 = window(&mut s, 297.0, 420.0, "Office A3");
+        assert!(!a3.sheets[0].issues.iter().any(|issue| issue.severity == Severity::Block));
+        assert!(a3.sheets[0].issues.iter().any(|issue| issue.code == codes::DEVICE_LIMIT_NEAR));
+        approve_warnings(&mut s, &a3);
+        enqueue(&mut s);
+        assert_eq!(s.take_queued_job().unwrap().printer.as_deref(), Some("Office A3"));
+        let bare = window(&mut s, 210.0, 297.0, "Bare");
+        assert!(bare.sheets[0].issues.iter().any(|issue| issue.code == codes::DEVICE_UNAVAILABLE && issue.severity == Severity::Warn));
+        assert!(!bare.sheets[0].issues.iter().any(|issue| issue.severity == Severity::Block));
+        let device = find_device("Office A3").unwrap();
+        assert_eq!(device.default_paper, "A3");
+        assert_eq!(device.papers[0].margins, [0.0; 4]);
+        assert_eq!(device.output, cadcraft_doc::PlotOutput::Pdf);
+    }
+
+    #[test]
+    fn plotter_file_wins_over_same_named_printer() {
+        setup();
+        let mut s = session(frames_drawing(1));
+        s.execute("plottermanager", &json!({"action": "new", "name": "File wins", "output": "png"})).unwrap();
+        assert_eq!(find_device("File wins").unwrap().output, cadcraft_doc::PlotOutput::Png);
+        assert!(find_device("CADCraft PDF").unwrap().papers.len() > 1);
+        window(&mut s, 210.0, 297.0, "File wins");
+        enqueue(&mut s);
+        assert!(s.take_queued_job().unwrap().printer.is_none());
+    }
+
+    fn run_printer_job(printer: &str) -> (Temp, PublishManifest, PrintJob) {
+        setup();
+        let temp = Temp::new();
+        let mut s = session(frames_drawing(1));
+        s.set_job_store(Box::new(DirJobStore::new(temp.0.join("jobs"))));
+        if printer == "Gone" {
+            scan(&mut s);
+        } else {
+            let plan = window(&mut s, 210.0, 297.0, printer);
+            approve_warnings(&mut s, &plan);
+        }
+        let path = temp.0.join("printed.pdf").to_string_lossy().into_owned();
+        s.execute("ubplot.publish", &json!({"background": true, "path": path})).unwrap();
+        let mut job = s.take_queued_job().unwrap();
+        job.printer = Some(printer.into());
+        let profile = s.execute("ubplot.profile", &json!({"action": "effective"})).unwrap();
+        let mut loader = SnapshotLoader(std::sync::Arc::new(s.doc().unwrap().clone()), job.sources[0].source_hash.clone());
+        let manifest = run_to_end(job.clone(), s.job_store_mut().unwrap(), &mut loader, &PdfSheetRenderer, &SheetBudget::desktop(), &|| 1).unwrap();
+        assert_eq!(s.execute("ubplot.profile", &json!({"action": "effective"})).unwrap(), profile);
+        assert_eq!(manifest.status, JobStatus::Done);
+        assert!(temp.0.join("printed.pdf").is_file());
+        assert!(std::fs::read(temp.0.join("printed.pdf")).unwrap().starts_with(b"%PDF-"));
+        (temp, manifest, job)
+    }
+
+    #[test]
+    fn missing_printer_falls_back_to_pdf_with_warn() {
+        for printer in ["Gone", "Offline"] {
+            let (temp, manifest, _) = run_printer_job(printer);
+            assert!(manifest.issues.iter().any(|issue| issue.code == codes::PRINTER_MISSING && issue.severity == Severity::Warn));
+            assert_eq!(manifest.files[0].delivered_to, temp.0.join("printed.pdf").to_string_lossy());
+        }
+        assert_eq!(MISDIRECTED.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn missing_handler_keeps_pdf_with_warn() {
+        let (temp, manifest, _) = run_printer_job("Handlerless");
+        assert!(manifest.issues.iter().any(|issue| issue.code == codes::PRINTER_HANDLER_MISSING && issue.severity == Severity::Warn));
+        assert_eq!(manifest.files[0].delivered_to, temp.0.join("printed.pdf").to_string_lossy());
+    }
+
+    #[test]
+    fn printer_without_papers_keeps_pdf() {
+        let (temp, manifest, _) = run_printer_job("Bare");
+        assert!(manifest.issues.iter().any(|issue| issue.code == codes::DEVICE_UNAVAILABLE && issue.severity == Severity::Warn));
+        assert_eq!(manifest.files[0].delivered_to, temp.0.join("printed.pdf").to_string_lossy());
+        assert_eq!(MISDIRECTED.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn runner_rechecks_system_printer_limits_before_rendering() {
+        setup();
+        let mut s = session(frames_drawing(1));
+        let plan = window(&mut s, 594.0, 841.0, "CADCraft PDF");
+        let mut job =
+            PrintJob::new(vec![JobSource { path: None, source_hash: plan.source_hash.clone(), plan }], OutputSpec::default(), DEFAULT_RETRY_LIMIT)
+                .unwrap();
+        job.printer = Some("Office A3".into());
+        let error = JobRunner::open(job, &mut MemoryJobStore::default(), 0).err().unwrap();
+        assert!(error.contains("PLAN_HAS_BLOCKED"));
+        assert_eq!(MISDIRECTED.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn printer_delivery_records_destination_and_resume_skips_submission() {
+        let (temp, manifest, job) = run_printer_job("Spooler");
+        assert_eq!(manifest.files[0].delivered_to, "printer:Spooler");
+        assert_eq!(SPOOLED.load(Ordering::Relaxed), 1);
+        let mut s = session(frames_drawing(1));
+        scan(&mut s);
+        let mut store = DirJobStore::new(temp.0.join("jobs"));
+        let mut loader = SnapshotLoader(std::sync::Arc::new(s.doc().unwrap().clone()), manifest.source_hash.clone());
+        let resumed = run_to_end(job, &mut store, &mut loader, &PdfSheetRenderer, &SheetBudget::desktop(), &|| 2).unwrap();
+        assert_eq!(resumed, manifest);
+        assert_eq!(SPOOLED.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn printers_command_lists_host_and_validates_refresh() {
+        setup();
+        let mut s = session(frames_drawing(1));
+        for params in [json!({}), json!({"refresh": true})] {
+            let printers = s.execute("ubplot.printers", &params).unwrap();
+            assert!(printers.as_array().unwrap().iter().any(|printer| printer["name"] == "Office A3"));
+        }
+        assert!(s.execute("ubplot.printers", &json!({"refresh": "yes"})).is_err());
+    }
+}

@@ -135,8 +135,8 @@ layout's whole sheet, or the model-space extents.
 `ubplot.scan {device: "A1 Plotter", …}` checks the greatest short and long sides among
 that device's papers. `CADCraft PDF` allows 15000 mm on either side. At least 95% of
 either limit produces WARN `DEVICE_LIMIT_NEAR`; exceeding either produces BLOCK
-`DEVICE_LIMIT_EXCEEDED`. Device definitions describe capabilities; real printer
-submission and driver queries remain pending. PDF batch queues are described below.
+`DEVICE_LIMIT_EXCEEDED`. Desktop system printers use recognised driver paper names
+through the same device checks. PDF batch queues are described below.
 
 An oversized long sheet can have an unapproved overlap split proposal. The short side
 must fit the device width; otherwise choose PDF. Scan and Publish never split it
@@ -354,16 +354,43 @@ assertions; this documentation update did not execute them.
 
 ## Printers
 
-Built-in PDF/PNG/SVG and user `.plotter.json` devices produce files. UBPLOT batch jobs
-produce PDFs; `DirJobStore::deliver` writes files and the web job store downloads them.
-No system-printer host, installed-printer enumeration or OS spool submission is wired in
-this checkout, and `ubplot.printers` is not registered. The `PrintJob.printer` field does
-not implement printing. Device limits above come from plotter definitions, not a driver
-capability query. No different printer is selected silently.
+Built-in devices and user `.plotter.json` files take precedence over an installed
+printer with the same name. Desktop registers a `PrinterHost`; `ubplot.printers {}`
+returns installed printer names, default/offline flags and recognised paper sizes.
+The desktop host caches discovery (including errors) for 60 seconds;
+`ubplot.printers {refresh: true}` forces an OS query. CLI and web have no host:
+the command returns `[]` and reports "printers are only in the desktop app".
 
-The GĐ5 T12 printer capability survey is pending a user decision. Driver paper sizes,
-roll lengths, OS PDF-handler behavior and real-printer smoke evidence have not been
-established; no capability survey table or spool-success claim is available.
+Windows queries `Get-CimInstance Win32_Printer` and parses `PrinterPaperNames`;
+`PaperSizesSupported` is not treated as DMPAPER codes. ISO A0–A6/B0–B6,
+JIS B4/B5, ANSI A–E, Letter/Legal/Tabloid, ARCH A–E and explicit `WxHmm`/`WxHin`
+names are recognised. Unknown names are skipped. CUPS platforms (macOS, Linux,
+FreeBSD) use `lpstat -e`, `lpstat -d`, `lpstat -p NAME` and `lpoptions -p NAME -l`.
+Driver papers become PDF devices with zero margins. No recognised paper means
+WARN `DEVICE_UNAVAILABLE` and PDF fallback; no roll length is inferred.
+The existing near-limit warning, blocking size checks and explicit split approval apply.
+
+`ubplot.publish {background: true, path: "output/job.pdf", …}` records the resolved
+system printer in the job. The runner rechecks availability and capabilities before
+rendering. Missing/offline printers keep PDFs in `output.dir` with manifest WARN
+`PRINTER_MISSING`; profiles are never changed and another printer is never selected.
+Each completed file is written before submission. Success records
+`delivered_to: "printer:<name>"`; unsupported/failed submission keeps the PDF path
+and WARN `PRINTER_HANDLER_MISSING`. Resume skips files already recorded as delivered.
+A crash between OS submission and manifest commit can still require manual spool checks.
+The default synchronous publish continues to export files; it does not submit them.
+
+Windows checks the PDF handler's Shell verbs for PrintTo before invoking
+`Start-Process -Verb PrintTo` with a quoted printer argument. It never invokes Print.
+The controller's Windows 11 survey found only Microsoft Print to PDF and an Edge PDF
+handler without PrintTo, so that configuration takes the PDF fallback path.
+CUPS submits PDFs with `lp -d NAME -o fit-to-page=false -o print-scaling=none`;
+the current host interface carries a PDF path and printer name, so driver media defaults
+apply to submission. Process calls have a
+20-second timeout and a 4 MiB stdout limit; stderr is discarded. Printer names with
+quotes or control characters are refused; user text is never interpolated into scripts.
+No new dependencies or unsafe bindings are used. Physical printing and native/wasm
+CI gates still require the lead's validation.
 
 ## Benchmark
 

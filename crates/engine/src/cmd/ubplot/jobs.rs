@@ -88,11 +88,17 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     let source = job.sources.first_mut().ok_or_else(|| bad(PUBLISH, "job source is missing"))?;
     prepare_plan(&mut source.plan)?;
     let mut job = PrintJob::new(job.sources, job.output, job.retry_limit).map_err(job_error)?;
+    job.printer = job.sources.first().and_then(|source| source.plan.device.as_deref()).and_then(crate::cmd::plotters::system_printer_name);
     job.profile_id = Some(super::profile::profile_id(s)?);
     job.profile_version = Some(effective.version.clone());
     job.naming = params.get("naming").and_then(Value::as_str).filter(|naming| *naming != "{stem}").map(str::to_owned);
-    let identity = json!({"output": job.output, "retry_limit": job.retry_limit, "naming": job.naming,
+    let mut identity = json!({"output": job.output, "retry_limit": job.retry_limit, "naming": job.naming,
         "profile_version": job.profile_version, "device": params.get("device"), "paper": params.get("paper"), "scale": params.get("scale")});
+    if let Some(printer) = &job.printer
+        && let Some(fields) = identity.as_object_mut()
+    {
+        fields.insert("printer".into(), json!(printer));
+    }
     job.job_id = crate::sheetplan::ids::job_id(&job.sources.first().ok_or_else(|| bad(PUBLISH, "missing source"))?.source_hash, &identity);
     let mut manifest = PublishManifest::new(&job, now());
     if !s.plot_jobs.persisted {
