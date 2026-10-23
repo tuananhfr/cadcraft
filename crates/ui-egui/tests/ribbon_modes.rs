@@ -421,6 +421,112 @@ fn compact_mode_shows_icon_buttons_with_tooltips() {
 }
 
 #[test]
+fn empty_workspace_reserves_no_ribbon_area_in_any_mode() {
+    let _guard = test_lock();
+    for density in ["compact", "normal", "comfortable"] {
+        for ppp in [1.0, 2.0] {
+            let mut app = attached(MemoryStore::default());
+            app.run("ui.workspace.select", json!({"id": "SIMPLE"})).unwrap();
+            app.run("options", json!({"interfaceLanguage": "en", "animations": "off"})).unwrap();
+            app.run("ui.toggle.menubar", json!({"on": true})).unwrap();
+            app.run("ui.density", json!({"density": density})).unwrap();
+            app.run("ui.ribbon.mode", json!({"mode": "hidden"})).unwrap();
+            let mut h = scaled_harness(app, ppp);
+            let canvas = h.state().canvas.rect.unwrap();
+            let file_tabs = egui::containers::panel::PanelState::load(&h.ctx, Id::new("cc_file_tabs")).unwrap().outer_rect;
+            for (name, mode) in [
+                ("expanded", RibbonMode::Expanded),
+                ("compact", RibbonMode::Compact),
+                ("tabs_only", RibbonMode::TabsOnly),
+                ("hidden", RibbonMode::Hidden),
+            ] {
+                h.state_mut().run("ui.ribbon.mode", json!({"mode": name})).unwrap();
+                let ribbon = h.state().ws.user.layout.ribbon.clone();
+                h.run_steps(5);
+                let case = format!("{density}/{ppp}/{name}");
+                assert!(cadcraft_ui_egui::ribbon::visible_tabs(h.state()).is_empty(), "{case}");
+                assert_eq!(h.state().ws.effective.layout.ribbon.mode, Some(mode), "{case}");
+                assert_eq!(h.state().ws.user.layout.ribbon, ribbon, "{case}: rendering preserves the preference");
+                assert_eq!(cadcraft_ui_egui::ribbon::render::rendered_mode(h.state(), h.ctx.content_rect().height()), RibbonMode::Hidden, "{case}");
+                assert!(egui::containers::panel::PanelState::load(&h.ctx, Id::new("cc_ribbon")).is_none(), "{case}");
+                assert_eq!(h.state().canvas.rect.unwrap(), canvas, "{case}");
+                assert_eq!(egui::containers::panel::PanelState::load(&h.ctx, Id::new("cc_file_tabs")).unwrap().outer_rect, file_tabs, "{case}");
+                assert!(h.query_by_role_and_label(egui::accesskit::Role::Tab, "Home").is_none(), "{case}");
+                assert!(h.query_by_label("Show ribbon").is_none(), "{case}");
+                assert!(!popup_open(&h), "{case}");
+                let stops: Vec<Id> = h.ctx.data(|data| data.get_temp(Id::new("cc_ribbon_menu_stops"))).unwrap_or_default();
+                assert!(stops.is_empty(), "{case}");
+                inside(h.ctx.content_rect(), canvas);
+                for label in ["File", "Command line input", "Status bar"] {
+                    inside(h.ctx.content_rect(), h.get_by_label(label).rect());
+                }
+                assert!(!h.state().session.state().unwrap().is_dirty(), "{case}");
+            }
+        }
+    }
+}
+
+#[test]
+fn empty_workspace_closes_flyout_and_restores_saved_ribbon_mode() {
+    let _guard = test_lock();
+    for (name, mode) in
+        [("expanded", RibbonMode::Expanded), ("compact", RibbonMode::Compact), ("tabs_only", RibbonMode::TabsOnly), ("hidden", RibbonMode::Hidden)]
+    {
+        let mut app = familiar(name);
+        let saved = app.run("ui.workspace.saveas", json!({"name": "Ribbon mode test"})).unwrap()["profile_id"].as_str().unwrap().to_string();
+        let mut h = harness(app);
+        if mode == RibbonMode::TabsOnly {
+            h.get_by_role_and_label(egui::accesskit::Role::Tab, "Home").click();
+            h.run_steps(3);
+            assert!(popup_open(&h));
+        }
+        if mode != RibbonMode::Hidden {
+            h.get_by_role_and_label(egui::accesskit::Role::Tab, "Home").focus();
+            h.run_steps(2);
+            let stops: Vec<Id> = h.ctx.data(|data| data.get_temp(Id::new("cc_ribbon_menu_stops"))).unwrap();
+            assert!(!stops.is_empty());
+        }
+        h.state_mut().run("ui.workspace.select", json!({"id": "SIMPLE"})).unwrap();
+        h.state_mut().run("ui.ribbon.mode", json!({"mode": name})).unwrap();
+        h.key_press_modifiers(egui::Modifiers::SHIFT, Key::F10);
+        h.run_steps(5);
+        assert!(cadcraft_ui_egui::ribbon::visible_tabs(h.state()).is_empty());
+        assert_eq!(h.state().ws.effective.layout.ribbon.mode, Some(mode));
+        assert!(!popup_open(&h), "{name}");
+        assert!(h.query_by_role_and_label(egui::accesskit::Role::Tab, "Home").is_none());
+        assert!(h.query_by_label("Show ribbon").is_none());
+        let stops: Vec<Id> = h.ctx.data(|data| data.get_temp(Id::new("cc_ribbon_menu_stops"))).unwrap_or_default();
+        assert!(stops.is_empty());
+        assert!(h.ctx.data(|data| data.get_temp::<Id>(Id::new("cc_ribbon_menu_key"))).is_none());
+        h.state_mut().run("ui.workspace.select", json!({"id": saved})).unwrap();
+        h.run_steps(5);
+        assert_eq!(h.state().ws.effective.layout.ribbon.mode, Some(mode));
+        assert_eq!(cadcraft_ui_egui::ribbon::render::rendered_mode(h.state(), h.ctx.content_rect().height()), mode);
+        let row = egui::containers::panel::PanelState::load(&h.ctx, Id::new("cc_ribbon")).unwrap().outer_rect;
+        inside(h.ctx.content_rect(), row);
+        if mode != RibbonMode::Hidden {
+            inside(row, h.get_by_role_and_label(egui::accesskit::Role::Tab, "Home").rect());
+        }
+        assert!(h.query_by_role_and_label(egui::accesskit::Role::Button, "Customize Ribbon…").is_none());
+        match mode {
+            RibbonMode::Expanded => assert!(row.height() > cadcraft_ui_egui::ribbon::render::COMPACT_HEIGHT + 1.0),
+            RibbonMode::Compact => assert!((row.height() - cadcraft_ui_egui::ribbon::render::COMPACT_HEIGHT).abs() <= 0.5),
+            RibbonMode::TabsOnly => {
+                assert!((row.height() - h.state().ws.effective.layout.density.metrics().tab_height).abs() <= 0.5);
+                h.get_by_role_and_label(egui::accesskit::Role::Tab, "Home").click();
+                h.run_steps(3);
+                assert!(popup_open(&h));
+            }
+            RibbonMode::Hidden => {
+                assert!((row.height() - 6.0).abs() <= 0.5);
+                inside(h.ctx.content_rect(), h.get_by_label("Show ribbon").rect());
+            }
+        }
+        assert!(!h.state().session.state().unwrap().is_dirty());
+    }
+}
+
+#[test]
 fn hidden_ribbon_always_offers_show_ribbon() {
     let _guard = test_lock();
     for integrated in [false, true] {
