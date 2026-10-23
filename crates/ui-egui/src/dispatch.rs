@@ -34,7 +34,7 @@ fn failure_message(outcome: Outcome, reason: &str) -> String {
 fn dispatch_command(app: &mut CadApp, id: &str, params: Value) -> Dispatched {
     let command = resolve_command(id).unwrap_or(id);
     if status_on(command, Target::current()) == CommandStatus::Unsupported {
-        let reason = format!("{id} is only available in the desktop app");
+        let reason = crate::tf!("{id} is only available in the desktop app", id = id);
         app.session.echo(reason.clone());
         return Dispatched { outcome: Outcome::Unsupported, result: Err(reason) };
     }

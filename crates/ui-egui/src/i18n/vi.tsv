@@ -2722,3 +2722,10 @@ ribbon	Fonts	Phông chữ
 	Proxy	Đối tượng đại diện
 	Visible	Hiển thị
 	Handle	Mã định danh
+# --- UbotCAD vi batch W4 ---
+	Auto (system language)	Tự động (ngôn ngữ hệ thống)
+	Close {label}	Đóng {label}
+	{name} options	Tùy chọn {name}
+	MODEL	MÔ HÌNH
+	PAPER	GIẤY
+	{id} is only available in the desktop app	{id} chỉ có trong ứng dụng máy tính

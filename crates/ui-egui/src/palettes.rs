@@ -191,7 +191,7 @@ pub fn toolsets(app: &mut CadApp, ui: &mut egui::Ui) {
                     let gresp = ui.interact(gear, ui.id().with(("ts_gear", name)), Sense::click());
                     icons::paint(pp, Rect::from_center_size(gear.center(), vec2(11.0, 11.0)), Icon::Gear, false);
                     icons::describe_control(ui, &hresp, name, Some(!collapsed), false);
-                    icons::describe_control(ui, &gresp, &format!("{name} options"), None, false);
+                    icons::describe_control(ui, &gresp, &crate::tf!("{name} options", name = crate::i18n::t(name)), None, false);
                     let gresp = gresp.on_hover_text(crate::tl!("Show and hide the tools of this category"));
                     if hresp.clicked() {
                         toggle_group = Some(name.to_string());

@@ -184,7 +184,7 @@ pub fn file_tabs(app: &mut CadApp, ui: &mut egui::Ui) {
                     let cr = Rect::from_center_size(pos2(tr.right() - size / 2.0 - 5.0, tr.center().y), vec2(size, size));
                     let cresp = ui.interact(cr, id.with("x"), Sense::click());
                     icons::paint(ui.painter(), cr.shrink(if comfortable { 8.0 } else { 0.0 }), Icon::Close, false);
-                    icons::describe_control(ui, &cresp, &format!("Close {label}"), None, false);
+                    icons::describe_control(ui, &cresp, &crate::tf!("Close {label}", label = label), None, false);
                     close = cresp.clicked();
                 }
                 icons::describe_control(ui, &resp, label, Some(active), true);

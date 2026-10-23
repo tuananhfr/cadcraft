@@ -2186,3 +2186,7 @@ ribbon	Plot	Друк креслення
 	{n} fonts missing: {shown}{more}. Tools > Fonts... lets you choose what to draw instead.	Бракує шрифтів: {n}, {shown}{more}. У меню Інструменти > Шрифти... можна вибрати шрифти для відображення замість відсутніх.
 	{title} was not saved ({e}); it stays open.	{title} не збережено ({e}); креслення залишається відкритим.
 	{title} was not saved; it stays open.	{title} не збережено; креслення залишається відкритим.
+# --- UbotCAD uk batch W4 (AI-assisted, review pending) ---
+	Close {label}	Закрити {label}
+	{name} options	Параметри {name}
+	{id} is only available in the desktop app	{id} доступно лише в настільному застосунку

@@ -548,7 +548,7 @@ fn row(
             }
             if !library.is_empty() {
                 ui.separator();
-                ui.menu_button("Load...", |ui| {
+                ui.menu_button(crate::tl!("Load..."), |ui| {
                     egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
                         for n in library {
                             if ui.button(n).clicked() {

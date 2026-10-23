@@ -45,7 +45,7 @@ pub enum DropTarget {
 /// Starts dragging `bar`; a bar the company policy holds stays where it is.
 pub(super) fn begin(app: &mut CadApp, bar: &ToolbarState, grab: Vec2) {
     if check(&app.ws.effective, &format!("/toolbars/{}", escape_token(&bar.id))).is_err() {
-        app.set_status(LOCKED_MESSAGE);
+        app.set_status(crate::i18n::t(LOCKED_MESSAGE));
         return;
     }
     app.ws.toolbar_drag = DragPhase::Dragging { id: bar.id.clone(), grab, target: None };

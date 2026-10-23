@@ -99,78 +99,6 @@ fn translations_cover_commands_menus_tools_and_snap_labels() {
     }
 }
 
-const MARKED_UI_SOURCES: &[(&str, &str)] = &[
-    ("lib.rs", include_str!("../lib.rs")),
-    ("ubplot/worker.rs", include_str!("../ubplot/worker.rs")),
-    ("toolbars/drag.rs", include_str!("../toolbars/drag.rs")),
-    ("wsprofile/commands.rs", include_str!("../wsprofile/commands.rs")),
-    ("options/mod.rs", include_str!("../options/mod.rs")),
-    ("exchange.rs", include_str!("../exchange.rs")),
-    ("fontstore.rs", include_str!("../fontstore.rs")),
-    ("menus.rs", include_str!("../menus.rs")),
-    ("chrome/annoscale.rs", include_str!("../chrome/annoscale.rs")),
-    ("autohide.rs", include_str!("../autohide.rs")),
-    ("lisp_panel.rs", include_str!("../lisp_panel.rs")),
-    ("dispatch.rs", include_str!("../dispatch.rs")),
-    ("shortcut_menus.rs", include_str!("../shortcut_menus.rs")),
-    ("context_menu.rs", include_str!("../context_menu.rs")),
-    ("spacemouse.rs", include_str!("../spacemouse.rs")),
-    ("plotstyles.rs", include_str!("../plotstyles.rs")),
-    ("closing.rs", include_str!("../closing.rs")),
-    ("xrefs.rs", include_str!("../xrefs.rs")),
-    ("canvas.rs", include_str!("../canvas.rs")),
-    ("chrome.rs", include_str!("../chrome.rs")),
-    ("cmdline.rs", include_str!("../cmdline.rs")),
-    ("focus.rs", include_str!("../focus.rs")),
-    ("fullscreen.rs", include_str!("../fullscreen.rs")),
-    ("credits.rs", include_str!("../credits.rs")),
-    ("palettes/quickcalc.rs", include_str!("../palettes/quickcalc.rs")),
-    ("palettes/patterns.rs", include_str!("../palettes/patterns.rs")),
-    ("docking.rs", include_str!("../docking.rs")),
-    ("dialogs.rs", include_str!("../dialogs.rs")),
-    ("ubplot/dialog.rs", include_str!("../ubplot/dialog.rs")),
-    ("ubplot/profile_dialog.rs", include_str!("../ubplot/profile_dialog.rs")),
-    ("ubplot/exceptions.rs", include_str!("../ubplot/exceptions.rs")),
-    ("ubplot/split.rs", include_str!("../ubplot/split.rs")),
-    ("palette/mod.rs", include_str!("../palette/mod.rs")),
-    ("managers.rs", include_str!("../managers.rs")),
-    ("managers/battman.rs", include_str!("../managers/battman.rs")),
-    ("autosave.rs", include_str!("../autosave.rs")),
-    ("fontmgr.rs", include_str!("../fontmgr.rs")),
-    ("viewcube.rs", include_str!("../viewcube.rs")),
-    ("hatchdlg.rs", include_str!("../hatchdlg.rs")),
-    ("mtext_editor.rs", include_str!("../mtext_editor.rs")),
-    ("layers.rs", include_str!("../layers.rs")),
-    ("canvas/compare.rs", include_str!("../canvas/compare.rs")),
-    ("canvas/blockedit.rs", include_str!("../canvas/blockedit.rs")),
-    ("bedit.rs", include_str!("../bedit.rs")),
-    ("palettes.rs", include_str!("../palettes.rs")),
-    ("parametric.rs", include_str!("../parametric.rs")),
-    ("quick.rs", include_str!("../quick.rs")),
-    ("vpscale.rs", include_str!("../vpscale.rs")),
-    ("options/dialog.rs", include_str!("../options/dialog.rs")),
-    ("wsprofile/picker.rs", include_str!("../wsprofile/picker.rs")),
-    ("wsprofile/import_preview.rs", include_str!("../wsprofile/import_preview.rs")),
-    ("wsprofile/mod.rs", include_str!("../wsprofile/mod.rs")),
-    ("wsprofile/save_state.rs", include_str!("../wsprofile/save_state.rs")),
-    ("wsprofile/sync.rs", include_str!("../wsprofile/sync.rs")),
-    ("wsprofile/conflict.rs", include_str!("../wsprofile/conflict.rs")),
-    ("wsprofile/tab_conflict.rs", include_str!("../wsprofile/tab_conflict.rs")),
-    ("shortcuts.rs", include_str!("../shortcuts.rs")),
-    ("quick_access.rs", include_str!("../quick_access.rs")),
-    ("ribbon/mod.rs", include_str!("../ribbon/mod.rs")),
-    ("ribbon/render.rs", include_str!("../ribbon/render.rs")),
-    ("customize/mod.rs", include_str!("../customize/mod.rs")),
-    ("customize/ribbon_tab.rs", include_str!("../customize/ribbon_tab.rs")),
-    ("customize/toolbars_tab.rs", include_str!("../customize/toolbars_tab.rs")),
-    ("customize/alias_tab.rs", include_str!("../customize/alias_tab.rs")),
-    ("customize/keyboard_tab.rs", include_str!("../customize/keyboard_tab.rs")),
-    ("customize/quick_access_tab.rs", include_str!("../customize/quick_access_tab.rs")),
-    ("toolbars/mod.rs", include_str!("../toolbars/mod.rs")),
-    ("toolbars/render.rs", include_str!("../toolbars/render.rs")),
-    ("toolbars/menu.rs", include_str!("../toolbars/menu.rs")),
-];
-
 fn command_label_sources() -> BTreeSet<String> {
     let mut sources: BTreeSet<_> = crate::menus::MENUS.iter().map(|name| (*name).to_string()).collect();
     for command in cadcraft_engine::command_specs() {
@@ -194,32 +122,15 @@ fn command_label_sources() -> BTreeSet<String> {
 
 fn marked_ui_sources(file: &str, source: &str) -> BTreeSet<String> {
     let mut sources = BTreeSet::new();
-    for marker in ["crate::tl!(", "crate::tf!("] {
-        for rest in source.split(marker).skip(1) {
-            // These macros require a quoted literal. Use JSON's string decoding for escapes.
-            let rest = rest.trim_start();
-            let mut escape = false;
-            let end = rest
-                .char_indices()
-                .skip(1)
-                .find_map(|(i, c)| {
-                    if escape {
-                        escape = false;
-                        None
-                    } else if c == '\\' {
-                        escape = true;
-                        None
-                    } else if c == '"' {
-                        Some(i + 1)
-                    } else {
-                        None
-                    }
-                })
-                .unwrap();
-            let key: String = serde_json::from_str(&rest[..end]).unwrap();
-            // Coordinate axes, glyph buttons and product names are not translated.
-            if !["X", "Y", "B", "UbotCAD"].contains(&key.as_str()) {
-                sources.insert(key);
+    let tokens = production_ui_tokens(source);
+    for i in 0..tokens.len() {
+        for (position, translated) in text_slots(&tokens, i, &TextHelpers::new()) {
+            if translated
+                && let Some(range) = ui_arguments(&tokens, text_call_open(&tokens, i)).get(position)
+                && let Some(key) = tokens[range.start].literal.as_ref()
+                && !["X", "Y", "B", "UbotCAD"].contains(&key.as_str())
+            {
+                sources.insert(key.clone());
             }
         }
     }
@@ -371,16 +282,6 @@ fn missing_commands_menus_tools_and_snap_labels(language: &str) -> Vec<String> {
     command_label_sources().into_iter().filter(|key| !catalog.contains_key(&("", key.as_str()))).collect()
 }
 
-const WIDGET_LITERAL_FILES: &[(&str, &str)] = &[
-    ("managers.rs", include_str!("../managers.rs")),
-    ("managers/battman.rs", include_str!("../managers/battman.rs")),
-    ("autosave.rs", include_str!("../autosave.rs")),
-    ("fontmgr.rs", include_str!("../fontmgr.rs")),
-    ("viewcube.rs", include_str!("../viewcube.rs")),
-    ("dialogs.rs", include_str!("../dialogs.rs")),
-    ("palette/mod.rs", include_str!("../palette/mod.rs")),
-];
-
 fn widget_text_argument(arguments: &str, wanted: usize) -> Option<&str> {
     let (mut start, mut argument, mut depth) = (0, 0, 0usize);
     let (mut quoted, mut escape) = (false, false);
@@ -413,58 +314,616 @@ fn widget_text_argument(arguments: &str, wanted: usize) -> Option<&str> {
     None
 }
 
-fn unmarked_widget_literals(source: &str) -> Vec<(usize, String)> {
-    let mut missing = Vec::new();
-    for (pattern, argument) in [
-        (".label(", 0),
-        (".button(", 0),
-        ("Button::new(", 0),
-        ("Window::new(", 0),
-        (".heading(", 0),
-        (".on_hover_text(", 0),
-        (".small_button(", 0),
-        (".collapsing(", 0),
-        ("RichText::new(", 0),
-        (".hint_text(", 0),
-        ("selectable_label(", 1),
-        ("checkbox(", 1),
-        ("radio(", 1),
-        ("radio_value(", 1),
-        ("radio_value(", 2),
-    ] {
-        for (offset, _) in source.match_indices(pattern) {
-            let line_start = source[..offset].rfind('\n').map_or(0, |i| i + 1);
-            if source[line_start..offset].trim_start().starts_with("//") {
-                continue;
+#[derive(Clone, Debug)]
+struct UiToken<'a> {
+    text: &'a str,
+    offset: usize,
+    literal: Option<String>,
+}
+
+fn rust_string(text: &str) -> String {
+    if text.starts_with('r') {
+        let quote = text.find('"').unwrap();
+        return text[quote + 1..text.len() - quote].to_string();
+    }
+    let mut decoded = String::new();
+    let mut chars = text[1..text.len() - 1].chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            decoded.push(c);
+            continue;
+        }
+        match chars.next().unwrap() {
+            'n' => decoded.push('\n'),
+            'r' => decoded.push('\r'),
+            't' => decoded.push('\t'),
+            '0' => decoded.push('\0'),
+            'x' => {
+                let hex: String = chars.by_ref().take(2).collect();
+                decoded.push(char::from(u8::from_str_radix(&hex, 16).unwrap()));
             }
-            let Some(text) = widget_text_argument(&source[offset + pattern.len()..], argument) else { continue };
-            if !text.starts_with('"') || !text.as_bytes().get(1).is_some_and(u8::is_ascii_uppercase) {
-                continue;
+            'u' => {
+                assert_eq!(chars.next(), Some('{'));
+                let hex: String = chars.by_ref().take_while(|c| *c != '}').filter(|c| *c != '_').collect();
+                decoded.push(char::from_u32(u32::from_str_radix(&hex, 16).unwrap()).unwrap());
             }
-            let Some(Ok(label)) = serde_json::Deserializer::from_str(text).into_iter::<String>().next() else { continue };
-            // Axes, product names, CAD tokens and font/file names are data rather than UI prose.
-            if ["X", "Y", "B", "UbotCAD", "OK", "ByLayer", "ByBlock", "WCS", cadcraft_fonts::BUILTIN_FONT].contains(&label.as_str())
-                || [".ttf", ".otf", ".ttc", ".shx", ".dxf", ".dwg", ".lin", ".ctb", ".stb", ".pc3"]
-                    .iter()
-                    .any(|ext| label.to_ascii_lowercase().ends_with(ext))
-            {
-                continue;
+            '\n' => {
+                while chars.peek().is_some_and(|c| c.is_whitespace()) {
+                    chars.next();
+                }
             }
-            missing.push((source[..offset].bytes().filter(|b| *b == b'\n').count() + 1, label));
+            c => decoded.push(c),
         }
     }
-    missing.sort();
-    missing.dedup();
-    missing
+    decoded
+}
+
+fn ui_tokens(source: &str) -> Vec<UiToken<'_>> {
+    let mut tokens = Vec::new();
+    let mut offset = 0;
+    while offset < source.len() {
+        let rest = &source[offset..];
+        let first = rest.chars().next().unwrap();
+        if first.is_whitespace() {
+            offset += first.len_utf8();
+            continue;
+        }
+        if rest.starts_with("//") {
+            offset += rest.find('\n').unwrap_or(rest.len());
+            continue;
+        }
+        if rest.starts_with("/*") {
+            let mut depth = 1;
+            offset += 2;
+            while depth > 0 && offset < source.len() {
+                if source[offset..].starts_with("/*") {
+                    depth += 1;
+                    offset += 2;
+                } else if source[offset..].starts_with("*/") {
+                    depth -= 1;
+                    offset += 2;
+                } else {
+                    offset += source[offset..].chars().next().unwrap().len_utf8();
+                }
+            }
+            continue;
+        }
+        let start = offset;
+        let raw_marker = if rest.starts_with("br") || rest.starts_with("cr") {
+            Some(2)
+        } else if rest.starts_with('r') {
+            Some(1)
+        } else {
+            None
+        };
+        let raw_prefix = raw_marker.map(|marker| rest[marker..].bytes().take_while(|b| *b == b'#').count() + marker);
+        let mut literal = false;
+        if let Some(prefix) = raw_prefix.filter(|prefix| rest.as_bytes().get(*prefix) == Some(&b'"')) {
+            let suffix = format!("\"{}", "#".repeat(prefix - raw_marker.unwrap()));
+            offset += prefix + 1;
+            offset += source[offset..].find(&suffix).unwrap() + suffix.len();
+            literal = raw_marker == Some(1);
+        } else if first == '"' {
+            offset += 1;
+            while offset < source.len() {
+                let c = source[offset..].chars().next().unwrap();
+                offset += c.len_utf8();
+                if c == '\\' {
+                    offset += source[offset..].chars().next().unwrap().len_utf8();
+                } else if c == '"' {
+                    break;
+                }
+            }
+            literal = true;
+        } else if first == '\''
+            && rest
+                .get(1..)
+                .and_then(|s| s.chars().next())
+                .is_some_and(|c| rest.get(1 + c.len_utf8()..).is_some_and(|s| s.starts_with('\'')) || c == '\\')
+        {
+            offset += 1;
+            while offset < source.len() {
+                let c = source[offset..].chars().next().unwrap();
+                offset += c.len_utf8();
+                if c == '\\' {
+                    offset += source[offset..].chars().next().unwrap().len_utf8();
+                } else if c == '\'' {
+                    break;
+                }
+            }
+        } else if first.is_ascii_alphabetic() || first == '_' {
+            offset += rest.bytes().take_while(|b| b.is_ascii_alphanumeric() || *b == b'_').count();
+        } else {
+            offset += first.len_utf8();
+        }
+        let text = &source[start..offset];
+        tokens.push(UiToken { text, offset: start, literal: literal.then(|| rust_string(text)) });
+    }
+    tokens
+}
+
+fn closing_token(tokens: &[UiToken<'_>], open: usize) -> usize {
+    let mut depth = 0usize;
+    for (i, token) in tokens.iter().enumerate().skip(open) {
+        match token.text {
+            "(" | "[" | "{" => depth += 1,
+            ")" | "]" | "}" => {
+                depth -= 1;
+                if depth == 0 {
+                    return i;
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("unclosed source token at {}", tokens[open].offset);
+}
+
+fn production_ui_tokens(source: &str) -> Vec<UiToken<'_>> {
+    let tokens = ui_tokens(source);
+    let mut result = Vec::new();
+    let mut i = 0;
+    while i < tokens.len() {
+        if tokens[i].text == "#" && tokens.get(i + 1).is_some_and(|t| t.text == "[") {
+            let end = closing_token(&tokens, i + 1);
+            let attribute: String = tokens[i + 2..end].iter().map(|t| t.text).collect();
+            // Test fixtures intentionally contain untranslated text and simulated widget calls.
+            if attribute == "cfg(test)" || attribute == "test" {
+                i = end + 1;
+                while i < tokens.len() && !matches!(tokens[i].text, "{" | ";") {
+                    i += 1;
+                }
+                if tokens.get(i).is_some_and(|t| t.text == "{") {
+                    i = closing_token(&tokens, i);
+                }
+                i += 1;
+                continue;
+            }
+        }
+        result.push(tokens[i].clone());
+        i += 1;
+    }
+    result
+}
+
+fn ui_source_files() -> Vec<(String, String)> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut directories = vec![root.clone()];
+    let mut sources = Vec::new();
+    while let Some(directory) = directories.pop() {
+        for entry in std::fs::read_dir(&directory).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                directories.push(path);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                let file = path.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
+                sources.push((file, std::fs::read_to_string(path).unwrap()));
+            }
+        }
+    }
+    sources.sort_by(|a, b| a.0.cmp(&b.0));
+    sources
+}
+
+fn test_source(file: &str) -> bool {
+    // Standalone test modules have no enclosing cfg(test) attribute in their own source file.
+    file.split('/').any(|part| part == "tests" || part == "tests.rs" || part.ends_with("_tests.rs"))
+}
+
+fn ui_arguments(tokens: &[UiToken<'_>], open: usize) -> Vec<std::ops::Range<usize>> {
+    let end = closing_token(tokens, open);
+    let mut result = Vec::new();
+    let mut start = open + 1;
+    let mut i = start;
+    while i < end {
+        match tokens[i].text {
+            "(" | "[" | "{" => i = closing_token(tokens, i),
+            "," => {
+                result.push(start..i);
+                start = i + 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    if start < end {
+        result.push(start..end);
+    }
+    result
+}
+
+// Each exemption is data or notation whose spelling must survive a language change.
+const UNTRANSLATED_UI_TEXT: &[(&str, &str)] = &[
+    ("UbotCAD", "product name"),
+    ("CADCraft", "product name"),
+    ("ArtCraft", "brand name"),
+    ("ubotbuild.com", "public website address"),
+    ("ByLayer", "CAD property token"),
+    ("ByBlock", "CAD property token"),
+    ("WCS", "coordinate system identifier"),
+    ("UCS", "coordinate system identifier"),
+    ("B", "bold glyph; tooltip is translated"),
+    ("I", "italic glyph; tooltip is translated"),
+    ("U", "underline glyph; tooltip is translated"),
+    ("O", "overline glyph; tooltip is translated"),
+    ("Q", "quick dimension icon glyph"),
+    ("A▾", "text colour glyph; menu labels are translated"),
+    ("A", "text icon glyph; tooltip is translated"),
+];
+
+fn intentional_ui_notation(text: &str) -> bool {
+    if UNTRANSLATED_UI_TEXT.iter().any(|(key, reason)| {
+        assert!(!reason.is_empty());
+        *key == text
+    }) || text == cadcraft_fonts::BUILTIN_FONT
+    {
+        return true;
+    }
+    // Placeholder values, punctuation, numeric readouts, axes and units carry no UI prose.
+    let mut notation = String::new();
+    let mut placeholder = false;
+    for c in text.chars() {
+        match c {
+            '{' => placeholder = true,
+            '}' => placeholder = false,
+            _ if !placeholder => notation.push(c),
+            _ => {}
+        }
+    }
+    if !notation.chars().any(char::is_alphabetic) || ["X", "Y", "Z", "mm", "cm", "m", "in", "pt"].contains(&notation.trim()) {
+        return true;
+    }
+    // A single font or drawing filename is data; prose mentioning an extension still needs translation.
+    !text.chars().any(char::is_whitespace)
+        && [".ttf", ".otf", ".ttc", ".shx", ".dxf", ".dwg", ".lin", ".ctb", ".stb", ".pc3"]
+            .iter()
+            .any(|extension| text.to_ascii_lowercase().ends_with(extension))
+}
+
+type TextHelpers = std::collections::BTreeMap<String, std::collections::BTreeMap<usize, bool>>;
+
+fn text_slots(tokens: &[UiToken<'_>], i: usize, helpers: &TextHelpers) -> Vec<(usize, bool)> {
+    let name = tokens[i].text;
+    let after = tokens.get(i + 1).map(|t| t.text);
+    if matches!(name, "tl" | "tf") && after == Some("!") && tokens.get(i + 2).is_some_and(|t| t.text == "(") {
+        return vec![(0, true)];
+    }
+    if after != Some("(") || i.checked_sub(1).is_some_and(|j| tokens[j].text == "fn") {
+        return Vec::new();
+    }
+    let mut slots = Vec::new();
+    if name == "t" && !i.checked_sub(1).is_some_and(|j| tokens[j].text == ".") {
+        slots.push((0, true));
+    }
+    if i.checked_sub(1).is_some_and(|j| tokens[j].text == ".") {
+        let position = match name {
+            "label"
+            | "button"
+            | "heading"
+            | "on_hover_text"
+            | "on_disabled_hover_text"
+            | "small_button"
+            | "collapsing"
+            | "hint_text"
+            | "menu_button"
+            | "selected_text"
+            | "set_status"
+            | "echo"
+            | "weak"
+            | "strong"
+            | "monospace"
+            | "hyperlink"
+            | "hyperlink_to" => Some(0),
+            "selectable_label" | "checkbox" | "radio" => Some(1),
+            "radio_value" | "selectable_value" => Some(2),
+            "text" => Some(2),
+            _ => None,
+        };
+        if let Some(position) = position {
+            slots.push((position, false));
+        }
+    }
+    if name == "new"
+        && let Some(j) = i.checked_sub(3)
+        && tokens[j + 1].text == ":"
+        && tokens[j + 2].text == ":"
+    {
+        match tokens[j].text {
+            "Button" | "RichText" | "Window" | "CollapsingHeader" | "Label" | "Link" | "MenuButton" => slots.push((0, false)),
+            "Checkbox" | "RadioButton" | "SelectableLabel" => slots.push((1, false)),
+            _ => {}
+        }
+    }
+    if let Some(parameters) = helpers.get(name) {
+        slots.extend(parameters.iter().map(|(position, translated)| (*position, *translated)));
+    }
+    slots.sort();
+    slots.dedup();
+    slots
+}
+
+fn text_call_open(tokens: &[UiToken<'_>], i: usize) -> usize {
+    if tokens[i + 1].text == "!" { i + 2 } else { i + 1 }
+}
+
+fn bare_text_parameter<'a>(tokens: &[UiToken<'a>], mut range: std::ops::Range<usize>) -> Option<&'a str> {
+    while range.start < range.end && tokens[range.start].text == "&" {
+        range.start += 1;
+    }
+    while range.len() >= 4
+        && tokens[range.end - 4].text == "."
+        && matches!(tokens[range.end - 3].text, "as_str" | "clone" | "to_owned" | "to_string")
+        && tokens[range.end - 2].text == "("
+        && tokens[range.end - 1].text == ")"
+    {
+        range.end -= 4;
+    }
+    (range.len() == 1).then(|| tokens[range.start].text)
+}
+
+fn text_helpers(sources: &[Vec<UiToken<'_>>]) -> TextHelpers {
+    let mut helpers = TextHelpers::new();
+    loop {
+        let mut changed = false;
+        for tokens in sources {
+            let mut i = 0;
+            while i + 2 < tokens.len() {
+                if tokens[i].text != "fn" || tokens[i + 2].text != "(" {
+                    i += 1;
+                    continue;
+                }
+                let name = tokens[i + 1].text;
+                let parameters: Vec<_> = ui_arguments(tokens, i + 2)
+                    .into_iter()
+                    .map(|range| {
+                        let parameter = &tokens[range];
+                        let end = parameter.iter().position(|t| t.text == ":").unwrap_or(parameter.len());
+                        parameter[..end].iter().rev().find(|t| t.text != "mut").map(|t| t.text)
+                    })
+                    .collect();
+                let mut body = closing_token(tokens, i + 2) + 1;
+                while body < tokens.len() && !matches!(tokens[body].text, "{" | ";") {
+                    body += 1;
+                }
+                if !tokens.get(body).is_some_and(|t| t.text == "{") {
+                    i = body + 1;
+                    continue;
+                }
+                let end = closing_token(tokens, body);
+                for j in body + 1..end {
+                    for (position, translated) in text_slots(tokens, j, &helpers) {
+                        let arguments = ui_arguments(tokens, text_call_open(tokens, j));
+                        let Some(parameter) = arguments.get(position).and_then(|range| bare_text_parameter(tokens, range.clone())) else { continue };
+                        let Some(position) = parameters.iter().position(|p| *p == Some(parameter)) else { continue };
+                        let Some(position) = position.checked_sub(usize::from(parameters.first() == Some(&Some("self")))) else { continue };
+                        let parameters = helpers.entry(name.to_string()).or_default();
+                        match parameters.get_mut(&position) {
+                            Some(old) if *old && !translated => {
+                                *old = false;
+                                changed = true;
+                            }
+                            None => {
+                                parameters.insert(position, translated);
+                                changed = true;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                i = end + 1;
+            }
+        }
+        if !changed {
+            return helpers;
+        }
+    }
+}
+
+fn text_literals(tokens: &[UiToken<'_>], range: std::ops::Range<usize>) -> Vec<(usize, String)> {
+    let mut result = Vec::new();
+    let mut i = range.start;
+    while i < range.end {
+        let token = &tokens[i];
+        // Conditions select text but their comparison values are engine data, not labels.
+        if token.text == "if" {
+            i += 1;
+            while i < range.end && tokens[i].text != "{" {
+                if matches!(tokens[i].text, "(" | "[") {
+                    i = closing_token(tokens, i);
+                }
+                i += 1;
+            }
+            continue;
+        }
+        if token.text == "match" {
+            let mut body = i + 1;
+            while body < range.end && tokens[body].text != "{" {
+                if matches!(tokens[body].text, "(" | "[") {
+                    body = closing_token(tokens, body);
+                }
+                body += 1;
+            }
+            if body == range.end {
+                break;
+            }
+            let end = closing_token(tokens, body);
+            let mut arm = body + 1;
+            while arm < end {
+                if tokens[arm].text == "=" && tokens.get(arm + 1).is_some_and(|t| t.text == ">") {
+                    let start = arm + 2;
+                    arm = start;
+                    while arm < end && tokens[arm].text != "," {
+                        if matches!(tokens[arm].text, "(" | "[" | "{") {
+                            arm = closing_token(tokens, arm);
+                        }
+                        arm += 1;
+                    }
+                    result.extend(text_literals(tokens, start..arm));
+                } else if matches!(tokens[arm].text, "(" | "[" | "{") {
+                    arm = closing_token(tokens, arm);
+                }
+                arm += 1;
+            }
+            i = end + 1;
+            continue;
+        }
+        if text_slots(tokens, i, &TextHelpers::new()).contains(&(0, true)) {
+            i = closing_token(tokens, text_call_open(tokens, i)) + 1;
+            continue;
+        }
+        if token.text == "format" && tokens.get(i + 1).is_some_and(|t| t.text == "!") {
+            let open = i + 2;
+            if let Some(format) = ui_arguments(tokens, open).first() {
+                result.extend(text_literals(tokens, format.clone()));
+            }
+            i = closing_token(tokens, open) + 1;
+            continue;
+        }
+        // A nested lookup's arguments are identifiers/data; only text-producing wrappers expose literals.
+        if tokens.get(i + 1).is_some_and(|t| t.text == "(")
+            && token.text.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            && !matches!(token.text, "Some" | "Ok" | "Err" | "unwrap_or" | "unwrap_or_else" | "map_or" | "map_or_else")
+        {
+            i = closing_token(tokens, i + 1) + 1;
+            continue;
+        }
+        if let Some(text) = &token.literal
+            && !intentional_ui_notation(text)
+        {
+            result.push((token.offset, text.clone()));
+        }
+        i += 1;
+    }
+    result
+}
+
+fn text_binding(tokens: &[UiToken<'_>], binding: usize, before: usize) -> Option<std::ops::Range<usize>> {
+    let mut start = binding + 1;
+    while start < before && !matches!(tokens[start].text, "=" | ";") {
+        start += 1;
+    }
+    if start == before || tokens[start].text != "=" {
+        return None;
+    }
+    start += 1;
+    let mut end = start;
+    while end < before && tokens[end].text != ";" {
+        if matches!(tokens[end].text, "(" | "[" | "{") {
+            end = closing_token(tokens, end);
+        }
+        end += 1;
+    }
+    (end < before).then_some(start..end)
+}
+
+fn bound_text_literals(tokens: &[UiToken<'_>], range: std::ops::Range<usize>) -> Vec<(usize, String)> {
+    let mut range = range;
+    let mut visited = BTreeSet::new();
+    while let Some(name) = bare_text_parameter(tokens, range.clone()) {
+        // Resolve local/static text bindings, leaving runtime drawing data to its existing path.
+        let function = (0..range.start).rev().find(|i| tokens[*i].text == "fn").unwrap_or(0);
+        let Some((binding, value)) = (0..range.start)
+            .rev()
+            .filter(|i| {
+                matches!(tokens[*i].text, "let" | "const" | "static")
+                    && (tokens[*i].text != "let" || *i >= function)
+                    && tokens.get(*i + 1).is_some_and(|t| t.text == name || (t.text == "mut" && tokens.get(*i + 2).is_some_and(|t| t.text == name)))
+            })
+            .find_map(|binding| text_binding(tokens, binding, range.start).map(|value| (binding, value)))
+        else {
+            break;
+        };
+        if !visited.insert(binding) {
+            break;
+        }
+        let first = &tokens[value.start];
+        if first.literal.is_none()
+            && !matches!(first.text, "if" | "match" | "format" | "crate" | "t" | "tl" | "tf" | "&")
+            && bare_text_parameter(tokens, value.clone()).is_none()
+        {
+            break;
+        }
+        range = value;
+    }
+    text_literals(tokens, range)
+}
+
+#[derive(Default)]
+struct UiLiteralAudit {
+    unmarked: BTreeSet<String>,
+    translated: BTreeSet<(String, usize, String)>,
+}
+
+fn audit_ui_sources(sources: &[(String, String)]) -> UiLiteralAudit {
+    let production: Vec<_> = sources.iter().filter(|(file, _)| !test_source(file)).collect();
+    let tokens: Vec<_> = production.iter().map(|(_, source)| production_ui_tokens(source)).collect();
+    let helpers = text_helpers(&tokens);
+    let mut audit = UiLiteralAudit::default();
+    for ((file, source), tokens) in production.into_iter().zip(&tokens) {
+        for i in 0..tokens.len() {
+            if matches!(tokens[i].text, "tl" | "tf")
+                && tokens.get(i + 1).is_some_and(|t| t.text == "!")
+                && let Some(token) = tokens.get(i + 3)
+                && let Some(text) = &token.literal
+                && !["X", "Y", "B", "UbotCAD"].contains(&text.as_str())
+            {
+                let line = source[..token.offset].bytes().filter(|b| *b == b'\n').count() + 1;
+                audit.translated.insert((file.clone(), line, text.clone()));
+            }
+            for (position, translated) in text_slots(tokens, i, &helpers) {
+                let arguments = ui_arguments(tokens, text_call_open(tokens, i));
+                let Some(range) = arguments.get(position) else { continue };
+                for (offset, text) in bound_text_literals(tokens, range.clone()) {
+                    let line = source[..offset].bytes().filter(|b| *b == b'\n').count() + 1;
+                    if translated {
+                        audit.translated.insert((file.clone(), line, text));
+                    } else {
+                        audit.unmarked.insert(format!("{file}:{line}: {text}"));
+                    }
+                }
+            }
+        }
+    }
+    audit
+}
+
+fn ui_literal_audit() -> &'static UiLiteralAudit {
+    static AUDIT: std::sync::OnceLock<UiLiteralAudit> = std::sync::OnceLock::new();
+    AUDIT.get_or_init(|| {
+        let sources = ui_source_files();
+        let mut audit = audit_ui_sources(&sources);
+        for (file, source) in sources.iter().filter(|(file, _)| !test_source(file)) {
+            let tokens = production_ui_tokens(source);
+            for key in marked_ui_sources(file, source) {
+                if audit.translated.iter().any(|(found, _, text)| found == file && *text == key) {
+                    continue;
+                }
+                let offset = tokens.iter().find(|token| token.literal.as_ref() == Some(&key)).map_or(0, |token| token.offset);
+                let line = source[..offset].bytes().filter(|b| *b == b'\n').count() + 1;
+                audit.translated.insert((file.clone(), line, key));
+            }
+        }
+        audit
+    })
+}
+
+fn unmarked_widget_literals(source: &str) -> Vec<(usize, String)> {
+    let sources = [("fixture.rs".to_string(), source.to_string())];
+    audit_ui_sources(&sources)
+        .unmarked
+        .into_iter()
+        .map(|message| {
+            let mut parts = message.splitn(3, ':');
+            parts.next();
+            (parts.next().unwrap().parse().unwrap(), parts.next().unwrap().trim_start().to_string())
+        })
+        .collect()
 }
 
 #[test]
 fn widget_literals_are_marked() {
-    let mut missing = Vec::new();
-    for (file, source) in WIDGET_LITERAL_FILES {
-        missing.extend(unmarked_widget_literals(source).into_iter().map(|(line, text)| format!("{file}:{line}: {text}")));
-    }
-    assert!(missing.is_empty(), "unmarked widget literals:\n{}", missing.join("\n"));
+    let missing = &ui_literal_audit().unmarked;
+    assert!(missing.is_empty(), "unmarked widget literals:\n{}", missing.iter().cloned().collect::<Vec<_>>().join("\n"));
 }
 
 #[test]
@@ -497,11 +956,134 @@ fn widget_literal_scanner_checks_nested_arguments_and_exemptions() {
         "Checkbox",
         "Radio",
         "Radio value",
+        "OK",
     ]
     .into_iter()
     .map(str::to_string)
     .collect();
     assert_eq!(labels, expected);
+}
+
+#[test]
+fn ui_sources_are_discovered_recursively_including_unlisted_modules() {
+    let sources = ui_source_files();
+    for file in ["exchange.rs", "opening.rs", "fullscreen/escape.rs", "i18n/tests.rs", "wsprofile/startup.rs"] {
+        assert!(sources.iter().any(|(name, _)| name == file), "source discovery omitted {file}");
+    }
+    assert!(sources.windows(2).all(|pair| pair[0].0 < pair[1].0));
+}
+
+#[test]
+fn widget_literal_scanner_covers_lowercase_unicode_raw_strings_and_all_text_arguments() {
+    let source = r##"
+        ui.menu_button("load...", |_| {});
+        egui::CollapsingHeader::new("details"); ui.label(r#"raw "label""#);
+        ui.label("… more"); ui.label("tiếng Việt");
+        ui.on_disabled_hover_text("unavailable"); ui.weak("weak text");
+        ui.selectable_value(&mut value, "command_id", "visible choice");
+        ui.radio_value(&mut value, "engine_token", "radio choice");
+        ui.label("escaped \"quote\" and \u{2192}");
+        ui.painter().text(at, anchor, "canvas label", font, color);
+        app.set_status("status message"); app.session.echo("command message");
+        ui.label(if mode == "engine condition" { "first label" } else { "second label" });
+        ui.label(match value { "engine pattern" => "match label", _ => "fallback label" });
+        ui.label(crate::tl!("translated")); ui.label(crate::i18n::t("also translated"));
+        ui.label(format!("{} ({})", drawing_name, count));
+        ui.label(format!("{value:.2} mm"));
+        ui.label("X"); ui.label("UbotCAD"); ui.label("ubotbuild.com");
+        ui.label("custom.shx"); ui.label("open custom.shx");
+    "##;
+    let labels: BTreeSet<_> = unmarked_widget_literals(source).into_iter().map(|(_, label)| label).collect();
+    let expected = BTreeSet::from(
+        [
+            "load...",
+            "details",
+            "raw \"label\"",
+            "… more",
+            "tiếng Việt",
+            "unavailable",
+            "weak text",
+            "visible choice",
+            "radio choice",
+            "escaped \"quote\" and →",
+            "canvas label",
+            "status message",
+            "command message",
+            "first label",
+            "second label",
+            "match label",
+            "fallback label",
+            "open custom.shx",
+        ]
+        .map(str::to_string),
+    );
+    assert_eq!(labels, expected);
+}
+
+#[test]
+fn widget_literal_scanner_ignores_comments_string_contents_and_test_code() {
+    let source = r##"
+        /* ui.label("comment"); /* ui.button("nested comment"); */ */
+        // ui.button("line comment");
+        let example = r#"ui.label("documentation sample")"#;
+        let bytes = br#"ui.label("byte data")"#;
+        let character = '('; let lifetime: &'static str = "data";
+        #[cfg(test)] mod tests { fn example() { ui.label("test label"); } }
+        #[test] fn regression() { ui.button("test button"); }
+        ui.label("production label");
+    "##;
+    assert_eq!(unmarked_widget_literals(source), vec![(9, "production label".to_string())]);
+    let sources = [("nested/tests.rs".to_string(), "ui.label(\"fixture\");".to_string())];
+    assert!(audit_ui_sources(&sources).unmarked.is_empty());
+}
+
+#[test]
+fn text_bindings_and_translated_helper_parameters_are_checked_across_files() {
+    let sources = [
+        (
+            "helpers.rs".to_string(),
+            r#"
+            fn prop_row(ui: &mut Ui, label: &str) { ui.label(crate::i18n::t(label)); }
+            fn forwarded(ui: &mut Ui, title: &str) { prop_row(ui, title); }
+            fn raw_heading(ui: &mut Ui, title: &str) { ui.heading(title); }
+        "#
+            .to_string(),
+        ),
+        (
+            "new/nested_panel.rs".to_string(),
+            r#"
+            let heading = "lowercase heading";
+            ui.label(heading);
+            let translated = "a missing catalog key";
+            ui.label(crate::i18n::t(translated));
+            forwarded(ui, "a helper catalog key");
+            raw_heading(ui, "raw helper heading");
+            ui.button(crate::tl!("a marked key"));
+            let owned = "owned heading";
+            ui.label(owned.as_str());
+            let translated_owned = "a shadowed catalog key";
+            let translated_owned = crate::i18n::t(translated_owned);
+            ui.label(translated_owned);
+        "#
+            .to_string(),
+        ),
+    ];
+    let audit = audit_ui_sources(&sources);
+    assert_eq!(
+        audit.unmarked,
+        BTreeSet::from([
+            "new/nested_panel.rs:2: lowercase heading".to_string(),
+            "new/nested_panel.rs:7: raw helper heading".to_string(),
+            "new/nested_panel.rs:9: owned heading".to_string(),
+        ])
+    );
+    let expected = BTreeSet::from([
+        ("new/nested_panel.rs".to_string(), 4, "a missing catalog key".to_string()),
+        ("new/nested_panel.rs".to_string(), 6, "a helper catalog key".to_string()),
+        ("new/nested_panel.rs".to_string(), 8, "a marked key".to_string()),
+        ("new/nested_panel.rs".to_string(), 11, "a shadowed catalog key".to_string()),
+    ]);
+    assert_eq!(audit.translated, expected);
 }
 
 #[test]
@@ -513,10 +1095,11 @@ fn every_marked_ui_literal_has_a_translation() {
 
 fn missing_marked_ui_literals(language: &str) -> BTreeSet<String> {
     let catalog = catalog(language).unwrap();
-    MARKED_UI_SOURCES
+    ui_literal_audit()
+        .translated
         .iter()
-        .flat_map(|(file, source)| marked_ui_sources(file, source))
-        .filter(|key| !catalog.contains_key(&("", key.as_str())))
+        .filter(|(_, _, key)| !catalog.contains_key(&("", key.as_str())))
+        .map(|(file, line, key)| format!("{file}:{line}: {key}"))
         .collect()
 }
 
@@ -529,7 +1112,8 @@ fn translation_sources_include_all_ui_surfaces() {
         assert!(sources.contains(key), "missing translation source: {key}");
     }
     assert!(!sources.contains(""));
-    let (_, source) = MARKED_UI_SOURCES.iter().find(|(name, _)| *name == "xrefs.rs").unwrap();
+    let sources = ui_source_files();
+    let (_, source) = sources.iter().find(|(name, _)| name == "xrefs.rs").unwrap();
     let xrefs = marked_ui_sources("xrefs.rs", source);
     assert!(xrefs.contains("Attach DWG..."));
     assert!(xrefs.contains("References: {n}"));

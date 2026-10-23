@@ -115,7 +115,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         }
     };
     let (mut close, mut print) = (false, false);
-    egui::Window::new("Plot Preview").open(open).collapsible(false).resizable(false).show(ctx, |ui| {
+    egui::Window::new(crate::tl!("Plot Preview")).open(open).collapsible(false).resizable(false).show(ctx, |ui| {
         match &preview.shown {
             Ok((tex, info)) => {
                 ui.label(info);
@@ -129,8 +129,8 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         }
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            print = ui.button("Print...").clicked();
-            close = ui.button("Close").clicked();
+            print = ui.button(crate::tl!("Print...")).clicked();
+            close = ui.button(crate::tl!("Close")).clicked();
         });
     });
     if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {

@@ -308,7 +308,7 @@ pub(crate) fn observe(app: &mut CadApp, record: bool) -> bool {
     app.ws.rebuild();
     if blocked {
         app.ws.message = Some(LOCKED_MESSAGE.into());
-        app.set_status(LOCKED_MESSAGE);
+        app.set_status(crate::i18n::t(LOCKED_MESSAGE));
     }
     // Policy refusals and session overrides put the interface back to what the layers say. Without
     // either the layers reproduce the capture, and re-applying would only move floating panels.
