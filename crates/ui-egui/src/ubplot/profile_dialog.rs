@@ -28,14 +28,33 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         _ => return,
     };
     let mut edit = None;
-    egui::Window::new(crate::tl!("Print Profile")).id(id).open(open).default_width(720.0).show(ctx, |ui| {
+    let max_width = (ctx.content_rect().width() - 32.0).max(0.0);
+    egui::Window::new(crate::tl!("Print Profile")).id(id).open(open).default_width(720.0_f32.min(max_width)).max_width(max_width).show(ctx, |ui| {
         ui.horizontal(|ui| {
             ui.label(crate::tl!("Edit level"));
             ui.radio_value(&mut state.drawing, false, crate::tl!("User"));
             ui.radio_value(&mut state.drawing, true, crate::tl!("Drawing"));
         });
-        egui::ScrollArea::both().max_height((ctx.content_rect().height() - 180.0).max(100.0)).show(ui, |ui| {
-            egui::Grid::new("print_profile_fields").striped(true).show(ui, |ui| {
+        egui::ScrollArea::both().auto_shrink([false, true]).max_height((ctx.content_rect().height() - 180.0).max(100.0)).show(ui, |ui| {
+            let text_width = |text: &str| {
+                ui.painter().layout_no_wrap(text.to_owned(), egui::TextStyle::Body.resolve(ui.style()), ui.visuals().text_color()).size().x
+            };
+            let spacing = ui.spacing().item_spacing.x;
+            let mut field_width = text_width(crate::tl!("Field")).max(ui.spacing().interact_size.x);
+            let mut origin_width = text_width(crate::tl!("From level")).max(ui.spacing().interact_size.x);
+            for field in settings.keys() {
+                let pointer = format!("/{field}");
+                field_width = field_width.max(text_width(field_label(field)));
+                let level_width = text_width(level_label(effective.origin.get(&pointer).copied().unwrap_or(ProfileLevel::Platform)));
+                let action_width = if check_change(&effective, &pointer).is_err() {
+                    18.0 + spacing + text_width(crate::tl!("Locked by company policy"))
+                } else {
+                    (text_width(crate::tl!("Apply")) + 2.0 * ui.spacing().button_padding.x).max(ui.spacing().interact_size.x)
+                };
+                origin_width = origin_width.max(level_width + spacing + action_width);
+            }
+            let value_width = (ui.available_width() - field_width - origin_width - 2.0 * spacing).max(220.0);
+            egui::Grid::new("print_profile_fields").num_columns(3).striped(true).show(ui, |ui| {
                 ui.strong(crate::tl!("Field"));
                 ui.strong(crate::tl!("Value"));
                 ui.strong(crate::tl!("From level"));
@@ -51,7 +70,9 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                         Value::String(text) => text.clone(),
                         _ => value.to_string(),
                     });
-                    let response = ui.add_enabled(!locked, egui::TextEdit::singleline(&mut *text).desired_width(220.0)).labelled_by(field_label.id);
+                    // Grid cells inherit their header width; a minimum prevents TextEdit from clamping to that narrow measurement.
+                    let editor = egui::TextEdit::singleline(&mut *text).desired_width(value_width).min_size(egui::vec2(value_width, 0.0));
+                    let response = ui.add_enabled(!locked, editor).labelled_by(field_label.id);
                     if locked {
                         response.on_disabled_hover_text(crate::tl!("Locked by company policy"));
                     }
