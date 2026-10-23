@@ -32,6 +32,9 @@ pub(crate) fn group_label<'a>(tab: &RibbonTab, group: &'a RibbonGroup) -> &'a st
 }
 
 pub fn rendered_mode(app: &CadApp, available_height: f32) -> RibbonMode {
+    if super::visible_tabs(app).is_empty() {
+        return RibbonMode::Hidden;
+    }
     let metrics = metrics(app.ws.effective.layout.density);
     let preferred = app.ws.effective.layout.ribbon.effective_mode();
     if matches!(preferred, RibbonMode::Hidden | RibbonMode::TabsOnly) {
@@ -69,8 +72,8 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         egui::Popup::close_id(ui.ctx(), popup_id);
     }
     let tabs = super::visible_tabs(app);
-    // A workspace without ribbon tabs (Simple) has nothing to restore, so it keeps no hidden strip.
-    if mode == RibbonMode::Hidden && tabs.is_empty() {
+    // Empty workspaces reserve no ribbon space, regardless of the saved display preference.
+    if tabs.is_empty() {
         ui.ctx().data_mut(|data| data.remove::<Vec<Id>>(Id::new("cc_ribbon_menu_stops")));
         return;
     }
@@ -235,7 +238,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
 }
 
 pub(crate) fn claim_menu_key(app: &CadApp, ctx: &egui::Context) {
-    if app.cmd.ime_composing() || ctx.text_edit_focused() || app.ui.dialog.is_some() {
+    if app.cmd.ime_composing() || ctx.text_edit_focused() || app.ui.dialog.is_some() || super::visible_tabs(app).is_empty() {
         return;
     }
     let Some(focused) = ctx.memory(|memory| memory.focused()) else { return };
