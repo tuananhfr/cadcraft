@@ -588,14 +588,17 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
     let view_height = window.map(|w| w.height()).unwrap_or(0.0);
     let mut list = cadcraft_render::build_plot(d, space, &cadcraft_render::Options { tolerance, view_height, ..ropts });
     check_cancelled(o)?;
-    if o.max_prims.is_some_and(|limit| list.prims.len() > limit) {
-        return Err(IoError::Format(format!("SHEET_TOO_LARGE: {} primitives exceed the sheet budget", list.prims.len())));
-    }
     if let Some(frame) = o.frame {
         list.rotate_about(frame.center, -frame.rotation);
     }
     let b = window.unwrap_or(list.bounds);
     let s = plot_scale(&b, &sheet, fit, o.scale);
+    if let Some(window) = window.filter(|_| matches!(space, Space::Model)) {
+        cull_window(&mut list, window, s * unit_mm);
+    }
+    if o.max_prims.is_some_and(|limit| list.prims.len() > limit) {
+        return Err(IoError::Format(format!("SHEET_TOO_LARGE: {} primitives exceed the sheet budget", list.prims.len())));
+    }
     let map = if fit || window.is_some() || matches!(space, Space::Model) {
         let (from, to) = placement(space, &b, fit || window.is_some(), &sheet, o);
         Map { from, s, to, k }
@@ -637,6 +640,56 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
         seams: o.seams,
         seam_overlap_mm: o.seam_overlap_mm.unwrap_or(20.0),
     })
+}
+
+fn cull_window(list: &mut cadcraft_render::DisplayList, window: Bounds2, mm_per_unit: f64) {
+    if !(mm_per_unit.is_finite() && mm_per_unit > 0.0) {
+        return;
+    }
+    let max_lw = list.prims.iter().map(|p| f64::from(p.lw)).filter(|lw| lw.is_finite()).fold(0.05, f64::max);
+    // Five full widths cover pen::apply's ten-half-width miter limit; 0.05 mm also allows for hairlines.
+    let area = window.expand(5.0 * max_lw / mm_per_unit);
+    if area.is_empty() || !area.min.is_finite() || !area.max.is_finite() {
+        return;
+    }
+    let intersects = |b: Bounds2| b.is_empty() || !b.min.is_finite() || !b.max.is_finite() || area.intersects(&b);
+    let mut next = 0u32;
+    let remap: Vec<Option<u32>> = list
+        .prims
+        .iter()
+        .map(|p| {
+            let points = p.start.checked_add(p.len).and_then(|end| {
+                let buffer = if matches!(p.kind, Kind::Tris | Kind::Mask) { &list.tris } else { &list.verts };
+                buffer.get(p.start as usize..end as usize)
+            });
+            let bounds = match points {
+                Some(points) if points.iter().all(|point| point.is_finite()) => Bounds2::from_points(points.iter().copied()),
+                _ => Bounds2::EMPTY,
+            };
+            let keep = matches!(p.kind, Kind::Infinite { .. }) || !p.lw.is_finite() || intersects(bounds);
+            if keep {
+                let index = next;
+                next = next.saturating_add(1);
+                Some(index)
+            } else {
+                None
+            }
+        })
+        .collect();
+    let mut indices = remap.iter();
+    list.prims.retain(|_| indices.next().is_some_and(Option::is_some));
+    let mut indices = remap.iter();
+    list.prim_layers.retain(|_| indices.next().is_some_and(Option::is_some));
+    let mut indices = remap.iter();
+    list.pens.retain(|_| indices.next().is_some_and(Option::is_some));
+    list.texts.retain_mut(|text| match remap.get(text.prim as usize) {
+        Some(Some(index)) => {
+            text.prim = *index;
+            true
+        }
+        Some(None) => false,
+        None => intersects(text.bounds),
+    });
 }
 
 /// Source and destination origins for the shared model-space PDF/PNG placement behavior.
@@ -1257,4 +1310,118 @@ fn assemble(d: &Drawing, pages: impl ExactSizeIterator<Item = Result<SheetPage>>
     }
     out.extend_from_slice(x.as_bytes());
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cadcraft_render::pen::Pen;
+    use cadcraft_render::{DPrim, DisplayList, PlotText};
+
+    fn prim(handle: u64, kind: Kind, start: u32, len: u32) -> DPrim {
+        DPrim { handle: Handle(handle), color: Rgb(0, 0, 0), aci7: false, lw: 0.0, transparency: 0, kind, start, len }
+    }
+
+    fn text(prim: u32, bounds: Bounds2) -> PlotText {
+        PlotText {
+            prim,
+            verts: 3,
+            bounds,
+            glyph: cadcraft_fonts::TextGlyph {
+                face: cadcraft_fonts::ttf::Face { bytes: Arc::new(Vec::new()), index: 0 },
+                gid: 1,
+                ch: 'A',
+                outline: 0,
+                origin: bounds.min,
+                x: Vec2::X,
+                y: Vec2::Y,
+            },
+        }
+    }
+
+    #[test]
+    fn window_culling_remaps_metadata_and_keeps_unknown_bounds() {
+        let near = Bounds2::new(Vec2::ZERO, Vec2::new(10.0, 10.0));
+        let far = Bounds2::new(Vec2::new(1000.0, 1000.0), Vec2::new(1010.0, 1010.0));
+        let pens: Vec<Pen> = [cadcraft_doc::EndStyle::Butt, cadcraft_doc::EndStyle::Square, cadcraft_doc::EndStyle::Round]
+            .into_iter()
+            .cycle()
+            .take(9)
+            .map(|end| Pen { end, ..Pen::default() })
+            .collect();
+        let mut list = DisplayList {
+            prims: vec![
+                prim(0, Kind::Polyline, 0, 2),
+                prim(1, Kind::Polyline, 2, 2),
+                prim(2, Kind::Tris, 0, 3),
+                prim(3, Kind::Mask, 3, 3),
+                prim(4, Kind::Polyline, 4, 2),
+                prim(5, Kind::Infinite { ray: false }, 6, 2),
+                prim(6, Kind::Polyline, u32::MAX, 2),
+                prim(7, Kind::Point, 0, 0),
+                DPrim { lw: f32::NAN, ..prim(8, Kind::Polyline, 0, 2) },
+            ],
+            verts: vec![far.min, far.max, near.min, near.max, Vec2::new(f64::NAN, 0.0), far.min, far.min, Vec2::X],
+            tris: vec![near.min, Vec2::new(10.0, 0.0), near.max, far.min, Vec2::new(1010.0, 1000.0), far.max],
+            prim_layers: (0..9).collect(),
+            pens: pens.clone(),
+            texts: vec![text(2, near), text(3, far), text(PlotText::NONE, near), text(PlotText::CLIPPED, far), text(PlotText::NONE, Bounds2::EMPTY)],
+            ..DisplayList::default()
+        };
+        cull_window(&mut list, near, 1.0);
+        assert_eq!(list.prims.iter().map(|p| p.handle.0).collect::<Vec<_>>(), [1, 2, 4, 5, 6, 7, 8]);
+        assert_eq!(list.prim_layers, [1, 2, 4, 5, 6, 7, 8]);
+        assert_eq!(list.pens, [pens[1], pens[2], pens[4], pens[5], pens[6], pens[7], pens[8]]);
+        assert_eq!(list.texts.iter().map(|t| t.prim).collect::<Vec<_>>(), [1, PlotText::NONE, PlotText::NONE]);
+        assert_eq!(list.texts.first().map(|t| t.bounds), Some(near));
+    }
+
+    #[test]
+    fn window_culling_converts_lineweight_margin_to_drawing_units() {
+        for mm_per_unit in [0.01, 1.0, 25.4] {
+            let window = Bounds2::new(Vec2::ZERO, Vec2::new(10.0, 10.0));
+            let mut list = DisplayList {
+                prims: vec![DPrim { lw: 2.0, ..prim(1, Kind::Polyline, 0, 2) }, DPrim { lw: 2.0, ..prim(2, Kind::Polyline, 2, 2) }],
+                verts: vec![
+                    Vec2::new(-0.5 / mm_per_unit, 2.0),
+                    Vec2::new(-0.5 / mm_per_unit, 8.0),
+                    Vec2::new(-100.0 / mm_per_unit, 2.0),
+                    Vec2::new(-100.0 / mm_per_unit, 8.0),
+                ],
+                ..DisplayList::default()
+            };
+            cull_window(&mut list, window, mm_per_unit);
+            assert_eq!(list.prims.iter().map(|p| p.handle).collect::<Vec<_>>(), [Handle(1)]);
+        }
+    }
+
+    #[test]
+    fn window_culling_keeps_layouts_and_sheet_links_consistent() {
+        use cadcraft_doc::{Common, EntityKind, Layer, Line};
+
+        let mut d = Drawing::new_metric();
+        d.layers.push(Layer::new("Inside"));
+        d.layers.push(Layer::new("Outside"));
+        let mut handles = Vec::new();
+        for space in [Space::Model, Space::Paper("Layout1".into())] {
+            for (layer, at) in [("Outside", Vec2::new(1000.0, 1000.0)), ("Inside", Vec2::new(2.0, 2.0))] {
+                let line = Line { a: at.to3(0.0), b: (at + Vec2::new(1.0, 1.0)).to3(0.0) };
+                let handle = d.add(&space, Common { layer: layer.into(), ..Common::default() }, EntityKind::Line(line)).unwrap();
+                handles.push((handle, format!("https://example.com/{layer}")));
+            }
+        }
+        let frame = PlotFrame { center: Vec2::new(5.0, 5.0), size: Vec2::new(10.0, 10.0), rotation: 0.0 };
+        for frame in [None, Some(frame)] {
+            let options =
+                PdfOptions { window: Some(Bounds2::new(Vec2::ZERO, Vec2::new(10.0, 10.0))), frame, max_prims: Some(1), ..PdfOptions::default() };
+            let page = sheet(&d, &Space::Model, &options, &handles).unwrap();
+            assert_eq!(page.list.prims.len(), 1);
+            assert_eq!(page.layers, [d.layers.iter().position(|layer| layer.name == "Inside").unwrap() as u32]);
+            assert_eq!(page.links.len(), 1);
+            assert_eq!(page.links.first().map(|(_, url)| url.as_str()), Some("https://example.com/Inside"));
+            assert!(sheet(&d, &Space::Paper("Layout1".into()), &options, &handles).is_err());
+            let options = PdfOptions { max_prims: None, ..options };
+            assert_eq!(sheet(&d, &Space::Paper("Layout1".into()), &options, &handles).unwrap().list.prims.len(), 2);
+        }
+    }
 }

@@ -485,6 +485,111 @@ fn pdf_model_fitted_to_sheet() {
     assert!(write(&d, "x.pdf").unwrap().starts_with(b"%PDF"));
 }
 
+fn window_plot_options() -> PdfOptions {
+    PdfOptions {
+        paper_mm: Some((100.0, 100.0)),
+        landscape: Some(false),
+        margins: Some([0.0; 4]),
+        window: Some(cadcraft_geom::Bounds2::new(Vec2::ZERO, Vec2::new(100.0, 100.0))),
+        ..PdfOptions::default()
+    }
+}
+
+fn window_plot_drawing(copies: usize) -> Drawing {
+    let mut d = Drawing::new_metric();
+    d.layers.push(Layer::new("Sheet lines"));
+    d.layers.push(Layer::new("Sheet text"));
+    for copy in (0..=copies).rev() {
+        let offset = Vec2::new(copy as f64 * 1000.0, 0.0);
+        for (a, b) in [
+            (Vec2::ZERO, Vec2::new(100.0, 0.0)),
+            (Vec2::new(100.0, 0.0), Vec2::new(100.0, 100.0)),
+            (Vec2::new(100.0, 100.0), Vec2::new(0.0, 100.0)),
+            (Vec2::new(0.0, 100.0), Vec2::ZERO),
+            (Vec2::new(10.0, 10.0), Vec2::new(90.0, 90.0)),
+        ] {
+            let line = EntityKind::Line(Line { a: (a + offset).to3(0.0), b: (b + offset).to3(0.0) });
+            d.add(&Space::Model, Common { layer: "Sheet lines".into(), ..Common::default() }, line).unwrap();
+        }
+        let t = Text { insert: (Vec2::new(20.0, 40.0) + offset).to3(0.0), height: 10.0, ..intl_text("AB12") };
+        d.add(&Space::Model, Common { layer: "Sheet text".into(), ..Common::default() }, EntityKind::Text(t)).unwrap();
+    }
+    d
+}
+
+#[test]
+fn window_plot_size_ignores_entities_outside_the_window() {
+    let local = window_plot_drawing(0);
+    let many = window_plot_drawing(500);
+    for compress in [false, true] {
+        let options = PdfOptions { compress, ..window_plot_options() };
+        let local_pdf = pdf::pdf(&local, &Space::Model, &options).unwrap();
+        let many_pdf = pdf::pdf(&many, &Space::Model, &options).unwrap();
+        let content = check_pdf(&local_pdf);
+        assert!(content.contains(" m\n") && content.contains(" l\n"));
+        assert_eq!(check_pdf(&many_pdf), content, "off-window copies must not add drawing operations");
+        assert!(local_pdf.len().abs_diff(many_pdf.len()) * 100 < local_pdf.len(), "{} vs {} bytes", local_pdf.len(), many_pdf.len());
+    }
+}
+
+#[test]
+fn window_plot_keeps_entities_crossing_the_edge() {
+    let mut d = Drawing::new_metric();
+    let line = Line { a: Vec3::new(-10.0, 50.0, 0.0), b: Vec3::new(10.0, 50.0, 0.0) };
+    d.add(&Space::Model, Common { color: Color::Index(1), ..Common::default() }, EntityKind::Line(line)).unwrap();
+    let t = Text { insert: Vec3::new(95.0, 20.0, 0.0), height: 20.0, ..intl_text("H") };
+    d.add(&Space::Model, Common { color: Color::Index(5), ..Common::default() }, EntityKind::Text(t)).unwrap();
+    let thick = Line { a: Vec3::new(-0.5, 70.0, 0.0), b: Vec3::new(-0.5, 80.0, 0.0) };
+    let common = Common { color: Color::Index(3), lineweight: Lineweight::Mm100(211), ..Common::default() };
+    d.add(&Space::Model, common, EntityKind::Line(thick)).unwrap();
+    let content = check_pdf(&pdf::pdf(&d, &Space::Model, &window_plot_options()).unwrap());
+    assert!(content.contains("-28.346 141.732 m\n28.346 141.732 l\n"), "{content}");
+    assert!(content.contains("0 0 1 RG") && content.contains("269.291 56.693 m\n269.291 113.386 l\n"), "{content}");
+    assert!(content.contains("0 1 0 RG") && content.contains("-1.417 198.425 m\n-1.417 226.772 l\n"), "{content}");
+}
+
+#[test]
+fn rotated_frame_culls_in_frame_coordinates() {
+    for center in [Vec2::ZERO, Vec2::new(512345.678, 2109876.543)] {
+        let rotation = std::f64::consts::PI / 6.0;
+        let frame = pdf::PlotFrame { center, size: Vec2::new(20.0, 100.0), rotation };
+        let options = PdfOptions { frame: Some(frame), paper_mm: Some((20.0, 100.0)), window: None, ..window_plot_options() };
+        let world = |p: Vec2| (center + p.rotate(rotation)).to3(0.0);
+        let mut d = Drawing::new_metric();
+        let inside = Line { a: world(Vec2::new(-1.0, 40.0)), b: world(Vec2::new(1.0, 40.0)) };
+        let unrotated = cadcraft_geom::Bounds2::new(center - frame.size * 0.5, center + frame.size * 0.5);
+        assert!(!unrotated.contains(inside.a.xy()) && !unrotated.contains(inside.b.xy()));
+        d.add(&Space::Model, Common { color: Color::Index(1), ..Common::default() }, EntityKind::Line(inside)).unwrap();
+        let expected = check_pdf(&pdf::pdf(&d, &Space::Model, &options).unwrap());
+        assert!(expected.contains("1 0 0 RG") && expected.contains(" m\n"));
+        let outside = Line { a: world(Vec2::new(40.0, -1.0)), b: world(Vec2::new(40.0, 1.0)) };
+        d.add(&Space::Model, Common { color: Color::Index(5), ..Common::default() }, EntityKind::Line(outside)).unwrap();
+        let content = check_pdf(&pdf::pdf(&d, &Space::Model, &options).unwrap());
+        assert_eq!(content, expected);
+        assert!(!content.contains("0 0 1 RG"));
+    }
+}
+
+#[test]
+fn sheet_budget_counts_only_window_primitives() {
+    let local = window_plot_drawing(0);
+    let many = window_plot_drawing(500);
+    let render_options = cadcraft_render::Options { min_dash: 0.0, ..cadcraft_render::Options::default() };
+    let local_count = cadcraft_render::build_plot(&local, &Space::Model, &render_options).prims.len();
+    let total = cadcraft_render::build_plot(&many, &Space::Model, &render_options).prims.len();
+    let limit = local_count + 1;
+    assert!(limit < total);
+    let options = PdfOptions { max_prims: Some(limit), ..window_plot_options() };
+    assert_eq!(check_pdf(&pdf::pdf(&many, &Space::Model, &options).unwrap()), check_pdf(&pdf::pdf(&local, &Space::Model, &options).unwrap()));
+    let too_small = PdfOptions { max_prims: Some(local_count - 1), ..window_plot_options() };
+    assert!(pdf::pdf(&many, &Space::Model, &too_small).unwrap_err().to_string().contains("SHEET_TOO_LARGE"));
+    let extents = PdfOptions { window: None, ..options.clone() };
+    assert!(pdf::pdf(&many, &Space::Model, &extents).unwrap_err().to_string().contains("SHEET_TOO_LARGE"));
+    let frame = pdf::PlotFrame { center: Vec2::new(50.0, 50.0), size: Vec2::new(100.0, 100.0), rotation: 0.0 };
+    let framed = PdfOptions { frame: Some(frame), window: None, ..options };
+    assert!(pdf::pdf(&many, &Space::Model, &framed).is_ok());
+}
+
 #[test]
 fn pdf_layout_one_to_one_with_viewport() {
     let mut d = sample();
