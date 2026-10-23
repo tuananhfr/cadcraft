@@ -151,3 +151,17 @@ Cloud workspace synchronization is not implemented. MemoryRemote remains a test 
 labels explicitly say unsynced. Neither remote `/print-jobs/*` APIs nor tenant job services
 are implemented. Batch resume and browser download limits are in
 [plotters](../plotters.md#batch-jobs).
+
+## V2.2 GĐ6 LPC sample limits
+
+The four local project samples reviewed on 2026-10-23 are rejected by
+`ubplot.templates audit` with `AUDIT_LIMIT`; the bounded template auditor cannot produce
+baseline picks from these drawings. Golden scans use the reviewed template through plain
+registry import. The three KC samples produce 27 sheets, all blocked with
+`FRAME_AMBIGUOUS` because their frame outlines are in missing xrefs; PHỤ TRỢ produces
+12 layout sheets without BLOCK issues (`PAPER_CUSTOM`, `FONT_MISSING` for absent SHX, `PLOT_STYLE`). This is scan coverage, not publish acceptance.
+The template audit step remains blocked until LPC-KHUNG TEN.dwg / LPC-ISO.dwt are supplied.
+Tests read local samples only through `UBOTCAD_LPC_DIR` and skip when they are unavailable.
+
+Attribute text in these samples was observed in TCVN3 (.VnTime), rather than Unicode.
+The reviewed attribute checks do not establish legacy text decoding or font parity.
