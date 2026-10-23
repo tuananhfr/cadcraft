@@ -56,7 +56,7 @@ This branch (`tuananhfr`) is UbotCAD, the UbotBuild build of [CADCraft](https://
 
 ## V2.2 GĐ2
 
-Paper, physical scale, preflight and audited approval (B1–B9). Gate 2 validation is pending.
+Paper, physical scale, preflight and audited approval (B1–B9). Gate 2 results are below; the benchmark and one 200% re-check remain open.
 
 - UBPLOT ratios use `INSUNITS`, independently of `MEASUREMENT`: `1:100` in a metre drawing prints 1 m as 10 mm. `scale_label` preserves the requested or frame-derived physical ratio. Unitless and unknown codes assume millimetres with INFO `UNITS_ASSUMED`. PLOT and EXPORTPDF retain their legacy paper-units-per-drawing-unit meaning unless `scaleMode: "real"` is supplied.
 - PLOT and EXPORTPDF with an explicit `scale` and no `fit` now preserve that scale on Model instead of silently fitting. PDF page items and PNG use the same default; `fit: true` remains an explicit request to fit. UBPLOT Ratio sheets always publish with `fit: false`; only Fit sheets are fitted. Paper/scale mismatches block instead of shrinking the drawing.
@@ -71,26 +71,25 @@ Paper, physical scale, preflight and audited approval (B1–B9). Gate 2 validati
 
 ### Gate 2 results (lead)
 
-Pending: the lead fills results and evidence after running the gate. No tests, benchmarks,
-CLI checks, builds or visual QA were run for this documentation task.
+2026-10-23 · Lead results. The benchmark was not run; 200% web re-check of the Exceptions fix is pending.
 
 | Check | Result / evidence |
 | --- | --- |
-| `sp05_mixed_a1_a3_long_in_one_pdf_each_own_mediabox` | Pending — lead |
-| `roll_914_length_follows_frame` | Pending — lead |
-| `sheet_15m_uses_user_unit` | Pending — lead |
-| `pages_with_scale_are_not_fitted` | Pending — lead |
-| `insunits_meters_plot_1_100` | Pending — lead |
-| SP07: `essential_missing_xref_blocks_the_sheet` | Pending — lead |
-| SP07: `font_missing_warns_at_plan_level` | Pending — lead |
-| SP11: `duplicate_sheet_ids_warn_on_every_copy` | Pending — lead |
-| SP11: `old_revision_against_register_warns` | Pending — lead |
-| `block_is_never_approvable_even_by_json` | Pending — lead |
-| Native/wasm clippy, fmt, affected crate tests, layers | Pending — lead |
-| `bench_thousand_dense_pages`: bytes/page, total bytes, time | Pending — lead |
-| Independent PDF CLI checks on mixed-size and 15 m output | Pending — lead |
-| Web release build and visual QA: 1366×768, 1920×1080, 200% zoom | Pending — lead |
-| Desktop smoke: approved three-piece split and PDF inspection | Pending — lead |
+| `sp05_mixed_a1_a3_long_in_one_pdf_each_own_mediabox` | Pass — Linux gate `4ea3c75`, run 39874361985 |
+| `roll_914_length_follows_frame` | Pass — Linux gate `4ea3c75`, run 39874361985 |
+| `sheet_15m_uses_user_unit` | Pass — Linux gate `4ea3c75`, run 39874361985 |
+| `pages_with_scale_are_not_fitted` | Pass — Linux gate `4ea3c75`, run 39874361985 |
+| `insunits_meters_plot_1_100` | Pass — Linux gate `4ea3c75`, run 39874361985 |
+| SP07: `essential_missing_xref_blocks_the_sheet` | Pass — Linux gate `4ea3c75`, run 39874361985 |
+| SP07: `font_missing_warns_at_plan_level` | Pass — Linux gate `4ea3c75`, run 39874361985 |
+| SP11: `duplicate_sheet_ids_warn_on_every_copy` | Pass — Linux gate `4ea3c75`, run 39874361985 |
+| SP11: `old_revision_against_register_warns` | Pass — Linux gate `4ea3c75`, run 39874361985 |
+| `block_is_never_approvable_even_by_json` | Pass — Linux gate `4ea3c75`, run 39874361985 |
+| Native/wasm clippy, fmt, affected crate tests, layers | Pass — Linux gate `4ea3c75` (run 39874361985); Windows desktop job green at `ff1b42d` (run 39831171062), cancelled at `4ea3c75` when Actions blocked the repository |
+| `bench_thousand_dense_pages`: bytes/page, total bytes, time | Not measured — the test is `#[ignore]` and was not run; no numbers are claimed |
+| Independent PDF CLI checks on mixed-size and 15 m output | Pass (pypdf strict; qpdf/mutool not installed) — web output: A3 420×297 mm and 841×2400 mm pages with labels S-002/S-003; `ROLL15` page 3 has UserUnit 3 → 841×15000 mm |
+| Web release build and visual QA: 1366×768, 1920×1080, 200% zoom | Partial — artifact `39b8b32`: 1366×768 Block ALL → 3 sheets, `XREF_MISSING` BLOCK disables Publish, excluding it publishes 2 pages; 1920×1080 `ROLL15` publishes 3 pages. At 200% the Exceptions body was not visible and did not scroll; fixed in `bedb169`, re-check pending |
+| Desktop smoke: approved three-piece split and PDF inspection | Pass — Windows artifact `459b1a2`: A1-only device, 594×2400 frame → `DEVICE_LIMIT_EXCEEDED`, split panel "3 pieces", Approve split clicked → no BLOCK, audit records the split; merged PDF has 3 pages 594×813.3 mm labelled S-001 (1/3)…(3/3). The UI Publish button (native save dialog) was not clicked |
 
 ## V3.1 chrome, focus, keys
 
