@@ -2113,3 +2113,76 @@ ribbon	Plot	Друк креслення
 	The requested printer is missing or offline; keeping PDF files.	Запитаний принтер відсутній або не в мережі; файли PDF збережено.
 	The printer has no recognised paper sizes; keeping PDF files.	Принтер не має розпізнаних розмірів паперу; файли PDF збережено.
 	The PDF handler does not expose PrintTo; keeping PDF files.	Обробник PDF не підтримує PrintTo; файли PDF збережено.
+
+# --- UbotCAD uk batch W1: UI strings (AI-assisted, review pending) ---
+	 and {n} more	 та ще {n}
+	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{binary_added} / −{binary_deleted} binary assets, {first} – {last}	@{login}: {prs} PR, {commits} комітів, +{added} / −{deleted} рядків (Δ {delta}), +{binary_added} / −{binary_deleted} двійкових ресурсів, {first} – {last}
+	A hidden panel cannot restore over the document view	Приховану панель не можна відновити поверх області перегляду документа
+	A hidden panel has an invalid or duplicate identity	Прихована панель має недійсний або повторюваний ідентифікатор
+	A tool bar docks to the top, bottom, left or right edge	Панель інструментів прикріплюється до верхнього, нижнього, лівого або правого краю
+	A workspace name has at most {max} characters	Назва робочого простору може містити щонайбільше {max} символів
+	A workspace named {name} already exists	Робочий простір із назвою {name} уже існує
+	APPLOAD: can't read {path}	APPLOAD: не вдалося прочитати {path}
+	Animation effects are {shown}	Ефекти анімації: {shown}
+	Animation effects follow the system setting ({shown})	Ефекти анімації відповідають системному налаштуванню ({shown})
+	At most {max} saved workspaces; delete one first	Можна зберегти щонайбільше {max} робочих просторів; спочатку видаліть один
+	Close panel	Закрити панель
+	Close: no drawing to close	Close: немає креслення для закриття
+	Connect a 3D mouse before calibrating	Підключіть 3D-мишу перед калібруванням
+	Could not read {path}: {error}	Не вдалося прочитати {path}: {error}
+	Could not save workspace: {error}	Не вдалося зберегти робочий простір: {error}
+	Don't Save	Не зберігати
+	Float panel	Зробити панель плаваючою
+	Move to group	Перемістити до групи
+	New drawings will be saved as version {v}	Нові креслення зберігатимуться у версії {v}
+	New drawings will be saved as {format}	Нові креслення зберігатимуться у форматі {format}
+	No Chinese font is installed, so the interface stays in English. Install one (Noto Sans CJK, for example) to use Chinese.	Шрифт для китайської мови не встановлено, тому інтерфейс залишається англійською. Установіть такий шрифт (наприклад, Noto Sans CJK), щоб користуватися китайською.
+	No font covers the Korean interface, so it stays in English. Install a Hangul font (Malgun Gothic or Nanum Gothic), or build with a Hang/Kore craft-fonts face.	Немає шрифту для корейського інтерфейсу, тому він залишається англійською. Установіть шрифт хангиль (Malgun Gothic або Nanum Gothic) чи зберіть програму зі шрифтом Hang/Kore з craft-fonts.
+	No layout change to redo	Немає змін розташування для повторення
+	No layout change to undo	Немає змін розташування для скасування
+	No saved workspace revision {revision}	Немає збереженої версії робочого простору {revision}
+	No workspace storage is attached	Сховище робочого простору не підключено
+	No workspace tab conflict to resolve	Немає конфлікту робочого простору між вкладками для розв’язання
+	Open: {name} is {mb} MB, larger than the {max} MB UbotCAD opens in the browser	Open: розмір {name} становить {mb} MB і перевищує ліміт {max} MB для відкриття в UbotCAD у браузері
+	Open: {name} is {mb} MB; the browser opens DWG files up to {max} MB. Open it in the desktop app.	Open: розмір {name} становить {mb} MB; у браузері можна відкрити файли DWG розміром до {max} MB. Відкрийте його в настільному застосунку.
+	Panel layout could not be restored: {error}	Не вдалося відновити розташування панелей: {error}
+	Panel move was not applied: {error}	Не вдалося перемістити панель: {error}
+	Plotted to {path}	Надруковано до {path}
+	Plotted {layout} ({bytes} bytes of PDF; there is no file dialog here)	Надруковано {layout} ({bytes} байтів PDF; діалог вибору файлу тут недоступний)
+	Plotted {layout} to {path}	Надруковано {layout} до {path}
+	Quantities and QA	Обсяги та контроль якості
+	Reading a workspace file by path is not available in the browser; pass its text	У браузері не можна прочитати файл робочого простору за шляхом; передайте його текст
+	Resize panel window	Змінити розмір вікна панелі
+	Resize panels	Змінити розміри панелей
+	Revision {revision} cannot be read: {error}	Не вдалося прочитати версію {revision}: {error}
+	Revision {revision} was restored but could not be saved: {error}	Версію {revision} відновлено, але не вдалося зберегти: {error}
+	SAVEFILEPATH must be a folder path	SAVEFILEPATH має бути шляхом до теки
+	SAVETIME must be from 0 to {max} minutes	SAVETIME має бути в межах від 0 до {max} хвилин
+	SOURCE_CHANGED: open the same source drawing before resuming this print job	SOURCE_CHANGED: відкрийте те саме вихідне креслення, перш ніж продовжити це завдання друку
+	Save changes to {title}?	Зберегти зміни у {title}?
+	Sheets	Аркуші
+	Survey	Геодезія
+	The document view cannot be collapsed	Область перегляду документа не можна згорнути
+	The document view cannot float	Область перегляду документа не може бути плаваючою
+	The document view cannot share a tab group	Область перегляду документа не може перебувати у спільній групі вкладок
+	The font could not be kept for the next run: {e}	Не вдалося зберегти шрифт для наступного запуску: {e}
+	The panel layout must contain its document view and bounded hidden panels	Розташування панелей має містити область перегляду документа та обмежену кількість прихованих панелей
+	The tool bars cannot be stored: {reason}	Неможливо зберегти панелі інструментів: {reason}
+	The workspace policy could not be read and was ignored	Не вдалося прочитати політику робочого простору, тому її проігноровано
+	This workspace cannot be exported: {error}	Неможливо експортувати цей робочий простір: {error}
+	This workspace cannot be imported: {error}	Неможливо імпортувати цей робочий простір: {error}
+	Unknown panel: {id}	Невідома панель: {id}
+	Unknown toolbar: {id}	Невідома панель інструментів: {id}
+	Unknown workspace: {id}	Невідомий робочий простір: {id}
+	ViewCube: rotating the view needs a view twist, which the 2D plan view doesn't support yet.	ViewCube: для обертання виду потрібен поворот видового екрана, який ще не підтримується у двовимірному вигляді в плані.
+	Workspace changed in another tab	Робочий простір змінено в іншій вкладці
+	Workspace could not be read; using SIMPLE. The damaged copy could not be kept, so it is not overwritten until it can be.	Не вдалося прочитати робочий простір; використовується SIMPLE. Пошкоджену копію не вдалося зберегти, тому її не буде перезаписано, доки це не стане можливим.
+	Workspace could not be read; using SIMPLE. The damaged copy was kept.	Не вдалося прочитати робочий простір; використовується SIMPLE. Пошкоджену копію збережено.
+	Your changes will be lost if you don't save them.	Ваші зміни буде втрачено, якщо їх не зберегти.
+	{key} must be "#rrggbb" or null	{key} має бути "#rrggbb" або null
+	{name} contains authoring elements. Open in Block Editor?	{name} містить елементи розробки. Відкрити в редакторі блоків?
+	{name}: there is no file dialog here; run it with parameters, e.g. {example}	{name}: діалог вибору файлу тут недоступний; запустіть із параметрами, наприклад {example}
+	{n} font missing: {shown}{more}. Tools > Fonts... lets you choose what to draw instead.	Бракує шрифтів: {n}, {shown}{more}. У меню Інструменти > Шрифти... можна вибрати шрифт для відображення замість відсутнього.
+	{n} fonts missing: {shown}{more}. Tools > Fonts... lets you choose what to draw instead.	Бракує шрифтів: {n}, {shown}{more}. У меню Інструменти > Шрифти... можна вибрати шрифти для відображення замість відсутніх.
+	{title} was not saved ({e}); it stays open.	{title} не збережено ({e}); креслення залишається відкритим.
+	{title} was not saved; it stays open.	{title} не збережено; креслення залишається відкритим.

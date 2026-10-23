@@ -27,7 +27,9 @@ const CLIPBOARD: &[&str] = &["cutclip", "copyclip", "copybase", "pasteclip", "pa
 /// Isolate ▸ (object isolation commands).
 const ISOLATE: &[&str] = &["isolateobjects", "hideobjects", "unisolateobjects"];
 /// With a selection: commands that act on it, and its label when it differs from the command's.
-const EDIT: &[(&str, Option<&str>)] = &[("erase", None), ("move", None), ("copy", Some("Copy Selection")), ("scale", None), ("rotate", None)];
+fn edit_commands() -> [(&'static str, Option<&'static str>); 5] {
+    [("erase", None), ("move", None), ("copy", Some(crate::tl!("Copy Selection"))), ("scale", None), ("rotate", None)]
+}
 /// Draw Order ▸.
 const DRAW_ORDER: &[&str] = &["draworder.front", "draworder.back", "draworder.above", "draworder.under"];
 const GROUP: &[&str] = &["group", "ungroup"];
@@ -95,19 +97,19 @@ pub fn entries(app: &CadApp) -> Vec<Vec<Entry>> {
         .filter_map(|id| find_command(id))
         .map(|c| Entry::Item { label: c.id.to_ascii_uppercase(), id: c.id.to_string(), shortcut: None, enabled: (c.enabled)(&app.session).is_ok() })
         .collect();
-    first.extend(sub("Recent Commands", recent));
+    first.extend(sub(crate::tl!("Recent Commands"), recent));
     push(&mut groups, first);
     // In the Block Editor: save the block or go back to the drawing.
     if app.session.state().is_ok_and(|st| st.block_edit.is_some()) {
         push(&mut groups, items(app, &["bsave", "bsaveas", "bclose"]));
     }
-    let mut clip: Vec<Entry> = sub("Clipboard", items(app, CLIPBOARD)).into_iter().collect();
-    clip.extend(sub("Isolate", items(app, ISOLATE)));
+    let mut clip: Vec<Entry> = sub(crate::tl!("Clipboard"), items(app, CLIPBOARD)).into_iter().collect();
+    clip.extend(sub(crate::tl!("Isolate"), items(app, ISOLATE)));
     push(&mut groups, clip);
     let selected = !app.session.selection().is_empty();
     if selected {
-        let mut edit: Vec<Entry> = EDIT.iter().filter_map(|(id, label)| item(app, id, *label)).collect();
-        edit.extend(sub("Draw Order", items(app, DRAW_ORDER)));
+        let mut edit: Vec<Entry> = edit_commands().iter().filter_map(|(id, label)| item(app, id, *label)).collect();
+        edit.extend(sub(crate::tl!("Draw Order"), items(app, DRAW_ORDER)));
         edit.extend(items(app, GROUP));
         push(&mut groups, edit);
         push(&mut groups, object_entries(app));
@@ -138,13 +140,13 @@ fn object_commands(app: &CadApp) -> Vec<(&'static str, Option<&'static str>)> {
         EntityKind::Insert(_) => {
             let mut v = vec![("bedit", None), ("refedit", None)];
             if ents.iter().any(|e| matches!(&e.kind, EntityKind::Insert(i) if !i.attribs.is_empty())) {
-                v.push(("attedit", Some("Edit Attributes...")));
+                v.push(("attedit", Some(crate::tl!("Edit Attributes..."))));
             }
             v
         }
         EntityKind::Hatch(_) => vec![("hatchedit", None)],
-        EntityKind::LwPolyline(_) | EntityKind::Polyline3d(_) => vec![("pedit", Some("Polyline Edit"))],
-        EntityKind::Spline(_) => vec![("splinedit", Some("Spline Edit"))],
+        EntityKind::LwPolyline(_) | EntityKind::Polyline3d(_) => vec![("pedit", Some(crate::tl!("Polyline Edit")))],
+        EntityKind::Spline(_) => vec![("splinedit", Some(crate::tl!("Spline Edit")))],
         EntityKind::Dimension(_) => vec![("dimtedit", None)],
         EntityKind::MLeader(_) => vec![("mleaderedit", None)],
         EntityKind::Viewport(_) => vec![("vpclip", None)],
@@ -163,9 +165,9 @@ pub fn object_entries(app: &CadApp) -> Vec<Entry> {
 pub fn command_entries(app: &CadApp) -> Option<Vec<Vec<Entry>>> {
     let prompt = app.session.current_prompt()?;
     let typed = |label: &str, id: String| Entry::Item { label: label.into(), id, shortcut: None, enabled: true };
-    let mut groups = vec![vec![typed("Enter", ENTER.into()), typed("Cancel", CANCEL.into())]];
+    let mut groups = vec![vec![typed(crate::tl!("Enter"), ENTER.into()), typed(crate::tl!("Cancel"), CANCEL.into())]];
     let recent: Vec<Entry> = app.cmd.recent_input.iter().rev().take(RECENT).map(|t| typed(t, format!("{TYPE}{t}"))).collect();
-    push(&mut groups, sub("Recent Input", recent).into_iter().collect());
+    push(&mut groups, sub(crate::tl!("Recent Input"), recent).into_iter().collect());
     push(&mut groups, prompt.keywords.iter().map(|k| typed(k, format!("{KEYWORD}{k}"))).collect());
     if cadcraft_engine::pointmod::accepts(&prompt) {
         let mut snaps = Vec::new();
@@ -174,7 +176,7 @@ pub fn command_entries(app: &CadApp) -> Option<Vec<Vec<Entry>>> {
                 snaps.push(prefix_ids(e, SNAP));
             }
         }
-        push(&mut groups, sub("Snap Overrides", snaps).into_iter().collect());
+        push(&mut groups, sub(crate::tl!("Snap Overrides"), snaps).into_iter().collect());
     }
     // Typed transparently ('zoom.extents), so the command keeps running.
     let view = |label: &str, ids: &[&str]| {
@@ -253,14 +255,14 @@ pub fn snap_entries(app: &CadApp) -> Vec<Vec<Entry>> {
     let typed = |label: &str, id: &str| Entry::Item { label: label.into(), id: id.into(), shortcut: None, enabled: on };
     let name = |m: u32| mode::ALL.iter().find(|(b, _)| *b == m).map_or("", |(_, n)| *n);
     let mut groups = vec![vec![
-        typed("Temporary track point", "_tt"),
-        typed("From", "_from"),
-        typed("Mid Between 2 Points", "_m2p"),
-        Entry::Sub { label: "Point Filters".into(), children: FILTERS.iter().map(|f| typed(f, &f.to_ascii_lowercase())).collect() },
+        typed(crate::tl!("Temporary track point"), "_tt"),
+        typed(crate::tl!("From"), "_from"),
+        typed(crate::tl!("Mid Between 2 Points"), "_m2p"),
+        Entry::Sub { label: crate::tl!("Point Filters").into(), children: FILTERS.iter().map(|f| typed(f, &f.to_ascii_lowercase())).collect() },
     ]];
     groups.extend(SNAP_GROUPS.iter().map(|g| g.iter().map(|(m, id)| typed(name(*m), id)).collect()));
-    groups.push(vec![typed("None", "_non")]);
-    groups.push(vec![Entry::Item { label: "Osnap Settings...".into(), id: OSNAP_SETTINGS.into(), shortcut: None, enabled: true }]);
+    groups.push(vec![typed(crate::tl!("None"), "_non")]);
+    groups.push(vec![Entry::Item { label: crate::tl!("Osnap Settings...").into(), id: OSNAP_SETTINGS.into(), shortcut: None, enabled: true }]);
     groups
 }
 

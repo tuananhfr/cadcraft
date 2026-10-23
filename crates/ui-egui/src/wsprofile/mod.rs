@@ -334,7 +334,7 @@ pub(crate) fn edit_toolbars(app: &mut CadApp, change: impl FnOnce(&mut Vec<schem
         return Err(LOCKED_MESSAGE.into());
     }
     let profile = WorkspaceProfile { layout: next, ..app.ws.user.clone() };
-    startup::check_profile(&profile, &app.ws.policy()).map_err(|reason| format!("The tool bars cannot be stored: {reason}"))?;
+    startup::check_profile(&profile, &app.ws.policy()).map_err(|reason| crate::tf!("The tool bars cannot be stored: {reason}", reason = reason))?;
     app.ws.history.record(before);
     app.ws.keep_layout(profile.layout);
     app.ws.rebuild();
@@ -580,14 +580,14 @@ impl CadApp {
                 )
             });
         } else if damaged {
-            notices.push(if kept { FALLBACK_MESSAGE.into() } else { NOT_KEPT_MESSAGE.into() });
+            notices.push(if kept { crate::i18n::t(FALLBACK_MESSAGE).into() } else { crate::i18n::t(NOT_KEPT_MESSAGE).into() });
         }
         if damaged || matches!(restored.fallback, Some(Fallback::RestoredSnapshot { .. })) {
             notices.push(crate::tl!("Restart in safe mode: add ?safe to the address / --safe-mode").into());
         }
         if let Some(problem) = store.read_policy().and_then(|raw| startup::policy_problem(&raw)) {
             log::warn!("workspace: policy: {problem}");
-            notices.push(format!("{POLICY_MESSAGE}: {problem}"));
+            notices.push(format!("{}: {problem}", crate::i18n::t(POLICY_MESSAGE)));
         }
         let session: Vec<Layer> = self.ws.layers.iter().filter(|layer| layer.level == Level::Session).cloned().collect();
         self.ws.store = Some(store);
@@ -657,7 +657,7 @@ impl CadApp {
         if self.ws.suspended {
             return Err(commands::ROLLBACK_MESSAGE.into());
         }
-        let store = self.ws.store.take().ok_or("No workspace storage is attached")?;
+        let store = self.ws.store.take().ok_or(crate::tl!("No workspace storage is attached"))?;
         self.attach_profile_store(store);
         self.ws.drag_before = None;
         self.ws.first_run = false;
@@ -692,7 +692,7 @@ impl CadApp {
         if interactive {
             self.ui.dialog = Some(tab_conflict::DIALOG.into());
         }
-        TAB_CONFLICT_MESSAGE.into()
+        crate::i18n::t(TAB_CONFLICT_MESSAGE).into()
     }
 
     /// Arms the next attempt after a commit that did not reach storage; returns the error to report.
@@ -703,7 +703,7 @@ impl CadApp {
         self.ws.writing = false;
         self.ws.autosave.retry(self.ws.now, delay);
         self.ws.status = SaveStatus::Failed(error.clone());
-        self.set_status(format!("Could not save workspace: {error}"));
+        self.set_status(crate::tf!("Could not save workspace: {error}", error = error));
         error
     }
 
@@ -748,7 +748,7 @@ impl CadApp {
         }
         let policy = self.ws.policy();
         let expected = self.ws.known_revision;
-        let Some(store) = self.ws.store.as_mut() else { return Err("No workspace storage is attached".into()) };
+        let Some(store) = self.ws.store.as_mut() else { return Err(crate::tl!("No workspace storage is attached").into()) };
         let mut revisions = store.snapshots();
         let newest = revisions.iter().copied().max().unwrap_or(0);
         let mut user = self.ws.user.clone();

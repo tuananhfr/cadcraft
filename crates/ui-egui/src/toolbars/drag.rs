@@ -125,7 +125,10 @@ fn snapped_target(toolbars: &[ToolbarState], id: &str, target: &DropTarget, froz
 /// Puts the bar `id` where `target` says. Bars in `frozen` (order held by policy) are never renumbered;
 /// a drop that would need that lands in the nearest slot that does not.
 pub fn apply_drop(toolbars: &mut [ToolbarState], id: &str, target: &DropTarget, frozen: &[String]) -> Result<(), String> {
-    let at = toolbars.iter().position(|bar| bar.id == id).ok_or_else(|| format!("Unknown toolbar: {}", id.chars().take(64).collect::<String>()))?;
+    let at = toolbars
+        .iter()
+        .position(|bar| bar.id == id)
+        .ok_or_else(|| crate::tf!("Unknown toolbar: {id}", id = id.chars().take(64).collect::<String>()))?;
     match target {
         DropTarget::Ribbon { .. } => return Err(crate::tl!("Use ui.toolbar.to_ribbon to convert a toolbar").to_string()),
         DropTarget::Float { pos_ratio } => {
@@ -136,7 +139,7 @@ pub fn apply_drop(toolbars: &mut [ToolbarState], id: &str, target: &DropTarget, 
         }
         DropTarget::Edge { dock, row, order } => {
             if *dock == Dock::Floating {
-                return Err("A tool bar docks to the top, bottom, left or right edge".into());
+                return Err(crate::tl!("A tool bar docks to the top, bottom, left or right edge").into());
             }
             let Some(bar) = toolbars.get_mut(at) else { return Ok(()) };
             bar.dock = *dock;

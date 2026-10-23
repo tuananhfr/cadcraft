@@ -419,13 +419,13 @@ pub(crate) fn layers_section(app: &mut CadApp, ui: &mut egui::Ui) {
         egui::Popup::from_toggle_button_response(&resp).width(w).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
             for (name, on, frozen, locked, color) in &layers {
                 ui.horizontal(|ui| {
-                    if icons::button(ui, if *on { Icon::Bulb } else { Icon::BulbOff }, 18.0, "On/Off", false).clicked() {
+                    if icons::button(ui, if *on { Icon::Bulb } else { Icon::BulbOff }, 18.0, crate::tl!("On/Off"), false).clicked() {
                         toggle = Some((name.clone(), "on", !*on));
                     }
-                    if icons::button(ui, if *frozen { Icon::Snowflake } else { Icon::Sun }, 18.0, "Freeze/Thaw", false).clicked() {
+                    if icons::button(ui, if *frozen { Icon::Snowflake } else { Icon::Sun }, 18.0, crate::tl!("Freeze/Thaw"), false).clicked() {
                         toggle = Some((name.clone(), "frozen", !*frozen));
                     }
-                    if icons::button(ui, if *locked { Icon::Lock } else { Icon::Unlock }, 18.0, "Lock/Unlock", false).clicked() {
+                    if icons::button(ui, if *locked { Icon::Lock } else { Icon::Unlock }, 18.0, crate::tl!("Lock/Unlock"), false).clicked() {
                         toggle = Some((name.clone(), "locked", !*locked));
                     }
                     let (sr, _) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover());
@@ -453,7 +453,7 @@ pub(crate) fn layers_section(app: &mut CadApp, ui: &mut egui::Ui) {
         icons::paint(ui.painter(), Rect::from_center_size(pos2(rect.right() - 12.0, rect.center().y), vec2(12.0, 12.0)), Icon::ChevronDown, false);
     });
     ui.add_space(4.0);
-    let label = if app.ui.show_layer_list { "Hide Layer List" } else { "Show Layer List" };
+    let label = if app.ui.show_layer_list { crate::tl!("Hide Layer List") } else { crate::tl!("Show Layer List") };
     ui.horizontal(|ui| {
         ui.add_space(8.0);
         let (rect, resp) = ui.allocate_exact_size(vec2(160.0, 20.0), Sense::click());
@@ -473,13 +473,13 @@ pub(crate) fn layers_section(app: &mut CadApp, ui: &mut egui::Ui) {
         for (name, on, frozen, locked, color) in &layers {
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
-                if icons::button(ui, if *on { Icon::Bulb } else { Icon::BulbOff }, 18.0, "On/Off", false).clicked() {
+                if icons::button(ui, if *on { Icon::Bulb } else { Icon::BulbOff }, 18.0, crate::tl!("On/Off"), false).clicked() {
                     toggle = Some((name.clone(), "on", !*on));
                 }
-                if icons::button(ui, if *frozen { Icon::Snowflake } else { Icon::Sun }, 18.0, "Freeze/Thaw", false).clicked() {
+                if icons::button(ui, if *frozen { Icon::Snowflake } else { Icon::Sun }, 18.0, crate::tl!("Freeze/Thaw"), false).clicked() {
                     toggle = Some((name.clone(), "frozen", !*frozen));
                 }
-                if icons::button(ui, if *locked { Icon::Lock } else { Icon::Unlock }, 18.0, "Lock/Unlock", false).clicked() {
+                if icons::button(ui, if *locked { Icon::Lock } else { Icon::Unlock }, 18.0, crate::tl!("Lock/Unlock"), false).clicked() {
                     toggle = Some((name.clone(), "locked", !*locked));
                 }
                 let (sr, _) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover());
@@ -609,7 +609,7 @@ fn custom_properties(ui: &egui::Ui, app: &CadApp, h: cadcraft_engine::doc::Handl
 
 /// A greyed value computed from the geometry.
 fn read_only(ui: &mut egui::Ui, text: &str) {
-    value_box(ui, crate::i18n::t(text), false, false).on_hover_text(crate::tl!("Read-only"));
+    value_box(ui, text, false, false).on_hover_text(crate::tl!("Read-only"));
 }
 
 /// The Properties header: All/My, the selection-type filter and the PICKADD / Select Objects /
@@ -707,7 +707,7 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
         let tb_styles: Vec<String> = d.table_styles.iter().map(|l| l.name.clone()).collect();
         let mut action: Option<(&str, Value)> = None;
         let mut act = |c: &'static str, p: Value| action = Some((c, p));
-        prop_row(ui, "Color", |ui| {
+        prop_row(ui, crate::tl!("Color"), |ui| {
             ui.menu_button(format!("■ {}", crate::i18n::t(&Color::from_aci(h.i64("CECOLOR", 256) as i16).name())), |ui| {
                 for (n, c) in [
                     ("ByLayer", 256),
@@ -727,12 +727,12 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
                 }
             });
         });
-        prop_row(ui, "Layer", |ui| {
+        prop_row(ui, crate::tl!("Layer"), |ui| {
             if let Some(l) = pick_menu(ui, &h.str("CLAYER", "0"), layers) {
                 act("layer.current", json!({ "name": l }));
             }
         });
-        prop_row(ui, "Linetype", |ui| {
+        prop_row(ui, crate::tl!("Linetype"), |ui| {
             let items = ["ByLayer", "ByBlock"]
                 .map(String::from)
                 .into_iter()
@@ -741,12 +741,12 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
                 act("linetype", json!({ "current": l }));
             }
         });
-        prop_row(ui, "Linetype scale", |ui| {
+        prop_row(ui, crate::tl!("Linetype scale"), |ui| {
             if let Some(f) = number(edit_field(ui, ui.id().with("cur_celtscale"), format!("{:.4}", h.f64("CELTSCALE", 1.0))), &mut bad) {
                 act("setvar", json!({ "name": "CELTSCALE", "value": f }));
             }
         });
-        prop_row(ui, "Lineweight", |ui| {
+        prop_row(ui, crate::tl!("Lineweight"), |ui| {
             ui.menu_button(crate::i18n::t(&cadcraft_doc::Lineweight::from_dxf(h.i64("CELWEIGHT", -1) as i16).name()), |ui| {
                 for n in ["ByLayer", "ByBlock", "Default"] {
                     if ui.button(crate::i18n::t(n)).clicked() {
@@ -762,34 +762,34 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
                 }
             });
         });
-        prop_row(ui, "Transparency", |ui| unavailable(ui, "ByLayer"));
-        prop_row(ui, "Thickness", |ui| {
+        prop_row(ui, crate::tl!("Transparency"), |ui| unavailable(ui, "ByLayer"));
+        prop_row(ui, crate::tl!("Thickness"), |ui| {
             if let Some(f) = number(edit_field(ui, ui.id().with("cur_thickness"), len(h.f64("THICKNESS", 0.0))), &mut bad) {
                 act("setvar", json!({ "name": "THICKNESS", "value": f }));
             }
         });
-        prop_row(ui, "Text style", |ui| {
+        prop_row(ui, crate::tl!("Text style"), |ui| {
             if let Some(n) = pick_menu(ui, &h.str("TEXTSTYLE", "Standard"), text_styles) {
                 act("style.current", json!({ "name": n }));
             }
         });
-        prop_row(ui, "Dimension style", |ui| {
+        prop_row(ui, crate::tl!("Dimension style"), |ui| {
             if let Some(n) = pick_menu(ui, &h.str("DIMSTYLE", "Standard"), dim_styles) {
                 act("dimstyle.current", json!({ "name": n }));
             }
         });
-        prop_row(ui, "Multileader style", |ui| {
+        prop_row(ui, crate::tl!("Multileader style"), |ui| {
             if let Some(n) = pick_menu(ui, &h.str("CMLEADERSTYLE", "Standard"), ml_styles) {
                 act("mleaderstyle", json!({ "name": n, "current": true }));
             }
         });
-        prop_row(ui, "Table style", |ui| {
+        prop_row(ui, crate::tl!("Table style"), |ui| {
             if let Some(n) = pick_menu(ui, &h.str("CTABLESTYLE", "Standard"), tb_styles) {
                 act("tablestyle", json!({ "name": n, "current": true }));
             }
         });
-        prop_row(ui, "Annotation scale", |ui| unavailable(ui, "1:1"));
-        prop_row(ui, "Text height", |ui| {
+        prop_row(ui, crate::tl!("Annotation scale"), |ui| unavailable(ui, "1:1"));
+        prop_row(ui, crate::tl!("Text height"), |ui| {
             if let Some(f) = number(edit_field(ui, ui.id().with("cur_textsize"), len(h.f64("TEXTSIZE", 0.2))), &mut bad) {
                 act("setvar", json!({ "name": "TEXTSIZE", "value": f }));
             }
@@ -799,32 +799,32 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
         let layout = space.layout().and_then(|n| d.layout(n).map(|l| (n.to_string(), l.page.plot_style_table.clone())));
         let table = layout.as_ref().and_then(|(_, t)| cadcraft_doc::plot_style_table(d, t));
         match table.as_ref().filter(|t| !t.is_color_dependent()) {
-            Some(t) => prop_row(ui, "Plot style", |ui| {
+            Some(t) => prop_row(ui, crate::tl!("Plot style"), |ui| {
                 let items = ["ByLayer", "ByBlock"].map(String::from).into_iter().chain(t.styles.iter().map(|s| s.name.clone()));
                 if let Some(n) = pick_menu(ui, &h.str("CPLOTSTYLE", "ByLayer"), items) {
                     act("plotstyle", json!({ "name": n }));
                 }
             }),
-            None => prop_row(ui, "Plot style", |ui| read_only(ui, "ByColor")),
+            None => prop_row(ui, crate::tl!("Plot style"), |ui| read_only(ui, crate::tl!("ByColor"))),
         }
         match &layout {
-            Some((name, current)) => prop_row(ui, "Plot style table", |ui| {
+            Some((name, current)) => prop_row(ui, crate::tl!("Plot style table"), |ui| {
                 let shown = if current.trim().is_empty() { "None".to_string() } else { current.clone() };
                 let items = std::iter::once("None".to_string()).chain(cadcraft_doc::plot_style_table_names(d));
                 if let Some(n) = pick_menu(ui, &shown, items) {
                     act("pagesetup", json!({ "layout": name, "plotStyleTable": n }));
                 }
             }),
-            None => prop_row(ui, "Plot style table", |ui| unavailable(ui, "None")),
+            None => prop_row(ui, crate::tl!("Plot style table"), |ui| unavailable(ui, "None")),
         }
-        let attached = layout.as_ref().map(|(n, _)| n.clone()).unwrap_or_else(|| "Model".into());
-        prop_row(ui, "Plot style attached to", |ui| read_only(ui, &attached));
+        let attached = layout.as_ref().map(|(n, _)| n.clone()).unwrap_or_else(|| crate::tl!("Model").into());
+        prop_row(ui, crate::tl!("Plot style attached to"), |ui| read_only(ui, &attached));
         let kind = match &table {
-            Some(t) if t.is_color_dependent() => "Color-dependent",
-            Some(_) => "Named",
-            None => "Not available",
+            Some(t) if t.is_color_dependent() => crate::tl!("Color-dependent"),
+            Some(_) => crate::tl!("Named"),
+            None => crate::tl!("Not available"),
         };
-        prop_row(ui, "Plot table type", |ui| read_only(ui, kind));
+        prop_row(ui, crate::tl!("Plot table type"), |ui| read_only(ui, kind));
         if let Some((c, p)) = action {
             let _ = app.run(c, p);
         }
@@ -857,8 +857,8 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
         ui.painter().rect_filled(r.shrink2(vec2(6.0, 1.0)), 2.0, t.chrome_dark);
         ui.painter().text(pos2(r.left() + 12.0, r.center().y), egui::Align2::LEFT_CENTER, crate::i18n::t(title), crate::theme::small(), t.text_dim);
     };
-    group(ui, "General");
-    prop_row(ui, "Color", |ui| {
+    group(ui, crate::tl!("General"));
+    prop_row(ui, crate::tl!("Color"), |ui| {
         ui.menu_button(format!("■ {}", crate::i18n::t(&color)), |ui| {
             for (n, c) in [
                 ("ByLayer", 256),
@@ -880,8 +880,8 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
             }
         });
     });
-    prop_row(ui, "Layer", |ui| {
-        ui.menu_button(layer.clone(), |ui| {
+    prop_row(ui, crate::tl!("Layer"), |ui| {
+        ui.menu_button(if layer == "*VARIES*" { crate::tl!("*VARIES*") } else { &layer }, |ui| {
             for l in &layers {
                 if ui.button(l).clicked() {
                     set = Some(json!({ "handles": ids, "layer": l }));
@@ -890,7 +890,7 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
             }
         });
     });
-    prop_row(ui, "Linetype", |ui| {
+    prop_row(ui, crate::tl!("Linetype"), |ui| {
         ui.menu_button(if ["ByLayer", "ByBlock", "*VARIES*"].contains(&linetype.as_str()) { crate::i18n::t(&linetype) } else { &linetype }, |ui| {
             for l in std::iter::once("ByLayer".to_string())
                 .chain(std::iter::once("ByBlock".to_string()))
@@ -903,12 +903,13 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
             }
         });
     });
-    prop_row(ui, "Linetype scale", |ui| {
-        if let Some(f) = number(edit_field(ui, ui.id().with(("lts", &ids)), lts.clone()), &mut bad) {
+    prop_row(ui, crate::tl!("Linetype scale"), |ui| {
+        let shown = if lts == "*VARIES*" { crate::tl!("*VARIES*").to_string() } else { lts.clone() };
+        if let Some(f) = number(edit_field(ui, ui.id().with(("lts", &ids)), shown), &mut bad) {
             set = Some(json!({ "handles": ids, "ltscale": f }));
         }
     });
-    prop_row(ui, "Lineweight", |ui| {
+    prop_row(ui, crate::tl!("Lineweight"), |ui| {
         ui.menu_button(crate::i18n::t(&lw), |ui| {
             for n in ["ByLayer", "ByBlock", "Default"] {
                 if ui.button(crate::i18n::t(n)).clicked() {
@@ -924,7 +925,7 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
             }
         });
     });
-    prop_row(ui, "Transparency", |ui| {
+    prop_row(ui, crate::tl!("Transparency"), |ui| {
         ui.menu_button(crate::i18n::t(&tr), |ui| {
             for v in ["ByLayer", "ByBlock"] {
                 if ui.button(crate::i18n::t(v)).clicked() {
@@ -953,7 +954,7 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
         });
     });
     if sel.len() == 1 {
-        group(ui, "Geometry");
+        group(ui, crate::tl!("Geometry"));
         let real = |v: f64| format!("{v:.4}");
         let num = |ui: &mut egui::Ui, label: &str, key: &str, shown: String, set: &mut Option<Value>, bad: &mut Option<String>, ids: &Vec<String>| {
             prop_row(ui, label, |ui| {
@@ -964,40 +965,40 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
         };
         match &e.kind {
             EntityKind::Line(l) => {
-                prop_row(ui, "Start X", |ui| {
+                prop_row(ui, crate::tl!("Start X"), |ui| {
                     if let Some(f) = number(edit_field(ui, ui.id().with(("sx", &ids)), len(l.a.x)), &mut bad) {
                         set = Some(json!({ "handles": ids, "start": [f, l.a.y] }));
                     }
                 });
-                prop_row(ui, "Start Y", |ui| {
+                prop_row(ui, crate::tl!("Start Y"), |ui| {
                     if let Some(f) = number(edit_field(ui, ui.id().with(("sy", &ids)), len(l.a.y)), &mut bad) {
                         set = Some(json!({ "handles": ids, "start": [l.a.x, f] }));
                     }
                 });
-                prop_row(ui, "End X", |ui| {
+                prop_row(ui, crate::tl!("End X"), |ui| {
                     if let Some(f) = number(edit_field(ui, ui.id().with(("ex", &ids)), len(l.b.x)), &mut bad) {
                         set = Some(json!({ "handles": ids, "end": [f, l.b.y] }));
                     }
                 });
-                prop_row(ui, "End Y", |ui| {
+                prop_row(ui, crate::tl!("End Y"), |ui| {
                     if let Some(f) = number(edit_field(ui, ui.id().with(("ey", &ids)), len(l.b.y)), &mut bad) {
                         set = Some(json!({ "handles": ids, "end": [l.b.x, f] }));
                     }
                 });
                 let dlt = l.b.xy() - l.a.xy();
-                prop_row(ui, "Delta X", |ui| read_only(ui, &len(dlt.x)));
-                prop_row(ui, "Delta Y", |ui| read_only(ui, &len(dlt.y)));
+                prop_row(ui, crate::tl!("Delta X"), |ui| read_only(ui, &len(dlt.x)));
+                prop_row(ui, crate::tl!("Delta Y"), |ui| read_only(ui, &len(dlt.y)));
                 // Length and angle keep the start point and move the end point.
-                num(ui, "Length", "length", len(dlt.len()), &mut set, &mut bad, &ids);
-                num(ui, "Angle", "angle", real(dlt.angle().to_degrees()), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Length"), "length", len(dlt.len()), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Angle"), "angle", real(dlt.angle().to_degrees()), &mut set, &mut bad, &ids);
             }
             EntityKind::Circle(c) => {
-                num(ui, "Center X", "cx", len(c.center.x), &mut set, &mut bad, &ids);
-                num(ui, "Center Y", "cy", len(c.center.y), &mut set, &mut bad, &ids);
-                num(ui, "Radius", "radius", len(c.radius), &mut set, &mut bad, &ids);
-                num(ui, "Diameter", "diameter", len(c.radius * 2.0), &mut set, &mut bad, &ids);
-                num(ui, "Circumference", "circumference", len(c.radius * std::f64::consts::TAU), &mut set, &mut bad, &ids);
-                num(ui, "Area", "area", real(c.radius * c.radius * std::f64::consts::PI), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Center X"), "cx", len(c.center.x), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Center Y"), "cy", len(c.center.y), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Radius"), "radius", len(c.radius), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Diameter"), "diameter", len(c.radius * 2.0), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Circumference"), "circumference", len(c.radius * std::f64::consts::TAU), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Area"), "area", real(c.radius * c.radius * std::f64::consts::PI), &mut set, &mut bad, &ids);
                 if let Some(v) = &mut set
                     && let Some(o) = v.as_object_mut()
                 {
@@ -1010,37 +1011,37 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
                 }
             }
             EntityKind::Arc(a) => {
-                num(ui, "Radius", "radius", len(a.radius), &mut set, &mut bad, &ids);
-                num(ui, "Start angle", "startAngle", real(a.start.to_degrees()), &mut set, &mut bad, &ids);
-                num(ui, "End angle", "endAngle", real(a.end.to_degrees()), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Radius"), "radius", len(a.radius), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Start angle"), "startAngle", real(a.start.to_degrees()), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("End angle"), "endAngle", real(a.end.to_degrees()), &mut set, &mut bad, &ids);
             }
             EntityKind::Text(tx) => {
-                prop_row(ui, "Contents", |ui| {
+                prop_row(ui, crate::tl!("Contents"), |ui| {
                     if let Some(s) = edit_field(ui, ui.id().with(("txt", &ids)), tx.value.clone()) {
                         set = Some(json!({ "handles": ids, "text": s }));
                     }
                 });
-                num(ui, "Height", "height", len(tx.height), &mut set, &mut bad, &ids);
-                num(ui, "Rotation", "rotation", real(tx.rotation.to_degrees()), &mut set, &mut bad, &ids);
-                num(ui, "Width factor", "widthFactor", real(tx.width_factor), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Height"), "height", len(tx.height), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Rotation"), "rotation", real(tx.rotation.to_degrees()), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Width factor"), "widthFactor", real(tx.width_factor), &mut set, &mut bad, &ids);
             }
             EntityKind::MText(tx) => {
-                prop_row(ui, "Contents", |ui| {
+                prop_row(ui, crate::tl!("Contents"), |ui| {
                     if let Some(s) = edit_field(ui, ui.id().with(("mtxt", &ids)), tx.contents.clone()) {
                         set = Some(json!({ "handles": ids, "text": s }));
                     }
                 });
-                num(ui, "Text height", "height", len(tx.height), &mut set, &mut bad, &ids);
-                num(ui, "Defined width", "width", len(tx.width), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Text height"), "height", len(tx.height), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Defined width"), "width", len(tx.width), &mut set, &mut bad, &ids);
             }
             EntityKind::LwPolyline(pl) => {
-                num(ui, "Global width", "width", len(pl.const_width), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Global width"), "width", len(pl.const_width), &mut set, &mut bad, &ids);
                 let g = cadcraft_geom::Polyline { vertices: pl.vertices.clone(), closed: pl.closed };
-                prop_row(ui, "Length", |ui| read_only(ui, &len(g.len())));
+                prop_row(ui, crate::tl!("Length"), |ui| read_only(ui, &len(g.len())));
                 if pl.closed {
-                    prop_row(ui, "Area", |ui| read_only(ui, &format!("{:.4}", g.area().abs())));
+                    prop_row(ui, crate::tl!("Area"), |ui| read_only(ui, &format!("{:.4}", g.area().abs())));
                 }
-                prop_row(ui, "Closed", |ui| {
+                prop_row(ui, crate::tl!("Closed"), |ui| {
                     let mut c = pl.closed;
                     let label = if c { "Yes" } else { "No" };
                     if ui.checkbox(&mut c, crate::i18n::t(label)).changed() {
@@ -1049,7 +1050,7 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
                 });
             }
             EntityKind::Hatch(hh) => {
-                prop_row(ui, "Pattern", |ui| {
+                prop_row(ui, crate::tl!("Pattern"), |ui| {
                     ui.menu_button(hh.pattern.clone(), |ui| {
                         if let Some(name) = patterns::menu(ui, &hh.pattern) {
                             set = Some(json!({ "handles": ids, "pattern": name }));
@@ -1057,16 +1058,16 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
                         }
                     });
                 });
-                num(ui, "Scale", "scale", real(hh.scale), &mut set, &mut bad, &ids);
-                num(ui, "Angle", "angle", real(hh.angle.to_degrees()), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Scale"), "scale", real(hh.scale), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Angle"), "angle", real(hh.angle.to_degrees()), &mut set, &mut bad, &ids);
             }
             EntityKind::Dimension(dm) => {
-                prop_row(ui, "Text override", |ui| {
+                prop_row(ui, crate::tl!("Text override"), |ui| {
                     if let Some(s) = edit_field(ui, ui.id().with(("dimtxt", &ids)), dm.text.clone()) {
                         set = Some(json!({ "handles": ids, "textOverride": s }));
                     }
                 });
-                prop_row(ui, "Dim style", |ui| {
+                prop_row(ui, crate::tl!("Dim style"), |ui| {
                     if let Some(n) = pick_menu(ui, &dm.style, d.dim_styles.iter().map(|st| st.name.clone())) {
                         set = Some(json!({ "handles": ids, "dimStyle": n }));
                     }
@@ -1077,14 +1078,14 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
                 // block's (`*U12`), and its custom properties below.
                 let custom = custom_properties(ui, app, e.handle);
                 let name = custom.as_ref().map_or_else(|| i.block.clone(), |(n, _)| n.clone());
-                prop_row(ui, "Name", |ui| read_only(ui, &name));
-                prop_row(ui, "Position X", |ui| read_only(ui, &len(i.insert.x)));
-                prop_row(ui, "Position Y", |ui| read_only(ui, &len(i.insert.y)));
-                prop_row(ui, "Position Z", |ui| read_only(ui, &len(i.insert.z)));
-                num(ui, "Rotation", "rotation", real(i.rotation.to_degrees()), &mut set, &mut bad, &ids);
-                num(ui, "Scale", "scale", real(i.scale.x), &mut set, &mut bad, &ids);
+                prop_row(ui, crate::tl!("Name"), |ui| read_only(ui, &name));
+                prop_row(ui, crate::tl!("Position X"), |ui| read_only(ui, &len(i.insert.x)));
+                prop_row(ui, crate::tl!("Position Y"), |ui| read_only(ui, &len(i.insert.y)));
+                prop_row(ui, crate::tl!("Position Z"), |ui| read_only(ui, &len(i.insert.z)));
+                num(ui, crate::tl!("Rotation"), "rotation", real(i.rotation.to_degrees()), &mut set, &mut bad, &ids);
+                num(ui, crate::tl!("Scale"), "scale", real(i.scale.x), &mut set, &mut bad, &ids);
                 if let Some((_, props)) = custom.filter(|(_, p)| !p.is_empty()) {
-                    group(ui, "Custom");
+                    group(ui, crate::tl!("Custom"));
                     for p in &props {
                         prop_row(ui, &p.name, |ui| {
                             let picked = match (p.editable, p.choices.is_empty()) {

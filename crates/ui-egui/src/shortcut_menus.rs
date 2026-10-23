@@ -54,14 +54,14 @@ pub fn command_line_entries(app: &CadApp) -> Vec<Vec<Entry>> {
         .map(|c| Entry::Item { label: c.id.to_ascii_uppercase(), id: c.id.to_string(), shortcut: None, enabled: (c.enabled)(&app.session).is_ok() })
         .collect();
     if !recent.is_empty() {
-        groups.push(vec![Entry::Sub { label: "Recent Commands".into(), children: recent }]);
+        groups.push(vec![Entry::Sub { label: crate::tl!("Recent Commands").into(), children: recent }]);
     }
     push(&mut groups, ["dynmode", "ui.toggle.history"].iter().filter_map(|id| item(app, id, None)).collect());
     let lines: Vec<Entry> = LINES.iter().filter_map(|n| run(&n.to_string(), "ui.cmdline.lines", json!({ "lines": n }))).collect();
     if !lines.is_empty() {
-        groups.push(vec![Entry::Sub { label: "Lines of Command History".into(), children: lines }]);
+        groups.push(vec![Entry::Sub { label: crate::tl!("Lines of Command History").into(), children: lines }]);
     }
-    let mut edit = vec![action("Copy History", "cmdline:copy".into(), !app.session.log.is_empty())];
+    let mut edit = vec![action(crate::tl!("Copy History"), "cmdline:copy".into(), !app.session.log.is_empty())];
     edit.extend(item(app, "ui.cmdline.clear", None));
     groups.push(edit);
     groups
@@ -81,11 +81,11 @@ pub fn drawing_tab_entries(app: &CadApp, index: usize) -> Vec<Vec<Entry>> {
         .collect();
     push(&mut groups, save);
     let close = vec![
-        action("Close", format!("drawing:close:{index}"), true),
-        action("Close All Other Drawings", format!("drawing:closeothers:{index}"), others),
+        action(crate::tl!("Close"), format!("drawing:close:{index}"), true),
+        action(crate::tl!("Close All Other Drawings"), format!("drawing:closeothers:{index}"), others),
     ];
     push(&mut groups, close);
-    groups.push(vec![action("Copy Full File Path", format!("drawing:copypath:{index}"), path.is_some())]);
+    groups.push(vec![action(crate::tl!("Copy Full File Path"), format!("drawing:copypath:{index}"), path.is_some())]);
     groups
 }
 
@@ -98,7 +98,7 @@ pub fn layout_tab_entries(app: &CadApp, name: &str) -> Vec<Vec<Entry>> {
     let mut groups = Vec::new();
     let mut new: Vec<Entry> = item(app, "layout.new", None).map(|_| layout("new", "New Layout")).into_iter().collect();
     if find_command("layout").is_some() {
-        new.push(layout("template", "From Template..."));
+        new.push(layout("template", crate::tl!("From Template...")));
         if !model {
             new.extend([layout("delete", "Delete Layout"), layout("rename", "Rename Layout"), layout("copy", "Copy Layout")]);
         }
@@ -120,19 +120,19 @@ pub fn layer_entries(app: &CadApp, name: &str) -> Vec<Vec<Entry>> {
     let Some(l) = d.layers.iter().find(|l| l.name.eq_ignore_ascii_case(name)) else { return Vec::new() };
     let set = |label: &str, key: &str, value: bool| run(label, "layer.set", json!({ "name": name, key: value }));
     let mut groups = Vec::new();
-    push(&mut groups, run("Set Current", "layer.current", json!({ "name": name })).into_iter().collect());
+    push(&mut groups, run(crate::tl!("Set Current"), "layer.current", json!({ "name": name })).into_iter().collect());
     push(
         &mut groups,
         [
-            if l.on { set("Turn Off Layer", "on", false) } else { set("Turn On Layer", "on", true) },
-            if l.frozen { set("Thaw Layer", "frozen", false) } else { set("Freeze Layer", "frozen", true) },
-            if l.locked { set("Unlock Layer", "locked", false) } else { set("Lock Layer", "locked", true) },
+            if l.on { set(crate::tl!("Turn Off Layer"), "on", false) } else { set(crate::tl!("Turn On Layer"), "on", true) },
+            if l.frozen { set(crate::tl!("Thaw Layer"), "frozen", false) } else { set(crate::tl!("Freeze Layer"), "frozen", true) },
+            if l.locked { set(crate::tl!("Unlock Layer"), "locked", false) } else { set(crate::tl!("Lock Layer"), "locked", true) },
         ]
         .into_iter()
         .flatten()
         .collect(),
     );
-    push(&mut groups, run("Delete Layer", "layer.delete", json!({ "name": name })).into_iter().collect());
+    push(&mut groups, run(crate::tl!("Delete Layer"), "layer.delete", json!({ "name": name })).into_iter().collect());
     push(&mut groups, item(app, "ui.dialog.layers", None).into_iter().collect());
     groups
 }
@@ -141,7 +141,7 @@ pub fn layer_entries(app: &CadApp, name: &str) -> Vec<Vec<Entry>> {
 pub fn properties_entries(app: &CadApp) -> Vec<Vec<Entry>> {
     let mut groups = Vec::new();
     push(&mut groups, ["qselect", "selectall", "ai_deselect"].iter().filter_map(|id| item(app, id, None)).collect());
-    push(&mut groups, run("Hide Palette", "ui.dock", json!({ "operation": "close", "panel": "properties" })).into_iter().collect());
+    push(&mut groups, run(crate::tl!("Hide Palette"), "ui.dock", json!({ "operation": "close", "panel": "properties" })).into_iter().collect());
     groups
 }
 

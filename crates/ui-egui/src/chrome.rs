@@ -257,22 +257,22 @@ fn status_item_visible(app: &CadApp, id: &str) -> bool {
 
 fn status_item_label(id: &str) -> Option<&'static str> {
     match id {
-        "annotation" => Some("Annotation Visibility"),
-        "coordinates" => Some("Coordinates"),
-        "dynmode" => Some("Dynamic Input (F12)"),
-        "grid" => Some("Grid (F7)"),
-        "isodraft" => Some("Isometric Drafting"),
-        "layouts" => Some("Layout tabs"),
-        "lineweight" => Some("Show/Hide Lineweight"),
-        "ortho" => Some("Ortho Mode (F8)"),
-        "osnap" => Some("Object Snap (F3)"),
-        "otrack" => Some("Object Snap Tracking (F11)"),
-        "polar" => Some("Polar Tracking (F10)"),
-        "quickprops" => Some("Quick Properties"),
-        "settings" => Some("Drafting Settings"),
-        "snap" => Some("Snap Mode (F9)"),
-        "transparency" => Some("Show/Hide Transparency"),
-        "workspace" => Some("Workspace Switching"),
+        "annotation" => Some(crate::tl!("Annotation Visibility")),
+        "coordinates" => Some(crate::tl!("Coordinates")),
+        "dynmode" => Some(crate::tl!("Dynamic Input (F12)")),
+        "grid" => Some(crate::tl!("Grid (F7)")),
+        "isodraft" => Some(crate::tl!("Isometric Drafting")),
+        "layouts" => Some(crate::tl!("Layout tabs")),
+        "lineweight" => Some(crate::tl!("Show/Hide Lineweight")),
+        "ortho" => Some(crate::tl!("Ortho Mode (F8)")),
+        "osnap" => Some(crate::tl!("Object Snap (F3)")),
+        "otrack" => Some(crate::tl!("Object Snap Tracking (F11)")),
+        "polar" => Some(crate::tl!("Polar Tracking (F10)")),
+        "quickprops" => Some(crate::tl!("Quick Properties")),
+        "settings" => Some(crate::tl!("Drafting Settings")),
+        "snap" => Some(crate::tl!("Snap Mode (F9)")),
+        "transparency" => Some(crate::tl!("Show/Hide Transparency")),
+        "workspace" => Some(crate::tl!("Workspace Switching")),
         _ => None,
     }
 }
@@ -480,7 +480,7 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
         // A transient message occupies the same bounded readout slot as coordinates.
         // Ellipsis and a tooltip keep either value readable without covering layout tabs.
         let message = app.status.as_ref().filter(|(_, at)| crate::now_ms() - at < 5000.0).map(|(message, _)| message);
-        let readout = message.cloned().or(coord);
+        let readout = message.map(|text| crate::i18n::t(text).to_string()).or(coord);
         if let Some(text) = readout {
             let left = x + 8.0;
             let width = (coord_right - left).max(0.0);
@@ -569,7 +569,9 @@ pub fn start_page(app: &mut CadApp, ui: &mut egui::Ui) {
     );
     let mut y = left.top() + 140.0;
     let mut action = None;
-    for (label, cmd) in [("Open...", "open"), ("New", "new"), ("New (metric)", "new.metric"), ("Open sample drawing", "sample")] {
+    for (label, cmd) in
+        [("Open...", "open"), ("New", "new"), (crate::tl!("New (metric)"), "new.metric"), (crate::tl!("Open sample drawing"), "sample")]
+    {
         let br = Rect::from_min_size(pos2(left.left() + 34.0, y), vec2(220.0, 34.0));
         let resp = ui.interact(br, ui.id().with(("start", cmd)), Sense::click());
         p.rect_stroke(br, 2.0, Stroke::new(1.0, if resp.hovered() { t.text } else { t.text_dim }), egui::StrokeKind::Inside);

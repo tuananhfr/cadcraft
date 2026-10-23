@@ -600,7 +600,7 @@ pub fn parameters_dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool)
                         ui.label(egui::RichText::new(crate::i18n::t(h)).strong());
                     }
                     ui.end_row();
-                    for (kind, title) in [("dimensional", "Dimensional Constraint Parameters"), ("user", "User Parameters")] {
+                    for (kind, title) in [("dimensional", crate::tl!("Dimensional Constraint Parameters")), ("user", crate::tl!("User Parameters"))] {
                         let group: Vec<&Row> =
                             rows.iter().filter(|r| r.kind == kind && (f.is_empty() || r.name.to_ascii_lowercase().contains(&f))).collect();
                         ui.label(egui::RichText::new(crate::i18n::t(title)).color(t.text_dim).small());

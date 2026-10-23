@@ -148,8 +148,8 @@ struct UiChanges {
 fn color_param(key: &str, v: &Value) -> Result<Option<Color32>, String> {
     match v {
         Value::Null => Ok(None),
-        Value::String(s) => parse_hex(s).map(Some).ok_or_else(|| format!("{key} must be \"#rrggbb\" or null")),
-        _ => Err(format!("{key} must be \"#rrggbb\" or null")),
+        Value::String(s) => parse_hex(s).map(Some).ok_or_else(|| crate::tf!("{key} must be \"#rrggbb\" or null", key = key)),
+        _ => Err(crate::tf!("{key} must be \"#rrggbb\" or null", key = key)),
     }
 }
 
@@ -190,12 +190,12 @@ fn parse_ui(key: &str, v: &Value, c: &mut UiChanges) -> Result<bool, String> {
             let n = v
                 .as_f64()
                 .filter(|n| n.is_finite() && (0.0..=f64::from(max)).contains(n))
-                .ok_or_else(|| format!("SAVETIME must be from 0 to {max} minutes"))?;
+                .ok_or_else(|| crate::tf!("SAVETIME must be from 0 to {max} minutes", max = max))?;
             c.savetime = Some(n.round() as u32);
         }
         k if k.eq_ignore_ascii_case("SAVEFILEPATH") => {
             let p = v.as_str().map(str::trim).filter(|p| p.chars().count() <= MAX_PATH_CHARS && !p.chars().any(char::is_control));
-            c.savefilepath = Some(p.ok_or("SAVEFILEPATH must be a folder path")?.to_string());
+            c.savefilepath = Some(p.ok_or(crate::tl!("SAVEFILEPATH must be a folder path"))?.to_string());
         }
         _ => return Ok(false),
     }
@@ -394,9 +394,9 @@ mod tests {
     #[test]
     fn dialog_labels_have_ukrainian_translations() {
         let sources = [include_str!("dialog.rs")];
-        let mut missing: Vec<String> = dialog::TABS.iter().filter(|(_, l)| crate::i18n::tr("uk", l) == *l).map(|(_, l)| l.to_string()).collect();
+        let mut missing: Vec<String> = dialog::tabs().iter().filter(|(_, l)| crate::i18n::tr("uk", l) == *l).map(|(_, l)| l.to_string()).collect();
         for source in sources {
-            for rest in source.split("crate::tl!(").skip(1) {
+            for rest in source.split(concat!("crate::tl!", "(")).skip(1) {
                 let Some(text) = rest.strip_prefix('"').and_then(|r| r.split('"').next()) else { continue };
                 // File format names read the same in every language.
                 if crate::i18n::tr("uk", text) == text && !["DXF", "DWG"].contains(&text) {

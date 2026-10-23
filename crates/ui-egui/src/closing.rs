@@ -53,7 +53,7 @@ impl CadApp {
                 let uid = d.uid;
                 self.begin_close(vec![uid]);
             }
-            None => self.session.echo("Close: no drawing to close"),
+            None => self.session.echo(crate::tl!("Close: no drawing to close")),
         }
     }
 
@@ -132,8 +132,8 @@ impl CadApp {
                         self.closing = None;
                         let title = self.doc_index(uid).and_then(|i| self.session.docs.get(i)).map(|d| d.title.clone()).unwrap_or_default();
                         let msg = match r {
-                            Err(e) => format!("{title} was not saved ({e}); it stays open."),
-                            Ok(_) => format!("{title} was not saved; it stays open."),
+                            Err(e) => crate::tf!("{title} was not saved ({e}); it stays open.", title = title, e = e),
+                            Ok(_) => crate::tf!("{title} was not saved; it stays open.", title = title),
                         };
                         self.session.echo(msg.clone());
                         self.set_status(msg);
@@ -213,19 +213,19 @@ pub fn prompt(app: &mut CadApp, ctx: &egui::Context) {
         ui.set_width(360.0);
         ui.label(RichText::new("UbotCAD").strong());
         ui.add_space(4.0);
-        ui.label(format!("Save changes to {title}?"));
-        ui.label(RichText::new("Your changes will be lost if you don't save them.").color(t.text_dim));
+        ui.label(crate::tf!("Save changes to {title}?", title = title));
+        ui.label(RichText::new(crate::tl!("Your changes will be lost if you don't save them.")).color(t.text_dim));
         ui.add_space(10.0);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let size = vec2(84.0, 22.0);
-            let save = ui.add(egui::Button::new(RichText::new("Save").color(t.text)).fill(t.accent).min_size(size));
+            let save = ui.add(egui::Button::new(RichText::new(crate::tl!("Save")).color(t.text)).fill(t.accent).min_size(size));
             if save.clicked() {
                 choice = Some(Choice::Save);
             }
-            if ui.add(egui::Button::new("Cancel").min_size(size)).clicked() {
+            if ui.add(egui::Button::new(crate::tl!("Cancel")).min_size(size)).clicked() {
                 choice = Some(Choice::Cancel);
             }
-            if ui.add(egui::Button::new("Don't Save").min_size(size)).clicked() {
+            if ui.add(egui::Button::new(crate::tl!("Don't Save")).min_size(size)).clicked() {
                 choice = Some(Choice::Discard);
             }
         });

@@ -48,7 +48,7 @@ pub fn authoring_dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) 
         .ok()
         .and_then(|st| st.path.clone())
         .and_then(|p| std::path::Path::new(&p).file_name().map(|f| f.to_string_lossy().into_owned()))
-        .unwrap_or_else(|| crate::i18n::t("This drawing").to_string());
+        .unwrap_or_else(|| crate::tl!("This drawing").to_string());
     let mut choice: Option<&str> = None;
     egui::Window::new(crate::tl!("Open in Block Editor"))
         .id(egui::Id::new("Open in Block Editor"))
@@ -59,7 +59,7 @@ pub fn authoring_dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) 
         .default_pos(ctx.content_rect().center())
         .show(ctx, |ui| {
             ui.set_max_width(420.0);
-            ui.label(format!("{name} {}", crate::i18n::t("contains authoring elements. Open in Block Editor?")));
+            ui.label(crate::tf!("{name} contains authoring elements. Open in Block Editor?", name = name));
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 if ui.button(crate::tl!("Yes")).clicked() {

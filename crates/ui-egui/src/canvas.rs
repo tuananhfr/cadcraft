@@ -2324,7 +2324,7 @@ fn grip_menu(app: &mut CadApp, resp: &egui::Response) {
     let open = resp
         .context_menu(|ui| {
             let vertex = options.contains(&cadcraft_engine::grips::GripAction::RemoveVertex);
-            if ui.button(crate::i18n::t(if vertex { "Stretch Vertex" } else { "Stretch" })).clicked() {
+            if ui.button(if vertex { crate::tl!("Stretch Vertex") } else { crate::tl!("Stretch") }).clicked() {
                 chosen = Some(None);
                 ui.close();
             }

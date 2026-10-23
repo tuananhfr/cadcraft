@@ -320,7 +320,7 @@ fn about(ctx: &egui::Context, open: &mut bool) {
         .show(ctx, |ui| {
             let mut tab = ui.data_mut(|d| d.get_temp::<u8>(tab_id)).unwrap_or(0);
             ui.horizontal(|ui| {
-                for (i, l) in ["About", "Contributors", "Models"].iter().enumerate() {
+                for (i, l) in [crate::tl!("About"), crate::tl!("Contributors"), crate::tl!("Models")].iter().enumerate() {
                     if ui.selectable_label(tab == i as u8, crate::i18n::t(l)).clicked() {
                         tab = i as u8;
                     }

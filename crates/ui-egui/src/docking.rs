@@ -40,16 +40,16 @@ impl Panel {
     }
     pub fn label(self) -> &'static str {
         match self {
-            Self::Canvas => "Drawing",
-            Self::ToolSets => "Tool Sets",
-            Self::QuickCalc => "QuickCalc",
-            Self::Layers => "Layers",
-            Self::Properties => "Properties",
-            Self::ExternalRefs => "External References",
-            Self::Fonts => "Fonts",
-            Self::Lisp => "LISP",
-            Self::Blocks => "Blocks",
-            Self::History => "Command History",
+            Self::Canvas => crate::tl!("Drawing"),
+            Self::ToolSets => crate::tl!("Tool Sets"),
+            Self::QuickCalc => crate::tl!("QuickCalc"),
+            Self::Layers => crate::tl!("Layers"),
+            Self::Properties => crate::tl!("Properties"),
+            Self::ExternalRefs => crate::tl!("External References"),
+            Self::Fonts => crate::tl!("Fonts"),
+            Self::Lisp => crate::tl!("LISP"),
+            Self::Blocks => crate::tl!("Blocks"),
+            Self::History => crate::tl!("Command History"),
         }
     }
     fn default_side(self) -> Zone {
@@ -65,7 +65,7 @@ impl Panel {
     /// Palettes outside the default arrangement, opened on request.
     pub const ON_DEMAND: &[Self] = &[Self::QuickCalc, Self::Fonts, Self::Lisp, Self::Blocks, Self::History];
     pub fn parse(id: &str) -> Result<Self, String> {
-        Self::ALL.iter().chain(Self::ON_DEMAND).copied().find(|panel| panel.id() == id).ok_or_else(|| format!("Unknown panel: {id}"))
+        Self::ALL.iter().chain(Self::ON_DEMAND).copied().find(|panel| panel.id() == id).ok_or_else(|| crate::tf!("Unknown panel: {id}", id = id))
     }
 }
 
@@ -120,11 +120,11 @@ impl Workspace {
     pub fn validate(&self) -> Result<(), String> {
         self.layout.validate().map_err(|error| error.to_string())?;
         if !self.layout.contains(&Panel::Canvas) || self.hidden.len() > Panel::ALL.len() + Panel::ON_DEMAND.len() {
-            return Err("The panel layout must contain its document view and bounded hidden panels".into());
+            return Err(crate::tl!("The panel layout must contain its document view and bounded hidden panels").into());
         }
         // Saved settings cannot turn the protected document view into a floating or closable tab.
         if self.layout.floating.iter().any(|group| group.panels.contains(&Panel::Canvas)) {
-            return Err("The document view cannot float".into());
+            return Err(crate::tl!("The document view cannot float").into());
         }
         let mut nodes: Vec<_> = self.layout.root.iter().collect();
         while let Some(node) = nodes.pop() {
@@ -134,10 +134,10 @@ impl Workspace {
                     nodes.push(second);
                 }
                 Node::Tabs { panels, .. } if panels.contains(&Panel::Canvas) && panels.len() != 1 => {
-                    return Err("The document view cannot share a tab group".into());
+                    return Err(crate::tl!("The document view cannot share a tab group").into());
                 }
                 Node::Stack { entries } if entries.iter().any(|entry| entry.panel == Panel::Canvas) => {
-                    return Err("The document view cannot be collapsed".into());
+                    return Err(crate::tl!("The document view cannot be collapsed").into());
                 }
                 _ => {}
             }
@@ -145,10 +145,10 @@ impl Workspace {
         let mut seen = std::collections::HashSet::new();
         for (panel, location) in &self.hidden {
             if *panel == Panel::Canvas || self.layout.contains(panel) || !seen.insert(*panel) {
-                return Err("A hidden panel has an invalid or duplicate identity".into());
+                return Err(crate::tl!("A hidden panel has an invalid or duplicate identity").into());
             }
             if location.anchor == Some(Panel::Canvas) && matches!(location.placement, Placement::Tab { .. } | Placement::Split(Zone::Center)) {
-                return Err("A hidden panel cannot restore over the document view".into());
+                return Err(crate::tl!("A hidden panel cannot restore over the document view").into());
             }
             let mut probe = self.layout.clone();
             if let Err(error) = probe.restore(*panel, location)
@@ -364,7 +364,7 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
     }
     let mut workspace = app.ui.docking.clone();
     if let Err(error) = workspace.validate().and_then(|()| sync(&mut workspace, app)) {
-        app.set_status(format!("Panel layout could not be restored: {error}"));
+        app.set_status(crate::tf!("Panel layout could not be restored: {error}", error = error));
         workspace = Workspace::default();
         let _ = sync(&mut workspace, app);
     }
@@ -382,6 +382,12 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
     style.border = egui::Stroke::new(1.0, t.border);
     style.accent = t.accent;
     style.font = crate::theme::body();
+    style.float_label = crate::tl!("Float panel").into();
+    style.close_label = crate::tl!("Close panel").into();
+    style.move_label = crate::tl!("Move to group").into();
+    style.panels_label = crate::tl!("Panels").into();
+    style.resize_label = crate::tl!("Resize panels").into();
+    style.resize_window_label = crate::tl!("Resize panel window").into();
     let mut content = Content { app, auto_hide: None };
     let output = DockArea::new(egui::Id::new("cadcraft-docking")).show_customized(
         ui,
@@ -410,7 +416,7 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
         if let Err(error) =
             serde_json::to_value(action).map_err(|error| error.to_string()).and_then(|action| command(app, false, &json!({"action": action})))
         {
-            app.set_status(format!("Panel move was not applied: {error}"));
+            app.set_status(crate::tf!("Panel move was not applied: {error}", error = error));
         }
     }
     if let Some(panel) = auto_hide
@@ -446,7 +452,7 @@ impl DockContent<Panel> for Content<'_> {
     fn panel_menu(&mut self, ui: &mut egui::Ui, panel: &Panel) {
         if *panel != Panel::Canvas {
             let unlocked = crate::autohide::can_change(self.app, *panel);
-            let response = ui.add_enabled(unlocked, egui::Button::new(crate::i18n::t("Auto-hide")));
+            let response = ui.add_enabled(unlocked, egui::Button::new(crate::tl!("Auto-hide")));
             if response.clicked() {
                 self.auto_hide = Some(*panel);
                 ui.close();

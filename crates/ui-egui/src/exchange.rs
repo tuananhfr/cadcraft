@@ -50,7 +50,7 @@ pub fn route(app: &mut CadApp, id: &str) -> Result<Value, String> {
 }
 
 fn no_picker(app: &mut CadApp, name: &str, example: &str) -> Result<Value, String> {
-    let msg = format!("{name}: there is no file dialog here; run it with parameters, e.g. {example}");
+    let msg = crate::tf!("{name}: there is no file dialog here; run it with parameters, e.g. {example}", name = name, example = example);
     app.session.echo(msg.clone());
     Err(msg)
 }

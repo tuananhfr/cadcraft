@@ -14,7 +14,9 @@ const PICKED: &str = "QuickCalc: ";
 const MAX_HISTORY: usize = 100;
 /// Variables kept.
 const MAX_VARS: usize = 50;
-const KINDS: [(&str, &str); 4] = [("length", "Length"), ("area", "Area"), ("volume", "Volume"), ("angle", "Angle")];
+fn kinds() -> [(&'static str, &'static str); 4] {
+    [("length", crate::tl!("Length")), ("area", crate::tl!("Area")), ("volume", crate::tl!("Volume")), ("angle", crate::tl!("Angle"))]
+}
 
 #[derive(Clone, Default)]
 struct State {
@@ -113,7 +115,7 @@ impl State {
     fn units(&mut self, app: &mut CadApp) -> Vec<(String, Vec<(String, String)>)> {
         if self.units.is_none() {
             let r = app.run("cal", json!({ "units": true })).unwrap_or_default();
-            let tables = KINDS
+            let tables = kinds()
                 .iter()
                 .map(|(kind, _)| {
                     let list = r["units"][*kind]
@@ -132,7 +134,7 @@ impl State {
     }
     /// A common pair of units for the chosen kind (millimetres to inches, …).
     fn default_pair(&mut self) {
-        let (from, to) = match KINDS.get(self.kind).map(|k| k.0) {
+        let (from, to) = match kinds().get(self.kind).map(|k| k.0) {
             Some("length") => ("mm", "in"),
             Some("area") => ("m2", "ft2"),
             Some("volume") => ("l", "galus"),
@@ -284,9 +286,9 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             let tables = st.units(app);
             egui::Grid::new("qc-units-grid").num_columns(2).spacing(vec2(6.0, 4.0)).show(ui, |ui| {
                 ui.label(crate::tl!("Type"));
-                let kind_label = KINDS.get(st.kind).map_or("", |k| k.1);
+                let kind_label = kinds().get(st.kind).map_or("", |k| k.1);
                 egui::ComboBox::from_id_salt("qc-kind").selected_text(crate::i18n::t(kind_label)).show_ui(ui, |ui| {
-                    for (i, (_, label)) in KINDS.iter().enumerate() {
+                    for (i, (_, label)) in kinds().iter().enumerate() {
                         if ui.selectable_label(st.kind == i, crate::i18n::t(label)).clicked() {
                             st.kind = i;
                             st.default_pair();

@@ -40,11 +40,21 @@ impl Default for QsState {
     }
 }
 
-const OPERATORS: &[(&str, &str)] =
-    &[("=", "= Equals"), ("!=", "<> Not Equal"), (">", "> Greater than"), ("<", "< Less than"), ("*", "* Wildcard Match")];
+fn operators() -> [(&'static str, &'static str); 5] {
+    [
+        ("=", crate::tl!("= Equals")),
+        ("!=", crate::tl!("<> Not Equal")),
+        (">", crate::tl!("> Greater than")),
+        ("<", crate::tl!("< Less than")),
+        ("*", crate::tl!("* Wildcard Match")),
+    ]
+}
 
 /// Friendly label for a property key (`centerX` → `Center X`).
 fn pretty(k: &str) -> String {
+    if k == "ltscale" {
+        return crate::tl!("Linetype scale").to_string();
+    }
     let mut out = String::new();
     for (i, c) in k.chars().enumerate() {
         if i == 0 {
@@ -134,9 +144,10 @@ pub fn qselect_dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                 });
                 ui.end_row();
                 ui.label(crate::tl!("Operator:"));
-                let op_label = OPERATORS.iter().find(|o| o.0 == st.operator).map(|o| o.1).unwrap_or("= Equals");
+                let operators = operators();
+                let op_label = operators.iter().find(|o| o.0 == st.operator).map(|o| o.1).unwrap_or(crate::tl!("= Equals"));
                 egui::ComboBox::from_id_salt("qs_op").width(220.0).selected_text(crate::i18n::t(op_label)).show_ui(ui, |ui| {
-                    for (o, l) in OPERATORS {
+                    for (o, l) in &operators {
                         ui.selectable_value(&mut st.operator, o.to_string(), crate::i18n::t(l));
                     }
                 });
@@ -312,39 +323,50 @@ pub fn quick_properties(app: &mut CadApp, ctx: &egui::Context) {
                 }
                 ui.end_row();
                 ui.label(RichText::new(crate::tl!("Layer")).color(Tokens::get().text_dim));
-                egui::ComboBox::from_id_salt("qp_layer").width(150.0).selected_text(layer.clone()).show_ui(ui, |ui| {
-                    for l in &layers {
-                        if ui.selectable_label(*l == layer, l).clicked() {
-                            set = Some(("layer".into(), json!(l)));
+                egui::ComboBox::from_id_salt("qp_layer")
+                    .width(150.0)
+                    .selected_text(if layer == "*VARIES*" { crate::tl!("*VARIES*") } else { &layer })
+                    .show_ui(ui, |ui| {
+                        for l in &layers {
+                            if ui.selectable_label(*l == layer, l).clicked() {
+                                set = Some(("layer".into(), json!(l)));
+                            }
                         }
-                    }
-                });
+                    });
                 ui.end_row();
                 ui.label(RichText::new(crate::tl!("Linetype")).color(Tokens::get().text_dim));
-                egui::ComboBox::from_id_salt("qp_lt").width(150.0).selected_text(linetype.clone()).show_ui(ui, |ui| {
-                    for l in std::iter::once("ByLayer".to_string())
-                        .chain(std::iter::once("ByBlock".to_string()))
-                        .chain(linetypes.iter().filter(|l| !["ByLayer", "ByBlock"].contains(&l.as_str())).cloned())
-                    {
-                        if ui.selectable_label(l == linetype, &l).clicked() {
-                            set = Some(("linetype".into(), json!(l)));
+                egui::ComboBox::from_id_salt("qp_lt")
+                    .width(150.0)
+                    .selected_text(if ["ByLayer", "ByBlock", "*VARIES*"].contains(&linetype.as_str()) {
+                        crate::i18n::t(&linetype)
+                    } else {
+                        &linetype
+                    })
+                    .show_ui(ui, |ui| {
+                        for l in std::iter::once("ByLayer".to_string())
+                            .chain(std::iter::once("ByBlock".to_string()))
+                            .chain(linetypes.iter().filter(|l| !["ByLayer", "ByBlock"].contains(&l.as_str())).cloned())
+                        {
+                            let shown = if ["ByLayer", "ByBlock"].contains(&l.as_str()) { crate::i18n::t(&l) } else { &l };
+                            if ui.selectable_label(l == linetype, shown).clicked() {
+                                set = Some(("linetype".into(), json!(l)));
+                            }
                         }
-                    }
-                });
+                    });
                 ui.end_row();
                 let id = |k: &str| egui::Id::new(("qp", k, &ids));
                 match &kind {
                     Some(EntityKind::Line(l)) => {
                         let dl = l.b.xy() - l.a.xy();
-                        num_row(ui, "Length", id("len"), dl.len(), &mut set, "length");
-                        num_row(ui, "Angle", id("ang"), dl.angle().to_degrees(), &mut set, "angle");
+                        num_row(ui, crate::tl!("Length"), id("len"), dl.len(), &mut set, "length");
+                        num_row(ui, crate::tl!("Angle"), id("ang"), dl.angle().to_degrees(), &mut set, "angle");
                     }
                     Some(EntityKind::Circle(c)) => {
-                        num_row(ui, "Center X", id("cx"), c.center.x, &mut set, "cx");
-                        num_row(ui, "Center Y", id("cy"), c.center.y, &mut set, "cy");
-                        num_row(ui, "Radius", id("r"), c.radius, &mut set, "radius");
-                        num_row(ui, "Diameter", id("d"), c.radius * 2.0, &mut set, "diameter");
-                        ro_row(ui, "Area", format!("{:.4}", c.radius * c.radius * std::f64::consts::PI));
+                        num_row(ui, crate::tl!("Center X"), id("cx"), c.center.x, &mut set, "cx");
+                        num_row(ui, crate::tl!("Center Y"), id("cy"), c.center.y, &mut set, "cy");
+                        num_row(ui, crate::tl!("Radius"), id("r"), c.radius, &mut set, "radius");
+                        num_row(ui, crate::tl!("Diameter"), id("d"), c.radius * 2.0, &mut set, "diameter");
+                        ro_row(ui, crate::tl!("Area"), format!("{:.4}", c.radius * c.radius * std::f64::consts::PI));
                         if let Some((k, v)) = &set {
                             if k == "cx" {
                                 set = Some(("center".into(), json!([v, c.center.y])));
@@ -354,17 +376,17 @@ pub fn quick_properties(app: &mut CadApp, ctx: &egui::Context) {
                         }
                     }
                     Some(EntityKind::Arc(a)) => {
-                        num_row(ui, "Radius", id("r"), a.radius, &mut set, "radius");
-                        num_row(ui, "Start angle", id("sa"), a.start.to_degrees(), &mut set, "startAngle");
-                        num_row(ui, "End angle", id("ea"), a.end.to_degrees(), &mut set, "endAngle");
+                        num_row(ui, crate::tl!("Radius"), id("r"), a.radius, &mut set, "radius");
+                        num_row(ui, crate::tl!("Start angle"), id("sa"), a.start.to_degrees(), &mut set, "startAngle");
+                        num_row(ui, crate::tl!("End angle"), id("ea"), a.end.to_degrees(), &mut set, "endAngle");
                     }
                     Some(EntityKind::LwPolyline(p)) => {
                         let g = cadcraft_geom::Polyline { vertices: p.vertices.clone(), closed: p.closed };
-                        ro_row(ui, "Length", format!("{:.4}", g.len()));
+                        ro_row(ui, crate::tl!("Length"), format!("{:.4}", g.len()));
                         if p.closed {
-                            ro_row(ui, "Area", format!("{:.4}", g.area().abs()));
+                            ro_row(ui, crate::tl!("Area"), format!("{:.4}", g.area().abs()));
                         }
-                        num_row(ui, "Global width", id("w"), p.const_width, &mut set, "width");
+                        num_row(ui, crate::tl!("Global width"), id("w"), p.const_width, &mut set, "width");
                     }
                     Some(EntityKind::Text(tx)) => {
                         ui.label(RichText::new(crate::tl!("Contents")).color(Tokens::get().text_dim));
@@ -372,8 +394,8 @@ pub fn quick_properties(app: &mut CadApp, ctx: &egui::Context) {
                             set = Some(("text".into(), json!(v)));
                         }
                         ui.end_row();
-                        num_row(ui, "Height", id("h"), tx.height, &mut set, "height");
-                        num_row(ui, "Rotation", id("rot"), tx.rotation.to_degrees(), &mut set, "rotation");
+                        num_row(ui, crate::tl!("Height"), id("h"), tx.height, &mut set, "height");
+                        num_row(ui, crate::tl!("Rotation"), id("rot"), tx.rotation.to_degrees(), &mut set, "rotation");
                     }
                     Some(EntityKind::MText(tx)) => {
                         ui.label(RichText::new(crate::tl!("Contents")).color(Tokens::get().text_dim));
@@ -381,12 +403,12 @@ pub fn quick_properties(app: &mut CadApp, ctx: &egui::Context) {
                             set = Some(("text".into(), json!(v)));
                         }
                         ui.end_row();
-                        num_row(ui, "Text height", id("h"), tx.height, &mut set, "height");
+                        num_row(ui, crate::tl!("Text height"), id("h"), tx.height, &mut set, "height");
                     }
                     Some(EntityKind::Insert(i)) => {
-                        ro_row(ui, "Name", i.block.clone());
-                        num_row(ui, "Rotation", id("rot"), i.rotation.to_degrees(), &mut set, "rotation");
-                        num_row(ui, "Scale", id("sc"), i.scale.x, &mut set, "scale");
+                        ro_row(ui, crate::tl!("Name"), i.block.clone());
+                        num_row(ui, crate::tl!("Rotation"), id("rot"), i.rotation.to_degrees(), &mut set, "rotation");
+                        num_row(ui, crate::tl!("Scale"), id("sc"), i.scale.x, &mut set, "scale");
                     }
                     Some(EntityKind::Dimension(dm)) => {
                         ui.label(RichText::new(crate::tl!("Text override")).color(Tokens::get().text_dim));
