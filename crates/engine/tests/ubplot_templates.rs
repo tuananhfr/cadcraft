@@ -847,3 +847,172 @@ mod reports {
         assert_eq!(session.execute("ubplot.report", &json!({"plan": empty})).unwrap()["rows"], json!([]));
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+mod lpc {
+    use std::collections::BTreeMap;
+    use std::path::{Path, PathBuf};
+
+    use cadcraft_doc::{EntityKind, dynblock};
+    use cadcraft_engine::cmd::file::{IoHooks, set_io};
+    use cadcraft_engine::hash::sha256_hex;
+    use cadcraft_engine::sheetplan::{Severity, SheetPlan, SheetStatus, codes};
+    use serde::Deserialize;
+
+    use super::*;
+
+    #[derive(Deserialize)]
+    struct Reviewed {
+        template: Value,
+        files: Vec<ReviewedFile>,
+    }
+
+    #[derive(Deserialize)]
+    struct ReviewedFile {
+        file: String,
+        sha256: String,
+        mode: String,
+        #[serde(default)]
+        blocks: Vec<String>,
+        expected_frames: usize,
+        expected_codes: BTreeMap<String, usize>,
+        #[serde(default)]
+        expected_attribs: BTreeMap<String, String>,
+        expected_paper_mm: Option<[f64; 2]>,
+        #[serde(default)]
+        no_block: bool,
+    }
+
+    fn inputs() -> Option<(PathBuf, Reviewed)> {
+        let Some(root) = std::env::var_os("UBOTCAD_LPC_DIR") else {
+            eprintln!("skipped: UBOTCAD_LPC_DIR");
+            return None;
+        };
+        let root = PathBuf::from(root);
+        let path = root.join("audit-reviewed.json");
+        if !path.is_file() {
+            eprintln!("skipped: UBOTCAD_LPC_DIR");
+            return None;
+        }
+        let reviewed: Reviewed = serde_json::from_slice(&std::fs::read(path).unwrap()).expect("valid reviewed LPC manifest");
+        assert!(!reviewed.files.is_empty(), "reviewed LPC manifest must list drawings");
+        if reviewed.files.iter().any(|file| !root.join(&file.file).is_file()) {
+            eprintln!("skipped: UBOTCAD_LPC_DIR");
+            return None;
+        }
+        Some((root, reviewed))
+    }
+
+    fn source_bytes(root: &Path, file: &ReviewedFile) -> Vec<u8> {
+        let bytes = std::fs::read(root.join(&file.file)).unwrap();
+        assert_eq!(sha256_hex(&bytes), file.sha256, "reviewed source hash: {}", file.file);
+        bytes
+    }
+
+    fn scan(root: &Path, reviewed: &Reviewed, file: &ReviewedFile) -> SheetPlan {
+        let bytes = source_bytes(root, file);
+        let drawing = cadcraft_io::read(&bytes, &file.file).unwrap();
+        let params = match file.mode.as_str() {
+            "block" => {
+                assert!(!file.blocks.is_empty(), "reviewed blocks: {}", file.file);
+                let handles: Vec<_> = drawing
+                    .model
+                    .iter()
+                    .filter_map(|entity| {
+                        let EntityKind::Insert(insert) = &entity.kind else { return None };
+                        let name = dynblock::effective_name(&drawing, entity.handle).unwrap_or_else(|| insert.block.clone());
+                        if !file.blocks.iter().any(|block| block.eq_ignore_ascii_case(&name)) {
+                            return None;
+                        }
+                        Some(entity.handle.hex())
+                    })
+                    .collect();
+                assert_eq!(handles.len(), file.expected_frames, "reviewed INSERT count: {}", file.file);
+                json!({"mode": "block", "handles": handles})
+            }
+            "layout" => {
+                let names: Vec<_> = drawing.layouts.iter().map(|layout| layout.name.clone()).collect();
+                assert_eq!(names.len(), file.expected_frames, "reviewed layout count: {}", file.file);
+                json!({"mode": "layout", "layouts": names})
+            }
+            mode => panic!("unsupported reviewed LPC mode: {mode}"),
+        };
+        let mut session = Session::new();
+        session.open_drawing(drawing, &file.file, Some(root.join(&file.file).to_str().unwrap().to_string()));
+        let mut template = reviewed.template.clone();
+        template["status"] = json!("approved");
+        template["version"] = json!(1);
+        let registry = json!({"schema_version": REGISTRY_SCHEMA, "templates": [template]});
+        session.execute("ubplot.templates", &json!({"action": "import", "text": registry.to_string()})).unwrap();
+        let imported = resolve(&session.ubplot.registry, &format!("{}@1", reviewed.template["id"].as_str().unwrap())).unwrap();
+        assert_eq!(imported.status, TemplateStatus::Approved);
+        serde_json::from_value(session.execute("ubplot.scan", &params).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn lpc_each_frame_one_page() {
+        let Some((root, reviewed)) = inputs() else { return };
+        for file in &reviewed.files {
+            let plan = scan(&root, &reviewed, file);
+            assert_eq!(plan.sheets.len(), file.expected_frames, "sheet count: {}", file.file);
+            let mut counts = BTreeMap::new();
+            for issue in plan.issues.iter().chain(plan.sheets.iter().flat_map(|sheet| &sheet.issues)) {
+                *counts.entry(issue.code.clone()).or_insert(0usize) += 1;
+                if file.no_block {
+                    assert_ne!(issue.severity, Severity::Block, "{}: {}", file.file, issue.code);
+                }
+                match issue.code.as_str() {
+                    codes::FRAME_AMBIGUOUS => assert_eq!(issue.severity, Severity::Block),
+                    codes::PAPER_CUSTOM => assert_eq!(issue.severity, Severity::Info),
+                    _ => {}
+                }
+            }
+            assert_eq!(counts, file.expected_codes, "issue-code counts: {}", file.file);
+            for sheet in &plan.sheets {
+                assert_eq!(sheet.paper_mm, file.expected_paper_mm.unwrap_or([297.0, 420.0]), "paper: {}", file.file);
+                for (tag, value) in &file.expected_attribs {
+                    assert_eq!(sheet.attributes.get(tag), Some(value), "{}: {tag}", file.file);
+                }
+                if file.mode == "block" {
+                    assert_eq!(
+                        sheet.issues.iter().filter(|issue| issue.code == codes::FRAME_AMBIGUOUS).count(),
+                        1,
+                        "{}: {}",
+                        file.file,
+                        sheet.sheet_id
+                    );
+                    assert_eq!(sheet.status, SheetStatus::Blocked, "{}: {}", file.file, sheet.sheet_id);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn lpc_audit_refuses_project_drawings() {
+        let Some((root, reviewed)) = inputs() else { return };
+        let file = reviewed.files.iter().find(|file| file.mode == "block").expect("reviewed KC drawing");
+        let _ = source_bytes(&root, file);
+        set_io(IoHooks {
+            read: |bytes, name| cadcraft_io::read(bytes, name).map_err(|error| error.to_string()),
+            write: |drawing, _| Ok(cadcraft_io::write_dxf(drawing).into_bytes()),
+            plot: None,
+        });
+        let mut session = Session::new();
+        let error = session.execute("ubplot.templates", &json!({"action": "audit", "path": root.join(&file.file)})).unwrap_err();
+        assert!(error.to_string().contains(codes::AUDIT_LIMIT), "{error}");
+    }
+
+    #[test]
+    fn lpc_originals_unchanged() {
+        let Some((root, reviewed)) = inputs() else { return };
+        let before: Vec<_> = reviewed.files.iter().map(|file| sha256_hex(&source_bytes(&root, file))).collect();
+        for file in &reviewed.files {
+            let _ = scan(&root, &reviewed, file);
+        }
+        for (file, before) in reviewed.files.iter().zip(before) {
+            let after = sha256_hex(&source_bytes(&root, file));
+            assert_eq!(after, before, "source unchanged after all scans: {}", file.file);
+            assert_eq!(after, file.sha256, "reviewed source hash: {}", file.file);
+        }
+    }
+}

@@ -240,4 +240,21 @@ Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded 
 | Web LISP panel | Empty state, Allowed folders… read-only notice and Load Application… reachable at 1366×768 and 200%. Web APPLOAD asks for a file name without a picker; loaded-file state was checked on desktop. |
 | Print Profile | Value column was ~40 px wide at 1366/200%, cutting values. Fixed in `d490620`; desktop shows wide values in full ("CADCraft PDF", "{stem}"). Web re-check of the fix remains pending. |
 | Desktop APPLOAD | Unreviewed file prompts with digest `ede1f430` and Yes/No/Always (default No). N refuses it and its command remains unknown; Y loads it, its command runs and the panel shows "Unreviewed ede1f430". |
-| Open observations / remaining gates | P3: a long APPLOAD path overflows the floating command line. LPC files / AutoCAD round-trip (T6) remain user-blocked; no such acceptance is claimed. |
+| Open observations / remaining gates | P3: a long APPLOAD path overflows the floating command line. The LPC template audit step remains blocked on LPC-KHUNG TEN.dwg / LPC-ISO.dwt; AutoCAD round-trip acceptance is not claimed. |
+
+### LPC samples (2026-10-23)
+
+- Native golden checks read the local reviewed manifest and four DWGs through
+  `UBOTCAD_LPC_DIR`; no sample data is committed. They check source hashes, sheet counts,
+  exact issue-code counts, attributes, paper sizes and unchanged originals after scans.
+- The three KC samples have 4, 8 and 15 `Khungten` INSERTs respectively. Each produces one
+  297×420 mm sheet with `KIEU=A3`; all sheets correctly carry `FRAME_AMBIGUOUS` BLOCK because
+  their closed outlines belong to missing xrefs (each frame also reports `XREF_MISSING_OUTSIDE`).
+  PHỤ TRỢ produces 12 layout sheets at 297×420 mm with `PAPER_CUSTOM`, `FONT_MISSING` (17, SHX
+  not available) and `PLOT_STYLE`, without BLOCK issues.
+- `ubplot.templates audit` refuses these project drawings with `AUDIT_LIMIT`; one KC sample
+  pins that refusal. The reviewed template uses plain registry import (approved, version 1).
+  The plan's template audit step remains **blocked on LPC-KHUNG TEN.dwg / LPC-ISO.dwt**,
+  which were not supplied; project-sample checks do not replace that baseline audit.
+- Attribute text was observed in legacy TCVN3 (.VnTime), rather than Unicode. These checks
+  pin the reviewed attributes; they do not establish legacy text conversion or font parity.
