@@ -164,9 +164,21 @@ See [UBPLOT](ubplot.md) for paper strings, physical scale, preflight and approva
 
 ## Batch jobs
 
-2026-10-23 · GĐ5 source inventory. Runtime gates, browser crash/quota QA and performance
-measurements remain pending. The synchronous `ubplot.publish` API retains its existing
-result; add `background: true` to queue a job from the current scan or a supplied `plan`:
+2026-10-23 · Scoped runtime QA: web `a664cc8`, re-check `4ea3c75`, resumed an interrupted
+100-sheet job with the source open to Done 100/100, producing 64 + 36 pages without
+duplicates; without the source, Resume reported `SOURCE_CHANGED`. The left Plot Jobs panel
+showed progress/current sheet and Cancel, then Interrupted with Resume/Discard after reopen.
+`UBPLOT.JOBS` focused the first action, Enter resumed, and the status bar showed Done.
+Windows 11 local release `d490620` published 20 sheets as 8 + 8 + 4 pages, and Folder mode
+published three DXFs × four approved A1 frames as 12 split PDFs with no drawing open.
+Linux gate `4ea3c75`, run 39874361985, was green (fmt, clippy -D warnings, tests, wasm).
+Its Windows desktop CI job was cancelled after "repository invocation blocked"; there is
+no Windows CI evidence. See [phase QA](../UBOTBUILD-CHANGES.md#smart-plotter-batch-jobs).
+Real browser quota exhaustion, real printer submission, T12 printer survey (user decision)
+and benchmark numbers remain pending; T13 is not merged, awaiting the T13B user decision.
+
+The synchronous `ubplot.publish` API retains its existing result; add `background: true`
+to queue a job from the current scan or a supplied `plan`:
 
 ```json
 {"command":"ubplot.publish","params":{"background":true,"path":"set.pdf","mode":"merged","pagesPerFile":256,"retryLimit":2}}

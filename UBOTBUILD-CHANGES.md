@@ -94,8 +94,8 @@ CLI checks, builds or visual QA were run for this documentation task.
 
 ## V3.1 chrome, focus, keys
 
-2026-10-23 · GĐ3 source changes; native/wasm gates, desktop smoke and browser visual QA
-remain pending. Evidence and remaining checks are in `docs/workspace/acceptance.md`.
+2026-10-23 · GĐ3 source changes with scoped web QA and Windows desktop smoke recorded
+below. Evidence and remaining checks are in `docs/workspace/acceptance.md`.
 
 - Ribbon modes/flyout (desktop/web): Expanded, Compact, TabsOnly and Hidden, height fallback and a bounded scrolling flyout; `crates/ui-egui/src/ribbon/render.rs` and `src/wsprofile/schema.rs`.
 - Tab overflow and menus (desktop/web): `»` keeps overflow tabs reachable; context controls hide/show tabs, select modes, open Customize and reset only the ribbon; `crates/ui-egui/src/ribbon/render.rs` and `src/ribbon/mod.rs`.
@@ -111,9 +111,27 @@ remain pending. Evidence and remaining checks are in `docs/workspace/acceptance.
 - CAD Manager/Minimal presets (desktop/web): local management layout and TabsOnly canvas layout; SIMPLE stays the safe fallback, with no company authorization service; `crates/ui-egui/src/wsprofile/presets.rs` and `src/wsprofile/presets/{CAD_MANAGER,MINIMAL}.json`.
 - Screen remap (desktop/web): proportional dock/floating geometry with split/panel clamps on resize/scale changes; desktop floats remain inside one main window, browser owns web monitor placement; `crates/ui-egui/src/wsprofile/apply.rs` and `src/dock_clamp.rs`.
 
+### QA 2026-10-23
+
+Web QA used integration wasm artifacts in headless Chromium, real device-scale factors 1/2,
+EN/VI: first pass `0055a51`, re-check `4ea3c75`. Linux gate `4ea3c75`, run 39874361985,
+was green (fmt, clippy -D warnings, tests, wasm). Its Windows desktop CI job was cancelled
+when GitHub Actions blocked the repository ("repository invocation blocked"); there is
+no Windows CI evidence. Desktop smoke used a local `cargo build --release -p cadcraft`
+at `d490620` on Windows 11, isolated `CADCRAFT_CONFIG_DIR`, a control port and
+`ui.screenshot`, at 1366×768 logical / 150% display scale.
+
+| Check | Result / evidence |
+| --- | --- |
+| Web ribbon and chrome | Four modes/flyout at 1366×768, 1920×1080 and 200% (683×384 CSS, DPR 2); Display Mode lists all four. Compact text buttons and ‹ › paging reach Clipboard at 1366. Density modes, Block context and alias page render; Customize has four columns and lists ≥5 rows; Options closes on Esc. |
+| Focus / fullscreen | Web Focus exit is top-centre, clear of ViewCube; Esc restores layout. Same-origin click enters browser fullscreen; cross-origin iframe without `allow="fullscreen"` falls back to Focus with a blocked status. Desktop fullscreen covers 2560×1600 px; Esc returns to the window. Desktop Focus hides chrome and Esc exits; TabsOnly is accepted. |
+| Vietnamese layout | Checked at 1366/900/600/450 px; Properties chips/selection combo do not overlap at 900. Pre-existing untranslated Properties labels, missing CJK/Arabic language-name glyphs, clipped menu and overlapping status bar at ≤600 px remain. |
+| Open observations / remaining QA | Default desktop workspace has no ribbon tabs: TabsOnly/Compact show empty strips (~40/95 px). Physical monitor removal / OS relocation (TC15, UX07, H13), real Telex/VNI typing, screen readers and browser-owned fullscreen Esc remain unverified; headless input cannot deliver the latter. Other row-specific checks remain in acceptance. |
+
 ## V3.1 GĐ4: local persistence v3
 
-2026-10-23 · Source inventory; native/wasm gates and browser crash/quota QA remain pending.
+2026-10-23 · Source inventory with recovery, migration and safe-mode smoke recorded below;
+real browser quota exhaustion and concurrent-tab race QA remain pending.
 
 - Workspace sets and exports write numeric `schemaVersion: 3`, camelCase schema keys and
   unchanged snake_case enum values. Canonical SHA-256 checksums cover stored sets, snapshots
@@ -141,13 +159,26 @@ remain pending. Evidence and remaining checks are in `docs/workspace/acceptance.
 - `ws_sync` uses user-owned `/command_line/lines` in place of device-only `/ui_scale` for its
   remote conflict probes; `ui_scale_is_not_synced` covers local scale retention. These are
   MemoryRemote tests, not a cloud-sync implementation. Fonts still use localStorage; real
-  quota, multi-tab and crash evidence is outstanding. Test mappings are in
+  quota exhaustion and concurrent-tab races remain unverified. Scoped crash recovery is
+  recorded below. Test mappings are in
   [acceptance](docs/workspace/acceptance.md#v31-gđ4-local-persistence-source-inventory).
+
+### QA 2026-10-23
+
+Web `0055a51` and Windows `d490620` smoke supplement the Linux gate recorded under GĐ3.
+
+| Check | Result / evidence |
+| --- | --- |
+| Separate status labels | Untruncated at EN 1366/1920 and VI 1366/200%. |
+| Web recovery / safe mode / import | After a renderer crash with heartbeat older than five minutes, Drawing Recovery lists the autosaved drawing; layout restores separately. `?safe` shows the safe preset and unsaved-layout notice. Import opens a JSON-pointer changes preview with Import/Cancel before applying. |
+| Desktop migration / rollback / safe mode | `aged-5y.json` migrates 1.0.0 → schemaVersion 3 with byte-identical `backup-v1.json`. Rollback returns `{"restored":"1.0.0"}`, restores exact original bytes and reports saving suspended until restart. `--safe-mode` reports Safe mode; a ribbon change leaves the stored current set untouched. |
+| Remaining QA | Real concurrent-tab IndexedDB races, quota exhaustion, transaction abort/fallback, browser startup storage isolation and asynchronous rollback durability remain unverified. Recovery edge cases remain in acceptance. |
 
 ## Smart Plotter: batch jobs
 
-2026-10-23 · GĐ5 queue, workers, Folder mode and CLI source coverage. Runtime acceptance,
-printer capability survey and benchmark measurements remain pending.
+2026-10-23 · GĐ5 queue, workers, Folder mode and CLI source coverage, with scoped runtime
+QA below. Real printer submission, T12 printer survey and T13 benchmarks remain pending
+(user decisions on T12 and T13B; T13 is not merged).
 
 - `ubplot.publish {background: true}` queues a persisted job and returns `jobId`/`QUEUED`;
   the default synchronous publish retains its existing result. Desktop runs a worker thread;
@@ -165,6 +196,18 @@ printer capability survey and benchmark measurements remain pending.
   `--templates FILE` supplies a strict registry for that run only. Real printer submission is
   not implemented in this checkout. See [plotters](docs/plotters.md#batch-jobs) for the manifest
   excerpt, limits, storage and CLI syntax; no batch performance numbers are claimed.
+
+### QA 2026-10-23
+
+Web `a664cc8`, re-checked at `4ea3c75`, and Windows `d490620` smoke supplement the Linux
+gate recorded under GĐ3. These are correctness checks, not benchmark measurements.
+
+| Check | Result / evidence |
+| --- | --- |
+| Web interruption / resume | Block → all → Quick Plot 100 sheets, merged at 64 pages/file. Plot Jobs shows progress, current sheet and Cancel. Closing mid-job and reopening shows Interrupted with Resume/Discard. Resume without the source reports `SOURCE_CHANGED`; with it open, Done 100/100 yields 64 + 36 pages without duplicates. |
+| Job panel / keyboard | `UBPLOT.JOBS` opens the left panel clear of ViewCube and focuses the first job action; Enter resumes, providing the Cancel/Resume keyboard path. Status bar shows Done after resume. |
+| Desktop publish / Folder | Background publish of 20 sheets at 8 pages/file finishes DONE 20/20, PDFs 8 + 8 + 4. Folder mode on three DXFs × four approved A1 frames finishes DONE 12/12 with 12 split PDFs and no drawing open. Jobs panel is on the left with a keyboard hint and per-file Open folder. |
+| Remaining gates | Real browser quota exhaustion, real printer submission, T12 printer survey (user decision) and benchmark numbers remain pending. T13 is not merged, awaiting the user decision on T13B. |
 
 ## V2.2 GĐ6
 
@@ -185,5 +228,17 @@ printer capability survey and benchmark measurements remain pending.
 - Editing routines retain one undo step and produce audit records. The panel shows the latest
   20, newest first; desktop rotates JSONL logs and web retains the session ring. Company locks
   and write restrictions are local policy, not an OS security boundary.
-- Compilation, automated tests, browser visual QA, desktop smoke and LPC/AutoCAD round-trip
-  evidence remain with the controller; this entry does not claim those gates passed.
+
+### QA 2026-10-23
+
+Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded under GĐ3.
+`d490620` (Print Profile column fix) was verified locally only:
+`cargo clippy --release -p cadcraft-ui-egui --all-targets -D warnings` clean and
+`cargo test --release -p cadcraft-ui-egui --test ubplot_profile_ui` 2/2 pass.
+
+| Check | Result / evidence |
+| --- | --- |
+| Web LISP panel | Empty state, Allowed folders… read-only notice and Load Application… reachable at 1366×768 and 200%. Web APPLOAD asks for a file name without a picker; loaded-file state was checked on desktop. |
+| Print Profile | Value column was ~40 px wide at 1366/200%, cutting values. Fixed in `d490620`; desktop shows wide values in full ("CADCraft PDF", "{stem}"). Web re-check of the fix remains pending. |
+| Desktop APPLOAD | Unreviewed file prompts with digest `ede1f430` and Yes/No/Always (default No). N refuses it and its command remains unknown; Y loads it, its command runs and the panel shows "Unreviewed ede1f430". |
+| Open observations / remaining gates | P3: a long APPLOAD path overflows the floating command line. LPC files / AutoCAD round-trip (T6) remain user-blocked; no such acceptance is claimed. |
