@@ -15,8 +15,9 @@ pub enum QuickAccessRow {
 
 pub fn quick_access_row(app: &CadApp) -> QuickAccessRow {
     match app.ws.effective.layout.quick_access_position {
-        QuickAccessPosition::TitleBar if !app.ui.in_window_menu => QuickAccessRow::TitleBar,
-        QuickAccessPosition::TitleBar | QuickAccessPosition::AboveRibbon => QuickAccessRow::OwnRowAboveRibbon,
+        // The title row sits above the in-window menu bar, as in a desktop CAD window.
+        QuickAccessPosition::TitleBar => QuickAccessRow::TitleBar,
+        QuickAccessPosition::AboveRibbon => QuickAccessRow::OwnRowAboveRibbon,
         QuickAccessPosition::BelowRibbon => QuickAccessRow::OwnRowBelowRibbon,
     }
 }
@@ -209,7 +210,10 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             item(app, ui, id, at, items.len());
         }
         if items.len() > 5 {
-            ui.menu_button(crate::tl!("More Quick Access commands"), |ui| {
+            let size = if app.ws.effective.layout.density == Density::Comfortable { 32.0 } else { 18.0 };
+            // A glyph keeps the title row's width for the drawing name; the label stays for tooltips and readers.
+            let more = crate::icons::button(ui, crate::icons::Icon::ChevronDown, size, crate::tl!("More Quick Access commands"), false);
+            egui::Popup::menu(&more).id(more.id.with("more_quick_access")).show(|ui| {
                 for (at, id) in items.iter().enumerate().skip(5) {
                     item(app, ui, id, at, items.len());
                 }
@@ -217,7 +221,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         }
         let mut query = String::new();
         let response =
-            ui.add(egui::TextEdit::singleline(&mut query).hint_text(crate::tl!("Search commands...")).desired_width(100.0).char_limit(1024));
+            ui.add(egui::TextEdit::singleline(&mut query).hint_text(crate::tl!("Search commands...")).desired_width(160.0).char_limit(1024));
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, crate::tl!("Search commands...")));
         if (response.clicked() || response.changed())
             && let Err(error) = app.run("ui.palette", json!({"query": query}))

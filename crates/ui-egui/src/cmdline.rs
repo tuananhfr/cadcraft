@@ -452,7 +452,13 @@ pub fn show_docked(app: &mut CadApp, ui: &mut egui::Ui) {
     };
     let free = ui.available_rect_before_wrap();
     let height = docked_height(app, ui.ctx().content_rect().height());
-    let height = height.clamp(INPUT_ROW_HEIGHT, (free.height() - MIN_CANVAS_HEIGHT).max(INPUT_ROW_HEIGHT));
+    // Drawing tabs sit inside the canvas pane, so the canvas keeps its minimum below them.
+    let tabs = if app.ui.show_file_tabs && !crate::focus::hides(app, crate::focus::Chrome::FileTabs) {
+        crate::chrome::file_tabs_height(app.ws.effective.layout.density)
+    } else {
+        0.0
+    };
+    let height = height.clamp(INPUT_ROW_HEIGHT, (free.height() - MIN_CANVAS_HEIGHT - tabs).max(INPUT_ROW_HEIGHT));
     panel.resizable(false).exact_size(height).frame(egui::Frame::NONE.fill(Tokens::get().cmd_history)).show(ui, |ui| {
         let area = ui.max_rect();
         let bar = Rect::from_min_size(pos2(area.left() + 4.0, area.bottom() - INPUT_HEIGHT - 4.0), vec2((area.width() - 8.0).max(0.0), INPUT_HEIGHT));

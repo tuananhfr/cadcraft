@@ -6,9 +6,9 @@
 # Empty context = ordinary label; menu/ribbon = headings; @plural = a single count form.
 # Keep command IDs, keywords, technology/product names and user data unchanged.
 
-ribbon	Home	Vẽ
+ribbon	Home	Trang chủ
 ribbon	Insert	Chèn
-ribbon	Annotate	Ghi chú
+ribbon	Annotate	Ghi kích thước
 ribbon	Layers	Lớp bản vẽ
 ribbon	View	Hiển thị
 ribbon	Layout	Bố cục in
@@ -4432,3 +4432,12 @@ echo	ATTSYNC block {name}: {n} references synchronized.	ATTSYNC khối {name}: �
 echo	{n} row extracted.	Đã trích xuất {n} hàng.
 echo	{n} rows extracted.	Đã trích xuất {n} hàng.
 echo	`{name}` takes {lo} argument(s)	`{name}` nhận {lo} đối số
+# UI redesign
+ribbon	Lines	Đường
+ribbon	Shapes	Hình
+	UbotBuild	UbotBuild
+	Ribbon with large buttons, a tool rail, Properties on the left and Layers with Command History on the right.	Ribbon nút lớn, thanh Công cụ, Thuộc tính bên trái, Lớp bản vẽ và Lịch sử lệnh bên phải.
+	Menu	Menu
+	Tool Rail	Thanh Công cụ
+	Hide Tool Rail	Ẩn thanh Công cụ
+	Create a new drawing or continue recent work.	Tạo bản vẽ mới hoặc tiếp tục công việc gần đây.

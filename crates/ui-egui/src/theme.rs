@@ -1,7 +1,7 @@
 //! Design tokens. Colours were measured from the reference look (dark slate chrome, near-black
 //! navy model space) and are CADCraft's own values; every widget reads them from here.
 //!
-//! Two palettes: [`Tokens::DARK`] (the original look) and [`Tokens::LIGHT`]. The interface theme
+//! Two palettes: [`Tokens::DARK`] (UbotBuild's navy look) and [`Tokens::LIGHT`]. The interface theme
 //! changes the chrome (title and tool bar, menus, palettes, tabs, command line, status bar,
 //! dialogs); the drawing area keeps its model-space colours in both, as drawing colours are not
 //! part of the interface theme. [`Tokens::get`] returns the palette of the theme in use, which
@@ -149,6 +149,12 @@ pub fn set_active(theme: Theme) {
 pub struct Tokens {
     pub chrome: Color32,
     pub chrome_dark: Color32,
+    /// The title bar above the menus and ribbon.
+    pub title_bar: Color32,
+    /// The ribbon's tab row, a step darker than its panels.
+    pub ribbon_tabs: Color32,
+    /// Palette headers and the ribbon's group titles.
+    pub header: Color32,
     pub panel: Color32,
     pub tab_active: Color32,
     pub control: Color32,
@@ -207,25 +213,28 @@ pub struct Tokens {
 
 impl Tokens {
     pub const DARK: Tokens = Tokens {
-        chrome: Color32::from_rgb(0x3b, 0x44, 0x53),
-        chrome_dark: Color32::from_rgb(0x31, 0x38, 0x44),
-        panel: Color32::from_rgb(0x3c, 0x44, 0x52),
-        tab_active: Color32::from_rgb(0x4e, 0x5a, 0x6e),
-        control: Color32::from_rgb(0x50, 0x5a, 0x6d),
-        control_hover: Color32::from_rgb(0x5c, 0x67, 0x7c),
-        border: Color32::from_rgb(0x23, 0x29, 0x30),
-        canvas: Color32::from_rgb(0x22, 0x28, 0x2f),
-        grid_minor: Color32::from_rgb(0x29, 0x30, 0x3a),
-        grid_major: Color32::from_rgb(0x31, 0x39, 0x45),
-        axis_x: Color32::from_rgb(0x56, 0x28, 0x29),
-        axis_y: Color32::from_rgb(0x28, 0x4a, 0x2e),
-        text: Color32::from_rgb(0xd7, 0xdb, 0xe0),
-        text_dim: Color32::from_rgb(0xaa, 0xb1, 0xbb),
-        text_faint: Color32::from_rgb(0xab, 0xb1, 0xba),
-        icon: Color32::from_rgb(0xcf, 0xd4, 0xdb),
+        chrome: Color32::from_rgb(0x2b, 0x3a, 0x4d),
+        chrome_dark: Color32::from_rgb(0x20, 0x2c, 0x3b),
+        title_bar: Color32::from_rgb(0x10, 0x1c, 0x2f),
+        ribbon_tabs: Color32::from_rgb(0x25, 0x32, 0x44),
+        header: Color32::from_rgb(0x30, 0x3e, 0x50),
+        panel: Color32::from_rgb(0x29, 0x38, 0x4a),
+        tab_active: Color32::from_rgb(0x28, 0x70, 0xbe),
+        control: Color32::from_rgb(0x34, 0x46, 0x5b),
+        control_hover: Color32::from_rgb(0x3f, 0x54, 0x6d),
+        border: Color32::from_rgb(0x17, 0x23, 0x34),
+        canvas: Color32::from_rgb(0x0c, 0x15, 0x21),
+        grid_minor: Color32::from_rgb(0x13, 0x1e, 0x2c),
+        grid_major: Color32::from_rgb(0x1a, 0x28, 0x39),
+        axis_x: Color32::from_rgb(0x4e, 0x22, 0x28),
+        axis_y: Color32::from_rgb(0x1f, 0x44, 0x2e),
+        text: Color32::from_rgb(0xca, 0xd3, 0xdf),
+        text_dim: Color32::from_rgb(0xae, 0xbc, 0xcd),
+        text_faint: Color32::from_rgb(0xa3, 0xb2, 0xc4),
+        icon: Color32::from_rgb(0xb5, 0xd3, 0xec),
         icon_accent: Color32::from_rgb(0x4f, 0xa3, 0xf7),
         icon_point: Color32::from_rgb(0xf0, 0x7a, 0x3a),
-        accent: Color32::from_rgb(0x3f, 0x8d, 0xff),
+        accent: Color32::from_rgb(0x4a, 0x97, 0xff),
         selection: Color32::from_rgb(0x4a, 0x8f, 0xff),
         hover: Color32::from_rgb(0x9c, 0xc6, 0xff),
         grip: Color32::from_rgb(0x2f, 0x6b, 0xff),
@@ -237,17 +246,17 @@ impl Tokens {
         compare_area: Color32::from_rgb(0xff, 0xb4, 0x3c),
         window_stroke: Color32::from_rgb(0x6f, 0xa8, 0xff),
         crossing_stroke: Color32::from_rgb(0x7f, 0xe0, 0x7f),
-        cmd_bg: Color32::from_rgba_premultiplied(0x34, 0x3c, 0x4a, 0xf0),
+        cmd_bg: Color32::from_rgba_premultiplied(0x1a, 0x28, 0x38, 0xf0),
         toggle_on: Color32::from_rgb(0x3d, 0x8b, 0xfd),
-        field: Color32::from_rgb(0x31, 0x38, 0x44),
-        select_bg: Color32::from_rgb(0x3d, 0x8b, 0xfd),
-        canvas_ink: Color32::from_rgb(0xa3, 0xaa, 0xb4),
-        cmd_history: Color32::from_rgba_unmultiplied_const(0x2a, 0x30, 0x3a, 170),
-        cmd_border: Color32::from_rgb(0x55, 0x5f, 0x70),
+        field: Color32::from_rgb(0x22, 0x32, 0x46),
+        select_bg: Color32::from_rgb(0x28, 0x70, 0xbe),
+        canvas_ink: Color32::from_rgb(0xa9, 0xb6, 0xc6),
+        cmd_history: Color32::from_rgba_unmultiplied_const(0x1a, 0x28, 0x38, 200),
+        cmd_border: Color32::from_rgb(0x46, 0x53, 0x68),
         cmd_keyword: Color32::from_rgb(0x8f, 0xc1, 0xff),
         cmd_keyword_hover: Color32::from_rgb(0x2f, 0x5e, 0xa8),
-        list_bg: Color32::from_rgb(0x2b, 0x31, 0x3b),
-        list_row: Color32::from_rgb(0x3a, 0x42, 0x50),
+        list_bg: Color32::from_rgb(0x1f, 0x2c, 0x3c),
+        list_row: Color32::from_rgb(0x2c, 0x3e, 0x54),
         warn: Color32::from_rgb(0xff, 0xd0, 0x80),
         crosshair: Color32::from_rgb(0xe8, 0xe8, 0xe8),
         paper: Color32::WHITE,
@@ -258,6 +267,9 @@ impl Tokens {
     pub const LIGHT: Tokens = Tokens {
         chrome: Color32::from_rgb(0xe4, 0xe7, 0xeb),
         chrome_dark: Color32::from_rgb(0xd5, 0xd9, 0xdf),
+        title_bar: Color32::from_rgb(0xd0, 0xd6, 0xde),
+        ribbon_tabs: Color32::from_rgb(0xd9, 0xde, 0xe4),
+        header: Color32::from_rgb(0xdb, 0xe0, 0xe6),
         panel: Color32::from_rgb(0xee, 0xf0, 0xf3),
         tab_active: Color32::from_rgb(0xc8, 0xd3, 0xe2),
         control: Color32::from_rgb(0xdc, 0xe0, 0xe6),
@@ -372,10 +384,10 @@ fn mix(a: Color32, b: Color32, f: f32) -> Color32 {
 }
 
 pub fn small() -> FontId {
-    FontId::new(11.5, FontFamily::Proportional)
+    FontId::new(12.0, FontFamily::Proportional)
 }
 pub fn body() -> FontId {
-    FontId::new(12.5, FontFamily::Proportional)
+    FontId::new(13.0, FontFamily::Proportional)
 }
 pub fn mono() -> FontId {
     FontId::new(12.0, FontFamily::Monospace)

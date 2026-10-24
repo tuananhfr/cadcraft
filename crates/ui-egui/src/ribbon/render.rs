@@ -43,8 +43,10 @@ pub fn rendered_mode(app: &CadApp, available_height: f32) -> RibbonMode {
     if !available_height.is_finite() || available_height <= 0.0 {
         return RibbonMode::TabsOnly;
     }
-    // Drafting keeps most of the remaining height; the saved preference survives resizing.
-    let mut reserved = crate::cmdline::MIN_CANVAS_HEIGHT.max(available_height * 0.6)
+    // Drafting keeps most of the remaining height; the saved preference survives resizing. A
+    // large-button ribbon is the workspace's main palette, so it may keep its rows on a laptop.
+    let large = super::visible_tabs(app).iter().any(|tab| tab.groups.iter().any(|group| group.large.is_some()));
+    let mut reserved = crate::cmdline::MIN_CANVAS_HEIGHT.max(available_height * if large { 0.5 } else { 0.6 })
         + crate::toolbars::render::docked_height(app, crate::wsprofile::schema::Dock::Bottom);
     if app.ui.show_status_bar {
         reserved += crate::chrome::STATUS_BAR_HEIGHT;
@@ -106,6 +108,9 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         let background = ui.interact(ui.max_rect(), ui.id().with("ribbon_context"), egui::Sense::click());
         ui.ctx().data_mut(|data| data.insert_temp(state_id, active.clone()));
         let mut open = None;
+        let tab_row = egui::Rect::from_min_size(ui.max_rect().min, vec2(ui.max_rect().width(), metrics.tab_height));
+        ui.painter().rect_filled(tab_row, 0.0, Tokens::get().ribbon_tabs);
+        ui.painter().hline(tab_row.x_range(), tab_row.bottom() - 0.5, egui::Stroke::new(1.0, Tokens::get().border));
         ui.allocate_ui_with_layout(vec2(ui.available_width(), metrics.tab_height), Layout::left_to_right(Align::Center), |ui| {
             if let Some(index) = tab_strip(ui, app, &(0..tabs.len()).collect::<Vec<_>>())
                 && let Some(tab) = tabs.get(index)
@@ -400,11 +405,30 @@ pub(crate) fn flyout(ui: &mut egui::Ui, app: &mut CadApp, tab: usize) {
             ui.with_layout(Layout::left_to_right(Align::Min).with_main_wrap(true), |ui| {
                 ui.spacing_mut().item_spacing = vec2(GROUP_GAP, GROUP_GAP);
                 for group in &tab.groups {
-                    let columns = column_widths(ui, group);
+                    let columns = group_columns(ui, group, false);
                     expanded_group(app, ui, &tab, group, &columns, group_width(&columns).min(available));
                 }
             });
         });
+}
+
+/// A tab's commands listed under their group names, for menus outside the ribbon.
+pub(crate) fn command_list(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
+    egui::ScrollArea::vertical().id_salt((&tab.id, "command_list")).max_height(ui.ctx().content_rect().height() * 0.8).show(ui, |ui| {
+        ui.set_min_width(MENU_ROW_WIDTH);
+        ui.spacing_mut().item_spacing.y = 1.0;
+        for (index, group) in tab.groups.iter().enumerate() {
+            if index > 0 {
+                ui.add_space(4.0);
+            }
+            ui.label(egui::RichText::new(group_label(tab, group)).font(crate::theme::small()).color(Tokens::get().text_faint));
+            ui.push_id(&group.id, |ui| {
+                for id in &group.commands {
+                    button(app, ui, tab, group, id, ButtonStyle::Small);
+                }
+            });
+        }
+    });
 }
 
 fn compact_groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
@@ -518,41 +542,127 @@ fn resolve(id: &str) -> crate::toolbars::Command {
     command
 }
 
+/// The icon a large or small ribbon button paints, drawing one for commands no tool bar has.
+fn tile_icon(id: &str, command: &crate::toolbars::Command) -> Option<crate::icons::Icon> {
+    command.icon.or_else(|| if command.known { super::icons::fallback(id) } else { None })
+}
+
 fn label(command: &crate::toolbars::Command) -> String {
     if command.known { crate::i18n::t(&command.label).to_string() } else { crate::toolbars::placeholder_label(command) }
 }
 
-fn column_widths(ui: &egui::Ui, group: &RibbonGroup) -> Vec<f32> {
-    let metrics = metrics(crate::theme::density(ui.ctx()));
-    let font = egui::TextStyle::Button.resolve(ui.style());
-    group
-        .commands
-        .chunks(ROWS)
-        .map(|commands| {
-            commands.iter().fold(metrics.column_width, |width, id| {
-                let command = resolve(id);
-                if command.icon.is_some() {
-                    return width;
-                }
-                // egui caches galleys by text and font, including changes of locale or font size.
-                let text = ui.painter().layout_no_wrap(label(&command), font.clone(), ui.visuals().text_color());
-                width.max((text.size().x + 2.0 * ui.spacing().button_padding.x).ceil().min(MAX_TEXT_WIDTH))
-            })
-        })
-        .collect()
+/// One column of a group: a large button, or up to [`ROWS`] stacked smaller ones.
+#[derive(Clone, Copy)]
+struct Column {
+    width: f32,
+    start: usize,
+    len: usize,
+    style: ButtonStyle,
 }
 
-fn group_width(columns: &[f32]) -> f32 {
-    (columns.iter().sum::<f32>() + columns.len().saturating_sub(1) as f32 * COLUMN_GAP + 2.0 * GROUP_PADDING).max(MIN_GROUP_WIDTH)
+const LARGE_MIN_WIDTH: f32 = 52.0;
+const LARGE_MAX_WIDTH: f32 = 84.0;
+const LARGE_GAP: f32 = 2.0;
+const SMALL_ICON: f32 = 16.0;
+const MENU_ROW_WIDTH: f32 = 190.0;
+
+fn large_icon(density: Density) -> f32 {
+    density.metrics().ribbon_button + 8.0
+}
+
+/// `reduced` drops the labels of the small buttons beside a group's large ones, the step a
+/// group takes before it folds into one button.
+fn group_columns(ui: &egui::Ui, group: &RibbonGroup, reduced: bool) -> Vec<Column> {
+    let density = crate::theme::density(ui.ctx());
+    let metrics = metrics(density);
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let padding = 2.0 * ui.spacing().button_padding.x;
+    // egui caches galleys by text and font, including changes of locale or font size.
+    let text_width = |command: &crate::toolbars::Command, font: egui::FontId| {
+        ui.painter().layout_no_wrap(label(command), font, ui.visuals().text_color()).size().x
+    };
+    let Some(large) = group.large else {
+        return group
+            .commands
+            .chunks(ROWS)
+            .enumerate()
+            .map(|(index, commands)| {
+                let width = commands.iter().fold(metrics.column_width, |width, id| {
+                    let command = resolve(id);
+                    if command.icon.is_some() {
+                        return width;
+                    }
+                    width.max((text_width(&command, font.clone()) + padding).ceil().min(MAX_TEXT_WIDTH))
+                });
+                Column { width, start: index * ROWS, len: commands.len(), style: ButtonStyle::Expanded }
+            })
+            .collect();
+    };
+    let large = usize::try_from(large).unwrap_or(usize::MAX).min(group.commands.len());
+    let mut columns: Vec<Column> = group
+        .commands
+        .iter()
+        .take(large)
+        .enumerate()
+        .map(|(index, id)| {
+            // The label may wrap once, so the button needs its longest word or about half of it.
+            let text = label(&resolve(id));
+            let measure = |text: &str| ui.painter().layout_no_wrap(text.to_owned(), crate::theme::small(), ui.visuals().text_color()).size().x;
+            let word = text.split_whitespace().map(measure).fold(0.0f32, f32::max);
+            let wanted = word.max(measure(&text) * 0.55) + 12.0;
+            let width = wanted.clamp(LARGE_MIN_WIDTH, LARGE_MAX_WIDTH).max(large_icon(density) + 12.0).ceil();
+            Column { width, start: index, len: 1, style: ButtonStyle::Large }
+        })
+        .collect();
+    let rest = group.commands.get(large..).unwrap_or_default();
+    if reduced {
+        columns.extend(rest.chunks(ROWS).enumerate().map(|(index, commands)| Column {
+            width: SMALL_ICON + 10.0,
+            start: large + index * ROWS,
+            len: commands.len(),
+            style: ButtonStyle::Small,
+        }));
+        return columns;
+    }
+    columns.extend(rest.chunks(ROWS).enumerate().map(|(index, commands)| {
+        let width = commands.iter().fold(0.0f32, |width, id| width.max(SMALL_ICON + 6.0 + text_width(&resolve(id), font.clone()) + padding));
+        Column { width: width.ceil().min(MAX_TEXT_WIDTH), start: large + index * ROWS, len: commands.len(), style: ButtonStyle::Small }
+    }));
+    columns
+}
+
+fn gap_after(column: &Column) -> f32 {
+    if matches!(column.style, ButtonStyle::Large) { LARGE_GAP } else { COLUMN_GAP }
+}
+
+fn group_width(columns: &[Column]) -> f32 {
+    let gaps: f32 = columns.iter().rev().skip(1).map(gap_after).sum();
+    (columns.iter().map(|column| column.width).sum::<f32>() + gaps + 2.0 * GROUP_PADDING).max(MIN_GROUP_WIDTH)
 }
 
 fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
     let metrics = metrics(app.ws.effective.layout.density);
     let available = ui.available_width().max(0.0);
-    let columns: Vec<_> = tab.groups.iter().map(|group| column_widths(ui, group)).collect();
-    let widths: Vec<_> = columns.iter().map(|columns| group_width(columns)).collect();
+    let full: Vec<_> = tab.groups.iter().map(|group| group_columns(ui, group, false)).collect();
+    let reduced: Vec<_> = tab.groups.iter().map(|group| group_columns(ui, group, true)).collect();
+    let mut columns: Vec<&Vec<Column>> = full.iter().collect();
+    let mut widths: Vec<_> = full.iter().map(|columns| group_width(columns)).collect();
     let mut collapsed = vec![false; widths.len()];
     let mut total = widths.iter().sum::<f32>() + widths.len().saturating_sub(1) as f32 * GROUP_GAP;
+    // Rightmost groups first drop their small labels, as AutoCAD's panels do, and only then fold.
+    for index in (0..widths.len()).rev() {
+        if total <= available {
+            break;
+        }
+        if let (Some(narrow), Some(width), Some(slot)) = (reduced.get(index), widths.get_mut(index), columns.get_mut(index)) {
+            let narrow_width = group_width(narrow);
+            if narrow_width < *width {
+                total -= *width - narrow_width;
+                *width = narrow_width;
+                *slot = narrow;
+            }
+        }
+    }
     for (index, width) in widths.iter().enumerate().rev() {
         if total <= available {
             break;
@@ -587,7 +697,9 @@ fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(rect).layout(Layout::top_down(Align::Min)), |ui| {
                     ui.set_min_size(vec2(width, metrics.group_height));
                     ui.spacing_mut().item_spacing.y = ROW_GAP;
-                    if compact {
+                    if compact && group.large.is_some() {
+                        collapsed_group(app, ui, tab, group, rect);
+                    } else if compact {
                         egui::containers::menu::MenuButton::from_button(
                             egui::Button::new(group_label(tab, group)).truncate().min_size(vec2(COMPACT_WIDTH, metrics.button_height)),
                         )
@@ -597,9 +709,11 @@ fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
                             }
                         });
                     } else {
-                        expanded_group(app, ui, tab, group, columns.get(index).map(Vec::as_slice).unwrap_or_default(), width);
+                        expanded_group(app, ui, tab, group, columns.get(index).map(|columns| columns.as_slice()).unwrap_or_default(), width);
                     }
                 });
+                let x = rect.right() + GROUP_GAP / 2.0;
+                ui.painter().vline(x, rect.top() + 2.0..=rect.bottom(), egui::Stroke::new(1.0, Tokens::get().border));
             });
             remaining -= width + GROUP_GAP;
             end = index.saturating_add(1);
@@ -611,7 +725,7 @@ fn groups(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab) {
     ui.ctx().data_mut(|data| data.insert_temp(scroll_id, start));
 }
 
-fn expanded_group(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGroup, columns: &[f32], width: f32) {
+fn expanded_group(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGroup, columns: &[Column], width: f32) {
     let metrics = metrics(app.ws.effective.layout.density);
     let inner_width = (width - 2.0 * GROUP_PADDING).max(metrics.column_width);
     let mut left = 0.0;
@@ -620,13 +734,13 @@ fn expanded_group(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &
     let positions: Vec<_> = columns
         .iter()
         .map(|column| {
-            let column = column.min(inner_width);
-            if left > 0.0 && left + column > inner_width {
+            let column_width = column.width.min(inner_width);
+            if left > 0.0 && left + column_width > inner_width {
                 left = 0.0;
                 top += metrics.columns_height + ROW_GAP;
             }
-            let position = (left, top, column);
-            left += column + COLUMN_GAP;
+            let position = (left, top, column_width);
+            left += column_width + gap_after(column);
             position
         })
         .collect();
@@ -636,19 +750,81 @@ fn expanded_group(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &
         ui.push_id((&tab.id, &group.id), |ui| {
             ui.spacing_mut().item_spacing.y = ROW_GAP;
             let (rect, _) = ui.allocate_exact_size(vec2(width, height), egui::Sense::hover());
-            for (column, commands) in group.commands.chunks(ROWS).enumerate() {
-                let (left, top, column_width) = positions.get(column).copied().unwrap_or((0.0, 0.0, metrics.column_width));
+            for (column, (left, top, column_width)) in columns.iter().zip(positions) {
+                let Some(commands) = group.commands.get(column.start..column.start.saturating_add(column.len)) else { continue };
                 let rect = egui::Rect::from_min_size(rect.min + vec2(GROUP_PADDING + left, top), vec2(column_width, metrics.columns_height));
                 ui.scope_builder(egui::UiBuilder::new().max_rect(rect).layout(Layout::top_down(Align::Min)), |ui| {
                     ui.set_min_size(vec2(column_width, metrics.columns_height));
                     for id in commands {
-                        button(app, ui, tab, group, id, ButtonStyle::Expanded);
+                        button(app, ui, tab, group, id, column.style);
                     }
                 });
             }
-            ui.add_sized(vec2(width, LABEL_HEIGHT), egui::Label::new(group_label(tab, group)).truncate());
+            let title = egui::RichText::new(group_label(tab, group)).font(crate::theme::small()).color(Tokens::get().text_dim);
+            ui.add_sized(vec2(width, LABEL_HEIGHT), egui::Label::new(title).truncate());
         });
     });
+}
+
+/// A group squeezed out of the ribbon's width: one large button named after it, listing its commands.
+fn collapsed_group(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGroup, rect: egui::Rect) {
+    let metrics = metrics(app.ws.effective.layout.density);
+    let icon = group.commands.iter().find_map(|id| tile_icon(id, &resolve(id)));
+    let name = group_label(tab, group);
+    let response = tile(ui, icon, name, vec2(rect.width(), metrics.columns_height), true, large_icon(app.ws.effective.layout.density));
+    // Painted rather than typed: the UI fonts have no small down-pointing triangle.
+    let chevron = egui::Rect::from_center_size(egui::pos2(response.rect.center().x, response.rect.bottom() - 6.0), vec2(10.0, 10.0));
+    crate::icons::paint(ui.painter(), chevron, crate::icons::Icon::ChevronDown, !ui.is_enabled());
+    crate::icons::describe_control(ui, &response, group_label(tab, group), None, false);
+    egui::Popup::menu(&response).id(response.id.with("collapsed_group")).show(|ui| {
+        ui.spacing_mut().item_spacing.y = 2.0;
+        for id in &group.commands {
+            button(app, ui, tab, group, id, ButtonStyle::Small);
+        }
+    });
+}
+
+/// A ribbon button painted by hand: a large icon over a two-line label, or a small icon beside one.
+fn tile(ui: &mut egui::Ui, icon: Option<crate::icons::Icon>, text: &str, size: egui::Vec2, large: bool, icon_side: f32) -> egui::Response {
+    let t = Tokens::get();
+    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+    let enabled = ui.is_enabled();
+    let painter = ui.painter();
+    if enabled && (response.hovered() || response.has_focus()) {
+        let fill = if response.is_pointer_button_down_on() { t.tab_active } else { t.control_hover };
+        painter.rect_filled(rect, 3.0, fill);
+    }
+    let color = if enabled { t.text } else { t.text_faint.gamma_multiply(0.55) };
+    let paint_icon = |icon_rect: egui::Rect| match icon {
+        Some(icon) => crate::icons::paint(painter, icon_rect, icon, !enabled),
+        // Commands a host adds without an icon still get a square of the same weight.
+        None => {
+            painter.rect_stroke(icon_rect.shrink(icon_rect.width() * 0.12), 3.0, egui::Stroke::new(1.2, color), egui::StrokeKind::Inside);
+            let initial: String = text.chars().find(|ch| ch.is_alphanumeric()).into_iter().collect();
+            painter.text(icon_rect.center(), egui::Align2::CENTER_CENTER, initial, egui::FontId::proportional(icon_rect.height() * 0.5), color);
+        }
+    };
+    if large {
+        let icon_rect = egui::Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 4.0 + icon_side / 2.0), vec2(icon_side, icon_side));
+        paint_icon(icon_rect);
+        let mut job = egui::text::LayoutJob::simple(text.to_owned(), crate::theme::small(), color, (rect.width() - 4.0).max(1.0));
+        job.wrap.max_rows = 2;
+        job.halign = Align::Center;
+        painter.galley(egui::pos2(rect.center().x, icon_rect.bottom() + 3.0), painter.layout_job(job), color);
+    } else if rect.width() < SMALL_ICON + 20.0 {
+        // A reduced group keeps only the icon; the label stays in the tooltip.
+        paint_icon(egui::Rect::from_center_size(rect.center(), vec2(SMALL_ICON, SMALL_ICON)));
+    } else {
+        let icon_rect = egui::Rect::from_center_size(egui::pos2(rect.left() + 4.0 + SMALL_ICON / 2.0, rect.center().y), vec2(SMALL_ICON, SMALL_ICON));
+        paint_icon(icon_rect);
+        let left = icon_rect.right() + 6.0;
+        let mut job = egui::text::LayoutJob::simple(text.to_owned(), crate::theme::body(), color, (rect.right() - left - 2.0).max(1.0));
+        job.wrap.max_rows = 1;
+        let galley = painter.layout_job(job);
+        painter.galley(egui::pos2(left, rect.center().y - galley.size().y / 2.0), galley, color);
+    }
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, text));
+    response
 }
 
 #[derive(Clone, Copy)]
@@ -656,6 +832,10 @@ enum ButtonStyle {
     Expanded,
     Compact,
     Label,
+    /// Icon over label, the column's full height.
+    Large,
+    /// Small icon beside its label.
+    Small,
 }
 
 fn button(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGroup, id: &str, style: ButtonStyle) {
@@ -666,7 +846,14 @@ fn button(app: &mut CadApp, ui: &mut egui::Ui, tab: &RibbonTab, group: &RibbonGr
         let enabled = command.known && cadcraft_engine::find_command(id).is_none_or(|spec| (spec.enabled)(&app.session).is_ok());
         let response = ui
             .add_enabled_ui(enabled, |ui| {
-                if matches!(style, ButtonStyle::Compact | ButtonStyle::Expanded)
+                if let ButtonStyle::Large | ButtonStyle::Small = style {
+                    let large = matches!(style, ButtonStyle::Large);
+                    // Inside a group column the button fills it; in a menu it keeps a readable row width.
+                    let width = if large || ui.available_width() < MENU_ROW_WIDTH * 2.0 { ui.available_width().max(1.0) } else { MENU_ROW_WIDTH };
+                    let height = if large { metrics.columns_height } else { metrics.button_height };
+                    tile(ui, tile_icon(id, &command), &label, vec2(width, height), large, large_icon(app.ws.effective.layout.density))
+                        .on_hover_text(label.as_str())
+                } else if matches!(style, ButtonStyle::Compact | ButtonStyle::Expanded)
                     && let Some(icon) = command.icon
                 {
                     crate::icons::button(ui, icon, metrics.button_height, &label, false)

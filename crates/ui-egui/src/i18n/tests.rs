@@ -60,9 +60,9 @@ fn glossary_is_valid_and_carries_the_uf_tab_table() {
     let rows = glossary();
     assert!(rows.len() >= 140, "{}", rows.len());
     for (en, vi) in [
-        ("Home", "Vẽ"),
+        ("Home", "Trang chủ"),
         ("Insert", "Chèn"),
-        ("Annotate", "Ghi chú"),
+        ("Annotate", "Ghi kích thước"),
         ("Layers", "Lớp bản vẽ"),
         ("View", "Hiển thị"),
         ("Layout", "Bố cục in"),
@@ -2276,9 +2276,9 @@ fn vietnamese_locales_preferences_and_single_count_form() {
 #[test]
 fn ribbon_tab_labels_follow_the_uf_table() {
     for (en, vi) in [
-        ("Home", "Vẽ"),
+        ("Home", "Trang chủ"),
         ("Insert", "Chèn"),
-        ("Annotate", "Ghi chú"),
+        ("Annotate", "Ghi kích thước"),
         ("Layers", "Lớp bản vẽ"),
         ("View", "Hiển thị"),
         ("Layout", "Bố cục in"),
@@ -2362,7 +2362,7 @@ fn user_named_ribbon_tab_is_not_translated() {
     let ctx = egui::Context::default();
     for language in ["vi", "en"] {
         with_language(language, || {
-            assert_eq!(crate::ribbon::render::tab_label(&home), if language == "vi" { "Vẽ" } else { "Home" });
+            assert_eq!(crate::ribbon::render::tab_label(&home), if language == "vi" { "Trang chủ" } else { "Home" });
             assert_eq!(crate::ribbon::render::tab_label(&renamed), "Bản vẽ kiến trúc");
             renamed.label = "Insert".into();
             assert_eq!(crate::ribbon::render::tab_label(&renamed), "Insert");

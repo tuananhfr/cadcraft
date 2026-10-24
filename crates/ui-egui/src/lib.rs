@@ -58,6 +58,7 @@ pub mod ribbon;
 pub mod shortcut_menus;
 pub mod shortcuts;
 pub mod theme;
+pub mod tool_rail;
 pub mod toolbars;
 pub mod ubplot;
 pub mod viewcube;
@@ -110,6 +111,7 @@ pub struct UiState {
     pub properties_all: bool,
     /// Show an in-window menu bar (platforms without a native menu bar, or on request).
     pub in_window_menu: bool,
+    pub show_tool_rail: bool,
     pub start_tab: bool,
     pub dialog: Option<String>,
     pub history_lines: usize,
@@ -192,6 +194,7 @@ impl Default for UiState {
             hidden_tools: Vec::new(),
             properties_all: true,
             in_window_menu: !cfg!(target_os = "macos"),
+            show_tool_rail: false,
             start_tab: false,
             dialog: None,
             history_lines: 3,
@@ -270,6 +273,10 @@ pub struct CadApp {
     /// A host that frames or scripts the app (an embedding page, `?sample`) sets this so a first run
     /// opens straight into the default workspace instead of the picker.
     pub skip_first_run_picker: bool,
+    /// The host's house workspace preset ([`wsprofile::preferred`]); `None` keeps the picker.
+    pub preferred_workspace: Option<&'static str>,
+    /// Hide the in-window menu bar in short windows ([`chrome::title_bar::MENU_BAR_MIN_HEIGHT`]).
+    pub auto_hide_menu_bar: bool,
     control_rx: Option<Receiver<ControlRequest>>,
     pending_shots: Vec<(u64, Option<String>, std::sync::mpsc::Sender<Value>, f64)>,
     queued_shots: Vec<(u64, f64, u32)>,
@@ -335,6 +342,8 @@ impl CadApp {
             opening: opening::Opening::default(),
             integrated_titlebar: false,
             skip_first_run_picker: false,
+            preferred_workspace: None,
+            auto_hide_menu_bar: false,
             control_rx: None,
             pending_shots: Vec::new(),
             queued_shots: Vec::new(),
@@ -760,7 +769,7 @@ impl CadApp {
         if !focus::hides(self, focus::Chrome::Toolbars) {
             chrome::title_and_toolbar(self, ui);
         }
-        if self.ui.in_window_menu && !focus::hides(self, focus::Chrome::MenuBar) {
+        if self.ui.in_window_menu && !focus::hides(self, focus::Chrome::MenuBar) && !chrome::title_bar::menu_bar_hidden(self, ui.ctx()) {
             menus::menu_bar(self, ui);
         }
         chrome::quick_access(self, ui, quick_access::QuickAccessRow::OwnRowAboveRibbon);
@@ -774,9 +783,6 @@ impl CadApp {
         if !focus::hides(self, focus::Chrome::Toolbars) {
             toolbars::show_docked(ui, self, wsprofile::schema::Dock::Bottom);
         }
-        if self.ui.show_file_tabs && !focus::hides(self, focus::Chrome::FileTabs) {
-            chrome::file_tabs(self, ui);
-        }
         if !focus::hides(self, focus::Chrome::Toolbars) {
             toolbars::show_docked(ui, self, wsprofile::schema::Dock::Left);
             toolbars::show_docked(ui, self, wsprofile::schema::Dock::Right);
@@ -784,6 +790,9 @@ impl CadApp {
         let has_doc = !self.session.docs.is_empty() && !self.ui.start_tab;
         if !has_doc && (self.focus.active() || self.fullscreen.phase != fullscreen::Phase::Off) {
             cmdline::keyboard(self, ui.ctx());
+        }
+        if has_doc && self.ui.show_tool_rail && !focus::hides(self, focus::Chrome::Panels) {
+            tool_rail::show(self, ui);
         }
         if has_doc && self.ui.show_command_line && !self.focus.active() {
             cmdline::show_docked(self, ui);
@@ -799,6 +808,9 @@ impl CadApp {
                     docking::show(self, ui);
                 }
             } else {
+                if self.ui.show_file_tabs && !focus::hides(self, focus::Chrome::FileTabs) {
+                    chrome::file_tabs(self, ui);
+                }
                 chrome::start_page(self, ui);
             }
         });

@@ -147,11 +147,7 @@ fn qat_position_is_independent_of_menu_bar() {
                     assert_eq!(quick_access_row(h.state()), QuickAccessRow::OwnRowBelowRibbon);
                     assert!(qat.min.y > ribbon.max.y, "{qat:?} below {ribbon:?}");
                 } else {
-                    let row = if expected == QuickAccessPosition::TitleBar && !in_window_menu {
-                        QuickAccessRow::TitleBar
-                    } else {
-                        QuickAccessRow::OwnRowAboveRibbon
-                    };
+                    let row = if expected == QuickAccessPosition::TitleBar { QuickAccessRow::TitleBar } else { QuickAccessRow::OwnRowAboveRibbon };
                     assert_eq!(quick_access_row(h.state()), row);
                     assert!(qat.max.y < ribbon.min.y, "{qat:?} above {ribbon:?}");
                 }

@@ -280,7 +280,7 @@ fn presets_keep_ratios_in_range_and_ids_unique() {
 fn discipline_presets_are_drafts() {
     for id in PRESET_IDS {
         let status = preset(id).unwrap().status;
-        let expected = if matches!(*id, "SIMPLE" | "AUTOCAD_FAMILIAR") { ProfileStatus::Published } else { ProfileStatus::Draft };
+        let expected = if matches!(*id, "SIMPLE" | "AUTOCAD_FAMILIAR" | "UBOTBUILD") { ProfileStatus::Published } else { ProfileStatus::Draft };
         assert_eq!(status, expected, "{id}");
     }
 }
@@ -300,6 +300,8 @@ fn ribbon_presets_carry_the_expected_tabs() {
         let standard: Vec<&str> = ribbon.tabs.iter().filter(|tab| tab.contextual.is_none()).map(|tab| tab.label.as_str()).collect();
         let expected: &[&str] = if *id == "CAD_MANAGER" {
             &["Home", "Standards", "Fonts", "Xref", "Plot"]
+        } else if *id == "UBOTBUILD" {
+            &["Home", "Draw", "Modify", "Annotate", "Layers", "Insert", "Properties", "View", "Layout", "Output", "Utilities"]
         } else {
             &["Home", "Insert", "Annotate", "Layers", "View", "Layout", "Tools", "Output"]
         };

@@ -84,7 +84,8 @@
       "properties": {
         "id": {"type": "string", "maxLength": 1024},
         "label": {"type": "string", "maxLength": 1024},
-        "commands": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/commandId"}}
+        "commands": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/commandId"}},
+        "large": {"type": "integer", "minimum": 0, "description": "How many leading commands show as large buttons; absent keeps three rows of small buttons."}
       }
     },
     "toolbar": {
@@ -152,7 +153,8 @@
         "ucsIcon": {"type": "boolean"},
         "layerList": {"type": "boolean", "description": "The layer list under the Layers palette's header."},
         "propertiesAll": {"type": "boolean", "description": "Properties shows every property rather than the common ones."},
-        "inWindowMenu": {"type": "boolean", "description": "In-window menu bar; defaults to off on macOS, on elsewhere."}
+        "inWindowMenu": {"type": "boolean", "description": "In-window menu bar; defaults to off on macOS, on elsewhere."},
+        "toolRail": {"type": "boolean", "description": "The Tools rail at the left edge, one row per ribbon tab opening its commands."}
       }
     },
     "screen": {

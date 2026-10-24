@@ -6,6 +6,7 @@ use crate::CadApp;
 use crate::wsprofile::schema::{RibbonGroup, RibbonMode, RibbonTab, WorkspaceLayout};
 
 pub mod contextual;
+pub(crate) mod icons;
 pub mod render;
 
 pub fn visible_tabs(app: &CadApp) -> Vec<RibbonTab> {

@@ -72,6 +72,7 @@ pub const KNOWN_KEYS: &[&str] = &[
     "layer_list",
     "properties_all",
     "in_window_menu",
+    "tool_rail",
     "quick_access_position",
     "density",
     "layers",
@@ -114,6 +115,7 @@ const RENAMED: &[(&str, &str)] = &[
     ("layer_list", "layerList"),
     ("properties_all", "propertiesAll"),
     ("in_window_menu", "inWindowMenu"),
+    ("tool_rail", "toolRail"),
     ("quick_access_position", "quickAccessPosition"),
 ];
 

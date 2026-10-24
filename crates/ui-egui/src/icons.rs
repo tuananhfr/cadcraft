@@ -144,6 +144,15 @@ pub enum Icon {
     PickAdd,
     SelectObjects,
     QuickSelect,
+    Count,
+    Audit,
+    Viewports,
+    Regen,
+    Color,
+    Linetype,
+    Compare,
+    Layout,
+    Library,
 }
 
 struct Pen<'a> {
@@ -904,6 +913,55 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, dim: bool) {
             // A filter funnel with a spark.
             pen.poly(&[(3.0, 4.0), (19.0, 4.0), (13.0, 11.0), (13.0, 19.0), (9.0, 17.0), (9.0, 11.0)], true, b);
             pen.poly(&[(20.0, 10.0), (16.5, 15.5), (20.0, 15.5), (17.0, 21.0)], false, a);
+        }
+        Count => {
+            for (x, y) in [(3.0, 4.0), (11.0, 4.0), (3.0, 12.0)] {
+                pen.rect(x, y, 6.0, 6.0, b);
+            }
+            pen.text(16.5, 16.5, "#", 11.0, a);
+        }
+        Audit => {
+            pen.poly(&[(5.0, 3.0), (14.0, 3.0), (18.0, 7.0), (18.0, 21.0), (5.0, 21.0)], true, b);
+            pen.poly(&[(8.0, 13.0), (11.0, 16.5), (20.0, 7.0)], false, a);
+        }
+        Viewports => {
+            pen.rect(3.0, 4.0, 18.0, 16.0, b);
+            pen.la(12.0, 4.0, 12.0, 20.0);
+            pen.la(3.0, 12.0, 21.0, 12.0);
+        }
+        Regen => {
+            pen.arc(12.0, 12.0, 7.0, 20.0, 160.0, b);
+            pen.arrow_tip(5.4, 9.6, -0.6, 1.0, b);
+            pen.arc(12.0, 12.0, 7.0, 200.0, 340.0, a);
+            pen.arrow_tip(18.6, 14.4, 0.6, -1.0, a);
+        }
+        Color => {
+            pen.fill_c(9.0, 9.0, 4.5, Color32::from_rgb(0xe8, 0x4c, 0x4c));
+            pen.fill_c(15.0, 9.0, 4.5, Color32::from_rgb(0x4c, 0xb8, 0x5c).gamma_multiply(0.9));
+            pen.fill_c(12.0, 14.5, 4.5, Color32::from_rgb(0x4f, 0x8f, 0xf0).gamma_multiply(0.9));
+        }
+        Linetype => {
+            pen.l(3.0, 6.0, 21.0, 6.0);
+            for x in [3.0, 9.0, 15.0] {
+                pen.la(x, 12.0, x + 4.0, 12.0);
+            }
+            for x in [3.0, 7.0, 11.0, 15.0, 19.0] {
+                pen.l(x, 18.0, x + 1.5, 18.0);
+            }
+        }
+        Compare => {
+            pen.rect(3.0, 3.0, 11.0, 14.0, b);
+            pen.rect(10.0, 7.0, 11.0, 14.0, a);
+        }
+        Layout => {
+            pen.rect(3.0, 4.0, 18.0, 16.0, b);
+            pen.rect(6.0, 7.0, 9.0, 8.0, a);
+            pen.l(15.0, 17.0, 19.0, 17.0);
+        }
+        Library => {
+            pen.rect(3.0, 5.0, 5.0, 15.0, b);
+            pen.rect(9.0, 5.0, 5.0, 15.0, b);
+            pen.poly(&[(15.0, 6.0), (19.5, 5.0), (22.0, 19.0), (17.5, 20.0)], true, a);
         }
     }
 }

@@ -1,9 +1,10 @@
-//! The eleven workspace presets shipped inside the binary.
+//! The workspace presets shipped inside the binary.
 
 use super::schema::WorkspaceProfile;
 
 pub const PRESET_IDS: &[&str] = &[
     "SIMPLE",
+    "UBOTBUILD",
     "AUTOCAD_FAMILIAR",
     "PLANNING_GIS",
     "ARCHITECTURE",
@@ -23,6 +24,7 @@ pub const SAFE_PRESET: &str = "SIMPLE";
 pub fn preset_json(id: &str) -> Option<&'static str> {
     Some(match id {
         "SIMPLE" => include_str!("presets/SIMPLE.json"),
+        "UBOTBUILD" => include_str!("presets/UBOTBUILD.json"),
         "AUTOCAD_FAMILIAR" => include_str!("presets/AUTOCAD_FAMILIAR.json"),
         "PLANNING_GIS" => include_str!("presets/PLANNING_GIS.json"),
         "ARCHITECTURE" => include_str!("presets/ARCHITECTURE.json"),

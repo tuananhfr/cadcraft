@@ -98,6 +98,10 @@ pub struct RibbonGroup {
     pub id: String,
     pub label: String,
     pub commands: Vec<String>,
+    /// How many leading commands show as large buttons (icon over label); `None` keeps the
+    /// three-row columns of small buttons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub large: Option<u32>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -324,6 +328,8 @@ pub struct ViewState {
     pub properties_all: bool,
     /// An in-window menu bar; off by default where the system draws the menu bar (macOS).
     pub in_window_menu: bool,
+    /// The category rail at the left edge, whose items open their ribbon tab's commands.
+    pub tool_rail: bool,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -337,6 +343,7 @@ impl Default for ViewState {
             layer_list: false,
             properties_all: true,
             in_window_menu: !cfg!(target_os = "macos"),
+            tool_rail: false,
             extra: Map::new(),
         }
     }

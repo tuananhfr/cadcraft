@@ -374,12 +374,13 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
     let workspace = app.ui.docking.clone();
     let mut style = DockStyle::from_ui(ui);
     style.min_pane = 96.0;
+    style.tab_height = 30.0;
     style.background = t.panel;
-    style.tab_background = t.chrome;
+    style.tab_background = t.header;
     style.active_background = t.tab_active;
     style.text = t.text;
     style.inactive_text = t.text_dim;
-    style.border = egui::Stroke::new(1.0, t.border);
+    style.border = egui::Stroke::new(1.0, t.cmd_border);
     style.accent = t.accent;
     style.font = crate::theme::body();
     style.float_label = crate::tl!("Float panel").into();
@@ -467,7 +468,11 @@ impl DockContent<Panel> for Content<'_> {
 pub(crate) fn body(app: &mut crate::CadApp, ui: &mut egui::Ui, panel: Panel) {
     match panel {
         Panel::Canvas => {
-            ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::Tokens::get().canvas);
+            // Drawing tabs head the drawing itself, not the palettes docked beside it.
+            if app.ui.show_file_tabs && !crate::focus::hides(app, crate::focus::Chrome::FileTabs) {
+                crate::chrome::file_tabs(app, ui);
+            }
+            ui.painter().rect_filled(ui.available_rect_before_wrap(), 0.0, crate::theme::Tokens::get().canvas);
             crate::canvas::show(app, ui);
         }
         Panel::ToolSets => crate::palettes::toolsets(app, ui),

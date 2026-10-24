@@ -10,6 +10,7 @@ use crate::theme::Tokens;
 use crate::wsprofile::schema::{Density, Dock};
 
 pub mod annoscale;
+pub mod title_bar;
 
 pub(crate) const FILE_TABS_HEIGHT: f32 = 26.0;
 pub(crate) const STATUS_BAR_HEIGHT: f32 = 26.0;
@@ -63,18 +64,25 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
     let ribbon_hidden = app.ws.effective.layout.ribbon.effective_mode() == crate::wsprofile::schema::RibbonMode::Hidden
         && !crate::ribbon::visible_tabs(app).is_empty();
-    let title_height = if app.ws.effective.layout.density == Density::Comfortable { 40.0 } else { MAC_TITLE_BAR };
+    let integrated = app.integrated_titlebar;
+    let title_height = if integrated {
+        if app.ws.effective.layout.density == Density::Comfortable { 40.0 } else { MAC_TITLE_BAR }
+    } else {
+        title_bar::height(app.ws.effective.layout.density, ui.ctx().content_rect().height())
+    };
     let qat_in_title = !crate::focus::hides(app, crate::focus::Chrome::QuickAccess)
         && quick_access_row(app) == QuickAccessRow::TitleBar
         && !app.ws.effective.layout.quick_access.is_empty();
-    if app.integrated_titlebar || ribbon_hidden || qat_in_title {
-        egui::Panel::top("cc_title_toolbar").exact_size(title_height).show_separator_line(false).frame(egui::Frame::NONE.fill(t.chrome)).show(
+    if integrated || ribbon_hidden || qat_in_title || title_bar::menu_bar_hidden(app, ui.ctx()) {
+        egui::Panel::top("cc_title_toolbar").exact_size(title_height).show_separator_line(false).frame(egui::Frame::NONE.fill(t.title_bar)).show(
             ui,
             |ui| {
                 let r = ui.max_rect();
-                let mut title_right = r.right();
+                let mut title_right = if integrated { r.right() } else { title_bar::trailing(app, ui, r) };
                 if ribbon_hidden {
-                    let mut restore = ui.new_child(egui::UiBuilder::new().max_rect(r).layout(egui::Layout::right_to_left(egui::Align::Center)));
+                    let restore_rect = Rect::from_min_max(r.min, pos2(title_right.max(r.left()), r.bottom()));
+                    let mut restore =
+                        ui.new_child(egui::UiBuilder::new().max_rect(restore_rect).layout(egui::Layout::right_to_left(egui::Align::Center)));
                     let button = restore.button(crate::tl!("Show ribbon"));
                     title_right = button.rect.left() - 8.0;
                     if button.clicked()
@@ -83,9 +91,11 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
                         app.set_status(error);
                     }
                 }
+                // Outside the macOS title bar the product mark already names the app.
+                let product = if integrated { "UbotCAD      " } else { "" };
                 let title = match app.session.state() {
-                    Ok(st) if !app.ui.start_tab => format!("UbotCAD      {}{}", st.title, if st.title.contains('.') { "" } else { ".dwg" }),
-                    _ => format!("UbotCAD      {}", crate::tl!("Start")),
+                    Ok(st) if !app.ui.start_tab => format!("{product}{}{}", st.title, if st.title.contains('.') { "" } else { ".dwg" }),
+                    _ => format!("{product}{}", crate::tl!("Start")),
                 };
                 // Centred on the traffic lights' centre line (the row's middle): with the system font
                 // the capitals' middle is the text box's middle, so no optical nudge.
@@ -101,18 +111,20 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
                     let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
                 }
-                let mut content_left = r.left() + MAC_CONTENT_LEFT;
+                let lead = if integrated { MAC_CONTENT_LEFT } else { title_bar::brand(ui, r, r.left() + 10.0) - r.left() + 16.0 };
+                let mut content_left = r.left() + lead;
                 if qat_in_title {
                     let inner =
                         egui::ScrollArea::horizontal().id_salt("cc_title_quick_access").max_width((title_right - r.left()).max(1.0)).show(ui, |ui| {
                             ui.horizontal(|ui| {
-                                ui.add_space(MAC_CONTENT_LEFT);
+                                ui.add_space(lead);
                                 crate::quick_access::show(app, ui);
                             })
                         });
                     content_left = inner.inner.response.rect.right() + 8.0;
                 }
-                let x = title_left(r.left(), r.width(), title_width).max(content_left);
+                let x = if integrated { title_left(r.left(), r.width(), title_width) } else { r.left() + (r.width() - title_width) / 2.0 }
+                    .max(content_left);
                 if x + title_width <= title_right {
                     ui.painter().galley(pos2(x, r.top() + (title_height - galley.size().y) / 2.0), galley, t.text_dim);
                 }
@@ -297,6 +309,7 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
         let body = ui.interact(r, ui.id().with("status_bar"), Sense::click());
         body.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Panel, true, crate::tl!("Status bar")));
         let p = ui.painter().clone();
+        p.hline(r.x_range(), r.top() + 0.5, Stroke::new(1.0, t.cmd_border));
         let mut x = r.left() + 8.0;
         // Clear the status message on time even when no input arrives (the app only repaints on input).
         if let Some((_, at)) = &app.status
@@ -554,65 +567,92 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
 /// The Start page (no drawing open, or the Start tab).
 pub fn start_page(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
-    let r = ui.max_rect();
+    let r = ui.available_rect_before_wrap();
     let p = ui.painter().clone();
-    let left = Rect::from_min_size(r.min, vec2(300.0, r.height()));
-    p.rect_filled(left, 0.0, t.chrome_dark);
-    p.rect_filled(Rect::from_min_max(pos2(left.right(), r.top()), r.max), 0.0, t.chrome);
-    p.text(pos2(left.left() + 34.0, left.top() + 70.0), egui::Align2::LEFT_CENTER, crate::tl!("UbotCAD"), egui::FontId::proportional(28.0), t.text);
+    p.rect_filled(r, 0.0, t.chrome);
+    let left = r.left() + 32.0;
+    let mut y = r.top() + 32.0;
+    p.text(pos2(left, y), egui::Align2::LEFT_TOP, crate::tl!("Start"), egui::FontId::proportional(28.0), t.text);
+    y += 42.0;
+    p.text(pos2(left, y), egui::Align2::LEFT_TOP, crate::tl!("Create a new drawing or continue recent work."), crate::theme::body(), t.text_dim);
     p.text(
-        pos2(left.left() + 34.0, left.top() + 98.0),
-        egui::Align2::LEFT_CENTER,
+        pos2(r.right() - 24.0, y),
+        egui::Align2::RIGHT_TOP,
         crate::tf!("Version {version}", version = env!("CARGO_PKG_VERSION")),
         crate::theme::small(),
         t.text_faint,
     );
-    let mut y = left.top() + 140.0;
+    y += 34.0;
     let mut action = None;
-    for (label, cmd) in
-        [("Open...", "open"), ("New", "new"), (crate::tl!("New (metric)"), "new.metric"), (crate::tl!("Open sample drawing"), "sample")]
+    let mut x = left;
+    for (index, (label, cmd)) in [
+        (crate::tl!("New Drawing"), "new"),
+        ("Open...", "open"),
+        (crate::tl!("New (metric)"), "new.metric"),
+        (crate::tl!("Open sample drawing"), "sample"),
+    ]
+    .into_iter()
+    .enumerate()
     {
-        let br = Rect::from_min_size(pos2(left.left() + 34.0, y), vec2(220.0, 34.0));
+        let text = crate::i18n::t(label);
+        let width = (p.layout_no_wrap(text.to_string(), crate::theme::body(), t.text).size().x + 48.0).max(150.0);
+        let br = Rect::from_min_size(pos2(x, y), vec2(width, 46.0));
         let resp = ui.interact(br, ui.id().with(("start", cmd)), Sense::click());
-        p.rect_stroke(br, 2.0, Stroke::new(1.0, if resp.hovered() { t.text } else { t.text_dim }), egui::StrokeKind::Inside);
-        p.text(pos2(br.left() + 16.0, br.center().y), egui::Align2::LEFT_CENTER, crate::i18n::t(label), crate::theme::body(), t.text);
+        // The first action is the one most people want, as on the ribbon's Home tab.
+        let fill = match (index == 0, resp.hovered()) {
+            (true, false) => t.select_bg,
+            (true, true) => t.accent,
+            (false, false) => t.control,
+            (false, true) => t.control_hover,
+        };
+        p.rect_filled(br, 3.0, fill);
+        p.rect_stroke(br, 3.0, Stroke::new(1.0, if index == 0 { t.accent } else { t.cmd_border }), egui::StrokeKind::Inside);
+        p.text(br.center(), egui::Align2::CENTER_CENTER, text, crate::theme::body(), t.text);
+        icons::describe_control(ui, &resp, label, None, false);
         if resp.clicked() {
             action = Some(cmd);
         }
-        y += 44.0;
+        x = br.right() + 14.0;
     }
-    let main = Rect::from_min_max(pos2(left.right() + 36.0, r.top() + 40.0), r.max);
-    p.text(main.min, egui::Align2::LEFT_TOP, crate::tl!("Recent"), egui::FontId::proportional(22.0), t.text);
+    y += 46.0 + 36.0;
+    p.text(pos2(left, y), egui::Align2::LEFT_TOP, crate::tl!("Recent"), egui::FontId::proportional(20.0), t.text);
+    y += 36.0;
+    let card = vec2(300.0, 64.0);
+    let gap = 14.0;
+    let columns = (((r.right() - 24.0 - left + gap) / (card.x + gap)).floor() as usize).max(1);
     let mut recent = None;
-    let mut y = main.top() + 44.0;
     for (i, path) in app.ui.recent_files.iter().enumerate() {
-        let row = Rect::from_min_size(pos2(main.left(), y), vec2((r.right() - main.left() - 36.0).clamp(0.0, 640.0), 42.0));
-        let resp = ui.interact(row, ui.id().with(("recent", i)), Sense::click());
-        if resp.hovered() {
-            p.rect_filled(row, 2.0, t.control_hover.gamma_multiply(0.5));
+        let at = pos2(left + (i % columns) as f32 * (card.x + gap), y + (i / columns) as f32 * (card.y + gap));
+        let row = Rect::from_min_size(at, card);
+        if row.top() > r.bottom() {
+            break;
         }
+        let resp = ui.interact(row, ui.id().with(("recent", i)), Sense::click());
+        p.rect_filled(row, 3.0, if resp.hovered() { t.control_hover } else { t.panel });
+        p.rect_stroke(row, 3.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
+        let icon = Rect::from_center_size(pos2(row.left() + 26.0, row.center().y), vec2(24.0, 24.0));
+        icons::paint(&p, icon, Icon::Open, false);
         let dir = std::path::Path::new(path).parent().map(|d| d.display().to_string()).unwrap_or_default();
         let clip = p.with_clip_rect(row.shrink(2.0));
-        clip.text(pos2(row.left() + 10.0, row.top() + 13.0), egui::Align2::LEFT_CENTER, crate::menus::file_name(path), crate::theme::body(), t.text);
-        clip.text(pos2(row.left() + 10.0, row.top() + 30.0), egui::Align2::LEFT_CENTER, dir, crate::theme::small(), t.text_faint);
+        clip.text(
+            pos2(icon.right() + 14.0, row.top() + 22.0),
+            egui::Align2::LEFT_CENTER,
+            crate::menus::file_name(path),
+            crate::theme::body(),
+            t.text,
+        );
+        clip.text(pos2(icon.right() + 14.0, row.top() + 43.0), egui::Align2::LEFT_CENTER, dir, crate::theme::small(), t.text_faint);
         if resp.on_hover_text(path).clicked() {
             recent = Some(path.clone());
         }
-        y += 46.0;
     }
     if let Some(path) = recent {
         app.open_path(&path);
     } else if app.ui.recent_files.is_empty() {
+        p.text(pos2(left, y), egui::Align2::LEFT_TOP, crate::tl!("There is nothing here yet."), egui::FontId::proportional(16.0), t.text);
         p.text(
-            pos2(main.center().x, main.center().y),
-            egui::Align2::CENTER_CENTER,
-            crate::tl!("There is nothing here yet."),
-            egui::FontId::proportional(18.0),
-            t.text,
-        );
-        p.text(
-            pos2(main.center().x, main.center().y + 26.0),
-            egui::Align2::CENTER_CENTER,
+            pos2(left, y + 26.0),
+            egui::Align2::LEFT_TOP,
             crate::tl!("To get started, create or open a drawing."),
             crate::theme::body(),
             t.text_dim,

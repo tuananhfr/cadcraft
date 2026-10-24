@@ -70,6 +70,7 @@ impl Fingerprint {
                 layer_list: app.ui.show_layer_list,
                 properties_all: app.ui.properties_all,
                 in_window_menu: app.ui.in_window_menu,
+                tool_rail: app.ui.show_tool_rail,
                 ..ViewState::default()
             },
             theme: app.ui.theme.as_str(),
@@ -121,13 +122,14 @@ pub fn capture(app: &CadApp, area: egui::Rect) -> WorkspaceLayout {
     if moved(|a, b| a.hidden_tools == b.hidden_tools) {
         layout.toolsets.hidden_tools = now.hidden_tools.clone();
     }
-    let view: [(fn(&ViewState) -> bool, fn(&mut ViewState) -> &mut bool); 6] = [
+    let view: [(fn(&ViewState) -> bool, fn(&mut ViewState) -> &mut bool); 7] = [
         (|view| view.file_tabs, |view| &mut view.file_tabs),
         (|view| view.viewcube, |view| &mut view.viewcube),
         (|view| view.ucs_icon, |view| &mut view.ucs_icon),
         (|view| view.layer_list, |view| &mut view.layer_list),
         (|view| view.properties_all, |view| &mut view.properties_all),
         (|view| view.in_window_menu, |view| &mut view.in_window_menu),
+        (|view| view.tool_rail, |view| &mut view.tool_rail),
     ];
     for (read, write) in view {
         if base.is_none_or(|base| read(&base.view) != read(&now.view)) {
@@ -176,6 +178,7 @@ pub fn apply(app: &mut CadApp, layout: &WorkspaceLayout, area: egui::Rect) -> Ap
     app.ui.show_layer_list = view.layer_list;
     app.ui.properties_all = view.properties_all;
     app.ui.in_window_menu = view.in_window_menu;
+    app.ui.show_tool_rail = view.tool_rail;
 
     let pinned = pinned_panels(app, layout);
     let mut docking = docking_from_tree(layout, area)

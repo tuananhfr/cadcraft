@@ -3893,3 +3893,13 @@ echo	ATTSYNC block {name}: {n} references synchronized.	ATTSYNC блок {name}:
 echo	{n} row extracted.	Видобуто рядків: {n}.
 echo	{n} rows extracted.	Видобуто рядків: {n}.
 echo	`{name}` takes {lo} argument(s)	`{name}` приймає аргументів: {lo}
+# UI redesign
+ribbon	Annotate	Анотації
+ribbon	Lines	Лінії
+ribbon	Shapes	Фігури
+	UbotBuild	UbotBuild
+	Ribbon with large buttons, a tool rail, Properties on the left and Layers with Command History on the right.	Стрічка з великими кнопками, панель інструментів, властивості ліворуч, шари та історія команд праворуч.
+	Menu	Меню
+	Tool Rail	Панель інструментів
+	Hide Tool Rail	Сховати панель інструментів
+	Create a new drawing or continue recent work.	Створіть нове креслення або продовжте недавню роботу.

@@ -5,9 +5,11 @@
 # status: approved 2026-10-22
 # Approved for use by the user's decision to translate without waiting for review; native review by the user and LPC is pending.
 # Ribbon tabs (U-F table, verbatim)
-ribbon	Home	Vẽ	U-F
+ribbon	Home	Trang chủ	U-F; UbotBuild mockup 2026-10-24 (Draw is its own tab)
 ribbon	Insert	Chèn	U-F
-ribbon	Annotate	Ghi chú	U-F
+ribbon	Annotate	Ghi kích thước	U-F; UbotBuild mockup 2026-10-24
+ribbon	Lines	Đường	UbotBuild Draw tab group
+ribbon	Shapes	Hình	UbotBuild Draw tab group
 ribbon	Layers	Lớp bản vẽ	U-F; also the group of the same name
 ribbon	View	Hiển thị	U-F
 ribbon	Layout	Bố cục in	U-F

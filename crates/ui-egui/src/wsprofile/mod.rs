@@ -13,6 +13,7 @@ pub mod import_preview;
 pub mod merge;
 pub mod migrate;
 pub mod picker;
+pub mod preferred;
 pub mod presets;
 pub mod save_state;
 pub mod schema;
@@ -620,6 +621,7 @@ impl CadApp {
             self.ws.message = Some(notice.clone());
             self.set_status(notice);
         }
+        preferred::adopt(self);
     }
 
     /// Shows the effective layout and the profile's theme and language (when it names them).

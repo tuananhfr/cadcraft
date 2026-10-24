@@ -127,6 +127,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.saveversion.2000", "Version 2000", &["File", "Default Save Format", "Version 2000"], None),
     ("ui.saveversion", "Default Save Version", &[], None),
     ("ui.toggle.menubar", "In-window Menu Bar", &["Window", "In-window Menu Bar"], None),
+    ("ui.toggle.toolrail", "Tool Rail", &["Window", "Tool Rail"], None),
     ("ui.hidepalettes", "Hide Palettes", &["Window", "Hide Palettes"], None),
     ("ui.resetpalettes", "Reset Palettes", &["Window", "Reset Palettes"], None),
     ("ui.start", "Start", &["Window", "Start"], None),
@@ -423,6 +424,10 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
         }
         "ui.toggle.menubar" => {
             toggle(&mut app.ui.in_window_menu, params);
+            Ok(Value::Null)
+        }
+        "ui.toggle.toolrail" => {
+            toggle(&mut app.ui.show_tool_rail, params);
             Ok(Value::Null)
         }
         "ui.theme.system" | "ui.theme.light" | "ui.theme.dark" => {
@@ -801,6 +806,26 @@ pub fn menu_bar(app: &mut CadApp, ui: &mut egui::Ui) {
             });
         },
     );
+    if let Some(id) = clicked {
+        activate(app, &id);
+    }
+}
+
+/// The menu bar's menus behind one button, for when the bar itself is hidden.
+pub fn menu_button(app: &mut CadApp, ui: &mut egui::Ui, size: f32) {
+    let tree = tree(app);
+    let collapsed = app.ws.effective.layout.ribbon.effective_mode() == RibbonMode::TabsOnly;
+    let mut clicked = None;
+    let response = crate::icons::button(ui, crate::icons::Icon::Menu, size, crate::tl!("Menu"), false);
+    egui::Popup::menu(&response).id(response.id.with("cc_menu_button")).show(|ui| {
+        for (name, entries) in &tree {
+            ui.menu_button(crate::i18n::menu(name), |ui| {
+                for e in entries {
+                    entry_ui_with_ribbon(ui, e, &mut clicked, Some(collapsed));
+                }
+            });
+        }
+    });
     if let Some(id) = clicked {
         activate(app, &id);
     }
