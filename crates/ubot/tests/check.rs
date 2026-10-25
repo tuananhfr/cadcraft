@@ -547,3 +547,107 @@ fn far_broken_zone_does_not_fail_check_but_nan_zone_does() {
     let err = check(&r, &Catalog::builtin()).unwrap_err();
     assert!(matches!(&err, UbotError::BadInput(m) if m.contains("zone nan")), "{err}");
 }
+
+fn far_zones(n: u32, vertices_each: u32) -> Vec<ZoneInput> {
+    (0..n)
+        .map(|k| {
+            let (cx, cy) = (5.0e6 + f64::from(k) * 3000.0, 5.0e6);
+            let ring = (0..vertices_each)
+                .map(|v| f64::from(v) * std::f64::consts::TAU / f64::from(vertices_each))
+                .map(|a| [cx + 1000.0 * a.cos(), cy + 1000.0 * a.sin(), 0.0])
+                .collect();
+            zone_rect(&format!("f{k}"), RingInput { vertices: ring }, None)
+        })
+        .collect()
+}
+
+/// `n` small slabs 20 m apart, each with a stored geometry hash that the far zones do not change.
+fn many_layouts(n: u32) -> Vec<LayoutInput> {
+    (0..n)
+        .map(|k| {
+            let x = f64::from(k % 40) * 20_000.0;
+            let y = f64::from(k / 40) * 20_000.0;
+            let boundary = rect(x, y, x + 6600.0, y + 6600.0);
+            LayoutInput {
+                layout_id: format!("{k:016x}"),
+                boundary_handle: format!("{:X}", 0x1000 + k),
+                stored_geometry_hash: Some(geometry_hash(1.0, &boundary, &[], &[]).unwrap()),
+                boundary,
+                holes: vec![],
+                layout: None,
+                edge_clearance_mm: None,
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn many_layouts_and_far_zones_cost_little() {
+    let r = CheckRequest { unit_scale: 1.0, instances: vec![], layouts: many_layouts(50), zones: far_zones(200, 50) };
+    let t = std::time::Instant::now();
+    assert!(run(&r).is_empty());
+    assert!(t.elapsed().as_secs_f64() < 2.0, "{:?}", t.elapsed());
+}
+
+#[test]
+#[ignore = "perf: run with --release -- --ignored --nocapture"]
+fn thousand_layouts_and_two_hundred_far_zones_perf() {
+    let r = CheckRequest { unit_scale: 1.0, instances: vec![], layouts: many_layouts(1_000), zones: far_zones(200, 500) };
+    let t = std::time::Instant::now();
+    assert!(run(&r).is_empty());
+    let took = t.elapsed();
+    eprintln!("check: 1 000 layouts x 200 far zones of 500 vertices: {took:?}");
+    assert!(took.as_secs_f64() < 0.5, "{took:?}");
+}
+
+#[test]
+fn over_a_million_raw_zone_vertices_is_a_limit() {
+    let res = filled();
+    let mut r = request(&res);
+    let ring = (0..1_000_001u32).map(|v| [1.0e7 + f64::from(v % 1000), 1.0e7 + f64::from(v / 1000), 0.0]).collect();
+    r.zones.push(zone_rect("huge", RingInput { vertices: ring }, None));
+    let err = check(&r, &Catalog::builtin()).unwrap_err();
+    assert!(matches!(&err, UbotError::Limit(m) if m.contains("1000000")), "{err}");
+}
+
+#[test]
+fn loose_box_in_a_far_zone_is_in_zone_with_or_without_layouts() {
+    let at = 5.0e6;
+    let zone = zone_rect("z", rect(at - 1000.0, at - 1000.0, at + 1000.0, at + 1000.0), None);
+    let mut r = loose_req(vec![loose("10", None, at, at)]);
+    r.zones.push(zone.clone());
+    assert_eq!(with_code(&run(&r), IssueCode::InZone).len(), 1, "no layouts");
+    let res = filled();
+    let mut r = request(&res);
+    r.instances.push(loose("FFFF", None, at, at));
+    r.zones.push(zone);
+    let issues = run(&r);
+    assert_eq!(with_code(&issues, IssueCode::InZone).len(), 1, "{issues:?}");
+    assert!(with_code(&issues, IssueCode::StaleLayout).is_empty(), "the far zone does not reach the slab");
+}
+
+#[test]
+fn stale_check_hashes_the_same_zones_as_geometry_hash() {
+    // Near zones (one with arcs, one only reached through its arc bulge), far zones and a hole, in cm.
+    let us = 10.0;
+    let boundary = rect(0.0, 0.0, 660.0, 660.0);
+    let holes = vec![rect(300.0, 300.0, 320.0, 320.0)];
+    let zones = vec![
+        zone_rect("near", rect(60.0, 10.0, 70.0, 20.0), None),
+        zone_rect("arc", RingInput { vertices: vec![[200.0, 200.0, 1.0], [220.0, 200.0, 1.0]] }, Some(50.0)),
+        zone_rect("bulge", RingInput { vertices: vec![[1900.0, 300.0, 0.0], [1910.0, 300.0, 50.0]] }, None),
+        zone_rect("far", rect(1.0e5, 1.0e5, 1.0e5 + 10.0, 1.0e5 + 10.0), None),
+    ];
+    let layout = LayoutInput {
+        layout_id: LAYOUT.into(),
+        boundary_handle: "A1".into(),
+        stored_geometry_hash: Some(geometry_hash(us, &boundary, &holes, &zones).unwrap()),
+        boundary,
+        holes,
+        layout: None,
+        edge_clearance_mm: None,
+    };
+    let r = CheckRequest { unit_scale: us, instances: vec![], layouts: vec![layout], zones };
+    let issues = run(&r);
+    assert!(with_code(&issues, IssueCode::StaleLayout).is_empty(), "{issues:?}");
+}

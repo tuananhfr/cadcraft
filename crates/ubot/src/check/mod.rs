@@ -14,16 +14,20 @@ use serde::{Deserialize, Serialize};
 
 use crate::catalog::Catalog;
 use crate::error::UbotError;
-use crate::fill::{ExistingInstance, LayoutRecord, MAX_CLEARANCE_MM, MAX_VERTICES, ZoneInput, ZoneReach, geometry_hash, handle_key};
+use crate::fill::{ExistingInstance, LayoutRecord, MAX_CLEARANCE_MM, MAX_VERTICES, ZoneInput, ZoneMm, ZoneReach, geometry_hash_of, handle_key};
 use crate::geometry::RingInput;
 use crate::model::RulePack;
+use cadcraft_geom::Bounds2;
 use containment::{LayoutCtx, Zones, check_layout, check_zones};
 use resolve::{Lookup, Placed, resolve};
 use work::Work;
+use zone_grid::ZoneGrid;
 
 const MAX_INSTANCES: usize = 100_000;
 const MAX_LAYOUTS: usize = 1_000;
 const MAX_ZONES: usize = 20_000;
+/// Zone vertices in a request before any are looked at; only zones near a slab or box count towards `MAX_VERTICES`.
+const MAX_RAW_ZONE_VERTICES: usize = 1_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -133,6 +137,10 @@ fn validate(req: &CheckRequest) -> Result<(), UbotError> {
             return Err(UbotError::Limit(format!("{len} {what}, the limit is {max}")));
         }
     }
+    let raw = req.zones.iter().fold(0usize, |n, z| n.saturating_add(z.ring.vertices.len()));
+    if raw > MAX_RAW_ZONE_VERTICES {
+        return Err(UbotError::Limit(format!("{raw} zone vertices, the limit is {MAX_RAW_ZONE_VERTICES}")));
+    }
     for l in &req.layouts {
         let n = l.holes.iter().fold(l.boundary.vertices.len(), |n, h| n.saturating_add(h.vertices.len()));
         if n > MAX_VERTICES {
@@ -142,26 +150,63 @@ fn validate(req: &CheckRequest) -> Result<(), UbotError> {
     Ok(())
 }
 
-/// Zones within reach of some layout ([`ZoneReach`], as fill uses); without layouts every zone is kept, so loose
-/// boxes are still checked against them. A non-finite zone is an error wherever it is.
-fn reachable_zones(req: &CheckRequest) -> Result<Vec<ZoneInput>, UbotError> {
-    let reaches = req.layouts.iter().map(|l| ZoneReach::new(req.unit_scale, &l.boundary)).collect::<Result<Vec<_>, _>>()?;
-    let mut out = Vec::new();
-    for z in &req.zones {
-        if z.ring.vertices.iter().flatten().any(|c| !(c * req.unit_scale).is_finite()) {
-            return Err(UbotError::BadInput(format!("zone {}: ring vertex is not a finite number in mm", z.id)));
+/// Every zone in mm once (a non-finite zone is an error wherever it is), bucketed by extent so a slab or box only
+/// visits the zones near it (ruling R17).
+struct ZoneIndex<'r> {
+    zones: &'r [ZoneInput],
+    mm: Vec<ZoneMm>,
+    grid: ZoneGrid,
+    digests: Vec<Option<String>>,
+}
+
+impl<'r> ZoneIndex<'r> {
+    fn new(zones: &'r [ZoneInput], unit_scale: f64) -> Result<Self, UbotError> {
+        let mm = zones.iter().map(|z| ZoneMm::new(unit_scale, z)).collect::<Result<Vec<_>, _>>()?;
+        let extents: Vec<_> = mm.iter().map(|z| z.extent).collect();
+        Ok(ZoneIndex { zones, grid: ZoneGrid::new(&extents), digests: vec![None; mm.len()], mm })
+    }
+
+    /// Zones within `reach` of a slab, exactly as [`crate::geometry_hash`] picks them, ascending.
+    fn reached(&self, reach: &ZoneReach, work: &mut Work) -> Result<Vec<usize>, UbotError> {
+        let candidates = self.grid.candidates(&reach.bounds());
+        work.spend(candidates.len().saturating_add(1))?;
+        Ok(candidates.into_iter().filter(|&k| self.mm.get(k).is_some_and(|z| reach.meets(&z.extent))).collect())
+    }
+
+    /// The layout's geometry hash from its pre-filtered zones; equals `geometry_hash(boundary, holes, all zones)`.
+    fn layout_hash(&mut self, l: &LayoutInput, unit_scale: f64, work: &mut Work) -> Result<String, UbotError> {
+        let reach = ZoneReach::new(unit_scale, &l.boundary)?;
+        let mut digests = Vec::new();
+        for k in self.reached(&reach, work)? {
+            let (Some(z), Some(mm), Some(slot)) = (self.zones.get(k), self.mm.get(k), self.digests.get_mut(k)) else { continue };
+            work.spend(z.ring.vertices.len())?;
+            digests.push(slot.get_or_insert_with(|| mm.digest(z)).clone());
         }
-        let mut near = reaches.is_empty();
-        for r in &reaches {
-            if near {
-                break;
+        geometry_hash_of(unit_scale, &l.boundary, &l.holes, digests)
+    }
+}
+
+/// Zones relevant to the check: within reach of any layout or near any box with a footprint, so loose boxes in a
+/// zone are checked with or without layouts. Only these count towards `MAX_VERTICES`.
+fn relevant_zones(req: &CheckRequest, index: &ZoneIndex<'_>, placed: &[Placed<'_>], work: &mut Work) -> Result<Vec<ZoneInput>, UbotError> {
+    let mut relevant = vec![false; req.zones.len()];
+    for l in &req.layouts {
+        for k in index.reached(&ZoneReach::new(req.unit_scale, &l.boundary)?, work)? {
+            if let Some(r) = relevant.get_mut(k) {
+                *r = true;
             }
-            near = r.reaches(req.unit_scale, &z.ring)?;
-        }
-        if near {
-            out.push(z.clone());
         }
     }
+    // Per zone, the first box within reach settles it; buckets of twice the reach keep each query to a few buckets.
+    let boxes: Vec<Bounds2> = placed.iter().filter_map(|p| p.geom.as_ref().map(|g| g.bounds)).collect();
+    if !boxes.is_empty() {
+        let grid = ZoneGrid::with_cell(&boxes, 2.0 * MAX_CLEARANCE_MM);
+        for (z, r) in index.mm.iter().zip(relevant.iter_mut()).filter(|(_, r)| !**r) {
+            let grown = z.extent.expand(MAX_CLEARANCE_MM);
+            *r = grid.any(&grown, work, |b| boxes.get(b).is_some_and(|b| b.intersects(&grown)))?;
+        }
+    }
+    let out: Vec<ZoneInput> = req.zones.iter().zip(&relevant).filter(|(_, r)| **r).map(|(z, _)| z.clone()).collect();
     let zone_vertices = out.iter().fold(0usize, |n, z| n.saturating_add(z.ring.vertices.len()));
     if zone_vertices > MAX_VERTICES {
         return Err(UbotError::Limit(format!("{zone_vertices} zone vertices, the limit is {MAX_VERTICES}")));
@@ -172,7 +217,8 @@ fn reachable_zones(req: &CheckRequest) -> Result<Vec<ZoneInput>, UbotError> {
 /// Audits boxes, layouts and zones as given; nothing is modified. Issues run top-down, then left to right.
 pub fn check(req: &CheckRequest, catalog: &Catalog) -> Result<Vec<Issue>, UbotError> {
     validate(req)?;
-    let near_zones = reachable_zones(req)?;
+    let mut index = ZoneIndex::new(&req.zones, req.unit_scale)?;
+    let mut work = Work::new();
     let mut out: Vec<Issue> = Vec::new();
     let mut lookup = Lookup::new(catalog);
 
@@ -210,12 +256,21 @@ pub fn check(req: &CheckRequest, catalog: &Catalog) -> Result<Vec<Issue>, UbotEr
     }
     let default_exclusion = clearance_mm(catalog.rulepack(None).map_or(0.0, |r| r.exclusion_clearance_mm), "exclusionClearanceMm")?;
     let widest_default = ctxs.iter().fold(default_exclusion, |m, c| m.max(c.exclusion_mm));
+
+    let mut placed: Vec<Placed<'_>> = Vec::with_capacity(req.instances.len());
+    let mut layout_of: Vec<Option<usize>> = Vec::with_capacity(req.instances.len());
+    for inst in &req.instances {
+        let layout = inst.base.layout_id.as_deref().and_then(|id| owner.get(id).copied());
+        placed.push(resolve(inst, layout.and_then(|k| ctxs.get(k)).and_then(|c| c.product), &mut lookup, req.unit_scale)?);
+        layout_of.push(layout);
+    }
+    let near_zones = relevant_zones(req, &index, &placed, &mut work)?;
     let zones = Zones::new(&near_zones, req.unit_scale, widest_default, &mut points)?;
 
     // Stale: the slab geometry no longer matches what the fill saw.
     for l in &req.layouts {
         let Some(stored) = &l.stored_geometry_hash else { continue };
-        if *stored != geometry_hash(req.unit_scale, &l.boundary, &l.holes, &req.zones)? {
+        if *stored != index.layout_hash(l, req.unit_scale, &mut work)? {
             let at = l.boundary.vertices.first().map_or([0.0, 0.0], |v| [v[0], v[1]]);
             out.push(Issue {
                 code: IssueCode::StaleLayout,
@@ -227,36 +282,32 @@ pub fn check(req: &CheckRequest, catalog: &Catalog) -> Result<Vec<Issue>, UbotEr
         }
     }
 
-    let mut work = Work::new();
-    let mut placed: Vec<Placed<'_>> = Vec::with_capacity(req.instances.len());
-    for inst in &req.instances {
-        let layout = inst.base.layout_id.as_deref().and_then(|id| owner.get(id).copied());
-        let p = resolve(inst, layout.and_then(|k| ctxs.get(k)).and_then(|c| c.product), &mut lookup, req.unit_scale)?;
+    for (p, &layout) in placed.iter().zip(&layout_of) {
+        let inst = p.inst;
         if !inst.xdata_valid {
-            out.push(issue(IssueCode::XdataInvalid, Severity::Error, &p, "the LPC_UBOT data of this box cannot be read".into()));
+            out.push(issue(IssueCode::XdataInvalid, Severity::Error, p, "the LPC_UBOT data of this box cannot be read".into()));
         }
         if inst.legacy {
-            out.push(issue(IssueCode::LegacyBlock, Severity::Warning, &p, format!("legacy block {}", inst.base.block_name)));
+            out.push(issue(IssueCode::LegacyBlock, Severity::Warning, p, format!("legacy block {}", inst.base.block_name)));
         }
         if p.unknown_product {
             let id = inst.base.product_id.as_deref().unwrap_or_default();
-            out.push(issue(IssueCode::UnknownProduct, Severity::Error, &p, format!("product {id} is not in the catalog")));
+            out.push(issue(IssueCode::UnknownProduct, Severity::Error, p, format!("product {id} is not in the catalog")));
         }
         if let Some(k) = layout {
             if let Some(l) = req.layouts.get(k)
-                && let Some(i) = moved::moved(&p, l)?
+                && let Some(i) = moved::moved(p, l)?
             {
                 out.push(i);
             }
             if let (Some(g), Some(ctx)) = (&p.geom, ctxs.get(k)) {
-                check_layout(&p, g, ctx, &mut work, &mut out)?;
+                check_layout(p, g, ctx, &mut work, &mut out)?;
             }
         }
         if let Some(g) = &p.geom {
             let default_mm = layout.and_then(|k| ctxs.get(k)).map_or(default_exclusion, |c| c.exclusion_mm);
-            check_zones(&p, g, &zones, default_mm, &mut work, &mut out)?;
+            check_zones(p, g, &zones, default_mm, &mut work, &mut out)?;
         }
-        placed.push(p);
     }
 
     duplicate_ids(&placed, &mut out);
@@ -294,5 +345,45 @@ fn duplicate_ids(placed: &[Placed<'_>], out: &mut Vec<Issue>) {
     for p in dups {
         let id = p.inst.base.instance_id.as_deref().unwrap_or_default();
         out.push(issue(IssueCode::DuplicateId, Severity::Error, p, format!("instance id {id} is used by another box")));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fill::ZoneType;
+    use crate::fill::geometry_hash;
+
+    fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> RingInput {
+        RingInput { vertices: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].iter().map(|p| [p[0], p[1], 0.0]).collect() }
+    }
+
+    fn zone(id: &str, ring: RingInput) -> ZoneInput {
+        ZoneInput { id: id.into(), ring, zone_type: ZoneType::Exclusion, clearance_mm: None, alt_product_id: None }
+    }
+
+    #[test]
+    fn layout_hash_equals_geometry_hash_over_all_zones() {
+        let zones = vec![
+            zone("near", rect(60.0, 10.0, 70.0, 20.0)),
+            zone("arc", RingInput { vertices: vec![[200.0, 200.0, 1.0], [220.0, 200.0, 1.0]] }),
+            zone("bulge", RingInput { vertices: vec![[1900.0, 300.0, 0.0], [1910.0, 300.0, 50.0]] }),
+            zone("edge", rect(1660.0, 0.0, 1670.0, 10.0)),
+            zone("far", rect(1.0e5, 1.0e5, 1.0e5 + 10.0, 1.0e5 + 10.0)),
+        ];
+        let layout = LayoutInput {
+            layout_id: "0123456789abcdef".into(),
+            boundary_handle: "A1".into(),
+            boundary: rect(0.0, 0.0, 660.0, 660.0),
+            holes: vec![rect(300.0, 300.0, 320.0, 320.0)],
+            stored_geometry_hash: None,
+            layout: None,
+            edge_clearance_mm: None,
+        };
+        for us in [1.0, 10.0, 0.001] {
+            let mut index = ZoneIndex::new(&zones, us).unwrap();
+            let got = index.layout_hash(&layout, us, &mut Work::new()).unwrap();
+            assert_eq!(got, geometry_hash(us, &layout.boundary, &layout.holes, &zones).unwrap(), "unit scale {us}");
+        }
     }
 }

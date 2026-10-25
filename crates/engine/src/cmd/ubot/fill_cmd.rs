@@ -271,7 +271,9 @@ fn rib_matches(stored: &LayoutRecord, main: &Product, rib: Option<f64>) -> bool 
 }
 
 fn grid(p: &Params, own: Option<&LayoutRecord>, main: &Product, unit_scale: f64) -> Grid {
-    let Some(r) = own else { return Grid { origin: p.origin, angle_deg: p.angle.unwrap_or(0.0), pitch_x: p.pitch_x, pitch_y: p.pitch_y } };
+    // A stored unit scale that cannot convert (hostile or broken tag) reuses nothing; R4 then resets the grid.
+    let usable = own.filter(|r| r.unit_scale.is_finite() && r.unit_scale > 0.0);
+    let Some(r) = usable else { return Grid { origin: p.origin, angle_deg: p.angle.unwrap_or(0.0), pitch_x: p.pitch_x, pitch_y: p.pitch_y } };
     // Stored in the drawing units of its own run; a units change converts it.
     let stored_origin = [r.origin[0] * r.unit_scale / unit_scale, r.origin[1] * r.unit_scale / unit_scale];
     let origin = p.origin.or_else(|| stored_origin.iter().all(|v| v.is_finite()).then_some(stored_origin));

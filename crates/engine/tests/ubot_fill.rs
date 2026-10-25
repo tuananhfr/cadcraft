@@ -149,7 +149,13 @@ fn copied_floor_gets_new_layout_and_leaves_original() {
         }
     }
 
-    // UBCHECK (Task 8) is not there yet: run the core check on what the drawing holds.
+    let issues = core_check(&s, 2, 200);
+    assert!(issues.is_empty(), "{issues:?}");
+}
+
+/// UBCHECK (Task 8) is not there yet: runs the core check on what the drawing holds (mm drawing, holes as tagged).
+fn core_check(s: &Session, layout_count: usize, box_count: usize) -> Vec<cadcraft_ubot::Issue> {
+    let d = s.doc().unwrap();
     let catalog = &s.ubot.catalog;
     let unit_scale = 1.0;
     let all_zones: Vec<_> = zones(d).into_iter().map(|(_, z)| z).collect();
@@ -168,14 +174,38 @@ fn copied_floor_gets_new_layout_and_leaves_original() {
             _ => None,
         })
         .collect();
-    assert_eq!(layouts.len(), 2);
+    assert_eq!(layouts.len(), layout_count);
     let instances: Vec<CheckInstance> = existing_instances(d, catalog)
         .into_iter()
         .map(|base| CheckInstance { legacy: base.instance_id.is_none(), base, xdata_valid: true })
         .collect();
-    assert_eq!(instances.len(), 200);
-    let issues = cadcraft_ubot::check(&CheckRequest { unit_scale, instances, layouts, zones: all_zones }, catalog).unwrap();
+    assert_eq!(instances.len(), box_count);
+    cadcraft_ubot::check(&CheckRequest { unit_scale, instances, layouts, zones: all_zones }, catalog).unwrap()
+}
+
+#[test]
+fn check_after_a_fill_with_a_hole_sees_no_stale_layout() {
+    let (mut s, b) = slab(4, 6600.0);
+    let hole = s.doc_mut().unwrap().add(&Space::Model, Common::default(), square(2900.0, 2900.0, 800.0)).unwrap();
+    commit(&mut s, b, json!({ "holes": [hole.hex()] }));
+    let issues = core_check(&s, 1, 96);
+    assert!(issues.iter().all(|i| i.code != cadcraft_ubot::IssueCode::StaleLayout), "{issues:?}");
     assert!(issues.is_empty(), "{issues:?}");
+}
+
+#[test]
+fn stored_grid_with_a_bad_unit_scale_is_not_reused() {
+    for bad in [0.0, -1.0] {
+        let (mut s, b) = slab(4, 6600.0);
+        commit(&mut s, b, json!({ "angle": 15, "origin": [400.0, 6200.0], "pitchX": 700 }));
+        let (mut record, owner) = layout_of(s.doc().unwrap(), b);
+        record.unit_scale = bad;
+        s.doc_mut().unwrap().modify_entity(b, |e| xdata::write(&mut e.common, &UbotTag::Layout { record, boundary_handle: owner }).unwrap()).unwrap();
+        let r = preview(&mut s, b, json!({}));
+        assert_eq!(r["layout"]["origin"], json!([330.0, 6270.0]), "unit scale {bad}");
+        assert_eq!((r["layout"]["angleDeg"].as_f64(), r["layout"]["pitchXMm"].as_f64()), (Some(0.0), Some(660.0)));
+        assert_eq!(r["reset"], true);
+    }
 }
 
 #[test]

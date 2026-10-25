@@ -248,22 +248,48 @@ impl ZoneReach {
 
     /// A non-finite ring is an error, never "out of reach": a broken zone must not vanish silently.
     pub fn reaches(&self, unit_scale: f64, zone: &RingInput) -> Result<bool, UbotError> {
-        Ok(ring_extent(&ring_mm(zone, unit_scale, "zone")?).intersects(&self.reach))
+        Ok(self.meets(&ring_extent(&ring_mm(zone, unit_scale, "zone")?)))
+    }
+
+    /// Whether a zone with this mm extent ([`ZoneMm::extent`]) is within reach.
+    pub(crate) fn meets(&self, zone_extent: &Bounds2) -> bool {
+        zone_extent.intersects(&self.reach)
+    }
+
+    /// The boundary's mm extent grown by the reach; any zone extent [`Self::meets`] intersects it.
+    pub(crate) fn bounds(&self) -> Bounds2 {
+        self.reach
     }
 
     /// The zones within reach, in input order; the error names the first non-finite zone.
     pub fn filter<'z>(&self, unit_scale: f64, zones: &'z [ZoneInput]) -> Result<Vec<&'z ZoneInput>, UbotError> {
         let mut out = Vec::new();
         for z in zones {
-            let near = self.reaches(unit_scale, &z.ring).map_err(|e| match e {
-                UbotError::BadInput(m) => UbotError::BadInput(format!("zone {}: {m}", z.id)),
-                other => other,
-            })?;
-            if near {
+            if self.meets(&ZoneMm::new(unit_scale, z)?.extent) {
                 out.push(z);
             }
         }
         Ok(out)
+    }
+}
+
+/// A zone ring converted to mm once, with its arc-grown extent.
+pub(crate) struct ZoneMm {
+    pub ring: RingInput,
+    pub extent: Bounds2,
+}
+
+impl ZoneMm {
+    /// Finiteness first: the error names the zone.
+    pub fn new(unit_scale: f64, z: &ZoneInput) -> Result<Self, UbotError> {
+        let ring = ring_mm(&z.ring, unit_scale, "ring")
+            .map_err(|_| UbotError::BadInput(format!("zone {}: ring vertex is not a finite number in mm", z.id)))?;
+        Ok(ZoneMm { extent: ring_extent(&ring), ring })
+    }
+
+    /// What [`geometry_hash`] hashes for this zone.
+    pub fn digest(&self, z: &ZoneInput) -> String {
+        input_hash(&ZoneInput { ring: self.ring.clone(), ..z.clone() })
     }
 }
 
@@ -272,9 +298,22 @@ impl ZoneReach {
 pub fn geometry_hash(unit_scale: f64, boundary: &RingInput, holes: &[RingInput], zones: &[ZoneInput]) -> Result<String, UbotError> {
     let reach = ZoneReach::new(unit_scale, boundary)?;
     let mut zone_digests = Vec::new();
-    for z in reach.filter(unit_scale, zones)? {
-        zone_digests.push(input_hash(&ZoneInput { ring: ring_mm(&z.ring, unit_scale, "zone")?, ..z.clone() }));
+    for z in zones {
+        let mm = ZoneMm::new(unit_scale, z)?;
+        if reach.meets(&mm.extent) {
+            zone_digests.push(mm.digest(z));
+        }
     }
+    geometry_hash_of(unit_scale, boundary, holes, zone_digests)
+}
+
+/// [`geometry_hash`] from the digests of the zones already found within reach, in any order.
+pub(crate) fn geometry_hash_of(
+    unit_scale: f64,
+    boundary: &RingInput,
+    holes: &[RingInput],
+    mut zone_digests: Vec<String>,
+) -> Result<String, UbotError> {
     zone_digests.sort_unstable();
     let holes = holes.iter().map(|h| ring_mm(h, unit_scale, "hole")).collect::<Result<_, _>>()?;
     let view = GeometryView { boundary: ring_mm(boundary, unit_scale, "boundary")?, holes, zones: zone_digests };

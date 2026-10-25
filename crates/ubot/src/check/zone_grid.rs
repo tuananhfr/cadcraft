@@ -4,6 +4,9 @@ use std::collections::HashMap;
 
 use cadcraft_geom::Bounds2;
 
+use super::work::Work;
+use crate::error::UbotError;
+
 /// A zone spanning more buckets than this is kept in a short list every query scans.
 const MAX_BUCKETS_PER_ZONE: i128 = 16;
 /// A query spanning more buckets than this just returns every zone.
@@ -23,6 +26,12 @@ impl ZoneGrid {
         extents.sort_unstable_by(f64::total_cmp);
         // Twice the median extent: a typical zone lands in at most 4 buckets.
         let cell = extents.get(extents.len() / 2).map_or(1.0, |m| (m * 2.0).max(1e-3));
+        Self::with_cell(bounds, cell)
+    }
+
+    /// A grid with a given bucket size, for queries that are all at least about that large.
+    pub fn with_cell(bounds: &[Bounds2], cell: f64) -> Self {
+        let cell = if cell.is_finite() && cell > 0.0 { cell } else { 1.0 };
         let mut grid = ZoneGrid { cell, buckets: HashMap::new(), large: Vec::new(), count: bounds.len() };
         for (k, b) in bounds.iter().enumerate() {
             let Ok(id) = u32::try_from(k) else { continue };
@@ -66,6 +75,37 @@ impl ZoneGrid {
         ids.sort_unstable();
         ids.dedup();
         ids.into_iter().map(|i| i as usize).collect()
+    }
+}
+
+impl ZoneGrid {
+    /// Whether some item that may meet `query` passes `hit`, stopping at the first; every visit is paid from `work`.
+    pub fn any(&self, query: &Bounds2, work: &mut Work, mut hit: impl FnMut(usize) -> bool) -> Result<bool, UbotError> {
+        let mut visit = |ids: &[u32], work: &mut Work| -> Result<bool, UbotError> {
+            work.spend(ids.len().saturating_add(1))?;
+            Ok(ids.iter().any(|&i| hit(i as usize)))
+        };
+        if visit(&self.large, work)? {
+            return Ok(true);
+        }
+        match self.range(query) {
+            Some((x0, x1, y0, y1)) if span(x0, x1, y0, y1) <= MAX_QUERY_BUCKETS => {
+                for cx in x0..=x1 {
+                    for cy in y0..=y1 {
+                        if let Some(b) = self.buckets.get(&(cx, cy))
+                            && visit(b, work)?
+                        {
+                            return Ok(true);
+                        }
+                    }
+                }
+                Ok(false)
+            }
+            _ => {
+                work.spend(self.count)?;
+                Ok((0..self.count).any(hit))
+            }
+        }
     }
 }
 
