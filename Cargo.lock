@@ -719,6 +719,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cadcraft-ubot"
+version = "0.8.0"
+dependencies = [
+ "cadcraft-geom",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "cadcraft-ui-egui"
 version = "0.8.0"
 dependencies = [

@@ -1,0 +1,20 @@
+{
+  "schema": "ubot.catalog/1",
+  "catalogId": "lpc-builtin",
+  "version": "draft-1",
+  "products": [
+    { "id": "ubot-h13-7", "sku": "H13+7", "name": "UBOT H13+7", "manufacturer": "LPC", "widthMm": 520.0, "lengthMm": 520.0, "slabThicknessMm": 270.0, "version": "draft-1", "approvalStatus": "draft", "sourceRef": "260626_LPC_ST_TKBVTC.pdf p.43 (KC-UB-20)" },
+    { "id": "ubot-h10-7", "sku": "H10+7", "name": "UBOT H10+7", "manufacturer": "LPC", "widthMm": 520.0, "lengthMm": 520.0, "slabThicknessMm": 240.0, "version": "draft-1", "approvalStatus": "draft", "sourceRef": "260626_LPC_ST_TKBVTC.pdf p.43 (KC-UB-20)" },
+    { "id": "ubot-h20-7", "sku": "H20+7", "name": "UBOT H20+7", "manufacturer": "LPC", "widthMm": 520.0, "lengthMm": 520.0, "slabThicknessMm": 350.0, "version": "draft-1", "approvalStatus": "draft", "sourceRef": "LPC-250811-BVTC-NHA LUU NIEM CO TT PHAM VAN DONG.pdf p.60 (KC-UB-2)" },
+    { "id": "ubot-h17-7", "sku": "H17+7", "name": "UBOT H17+7", "manufacturer": "LPC", "widthMm": 520.0, "lengthMm": 520.0, "slabThicknessMm": 320.0, "version": "draft-1", "approvalStatus": "draft", "sourceRef": "LPC-250811-BVTC-NHA LUU NIEM CO TT PHAM VAN DONG.pdf p.60 (KC-UB-2)" }
+  ],
+  "mappings": [
+    { "productId": null, "cadEngine": "any", "blockName": "UB-1", "unitsMmPerBlockUnit": 1.0, "anchor": "top_center", "rotationOffsetDeg": 0.0 },
+    { "productId": null, "cadEngine": "any", "blockName": "UB-2", "unitsMmPerBlockUnit": 1.0, "anchor": "top_center", "rotationOffsetDeg": 0.0 },
+    { "productId": null, "cadEngine": "any", "blockName": "UB-3", "unitsMmPerBlockUnit": 1.0, "anchor": "top_center", "rotationOffsetDeg": 0.0 },
+    { "productId": null, "cadEngine": "any", "blockName": "UB-4", "unitsMmPerBlockUnit": 1.0, "anchor": "top_center", "rotationOffsetDeg": 0.0 }
+  ],
+  "rulepacks": [
+    { "id": "lpc-draft-1", "version": "1", "approvalStatus": "draft", "edgeClearanceMm": 0.0, "exclusionClearanceMm": 0.0, "ribMmDefault": 140.0, "ribMmChoices": [120.0, 140.0] }
+  ]
+}
