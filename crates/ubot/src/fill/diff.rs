@@ -16,8 +16,8 @@ use crate::placement::{center_from_insert, insert_from_center, relative_scale};
 
 /// Existing boxes per run (spec §6).
 pub(super) const MAX_EXISTING: usize = 100_000;
-/// A box farther than this from its computed spot counts as moved by hand.
-const MOVE_TOL_MM: f64 = 1e-3;
+/// Spec §14.1: a box more than 1 mm from its computed spot counts as moved by hand.
+const MOVE_TOL_MM: f64 = 1.0;
 const TURN_TOL_DEG: f64 = 1e-6;
 
 /// An existing box of this layout, with its cell from the instance id.
@@ -190,7 +190,7 @@ pub(super) fn diff(cells: &[Cell<'_>], mut owned: Vec<Owned<'_>>, reset: bool, p
             continue;
         };
         let target = placer.place(cell.cell, cell.center_mm, cell.product, grid.angle_deg);
-        let moved = o.center_mm.dist(cell.center_mm) >= MOVE_TOL_MM || angle_gap_deg(o.angle_deg, grid.angle_deg) >= TURN_TOL_DEG;
+        let moved = o.center_mm.dist(cell.center_mm) > MOVE_TOL_MM || angle_gap_deg(o.angle_deg, grid.angle_deg) >= TURN_TOL_DEG;
         let same = o.ex.product_id.as_deref() == Some(cell.product.id.as_str()) && o.ex.block_name.eq_ignore_ascii_case(&target.block_name);
         let current = o.ex.instance_id.as_deref() == Some(target.instance_id.as_str());
         let handle = o.ex.handle.clone();

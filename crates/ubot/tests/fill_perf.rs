@@ -123,4 +123,23 @@ fn dense_boundary_at_the_cell_limit() {
     println!("dense boundary: {} boxes, {} problems in {took:?}", res.add.len(), res.problems.len());
     assert!(res.add.len() > 70_000);
     assert!(took.as_secs_f64() < 2.0, "{took:?}");
+
+    // A generous but realistic 1 m clearance stays inside the work budget.
+    let mut one_m = req.clone();
+    one_m.edge_clearance_mm = Some(1000.0);
+    let t = Instant::now();
+    let res = fill(&one_m, &Catalog::builtin()).unwrap();
+    let took = t.elapsed();
+    println!("dense boundary, 1 m clearance: {} boxes in {took:?}", res.add.len());
+    assert!(took.as_secs_f64() < 2.0, "{took:?}");
+
+    // The widest legal clearance pulls ~600 000 edges into reach of each edge cell; the work budget must stop it fast.
+    let mut wide = req.clone();
+    wide.edge_clearance_mm = Some(cadcraft_ubot::MAX_CLEARANCE_MM);
+    let t = Instant::now();
+    let res = fill(&wide, &Catalog::builtin());
+    let took = t.elapsed();
+    println!("dense boundary, 10 m clearance: {} in {took:?}", if res.is_ok() { "ok" } else { "error" });
+    assert!(matches!(res, Ok(_) | Err(cadcraft_ubot::UbotError::Limit(_))), "{:?}", res.err());
+    assert!(took.as_secs_f64() < 2.0, "{took:?}");
 }

@@ -13,8 +13,8 @@ mod placement;
 pub use catalog::Catalog;
 pub use error::UbotError;
 pub use fill::{
-    Candidate, ExistingInstance, FillRequest, FillResult, FillSummary, LayoutRecord, Placement, Reason, Status, UpdatePlacement, ZoneInput, ZoneType,
-    fill, geometry_hash,
+    Candidate, ExistingInstance, FillRequest, FillResult, FillSummary, LayoutRecord, MAX_CLEARANCE_MM, Placement, Reason, Status, UpdatePlacement,
+    ZoneInput, ZoneType, fill, geometry_hash,
 };
 pub use geometry::{
     EdgeIndex, Footprint, Ring, RingInput, distance_footprint_ring_edges, distance_footprint_ring_edges_with, footprint, footprint_intersects_ring,

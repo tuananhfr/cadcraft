@@ -20,6 +20,8 @@ use grid::{Grid, GridSpec};
 /// Boundary, hole and zone vertices together, after arc subdivision (spec §6).
 const MAX_VERTICES: usize = 20_000;
 const MAX_LAYOUT_ID_LEN: usize = 64;
+/// Largest edge, exclusion or zone clearance accepted; wider reach turns every cell query into a scan of the slab.
+pub const MAX_CLEARANCE_MM: f64 = 10_000.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -281,6 +283,10 @@ fn non_negative(v: f64, name: &str) -> Result<f64, UbotError> {
     if finite(v, name)? >= 0.0 { Ok(v) } else { Err(UbotError::BadInput(format!("{name} must be >= 0"))) }
 }
 
+fn clearance_mm(v: f64, name: &str) -> Result<f64, UbotError> {
+    if non_negative(v, name)? <= MAX_CLEARANCE_MM { Ok(v) } else { Err(UbotError::BadInput(format!("{name} must be <= {MAX_CLEARANCE_MM} mm"))) }
+}
+
 /// R3.6: 1..=64 characters of `[0-9A-Za-z_-]`.
 fn check_layout_id(id: &str, name: &str) -> Result<(), UbotError> {
     let ok = !id.is_empty() && id.len() <= MAX_LAYOUT_ID_LEN && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
@@ -302,7 +308,8 @@ fn settings(req: &FillRequest, product: &Product, rulepack: &RulePack) -> Result
         // A pitch below the box size would lay boxes over each other.
         if p < size { Err(UbotError::BadInput(format!("{name} {p} is smaller than the box ({size} mm)"))) } else { Ok(p) }
     };
-    let clearance = |given: Option<f64>, name: &str, default: f64| given.map(|v| non_negative(v, name)).transpose().map(|v| v.unwrap_or(default));
+    // The rulepack fallback is capped too: a catalog overlay is as untrusted as the request.
+    let clearance = |given: Option<f64>, name: &str, default: f64| clearance_mm(given.unwrap_or(default), name);
     Ok(Settings {
         rib_mm,
         pitch_mm: Vec2::new(pitch(req.pitch_x_mm, "pitchXMm", product.width_mm)?, pitch(req.pitch_y_mm, "pitchYMm", product.length_mm)?),
@@ -325,7 +332,7 @@ fn build_domain<'c>(req: &FillRequest, catalog: &'c Catalog, main: &Product, s: 
     }
     for z in &req.zones {
         let clearance_mm = match z.clearance_mm {
-            Some(c) => non_negative(c, &format!("zone {} clearanceMm", z.id))?,
+            Some(c) => clearance_mm(c, &format!("zone {} clearanceMm", z.id))?,
             None => s.exclusion_clearance_mm,
         };
         roles.push(match z.zone_type {
@@ -366,6 +373,7 @@ fn draft_warnings(rulepack: &RulePack, products: &[&Product]) -> Vec<String> {
 }
 
 /// Lays the grid, classifies each cell and diffs against `req.existing`; nothing is written, the adapter applies the result.
+/// Callers must pass `reset: true` when origin, angle or pitch differ from the stored layout, or every box reads as moved.
 pub fn fill(req: &FillRequest, catalog: &Catalog) -> Result<FillResult, UbotError> {
     check_layout_id(&req.layout_id, "layoutId")?;
     if let Some(prev) = &req.previous_layout_id {

@@ -14,6 +14,8 @@ pub(super) const NEAR_BAND_MM: f64 = 0.5;
 const MEETS_TOL_MM: f64 = 1e-6;
 /// Touching footprints share an edge; only overlap deeper than this blocks a cell.
 const OVERLAP_TOL_MM: f64 = 1e-6;
+/// Budget units per ring edge tested against the footprint: one segment test per footprint side.
+const EDGE_TEST_COST: usize = 4;
 /// Bucket entries for existing boxes; only boxes far larger than a cell can approach it.
 const MAX_OBSTACLE_ENTRIES: usize = 10_000_000;
 
@@ -123,12 +125,15 @@ pub(super) fn classify<'a>(grid: &Grid, domain: &Domain<'a>, obstacles: &Obstacl
             let center_mm = grid.to_world(g);
             let fp = footprint(center_mm, grid.size_mm.x, grid.size_mm.y, grid.angle_deg);
             cover.at(g.x, &mut covering, &mut budget)?;
+            let reach = Bounds2::from_points(fp.corners);
+            // Charged before the query runs so a wide reach fails fast instead of collecting first.
+            budget.spend(index.query_cost(reach, margin, budget.remaining()))?;
             near.clear();
-            near.extend(index.query(Bounds2::from_points(fp.corners), margin));
+            near.extend(index.query(reach, margin));
             near.sort_unstable();
             budget.spend(near.len())?;
             let probe = Probe { domain, fp: &fp, near: &near, covering: &covering };
-            let Some(verdict) = probe.judge() else { continue };
+            let Some(verdict) = probe.judge(&mut budget)? else { continue };
             let product = verdict.alt.unwrap_or(main);
             let (status, reasons) = verdict.status(obstacles.blocks(grid, i, j, &fp));
             out.push(Cell { cell: [i, j], center_mm, status, reasons, product });
@@ -172,45 +177,46 @@ impl Verdict<'_> {
 }
 
 impl<'a> Probe<'_, 'a> {
-    /// `None` when the footprint lies wholly outside the boundary (such cells are not reported).
-    fn judge(&self) -> Option<Verdict<'a>> {
+    /// `Ok(None)` when the footprint lies wholly outside the boundary (such cells are not reported).
+    fn judge(&self, budget: &mut Budget) -> Result<Option<Verdict<'a>>, UbotError> {
         let mut rings: Vec<usize> = self.near.iter().map(|n| n.0).chain(self.covering.iter().map(|&r| r as usize)).collect();
         rings.sort_unstable();
         rings.dedup();
         if rings.first() != Some(&0) {
-            return None;
+            return Ok(None);
         }
         let mut v = Verdict { invalid: Vec::new(), uncertain: Vec::new(), alt: None };
         for r in rings {
             let (Some(ring), Some(role)) = (self.domain.rings.get(r), self.domain.roles.get(r)) else { continue };
             let edges = self.edges_of(r);
             let center_in = u32::try_from(r).is_ok_and(|id| self.covering.binary_search(&id).is_ok());
-            let meets = || center_in || any_edge_enters(self.fp, ring, edges.iter().map(|e| e.1));
-            match *role {
-                Role::Boundary => {
-                    if any_edge_enters(self.fp, ring, edges.iter().map(|e| e.1)) {
-                        v.invalid.push(Reason::OutsideBoundary);
-                    } else if !center_in {
-                        return None;
-                    } else {
-                        self.clearance(&mut v, ring, edges, self.domain.edge_clearance_mm, Reason::EdgeClearance);
-                    }
-                }
-                Role::Hole if meets() => v.invalid.push(Reason::InHole),
-                Role::Hole => self.clearance(&mut v, ring, edges, self.domain.edge_clearance_mm, Reason::EdgeClearance),
-                Role::Opening { .. } if meets() => v.invalid.push(Reason::InHole),
-                Role::Blocker { .. } if meets() => v.invalid.push(Reason::InZone),
-                Role::Opening { clearance_mm } | Role::Blocker { clearance_mm } => {
-                    self.clearance(&mut v, ring, edges, clearance_mm, Reason::ZoneClearance)
-                }
+            let (clearance_mm, too_close, crossed) = match *role {
                 Role::Alt { product } => {
                     if center_in && v.alt.is_none() {
                         v.alt = Some(product);
                     }
+                    continue;
                 }
+                Role::Boundary => (self.domain.edge_clearance_mm, Reason::EdgeClearance, Reason::OutsideBoundary),
+                Role::Hole => (self.domain.edge_clearance_mm, Reason::EdgeClearance, Reason::InHole),
+                Role::Opening { clearance_mm } => (clearance_mm, Reason::ZoneClearance, Reason::InHole),
+                Role::Blocker { clearance_mm } => (clearance_mm, Reason::ZoneClearance, Reason::InZone),
+            };
+            budget.spend(edges.len().saturating_mul(EDGE_TEST_COST))?;
+            let enters = any_edge_enters(self.fp, ring, edges.iter().map(|e| e.1));
+            // The boundary must hold the footprint; holes and zones must stay clear of it.
+            let violated = match role {
+                Role::Boundary if !enters && !center_in => return Ok(None),
+                Role::Boundary => enters,
+                _ => enters || center_in,
+            };
+            if violated {
+                v.invalid.push(crossed);
+            } else {
+                self.clearance(&mut v, ring, edges, clearance_mm, too_close, budget)?;
             }
         }
-        Some(v)
+        Ok(Some(v))
     }
 
     fn edges_of(&self, ring: usize) -> &[(usize, usize)] {
@@ -221,10 +227,19 @@ impl<'a> Probe<'_, 'a> {
 
     /// R3.1/R3.2: short by more than the band → invalid; short within it → NearLimit; meeting it within the band of a
     /// curved edge → CurvedEdgeTolerance (the chords may hide up to the band).
-    fn clearance(&self, v: &mut Verdict<'_>, ring: &Ring, edges: &[(usize, usize)], required_mm: f64, reason: Reason) {
+    fn clearance(
+        &self,
+        v: &mut Verdict<'_>,
+        ring: &Ring,
+        edges: &[(usize, usize)],
+        required_mm: f64,
+        reason: Reason,
+        budget: &mut Budget,
+    ) -> Result<(), UbotError> {
         if edges.is_empty() {
-            return;
+            return Ok(());
         }
+        budget.spend(edges.len().saturating_mul(EDGE_TEST_COST))?;
         let (d, curved) = distance_footprint_ring_edges_with(self.fp, ring, edges.iter().map(|e| e.1));
         let short = required_mm - d;
         if short > NEAR_BAND_MM {
@@ -234,5 +249,6 @@ impl<'a> Probe<'_, 'a> {
         } else if curved && d - required_mm < NEAR_BAND_MM {
             v.uncertain.push(Reason::CurvedEdgeTolerance);
         }
+        Ok(())
     }
 }

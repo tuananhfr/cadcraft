@@ -8,8 +8,9 @@ use crate::error::UbotError;
 pub(super) const MAX_CELLS: usize = 100_000;
 /// Cell indices beyond this lose f64 precision in `origin + i·pitch`; such an origin is far from the slab anyway.
 const MAX_CELL_INDEX: f64 = 1e12;
-/// Total scanline and classification steps; only adversarial geometry gets near it.
-const MAX_WORK: u64 = 200_000_000;
+/// Total scanline and classification steps (bucket visits, edge tests); only adversarial geometry or clearances
+/// reaching thousands of edges per cell get near it, and it is spent in well under a second.
+const MAX_WORK: u64 = 50_000_000;
 
 pub(super) struct GridSpec {
     pub angle_deg: f64,
@@ -63,13 +64,10 @@ impl Grid {
             None => Vec2::new(gb.min.x + spec.rib_mm / 2.0 + half.x, gb.max.y - (spec.rib_mm / 2.0 + half.y)),
         };
         let (o, p) = (grid.origin, spec.pitch_mm);
-        let mut i_range = open_span((gb.min.x - half.x - o.x) / p.x, (gb.max.x + half.x - o.x) / p.x)?;
-        let mut j_range = open_span((o.y - half.y - gb.max.y) / p.y, (o.y + half.y - gb.min.y) / p.y)?;
-        if spec.origin_mm.is_none() {
-            // Lower indices only touch the bounds from outside; the default grid numbers cells from 0.
-            i_range.0 = i_range.0.max(0);
-            j_range.0 = j_range.0.max(0);
-        }
+        // No clamp at 0 for the default origin: with a pitch below width + rib/2, cell −1 still straddles the bounds and
+        // must be reported (R3.9).
+        let i_range = open_span((gb.min.x - half.x - o.x) / p.x, (gb.max.x + half.x - o.x) / p.x)?;
+        let j_range = open_span((o.y - half.y - gb.max.y) / p.y, (o.y + half.y - gb.min.y) / p.y)?;
         let (cols, rows) = (span_len(i_range)?, span_len(j_range)?);
         let cells = cols.checked_mul(rows).ok_or_else(too_many_cells)?;
         if cells > MAX_CELLS {
@@ -163,6 +161,10 @@ pub(super) struct Budget {
 impl Budget {
     pub fn new() -> Self {
         Budget { left: MAX_WORK }
+    }
+
+    pub fn remaining(&self) -> usize {
+        usize::try_from(self.left).unwrap_or(usize::MAX)
     }
 
     pub fn spend(&mut self, n: usize) -> Result<(), UbotError> {

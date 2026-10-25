@@ -4,8 +4,9 @@
 
 use cadcraft_geom::Vec2;
 use cadcraft_ubot::{
-    Anchor, ApprovalStatus, BlockMapping, Candidate, Catalog, ExistingInstance, FillRequest, FillResult, Product, Reason, RingInput, Status,
-    UbotError, ZoneInput, ZoneType, distance_footprint_ring_edges, fill, footprint, geometry_hash, ring_contains_footprint, ring_from_input,
+    Anchor, ApprovalStatus, BlockMapping, Candidate, Catalog, ExistingInstance, FillRequest, FillResult, MAX_CLEARANCE_MM, Product, Reason,
+    RingInput, Status, UbotError, ZoneInput, ZoneType, distance_footprint_ring_edges, fill, footprint, footprint_intersects_ring, geometry_hash,
+    ring_contains_footprint, ring_from_input,
 };
 
 const LAYOUT: &str = "0123456789abcdef";
@@ -465,6 +466,23 @@ fn manual_move_is_kept_and_reported() {
 }
 
 #[test]
+fn move_threshold_is_one_mm() {
+    // Spec §14.1: a box counts as moved when it is more than 1 mm off its cell.
+    let first = run(&req(square()));
+    let mut r = req(square());
+    r.existing = as_existing(&first);
+    r.existing[7].insert[1] += 0.5;
+    let res = run(&r);
+    assert_eq!(res.keep.len(), 100);
+    assert!(res.problems.is_empty(), "{:?}", res.problems);
+    r.existing[7].insert[1] += 1.0;
+    let res = run(&r);
+    assert_eq!(res.keep.len(), 100);
+    assert_eq!(cells_of(&res.problems), [[7, 0]]);
+    all_have(&res.problems, Status::Info, &[Reason::ManualMoved]);
+}
+
+#[test]
 fn copied_floor_previous_layout_is_rehomed() {
     const OLD: &str = "aaaaaaaaaaaaaaaa";
     const NEW: &str = "bbbbbbbbbbbbbbbb";
@@ -688,6 +706,55 @@ fn explicit_origin_allows_negative_cells() {
 }
 
 #[test]
+fn narrow_pitch_reports_cells_straddling_the_bounds() {
+    // Pitch 520 with the default origin (330, 6270): cell −1 centres at x = −190 (footprint −450..70) and cell 12 at 6570
+    // (6310..6830), both crossing the boundary; cells 0..=11 fit (cell 11 ends at 6310).
+    let mut r = req(square());
+    r.pitch_x_mm = Some(520.0);
+    let res = run(&r);
+    assert_eq!(res.add.len(), 120);
+    assert_eq!(res.problems.len(), 20);
+    all_have(&res.problems, Status::Invalid, &[Reason::OutsideBoundary]);
+    assert_eq!(&cells_of(&res.problems)[..2], [[-1, 0], [12, 0]]);
+}
+
+#[test]
+fn rotated_grid_matches_brute_force_on_concave_boundary() {
+    // Non-aligned concave slab (V notch at the top) with a skewed hole; expected cells come from testing every cell of a
+    // wide window directly with the geometry predicates.
+    let boundary = poly(&[[0.0, 0.0], [9000.0, 1200.0], [8000.0, 7000.0], [4500.0, 4000.0], [1000.0, 8000.0], [-1500.0, 3000.0]]);
+    let hole = poly(&[[2000.0, 2000.0], [3500.0, 2300.0], [3300.0, 3400.0], [1900.0, 3100.0]]);
+    let (b_ring, h_ring) = (ring_from_input(&boundary, 1.0, 0.5).unwrap(), ring_from_input(&hole, 1.0, 0.5).unwrap());
+    let clearance = 50.0;
+    let origin = [123.0, 456.0];
+    for angle in [0.0, 17.0, -33.0, 90.0, 123.4] {
+        let mut r = req(boundary.clone());
+        r.holes = vec![hole.clone()];
+        r.angle_deg = angle;
+        r.origin = Some(origin);
+        r.edge_clearance_mm = Some(clearance);
+        let res = run(&r);
+        let a = f64::to_radians(angle);
+        let (u, v) = (Vec2::new(a.cos(), a.sin()), Vec2::new(-a.sin(), a.cos()));
+        let mut expect = Vec::new();
+        for j in -40..=40 {
+            for i in -40..=40 {
+                let c = Vec2::new(origin[0], origin[1]) + u * (660.0 * i as f64) - v * (660.0 * j as f64);
+                let fp = footprint(c, 520.0, 520.0, angle);
+                let inside = ring_contains_footprint(&b_ring, &fp) && distance_footprint_ring_edges(&fp, &b_ring).0 >= clearance;
+                let clear_of_hole = !footprint_intersects_ring(&fp, &h_ring) && distance_footprint_ring_edges(&fp, &h_ring).0 >= clearance;
+                if inside && clear_of_hole {
+                    expect.push([i as i64, j as i64]);
+                }
+            }
+        }
+        let got: Vec<[i64; 2]> = res.add.iter().map(|p| p.cell).collect();
+        assert!(expect.len() > 50, "{angle}°: fixture too small ({})", expect.len());
+        assert_eq!(got, expect, "{angle}°");
+    }
+}
+
+#[test]
 fn layout_ids_are_validated() {
     for bad in ["", "a:b", "ä", &"a".repeat(65)] {
         let mut r = req(square());
@@ -756,6 +823,30 @@ fn hostile_numbers_never_panic() {
         r.existing[3].rotation_deg = bad;
         bad_input(&r, "existing rotation");
     }
+    // Clearances past MAX_CLEARANCE_MM are rejected up front, whichever source they come from.
+    for huge in [1e9, MAX_CLEARANCE_MM + 1.0] {
+        let started = std::time::Instant::now();
+        let mut r = req(square());
+        r.edge_clearance_mm = Some(huge);
+        bad_input(&r, "huge edge clearance");
+        let mut r = req(square());
+        r.exclusion_clearance_mm = Some(huge);
+        bad_input(&r, "huge exclusion clearance");
+        let mut r = req(square());
+        let mut z = zone("c", rect(1.0, 1.0, 2.0, 2.0), ZoneType::Column);
+        z.clearance_mm = Some(huge);
+        r.zones = vec![z];
+        bad_input(&r, "huge zone clearance");
+        let mut pack = c.rulepacks[0].clone();
+        pack.edge_clearance_mm = huge;
+        let loose = c.overlay(&Catalog { products: vec![], mappings: vec![], rulepacks: vec![pack], ..c.clone() });
+        assert!(matches!(fill(&req(square()), &loose), Err(UbotError::BadInput(_))), "huge rulepack clearance");
+        assert!(started.elapsed().as_secs_f64() < 1.0, "{:?}", started.elapsed());
+    }
+    let mut r = req(square());
+    r.edge_clearance_mm = Some(MAX_CLEARANCE_MM);
+    let res = fill(&r, &c).unwrap();
+    assert_eq!((res.add.len(), res.summary.invalid), (0, 100));
     // A negative angle is an ordinary angle.
     let mut r = req(square());
     r.angle_deg = -30.0;

@@ -138,18 +138,40 @@ impl EdgeIndex {
         self.collect(bounds, margin_mm).into_iter()
     }
 
-    fn collect(&self, bounds: Bounds2, margin_mm: f64) -> Vec<(usize, usize)> {
+    /// Buckets plus bucket entries that [`query`](Self::query) with the same arguments visits, counting stops past `cap`.
+    pub(crate) fn query_cost(&self, bounds: Bounds2, margin_mm: f64, cap: usize) -> usize {
+        let Some((_, (x0, x1, y0, y1))) = self.bucket_range(bounds, margin_mm) else { return 0 };
+        let mut cost = 0usize;
+        for cy in y0..=y1 {
+            for cx in x0..=x1 {
+                let c = cy * self.nx + cx;
+                let (Some(&s), Some(&e)) = (self.starts.get(c), self.starts.get(c + 1)) else { continue };
+                cost = cost.saturating_add(1 + e.saturating_sub(s));
+                if cost > cap {
+                    return cost;
+                }
+            }
+        }
+        cost
+    }
+
+    /// Grown query bounds and the inclusive bucket range they cover; `None` when the query cannot match anything.
+    fn bucket_range(&self, bounds: Bounds2, margin_mm: f64) -> Option<(Bounds2, (usize, usize, usize, usize))> {
         let finite = bounds.min.is_finite() && bounds.max.is_finite() && margin_mm.is_finite();
         if !finite || bounds.is_empty() || self.nx == 0 || self.ny == 0 {
-            return Vec::new();
+            return None;
         }
         let q = bounds.expand(margin_mm.max(0.0));
         let grid_max = Vec2::new(self.origin.x + self.nx as f64 * self.cell, self.origin.y + self.ny as f64 * self.cell);
         let outside = q.max.x < self.origin.x || q.max.y < self.origin.y || q.min.x > grid_max.x || q.min.y > grid_max.y;
         if !(q.min.is_finite() && q.max.is_finite()) || outside {
-            return Vec::new();
+            return None;
         }
-        let (x0, x1, y0, y1) = (self.cell_x(q.min.x), self.cell_x(q.max.x), self.cell_y(q.min.y), self.cell_y(q.max.y));
+        Some((q, (self.cell_x(q.min.x), self.cell_x(q.max.x), self.cell_y(q.min.y), self.cell_y(q.max.y))))
+    }
+
+    fn collect(&self, bounds: Bounds2, margin_mm: f64) -> Vec<(usize, usize)> {
+        let Some((q, (x0, x1, y0, y1))) = self.bucket_range(bounds, margin_mm) else { return Vec::new() };
         let mut ids: Vec<u32> = Vec::new();
         for cy in y0..=y1 {
             for cx in x0..=x1 {
