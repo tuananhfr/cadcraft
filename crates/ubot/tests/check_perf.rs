@@ -84,3 +84,42 @@ fn check_ten_thousand_boxes() {
     assert!(issues.is_empty());
     assert!(t.elapsed().as_secs() < 2);
 }
+
+#[test]
+#[ignore = "timing"]
+fn check_fifty_thousand_boxes_against_two_thousand_zones() {
+    let boxes: Vec<CheckInstance> = (0..50_000)
+        .map(|k| CheckInstance {
+            base: ExistingInstance {
+                handle: format!("{k:X}"),
+                instance_id: None,
+                layout_id: None,
+                product_id: Some("ubot-h13-7".into()),
+                block_name: "UBOT_H13_7".into(),
+                insert: [f64::from(k % 250) * 600.0, f64::from(k / 250) * 600.0],
+                rotation_deg: 0.0,
+                scale: 1.0,
+            },
+            xdata_valid: true,
+            legacy: false,
+        })
+        .collect();
+    let zones: Vec<ZoneInput> = (0..2_000)
+        .map(|k| {
+            let (x, y) = (f64::from(k % 250) * 600.0 + 290.0, f64::from(k / 250) * 600.0 + 290.0);
+            ZoneInput {
+                id: format!("z{k}"),
+                ring: RingInput { vertices: vec![[x, y, 0.0], [x + 20.0, y, 0.0], [x + 20.0, y + 20.0, 0.0], [x, y + 20.0, 0.0]] },
+                zone_type: ZoneType::Column,
+                clearance_mm: None,
+                alt_product_id: None,
+            }
+        })
+        .collect();
+    let req = CheckRequest { unit_scale: 1.0, instances: boxes, layouts: vec![], zones };
+    let t = Instant::now();
+    let issues = check(&req, &Catalog::builtin()).unwrap();
+    println!("50 000 boxes x 2 000 zones, {} issues in {:?}", issues.len(), t.elapsed());
+    assert!(issues.is_empty());
+    assert!(t.elapsed().as_secs() < 2);
+}

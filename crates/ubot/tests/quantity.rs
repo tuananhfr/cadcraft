@@ -84,3 +84,18 @@ fn json_shape_is_camel_case() {
     let it: CountItem = serde_json::from_value(serde_json::json!({"blockName": "UB-1", "multiplier": 2, "source": "legacy"})).unwrap();
     assert_eq!(it.source, CountSource::Legacy);
 }
+
+#[test]
+fn mapped_block_without_product_id_counts_under_the_mapped_product() {
+    let mut c = Catalog::builtin();
+    c.mappings.push(cadcraft_ubot::BlockMapping {
+        product_id: Some("ubot-h20-7".into()),
+        cad_engine: "any".into(),
+        block_name: "UB-9".into(),
+        units_mm_per_block_unit: 1.0,
+        anchor: cadcraft_ubot::Anchor::Center,
+        rotation_offset_deg: 0.0,
+    });
+    let r = count(&[item(None, "ub-9", 3, CountSource::Legacy)], &c);
+    assert_eq!((r.rows[0].product_id.as_deref(), r.rows[0].legacy), (Some("ubot-h20-7"), 3));
+}

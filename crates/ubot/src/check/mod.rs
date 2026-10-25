@@ -6,6 +6,7 @@ mod moved;
 mod overlap;
 mod resolve;
 mod work;
+mod zone_grid;
 
 use std::collections::HashMap;
 
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::catalog::Catalog;
 use crate::error::UbotError;
-use crate::fill::{ExistingInstance, LayoutRecord, MAX_CLEARANCE_MM, ZoneInput, geometry_hash, handle_key};
+use crate::fill::{ExistingInstance, LayoutRecord, MAX_CLEARANCE_MM, MAX_VERTICES, ZoneInput, geometry_hash, handle_key};
 use crate::geometry::RingInput;
 use crate::model::RulePack;
 use containment::{LayoutCtx, Zones, check_layout, check_zones};
@@ -23,8 +24,6 @@ use work::Work;
 const MAX_INSTANCES: usize = 100_000;
 const MAX_LAYOUTS: usize = 1_000;
 const MAX_ZONES: usize = 20_000;
-/// Boundary, hole and zone vertices of one request (spec §6).
-const MAX_VERTICES: usize = 20_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -173,6 +172,7 @@ pub fn check(req: &CheckRequest, catalog: &Catalog) -> Result<Vec<Issue>, UbotEr
         }
     }
 
+    let mut points = 0usize;
     let mut ctxs: Vec<LayoutCtx<'_>> = Vec::with_capacity(req.layouts.len());
     for l in &req.layouts {
         let rulepack = rulepack_for(catalog, l);
@@ -182,11 +182,11 @@ pub fn check(req: &CheckRequest, catalog: &Catalog) -> Result<Vec<Issue>, UbotEr
         };
         let exclusion_mm = clearance_mm(rulepack.map_or(0.0, |r| r.exclusion_clearance_mm), "exclusionClearanceMm")?;
         let product = l.layout.as_ref().and_then(|r| lookup.product(&r.product_id));
-        ctxs.push(LayoutCtx::new(&l.boundary, &l.holes, req.unit_scale, edge_mm, exclusion_mm, product)?);
+        ctxs.push(LayoutCtx::new(&l.boundary, &l.holes, req.unit_scale, (edge_mm, exclusion_mm), product, &mut points)?);
     }
     let default_exclusion = clearance_mm(catalog.rulepack(None).map_or(0.0, |r| r.exclusion_clearance_mm), "exclusionClearanceMm")?;
     let widest_default = ctxs.iter().fold(default_exclusion, |m, c| m.max(c.exclusion_mm));
-    let zones = Zones::new(&req.zones, req.unit_scale, widest_default)?;
+    let zones = Zones::new(&req.zones, req.unit_scale, widest_default, &mut points)?;
 
     // Stale: the slab geometry no longer matches what the fill saw.
     for l in &req.layouts {

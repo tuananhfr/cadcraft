@@ -68,14 +68,18 @@ pub(super) fn resolve<'a>(
     if !(b.scale.is_finite() && b.scale != 0.0) {
         return Err(bad(inst, "scale must be finite and non-zero"));
     }
+    let mapping = lookup.mapping(&b.block_name);
     let (size, unknown_product) = match b.product_id.as_deref() {
         Some(id) => match lookup.product(id) {
             Some(p) => (Some(Vec2::new(p.width_mm, p.length_mm)), false),
             None => (None, true),
         },
-        None => (layout_product.map(|p| Vec2::new(p.width_mm, p.length_mm)), false),
+        None => {
+            // A legacy block still has a size when the catalog maps it to a product; failing that, the layout's product.
+            let mapped = mapping.and_then(|m| m.product_id.as_deref()).and_then(|id| lookup.product(id));
+            (mapped.or(layout_product).map(|p| Vec2::new(p.width_mm, p.length_mm)), false)
+        }
     };
-    let mapping = lookup.mapping(&b.block_name);
     let insert_mm = Vec2::new(b.insert[0], b.insert[1]) * unit_scale;
     let center_mm = center_from_insert(mapping, size.map_or(0.0, |s| s.y), insert_mm, b.rotation_deg, relative_scale(mapping, b.scale, unit_scale));
     let angle_deg = b.rotation_deg - mapping.map_or(0.0, |m| m.rotation_offset_deg);

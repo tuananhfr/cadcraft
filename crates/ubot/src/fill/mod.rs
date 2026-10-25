@@ -5,7 +5,7 @@ mod classify;
 mod diff;
 mod grid;
 
-use cadcraft_geom::Vec2;
+use cadcraft_geom::{Bounds2, Vec2};
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::Catalog;
@@ -17,10 +17,11 @@ use classify::{Domain, Obstacles, Role};
 pub(crate) use classify::{NEAR_BAND_MM, footprints_overlap};
 use diff::Placer;
 pub(crate) use diff::{MOVE_TOL_MM, TURN_TOL_DEG, angle_gap_deg, handle_key, parse_cell};
+pub(crate) use grid::cell_center_world;
 use grid::{Grid, GridSpec};
 
 /// Boundary, hole and zone vertices together, after arc subdivision (spec §6).
-const MAX_VERTICES: usize = 20_000;
+pub(crate) const MAX_VERTICES: usize = 20_000;
 const MAX_LAYOUT_ID_LEN: usize = 64;
 /// Largest edge, exclusion or zone clearance accepted; wider reach turns every cell query into a scan of the slab.
 pub const MAX_CLEARANCE_MM: f64 = 10_000.0;
@@ -205,7 +206,27 @@ pub struct FillResult {
     pub warnings: Vec<String>,
 }
 
-/// `input_hash` of the boundary, holes and zones with coordinates converted to mm.
+/// Largest extent an arc segment can add beyond its chord endpoints, as a multiple of its radius.
+const ARC_REACH: f64 = 2.0;
+
+/// Bounding box of a ring's vertices grown by what its arcs can bulge out; deliberately a little loose.
+fn ring_extent(r: &RingInput) -> Bounds2 {
+    let extent = Bounds2::from_points(r.vertices.iter().map(|v| Vec2::new(v[0], v[1])));
+    let mut bulge_reach = 0.0_f64;
+    for (k, a) in r.vertices.iter().enumerate() {
+        let Some(b) = r.vertices.get((k + 1) % r.vertices.len()) else { continue };
+        let bulge = a[2].abs();
+        if bulge > 0.0 {
+            let chord = Vec2::new(a[0], a[1]).dist(Vec2::new(b[0], b[1]));
+            bulge_reach = bulge_reach.max(ARC_REACH * chord * (1.0 + bulge * bulge) / (4.0 * bulge));
+        }
+    }
+    extent.expand(bulge_reach.min(1e12))
+}
+
+/// `input_hash` of the boundary and holes plus the zones that can touch the slab, all in mm. Zones are hashed one by one
+/// and sorted, and a zone further than `MAX_CLEARANCE_MM` from the boundary's extent is left out, so fill and check agree
+/// whatever other zones the drawing holds and in whatever order they are read.
 pub fn geometry_hash(unit_scale: f64, boundary: &RingInput, holes: &[RingInput], zones: &[ZoneInput]) -> Result<String, UbotError> {
     positive(unit_scale, "unitScale")?;
     let mm = |r: &RingInput| -> Result<RingInput, UbotError> {
@@ -216,8 +237,17 @@ pub fn geometry_hash(unit_scale: f64, boundary: &RingInput, holes: &[RingInput],
             Err(UbotError::BadInput("ring vertex is not a finite number in mm".into()))
         }
     };
-    let zones = zones.iter().map(|z| Ok(ZoneInput { ring: mm(&z.ring)?, ..z.clone() })).collect::<Result<Vec<ZoneInput>, UbotError>>()?;
-    let view = GeometryView { boundary: mm(boundary)?, holes: holes.iter().map(mm).collect::<Result<_, _>>()?, zones };
+    let boundary = mm(boundary)?;
+    let reach = ring_extent(&boundary).expand(MAX_CLEARANCE_MM);
+    let mut zone_digests = Vec::new();
+    for z in zones {
+        let zone = ZoneInput { ring: mm(&z.ring)?, ..z.clone() };
+        if ring_extent(&zone.ring).intersects(&reach) {
+            zone_digests.push(input_hash(&zone));
+        }
+    }
+    zone_digests.sort_unstable();
+    let view = GeometryView { boundary, holes: holes.iter().map(mm).collect::<Result<_, _>>()?, zones: zone_digests };
     Ok(input_hash(&view))
 }
 
@@ -225,7 +255,7 @@ pub fn geometry_hash(unit_scale: f64, boundary: &RingInput, holes: &[RingInput],
 struct GeometryView {
     boundary: RingInput,
     holes: Vec<RingInput>,
-    zones: Vec<ZoneInput>,
+    zones: Vec<String>,
 }
 
 /// The request minus `existing`: what the drawing holds today does not change the layout being asked for.
@@ -344,11 +374,16 @@ fn build_domain<'c>(req: &FillRequest, catalog: &'c Catalog, main: &Product, s: 
         });
         rings.push(ring(&z.ring)?);
     }
-    let total = rings.iter().fold(0usize, |n, r| n.saturating_add(r.points.len()));
+    check_vertex_total(rings.iter().fold(0usize, |n, r| n.saturating_add(r.points.len())))?;
+    Ok(Domain { rings, roles, edge_clearance_mm: s.edge_clearance_mm })
+}
+
+/// The vertex cap applies after arcs are subdivided, so a few big circles count as many vertices.
+pub(crate) fn check_vertex_total(total: usize) -> Result<(), UbotError> {
     if total > MAX_VERTICES {
         return Err(UbotError::Limit(format!("{total} vertices after arc subdivision, the limit is {MAX_VERTICES}")));
     }
-    Ok(Domain { rings, roles, edge_clearance_mm: s.edge_clearance_mm })
+    Ok(())
 }
 
 fn alt_product<'c>(z: &ZoneInput, catalog: &'c Catalog, main: &Product) -> Result<&'c Product, UbotError> {

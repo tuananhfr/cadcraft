@@ -4,9 +4,10 @@ use cadcraft_geom::Bounds2;
 
 use super::resolve::{Geom, Placed};
 use super::work::Work;
+use super::zone_grid::ZoneGrid;
 use super::{Issue, IssueCode, Severity, issue};
 use crate::error::UbotError;
-use crate::fill::{NEAR_BAND_MM, ZoneInput, ZoneType};
+use crate::fill::{NEAR_BAND_MM, ZoneInput, ZoneType, check_vertex_total};
 use crate::geometry::{
     EdgeIndex, Footprint, Ring, RingInput, distance_footprint_ring_edges_with, footprint_intersects_ring_with, ring_contains_footprint_with,
     ring_from_input,
@@ -30,18 +31,26 @@ pub(super) struct LayoutCtx<'c> {
     pub product: Option<&'c Product>,
 }
 
+/// Subdivides one ring and counts its points against the request-wide cap before the next ring is built.
+fn build_ring(r: &RingInput, unit_scale: f64, points: &mut usize) -> Result<Ring, UbotError> {
+    let ring = ring_from_input(r, unit_scale, NEAR_BAND_MM)?;
+    *points = points.saturating_add(ring.points.len());
+    check_vertex_total(*points)?;
+    Ok(ring)
+}
+
 impl<'c> LayoutCtx<'c> {
+    /// `points` counts ring vertices after arc subdivision across the whole request.
     pub fn new(
         boundary: &RingInput,
         holes: &[RingInput],
         unit_scale: f64,
-        edge_mm: f64,
-        exclusion_mm: f64,
+        (edge_mm, exclusion_mm): (f64, f64),
         product: Option<&'c Product>,
+        points: &mut usize,
     ) -> Result<Self, UbotError> {
-        let ring = |r: &RingInput| ring_from_input(r, unit_scale, NEAR_BAND_MM);
-        let boundary = ring(boundary)?;
-        let holes = holes.iter().map(ring).collect::<Result<Vec<Ring>, UbotError>>()?;
+        let boundary = build_ring(boundary, unit_scale, points)?;
+        let holes = holes.iter().map(|h| build_ring(h, unit_scale, points)).collect::<Result<Vec<Ring>, UbotError>>()?;
         let hole_bounds = holes.iter().map(Ring::bounds).collect();
         let refs: Vec<&Ring> = std::iter::once(&boundary).chain(holes.iter()).collect();
         let index = EdgeIndex::new(&refs, 2000.0);
@@ -66,12 +75,13 @@ struct Zone {
 pub(super) struct Zones {
     zones: Vec<Zone>,
     index: EdgeIndex,
+    grid: ZoneGrid,
     margin: f64,
 }
 
 impl Zones {
     /// `max_default_mm` is the widest clearance a zone without its own value can inherit.
-    pub fn new(inputs: &[ZoneInput], unit_scale: f64, max_default_mm: f64) -> Result<Self, UbotError> {
+    pub fn new(inputs: &[ZoneInput], unit_scale: f64, max_default_mm: f64, points: &mut usize) -> Result<Self, UbotError> {
         let mut zones = Vec::with_capacity(inputs.len());
         let mut widest = max_default_mm;
         for z in inputs {
@@ -79,12 +89,14 @@ impl Zones {
             if let Some(c) = z.clearance_mm {
                 widest = widest.max(super::clearance_mm(c, &format!("zone {} clearanceMm", z.id))?);
             }
-            let ring = ring_from_input(&z.ring, unit_scale, NEAR_BAND_MM)?;
+            let ring = build_ring(&z.ring, unit_scale, points)?;
             zones.push(Zone { id: z.id.clone(), bounds: ring.bounds(), ring, kind, clearance_mm: z.clearance_mm });
         }
         let refs: Vec<&Ring> = zones.iter().map(|z| &z.ring).collect();
         let index = EdgeIndex::new(&refs, 2000.0);
-        Ok(Zones { zones, index, margin: widest + NEAR_BAND_MM + QUERY_PAD_MM })
+        let margin = widest + NEAR_BAND_MM + QUERY_PAD_MM;
+        let reach: Vec<Bounds2> = zones.iter().map(|z| z.bounds.expand(margin)).collect();
+        Ok(Zones { grid: ZoneGrid::new(&reach), zones, index, margin })
     }
 }
 
@@ -158,8 +170,10 @@ pub(super) fn check_zones(p: &Placed<'_>, g: &Geom, zones: &Zones, default_mm: f
         return Ok(());
     }
     let near = near_edges(&zones.index, g.bounds, zones.margin, work)?;
-    for (k, z) in zones.zones.iter().enumerate() {
-        work.spend(1)?;
+    let candidates = zones.grid.candidates(&g.bounds);
+    work.spend(candidates.len().saturating_add(1))?;
+    for k in candidates {
+        let Some(z) = zones.zones.get(k) else { continue };
         if z.kind == Kind::Alt {
             continue;
         }

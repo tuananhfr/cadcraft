@@ -38,23 +38,27 @@ pub(super) struct Grid {
 }
 
 impl Grid {
-    /// Covers every cell whose footprint overlaps the bounds of `boundary` (mm); errors past [`MAX_CELLS`].
-    pub fn new(boundary: &[Vec2], spec: &GridSpec) -> Result<Grid, UbotError> {
-        let a = spec.angle_deg.to_radians();
-        let (u, v) = (Vec2::new(a.cos(), a.sin()), Vec2::new(-a.sin(), a.cos()));
-        let half = spec.size_mm * 0.5;
-        let mut grid = Grid {
-            u,
-            v,
+    /// Frame and pitch only: no cell range, origin at the frame origin.
+    fn bare(angle_deg: f64, size_mm: Vec2, pitch_mm: Vec2) -> Grid {
+        let a = angle_deg.to_radians();
+        Grid {
+            u: Vec2::new(a.cos(), a.sin()),
+            v: Vec2::new(-a.sin(), a.cos()),
             origin: Vec2::ZERO,
-            angle_deg: spec.angle_deg,
-            size_mm: spec.size_mm,
-            pitch_mm: spec.pitch_mm,
+            angle_deg,
+            size_mm,
+            pitch_mm,
             i_range: (0, -1),
             j_range: (0, -1),
             cols: 0,
             rows: 0,
-        };
+        }
+    }
+
+    /// Covers every cell whose footprint overlaps the bounds of `boundary` (mm); errors past [`MAX_CELLS`].
+    pub fn new(boundary: &[Vec2], spec: &GridSpec) -> Result<Grid, UbotError> {
+        let half = spec.size_mm * 0.5;
+        let mut grid = Grid::bare(spec.angle_deg, spec.size_mm, spec.pitch_mm);
         let gb = Bounds2::from_points(boundary.iter().map(|p| grid.to_grid(*p)));
         if gb.is_empty() || !(gb.min.is_finite() && gb.max.is_finite()) {
             return Err(UbotError::Geometry("boundary has no finite extent".into()));
@@ -122,6 +126,13 @@ impl Grid {
         let j = clip_span((o.y - half.y - bounds.max.y) / p.y, (o.y + half.y - bounds.min.y) / p.y, self.j_range)?;
         Some((i.0, i.1, j.0, j.1))
     }
+}
+
+/// World position (mm) of the centre of cell `(i, j)` of a stored layout whose cell (0, 0) is centred at `origin_world`.
+pub(crate) fn cell_center_world(angle_deg: f64, origin_world: Vec2, pitch_mm: Vec2, i: i64, j: i64) -> Vec2 {
+    let mut grid = Grid::bare(angle_deg, Vec2::ZERO, pitch_mm);
+    grid.origin = grid.to_grid(origin_world);
+    grid.to_world(grid.center(i, j))
 }
 
 fn too_many_cells() -> UbotError {

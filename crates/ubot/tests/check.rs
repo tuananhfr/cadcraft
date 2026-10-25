@@ -234,6 +234,7 @@ fn box_outside_boundary_and_in_zone() {
     let issues = run(&r);
     let handles = |code| -> Vec<String> { with_code(&issues, code).iter().map(|i| i.handle.clone().unwrap()).collect() };
     assert_eq!(handles(IssueCode::OutsideBoundary), ["FF0"], "{issues:?}");
+    assert!(issues.iter().filter(|i| matches!(i.code, IssueCode::OutsideBoundary | IssueCode::InZone)).all(|i| i.severity == Severity::Error));
     // Column x 1900..2300, y 5500..5900 reaches the boxes of cells (2, 1) and (3, 1) only.
     let cell = |i: i64, j: i64| {
         r.instances.iter().find(|n| n.base.instance_id.as_deref() == Some(format!("{LAYOUT}:{i}:{j}").as_str())).unwrap().base.handle.clone()
@@ -250,8 +251,11 @@ fn box_in_a_hole_is_outside_the_slab() {
     let res = filled();
     let mut r = request(&res);
     r.layouts[0].holes.push(rect(300.0, 5500.0, 900.0, 6100.0));
+    r.layouts[0].stored_geometry_hash = None;
     let issues = run(&r);
-    assert!(!with_code(&issues, IssueCode::OutsideBoundary).is_empty(), "{issues:?}");
+    // The hole 300..900 x 5500..6100 reaches the boxes of cells (0,0), (1,0), (0,1) and (1,1).
+    assert_eq!(issues.len(), 4, "{issues:?}");
+    assert!(issues.iter().all(|i| i.code == IssueCode::OutsideBoundary && i.severity == Severity::Error && i.message.contains("hole")));
 }
 
 #[test]
@@ -372,4 +376,155 @@ fn far_apart_boxes_do_not_cost_quadratic_work() {
     let t = std::time::Instant::now();
     assert!(check(&r, &Catalog::builtin()).unwrap().is_empty());
     assert!(t.elapsed().as_secs() < 10);
+}
+
+fn zone_rect(id: &str, ring: RingInput, clearance_mm: Option<f64>) -> ZoneInput {
+    ZoneInput { id: id.into(), ring, zone_type: ZoneType::Column, clearance_mm, alt_product_id: None }
+}
+
+#[test]
+fn many_big_circular_zones_hit_the_vertex_limit_fast() {
+    let mut r = loose_req(vec![loose("10", None, 0.0, 0.0)]);
+    r.zones = (0..9_000)
+        .map(|k| zone_rect(&format!("z{k}"), RingInput { vertices: vec![[-4.0e7, f64::from(k), 1.0], [4.0e7, f64::from(k), 1.0]] }, None))
+        .collect();
+    let t = std::time::Instant::now();
+    assert!(matches!(check(&r, &Catalog::builtin()), Err(UbotError::Limit(_))));
+    assert!(t.elapsed().as_secs_f64() < 2.0, "{:?}", t.elapsed());
+}
+
+#[test]
+fn thousands_of_small_zones_are_looked_up_locally() {
+    // 30 000 boxes x 4 000 zones would be 120 M zone visits if every box scanned every zone.
+    let boxes = (0..30_000).map(|k| loose(&format!("{k:X}"), None, f64::from(k % 200) * 600.0, f64::from(k / 200) * 600.0)).collect();
+    let mut r = loose_req(boxes);
+    r.zones = (0..4_000)
+        .map(|k| {
+            let (x, y) = (f64::from(k % 200) * 600.0 + 290.0, f64::from(k / 200) * 600.0 + 290.0);
+            zone_rect(&format!("z{k}"), rect(x, y, x + 20.0, y + 20.0), None)
+        })
+        .collect();
+    assert!(check(&r, &Catalog::builtin()).unwrap().is_empty());
+}
+
+#[test]
+fn stale_layout_follows_the_zones_that_meet_the_slab() {
+    let res = filled();
+    let mut r = request(&res);
+    r.zones.push(zone_rect("far", rect(1.0e6, 1.0e6, 1.0e6 + 400.0, 1.0e6 + 400.0), None));
+    assert!(run(&r).is_empty(), "a zone far from the slab must not stale the layout");
+    // In the rib gap between cells (0, 9) and (1, 9): changes the slab's zone set without touching a box.
+    r.zones.push(zone_rect("near", rect(600.0, 100.0, 700.0, 200.0), None));
+    let issues = run(&r);
+    assert_eq!(issues.len(), 1, "{issues:?}");
+    assert_eq!(issues[0].code, IssueCode::StaleLayout);
+}
+
+#[test]
+fn geometry_hash_ignores_zone_order_and_far_zones() {
+    let a = zone_rect("a", rect(600.0, 100.0, 700.0, 200.0), None);
+    let b = zone_rect("b", rect(2000.0, 2000.0, 2100.0, 2100.0), None);
+    let far = zone_rect("far", rect(1.0e6, 1.0e6, 1.0e6 + 1.0, 1.0e6 + 1.0), None);
+    let h = |zones: &[ZoneInput]| geometry_hash(1.0, &square(), &[], zones).unwrap();
+    assert_eq!(h(&[a.clone(), b.clone()]), h(&[b.clone(), a.clone()]));
+    assert_eq!(h(&[a.clone(), b.clone()]), h(&[far, b.clone(), a.clone()]));
+    assert_ne!(h(std::slice::from_ref(&a)), h(&[a, b]));
+    // Millimetres and metres stay the same hash.
+    let metre = RingInput { vertices: vec![[0.0, 0.0, 0.0], [6.6, 0.0, 0.0], [6.6, 6.6, 0.0], [0.0, 6.6, 0.0]] };
+    assert_eq!(geometry_hash(1000.0, &metre, &[], &[]).unwrap(), h(&[]));
+}
+
+#[test]
+fn duplicate_ids_with_handles_in_reverse_order_and_different_lengths() {
+    let r = loose_req(vec![loose("100", Some("x:0:0"), 0.0, 0.0), loose("FF", Some("x:0:0"), 3000.0, 0.0)]);
+    // FF is the smaller handle (shorter hex string), so the copy 100 is the extra.
+    assert_eq!(run(&r).iter().map(|i| i.handle.clone().unwrap()).collect::<Vec<_>>(), ["100"]);
+    let r = loose_req(vec![loose("FF", Some("x:0:0"), 0.0, 0.0), loose("100", Some("x:0:0"), 3000.0, 0.0)]);
+    assert_eq!(run(&r).iter().map(|i| i.handle.clone().unwrap()).collect::<Vec<_>>(), ["100"]);
+}
+
+#[test]
+fn issue_order_breaks_ties_on_x_ascending() {
+    let mut r = loose_req(vec![loose("10", None, 2000.0, 0.0), loose("11", None, 0.0, 0.0), loose("12", None, 1000.0, 0.0)]);
+    for i in &mut r.instances {
+        i.xdata_valid = false;
+    }
+    let handles: Vec<_> = run(&r).iter().map(|i| i.handle.clone().unwrap()).collect();
+    assert_eq!(handles, ["11", "12", "10"]);
+}
+
+#[test]
+fn rotated_grid_in_a_metre_drawing_is_clean_then_flags_one_moved_box() {
+    let metre = RingInput { vertices: vec![[0.0, 0.0, 0.0], [6.6, 0.0, 0.0], [6.6, 6.6, 0.0], [0.0, 6.6, 0.0]] };
+    let mut f = fill_req(metre.clone());
+    f.unit_scale = 1000.0;
+    f.angle_deg = 30.0;
+    let res = fill(&f, &Catalog::builtin()).unwrap();
+    assert!(res.add.len() > 20);
+    let mut r = CheckRequest { unit_scale: 1000.0, instances: instances(&res), layouts: vec![layout_of(&res, metre)], zones: vec![] };
+    let issues = run(&r);
+    assert!(issues.is_empty(), "{issues:?}");
+    r.instances[3].base.insert[0] += 0.005;
+    let issues = run(&r);
+    assert_eq!(issues.len(), 1, "{issues:?}");
+    assert_eq!(issues[0].code, IssueCode::ManualMoved);
+    assert_eq!(issues[0].handle, Some(r.instances[3].base.handle.clone()));
+}
+
+#[test]
+fn edge_clearance_shortfall_inside_the_arc_band_is_a_warning() {
+    let res = filled();
+    let mut r = request(&res);
+    r.layouts[0].edge_clearance_mm = Some(70.3);
+    let issues = run(&r);
+    assert_eq!(issues.len(), 36, "{issues:?}");
+    assert!(issues.iter().all(|i| i.code == IssueCode::Clearance && i.severity == Severity::Warning));
+    r.layouts[0].edge_clearance_mm = Some(71.0);
+    assert!(run(&r).iter().all(|i| i.code == IssueCode::Clearance && i.severity == Severity::Error));
+}
+
+#[test]
+fn zone_clearance_own_value_and_rulepack_fallback() {
+    let res = filled();
+    // 20 mm wide zone 50 mm right of cell (0, 0) (x 70..590) and 70 mm left of cell (1, 0) (x 730..1250).
+    let cell00 = format!("{LAYOUT}:0:0");
+    let run_with = |clearance: Option<f64>, catalog: &Catalog| {
+        let mut r = request(&res);
+        r.layouts[0].stored_geometry_hash = None;
+        r.zones.push(zone_rect("c", rect(640.0, 6100.0, 660.0, 6200.0), clearance));
+        let handle = r.instances.iter().find(|i| i.base.instance_id.as_deref() == Some(cell00.as_str())).unwrap().base.handle.clone();
+        (check(&r, catalog).unwrap(), handle)
+    };
+    let (issues, h) = run_with(Some(60.0), &Catalog::builtin());
+    assert_eq!(issues.len(), 1, "{issues:?}");
+    assert_eq!((issues[0].code, issues[0].severity, issues[0].handle.clone()), (IssueCode::Clearance, Severity::Error, Some(h)));
+    let (issues, _) = run_with(Some(50.3), &Catalog::builtin());
+    assert_eq!((issues.len(), issues[0].severity), (1, Severity::Warning));
+    assert!(run_with(Some(50.0), &Catalog::builtin()).0.is_empty());
+    let mut rulepack = Catalog::builtin();
+    rulepack.rulepacks[0].exclusion_clearance_mm = 60.0;
+    let (issues, h2) = run_with(None, &rulepack);
+    assert_eq!((issues.len(), issues[0].severity, issues[0].handle.clone()), (1, Severity::Error, Some(h2)));
+    assert!(run_with(None, &Catalog::builtin()).0.is_empty());
+}
+
+#[test]
+fn legacy_block_with_a_mapped_product_gets_a_footprint_and_can_overlap() {
+    let mut c = Catalog::builtin();
+    c.mappings.push(cadcraft_ubot::BlockMapping {
+        product_id: Some("ubot-h13-7".into()),
+        cad_engine: "any".into(),
+        block_name: "UB-9".into(),
+        units_mm_per_block_unit: 1.0,
+        anchor: cadcraft_ubot::Anchor::Center,
+        rotation_offset_deg: 0.0,
+    });
+    let mut legacy = loose("11", None, 300.0, 0.0);
+    legacy.base.product_id = None;
+    legacy.base.block_name = "UB-9".into();
+    legacy.legacy = true;
+    let issues = check(&loose_req(vec![loose("10", None, 0.0, 0.0), legacy]), &c).unwrap();
+    let codes: Vec<_> = issues.iter().map(|i| i.code).collect();
+    assert!(codes.contains(&IssueCode::Overlap) && codes.contains(&IssueCode::LegacyBlock), "{issues:?}");
+    assert_eq!(issues.len(), 2);
 }

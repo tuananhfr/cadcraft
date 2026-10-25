@@ -1,5 +1,7 @@
 //! Product swap planning (TUBAB): same centre and orientation, new product block and anchor.
 
+use std::collections::HashSet;
+
 use cadcraft_geom::Vec2;
 use serde::{Deserialize, Serialize};
 
@@ -34,6 +36,8 @@ pub struct ReplaceChange {
     pub block_name: String,
     pub insert: [f64; 2],
     pub rotation_deg: f64,
+    /// Uniform INSERT scale that draws the block at true size: mm per block unit over mm per drawing unit.
+    pub scale: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -60,8 +64,16 @@ pub fn replace(req: &ReplaceRequest, catalog: &Catalog) -> Result<ReplaceResult,
     let to = catalog.product(&req.to_product_id).ok_or_else(|| UbotError::UnknownProduct(req.to_product_id.clone()))?;
     let new_mapping = catalog.mapping_for_product(&to.id);
     let new_block = new_mapping.map_or_else(|| Catalog::default_block_name(to), |m| m.block_name.clone());
+    let new_scale = new_mapping.map_or(1.0, |m| m.units_mm_per_block_unit) / req.unit_scale;
+    if !new_scale.is_finite() {
+        return Err(UbotError::BadInput("unitScale makes the block scale overflow".into()));
+    }
+    let mut seen = HashSet::new();
     let mut out = ReplaceResult { changes: vec![], refused: vec![], warnings: vec![] };
     for t in &req.targets {
+        if !seen.insert(t.handle.as_str()) {
+            return Err(UbotError::BadInput(format!("target {} is listed twice", t.handle)));
+        }
         if !(t.insert.iter().all(|c| c.is_finite()) && t.rotation_deg.is_finite()) {
             return Err(UbotError::BadInput(format!("target {}: insert and rotation must be finite", t.handle)));
         }
@@ -77,14 +89,17 @@ pub fn replace(req: &ReplaceRequest, catalog: &Catalog) -> Result<ReplaceResult,
                     continue;
                 }
             },
-            None => {
-                out.warnings.push(issue(
-                    IssueCode::LegacyBlock,
-                    Severity::Warning,
-                    format!("block {} has no product, assumed to be the size of {}", t.block_name, to.id),
-                ));
-                to
-            }
+            None => match catalog.mapping_for_block(&t.block_name).and_then(|m| m.product_id.as_deref()).and_then(|id| catalog.product(id)) {
+                Some(p) => p,
+                None => {
+                    out.warnings.push(issue(
+                        IssueCode::LegacyBlock,
+                        Severity::Warning,
+                        format!("block {} has no product, assumed to be the size of {}", t.block_name, to.id),
+                    ));
+                    to
+                }
+            },
         };
         if !req.allow_resize && !same_size(from, to) {
             out.refused.push(issue(IssueCode::Clearance, Severity::Error, format!("size differs: {} to {}", from.id, to.id)));
@@ -107,6 +122,7 @@ pub fn replace(req: &ReplaceRequest, catalog: &Catalog) -> Result<ReplaceResult,
             block_name: new_block.clone(),
             insert: [insert.x, insert.y],
             rotation_deg,
+            scale: new_scale,
         });
     }
     Ok(out)

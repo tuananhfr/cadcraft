@@ -114,3 +114,89 @@ fn json_shape_is_camel_case() {
     .unwrap();
     assert!(!req.allow_resize);
 }
+
+fn mapping(product: Option<&str>, block: &str, anchor: Anchor, units: f64, offset: f64) -> BlockMapping {
+    BlockMapping {
+        product_id: product.map(Into::into),
+        cad_engine: "any".into(),
+        block_name: block.into(),
+        units_mm_per_block_unit: units,
+        anchor,
+        rotation_offset_deg: offset,
+    }
+}
+
+fn near(a: [f64; 2], b: [f64; 2]) {
+    assert!((a[0] - b[0]).abs() < 1e-9 && (a[1] - b[1]).abs() < 1e-9, "{a:?} != {b:?}");
+}
+
+#[test]
+fn metre_drawing_with_block_scale() {
+    let c = Catalog::builtin();
+    let mut t = target("1", Some("ubot-h13-7"), "UB-1", [1.0, 2.0], 0.0);
+    t.scale = 0.001;
+    let mut req = request(vec![t], "ubot-h13-7", false);
+    req.unit_scale = 1000.0;
+    let ch = &replace(&req, &c).unwrap().changes[0];
+    near(ch.insert, [1.0, 1.74]);
+    assert!((ch.scale - 0.001).abs() < 1e-12, "{}", ch.scale);
+}
+
+#[test]
+fn block_scale_other_than_one_scales_the_anchor_offset() {
+    let c = Catalog::builtin();
+    let mut t = target("1", Some("ubot-h13-7"), "UB-1", [1000.0, 2000.0], 0.0);
+    t.scale = 2.0;
+    let ch = &replace(&request(vec![t], "ubot-h13-7", false), &c).unwrap().changes[0];
+    near(ch.insert, [1000.0, 1480.0]);
+    assert_eq!(ch.scale, 1.0);
+}
+
+#[test]
+fn rotation_offsets_of_both_blocks_apply() {
+    let mut c = Catalog::builtin();
+    c.mappings.push(mapping(None, "OLDX", Anchor::Center, 1.0, 10.0));
+    c.mappings.push(mapping(Some("ubot-h10-7"), "NEWX", Anchor::Center, 1.0, 90.0));
+    let r = replace(&request(vec![target("1", Some("ubot-h13-7"), "OLDX", [5.0, 6.0], 40.0)], "ubot-h10-7", false), &c).unwrap();
+    // Footprint angle 40 - 10 = 30, then the new block's own offset.
+    assert_eq!(r.changes[0].rotation_deg, 120.0);
+    assert_eq!(r.changes[0].block_name, "NEWX");
+    near(r.changes[0].insert, [5.0, 6.0]);
+}
+
+#[test]
+fn top_center_with_a_different_size_and_allow_resize() {
+    let mut c = catalog_with_top_center();
+    let mut big = c.products[0].clone();
+    big.id = "ubot-big".into();
+    big.sku = "BIG".into();
+    big.width_mm = 600.0;
+    big.length_mm = 600.0;
+    c.products.push(big);
+    c.mappings.push(mapping(Some("ubot-big"), "UBOT_BIG", Anchor::TopCenter, 1.0, 0.0));
+    // 520 mm box, top-centre insert (500, 500): centre (500, 240); the 600 mm box puts its insert 300 above that.
+    let r = replace(&request(vec![target("1", Some("ubot-h13-7"), "UBOT_H13_7", [500.0, 500.0], 0.0)], "ubot-big", true), &c).unwrap();
+    near(r.changes[0].insert, [500.0, 540.0]);
+}
+
+#[test]
+fn duplicate_target_handles_are_rejected() {
+    let c = Catalog::builtin();
+    let t = target("1", Some("ubot-h13-7"), "X", [0.0, 0.0], 0.0);
+    assert!(matches!(replace(&request(vec![t.clone(), t], "ubot-h13-7", false), &c), Err(UbotError::BadInput(_))));
+}
+
+#[test]
+fn mapped_legacy_block_has_a_known_size_and_no_warning() {
+    let mut c = Catalog::builtin();
+    c.mappings.push(mapping(Some("ubot-h13-7"), "UB-9", Anchor::Center, 1.0, 0.0));
+    let mut big = c.products[0].clone();
+    big.id = "ubot-big".into();
+    big.sku = "BIG".into();
+    big.width_mm = 600.0;
+    c.products.push(big);
+    let r = replace(&request(vec![target("1", None, "UB-9", [0.0, 0.0], 0.0)], "ubot-h10-7", false), &c).unwrap();
+    assert!(r.warnings.is_empty() && r.changes.len() == 1);
+    let r = replace(&request(vec![target("1", None, "UB-9", [0.0, 0.0], 0.0)], "ubot-big", false), &c).unwrap();
+    assert_eq!((r.changes.len(), r.refused.len()), (0, 1));
+}
