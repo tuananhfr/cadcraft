@@ -13,8 +13,10 @@ use crate::error::UbotError;
 use crate::geometry::{RingInput, ring_from_input};
 use crate::hash::input_hash;
 use crate::model::{ApprovalStatus, Product, RulePack};
-use classify::{Domain, NEAR_BAND_MM, Obstacles, Role};
+use classify::{Domain, Obstacles, Role};
+pub(crate) use classify::{NEAR_BAND_MM, footprints_overlap};
 use diff::Placer;
+pub(crate) use diff::{MOVE_TOL_MM, TURN_TOL_DEG, angle_gap_deg, handle_key, parse_cell};
 use grid::{Grid, GridSpec};
 
 /// Boundary, hole and zone vertices together, after arc subdivision (spec §6).

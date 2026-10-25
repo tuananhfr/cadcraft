@@ -9,7 +9,7 @@ use crate::geometry::{EdgeIndex, Footprint, Ring, any_edge_enters, distance_foot
 use crate::model::Product;
 
 /// Tessellation tolerance of arcs, and the band around a clearance threshold that is "uncertain" instead of decided.
-pub(super) const NEAR_BAND_MM: f64 = 0.5;
+pub(crate) const NEAR_BAND_MM: f64 = 0.5;
 /// Distances this close to the required clearance count as meeting it (float noise, not geometry).
 const MEETS_TOL_MM: f64 = 1e-6;
 /// Touching footprints share an edge; only overlap deeper than this blocks a cell.
@@ -92,7 +92,7 @@ impl Obstacles {
 }
 
 /// Separating-axis test on the four edge directions; touching is not overlap.
-fn footprints_overlap(a: &Footprint, b: &Footprint) -> bool {
+pub(crate) fn footprints_overlap(a: &Footprint, b: &Footprint) -> bool {
     let axes = |f: &Footprint| [(f.corners[1] - f.corners[0]).normalized(), (f.corners[3] - f.corners[0]).normalized()];
     let project = |f: &Footprint, axis: Vec2| {
         f.corners.iter().map(|c| c.dot(axis)).fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), d| (lo.min(d), hi.max(d)))

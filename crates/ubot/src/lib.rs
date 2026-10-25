@@ -3,14 +3,18 @@
 #![forbid(unsafe_code)]
 
 mod catalog;
+mod check;
 mod error;
 mod fill;
 mod geometry;
 mod hash;
 mod model;
 mod placement;
+mod quantity;
+mod replace;
 
 pub use catalog::Catalog;
+pub use check::{CheckInstance, CheckRequest, Issue, IssueCode, LayoutInput, Severity, check};
 pub use error::UbotError;
 pub use fill::{
     Candidate, ExistingInstance, FillRequest, FillResult, FillSummary, LayoutRecord, MAX_CLEARANCE_MM, Placement, Reason, Status, UpdatePlacement,
@@ -23,3 +27,5 @@ pub use geometry::{
 pub use hash::input_hash;
 pub use model::{Anchor, ApprovalStatus, BlockMapping, Product, RulePack};
 pub use placement::{center_from_insert, insert_from_center, relative_scale};
+pub use quantity::{CountItem, CountRow, CountSource, Counts, count, count_in};
+pub use replace::{ReplaceChange, ReplaceRequest, ReplaceResult, replace};

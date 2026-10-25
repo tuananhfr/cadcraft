@@ -17,8 +17,8 @@ use crate::placement::{center_from_insert, insert_from_center, relative_scale};
 /// Existing boxes per run (spec §6).
 pub(super) const MAX_EXISTING: usize = 100_000;
 /// Spec §14.1: a box more than 1 mm from its computed spot counts as moved by hand.
-const MOVE_TOL_MM: f64 = 1.0;
-const TURN_TOL_DEG: f64 = 1e-6;
+pub(crate) const MOVE_TOL_MM: f64 = 1.0;
+pub(crate) const TURN_TOL_DEG: f64 = 1e-6;
 
 /// An existing box of this layout, with its cell from the instance id.
 pub(super) struct Owned<'e> {
@@ -66,7 +66,7 @@ impl<'c> Placer<'c> {
 }
 
 /// `"<layout>:<i>:<j>"` → `(i, j)`.
-fn parse_cell(id: &str) -> Option<[i64; 2]> {
+pub(crate) fn parse_cell(id: &str) -> Option<[i64; 2]> {
     let mut parts = id.rsplitn(3, ':');
     let j = parts.next()?.parse().ok()?;
     let i = parts.next()?.parse().ok()?;
@@ -163,11 +163,11 @@ fn order(cell: [i64; 2]) -> (i64, i64) {
 }
 
 /// Handle order: AutoCAD handles are hex without leading zeros, so shorter means smaller.
-fn handle_key(h: &str) -> (usize, String) {
+pub(crate) fn handle_key(h: &str) -> (usize, String) {
     (h.len(), h.to_ascii_uppercase())
 }
 
-fn angle_gap_deg(a: f64, b: f64) -> f64 {
+pub(crate) fn angle_gap_deg(a: f64, b: f64) -> f64 {
     let d = (a - b).rem_euclid(360.0);
     d.min(360.0 - d)
 }
