@@ -4441,3 +4441,58 @@ ribbon	Shapes	Hình
 	Tool Rail	Thanh Công cụ
 	Hide Tool Rail	Ẩn thanh Công cụ
 	Create a new drawing or continue recent work.	Tạo bản vẽ mới hoặc tiếp tục công việc gần đây.
+# U-BOT toolkit: UBLIB, UBZONE and their messages
+	U-BOT	U-BOT
+	U-BOT Catalog	Danh mục U-BOT
+	U-BOT Zone	Vùng U-BOT
+	Catalog	Danh mục
+	Tag Zone	Gán vùng
+	Select closed polylines or circles	Chọn đa tuyến kín hoặc đường tròn
+	Zone type	Loại vùng
+	Alternative product id	Mã sản phẩm thay thế
+	U-BOT catalog reset to the built-in draft catalog.	Đã đặt lại danh mục U-BOT về danh mục nháp có sẵn.
+echo	unknown action '{shown}' (use list, load or reset)	thao tác '{shown}' không hợp lệ (dùng list, load hoặc reset)
+echo	the catalog is larger than {max} bytes	danh mục lớn hơn {max} byte
+echo	{path}: the catalog is larger than {max} bytes	{path}: danh mục lớn hơn {max} byte
+	pass either `path` or `text`, not both	chỉ truyền `path` hoặc `text`, không truyền cả hai
+	`load` needs `path` (catalog JSON file) or `text` (catalog JSON)	`load` cần `path` (tệp JSON danh mục) hoặc `text` (JSON danh mục)
+echo	U-BOT catalog '{catalog}' {version} loaded: {count} products.	Đã nạp danh mục U-BOT '{catalog}' {version}: {count} sản phẩm.
+	paths are not available on the web; pass the catalog JSON as `text`	trên web không dùng được đường dẫn; hãy truyền JSON danh mục qua `text`
+echo	unknown units '{shown}' (use mm, cm, m or in)	đơn vị '{shown}' không hợp lệ (dùng mm, cm, m hoặc in)
+echo	the drawing units are not set (INSUNITS = {insunits}); pass units: mm, cm, m or in	chưa đặt đơn vị bản vẽ (INSUNITS = {insunits}); hãy truyền units: mm, cm, m hoặc in
+	a box block needs a name	khối hộp cần có tên
+echo	product '{product}' has no usable footprint	sản phẩm '{product}' không có kích thước mặt bằng dùng được
+echo	revision {revision} is larger than {max}	lần sửa đổi {revision} lớn hơn {max}
+echo	field {n} is longer than {max} bytes	trường {n} dài hơn {max} byte
+echo	missing field {n}	thiếu trường {n}
+echo	field {n} has group code {code}, expected {expected}	trường {n} có mã nhóm {code}, cần {expected}
+echo	field {n} is empty	trường {n} bị trống
+echo	field {n} is not a finite number	trường {n} không phải số hữu hạn
+echo	{found} fields, expected {expected}	có {found} trường, cần {expected}
+echo	unsupported record version '{version}'	không hỗ trợ phiên bản bản ghi '{version}'
+	count multiplier is not an integer	hệ số đếm không phải số nguyên
+	count multiplier must be at least 1	hệ số đếm phải từ 1 trở lên
+	revision is not a 32-bit non-negative integer	lần sửa đổi không phải số nguyên 32 bit không âm
+echo	unknown zone type '{zone_type}'	loại vùng '{zone_type}' không hợp lệ
+	clearance must be -1 (rulepack) or at least 0	khoảng hở phải là -1 (theo bộ quy tắc) hoặc từ 0 trở lên
+echo	unknown record kind '{kind}'	loại bản ghi '{kind}' không hợp lệ
+	a zone must be a closed polyline or a circle	vùng phải là đa tuyến kín hoặc đường tròn
+	a slab boundary must be a closed polyline	biên sàn phải là đa tuyến kín
+	a box must be a block reference	hộp phải là tham chiếu khối
+echo	too many objects (at most {max})	quá nhiều đối tượng (tối đa {max})
+	Choose one of the listed zone types.	Hãy chọn một trong các loại vùng đã liệt kê.
+echo	Unknown product '{product}' (see UBLIB).	Không có sản phẩm '{product}' (xem UBLIB).
+echo	unknown product '{product}' (see UBLIB)	không có sản phẩm '{product}' (xem UBLIB)
+	`type` is required (exclusion, solid, column, wall, opening or alt_product)	cần có `type` (exclusion, solid, column, wall, opening hoặc alt_product)
+echo	unknown zone type '{shown}' (use exclusion, solid, column, wall, opening or alt_product)	loại vùng '{shown}' không hợp lệ (dùng exclusion, solid, column, wall, opening hoặc alt_product)
+echo	`clearanceMm` must be a number from 0 to {max}	`clearanceMm` phải là số từ 0 đến {max}
+	an alt_product zone needs `altProduct` (a product id)	vùng alt_product cần có `altProduct` (mã sản phẩm)
+	`altProduct` applies to alt_product zones only	`altProduct` chỉ dùng cho vùng alt_product
+	select closed polylines or circles to tag as zones	hãy chọn đa tuyến kín hoặc đường tròn để gán vùng
+echo	no object {handle}	không có đối tượng {handle}
+echo	{handle} is not in model space	{handle} không nằm trong không gian mô hình
+echo	{handle} is on a locked layer	{handle} nằm trên lớp bị khóa
+echo	{handle} is an open polyline; a zone must be closed	{handle} là đa tuyến hở; vùng phải khép kín
+echo	{handle}: {kind} zones are not supported yet; trace it with a closed polyline (BOUNDARY)	{handle}: chưa hỗ trợ vùng dạng {kind}; hãy vẽ lại bằng đa tuyến kín (BOUNDARY)
+echo	{handle} ({kind}) is not a closed polyline or circle	{handle} ({kind}) không phải đa tuyến kín hoặc đường tròn
+echo	{count} zone(s) tagged as {zone_type}.	Đã gán {count} vùng loại {zone_type}.

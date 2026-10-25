@@ -22,7 +22,7 @@ fn instance_tag() -> UbotTag {
         instance_id: "0123456789abcdef:3:4".into(),
         product_id: "ubot-h13-7".into(),
         layout_id: "0123456789abcdef".into(),
-        count_multiplier: 1,
+        count_multiplier: 3,
     }
 }
 
@@ -79,7 +79,7 @@ fn insert(block: &str, at: [f64; 2], cols: u32, rows: u32) -> EntityKind {
 fn tagged(kind: EntityKind, t: Option<&UbotTag>) -> (Common, EntityKind) {
     let mut c = Common::default();
     if let Some(t) = t {
-        xdata::write(&mut c, t);
+        xdata::write(&mut c, t).unwrap();
     }
     (c, kind)
 }
@@ -111,28 +111,50 @@ fn read_tag(s: &Session, h: Handle) -> Option<Result<UbotTag, String>> {
 fn xdata_write_then_read_each_kind() {
     for t in [instance_tag(), layout_tag(), zone_tag(None, None), zone_tag(Some(150.0), None), zone_tag(None, Some("ubot-h10-7"))] {
         let mut c = Common::default();
-        xdata::write(&mut c, &t);
+        xdata::write(&mut c, &t).unwrap();
         assert_eq!(c.xdata.first(), Some(&tag(1001, APP)));
         assert_eq!(c.xdata.get(1), Some(&tag(1000, "ubot/1")), "version is always the first field");
         assert_eq!(xdata::read(&c), Some(Ok(t.clone())));
         // Writing again replaces the record rather than adding a second one.
-        xdata::write(&mut c, &t);
+        xdata::write(&mut c, &t).unwrap();
         assert_eq!(c.xdata.iter().filter(|r| r.code == 1001).count(), 1);
     }
     // Spec §4.1 field order, read by position.
     let mut c = Common::default();
-    xdata::write(&mut c, &zone_tag(None, None));
+    xdata::write(&mut c, &zone_tag(None, None)).unwrap();
     let codes: Vec<(i32, &str)> = c.xdata.iter().map(|r| (r.code, r.value.as_str())).collect();
     assert_eq!(codes, [(1001, APP), (1000, "ubot/1"), (1000, "Z"), (1000, "fedcba9876543210"), (1000, "column"), (1040, "-1"), (1000, "")]);
     let mut c = Common::default();
-    xdata::write(&mut c, &layout_tag());
-    let codes: Vec<i32> = c.xdata.iter().map(|r| r.code).collect();
-    assert_eq!(codes, [1001, 1000, 1000, 1000, 1071, 1000, 1000, 1040, 1040, 1040, 1040, 1040, 1040, 1000, 1000]);
-    assert_eq!(c.xdata.last(), Some(&tag(1000, "2F")), "boundary handle is the last field");
+    xdata::write(&mut c, &layout_tag()).unwrap();
+    let hash = "ab".repeat(32);
+    let codes: Vec<(i32, &str)> = c.xdata.iter().map(|r| (r.code, r.value.as_str())).collect();
+    assert_eq!(
+        codes,
+        [
+            (1001, APP),
+            (1000, "ubot/1"),
+            (1000, "L"),
+            (1000, "0123456789abcdef"),
+            (1071, "3"),
+            (1000, "ubot-h13-7"),
+            (1000, "lpc-draft-1@1"),
+            (1040, "1234.5678"),
+            (1040, "-98.765"),
+            (1040, "12.5"),
+            (1040, "660"),
+            (1040, "640.25"),
+            (1040, "10"),
+            (1000, hash.as_str()),
+            (1000, "2F"),
+        ]
+    );
     let mut c = Common::default();
-    xdata::write(&mut c, &instance_tag());
-    let codes: Vec<i32> = c.xdata.iter().map(|r| r.code).collect();
-    assert_eq!(codes, [1001, 1000, 1000, 1000, 1000, 1000, 1070]);
+    xdata::write(&mut c, &instance_tag()).unwrap();
+    let codes: Vec<(i32, &str)> = c.xdata.iter().map(|r| (r.code, r.value.as_str())).collect();
+    assert_eq!(
+        codes,
+        [(1001, APP), (1000, "ubot/1"), (1000, "I"), (1000, "0123456789abcdef:3:4"), (1000, "ubot-h13-7"), (1000, "0123456789abcdef"), (1070, "3")]
+    );
 }
 
 #[test]
@@ -153,7 +175,7 @@ fn xdata_write_keeps_other_apps() {
         ],
         ..Common::default()
     };
-    xdata::write(&mut c, &instance_tag());
+    xdata::write(&mut c, &instance_tag()).unwrap();
     assert_eq!(c.xdata.get(..2), Some(&[tag(1001, "ACME"), tag(1000, "a")][..]));
     assert_eq!(c.xdata.get(2), Some(&tag(1001, APP)));
     assert_eq!(c.xdata.get(c.xdata.len() - 2..), Some(&[tag(1001, "PE_URL"), tag(1000, "https://example.com")][..]));
@@ -161,7 +183,7 @@ fn xdata_write_keeps_other_apps() {
 
     // No record yet: appended after the others.
     let mut c = Common { xdata: vec![tag(1001, "ACME"), tag(1000, "a")], ..Common::default() };
-    xdata::write(&mut c, &zone_tag(Some(0.0), None));
+    xdata::write(&mut c, &zone_tag(Some(0.0), None)).unwrap();
     assert_eq!(c.xdata.get(..3), Some(&[tag(1001, "ACME"), tag(1000, "a"), tag(1001, APP)][..]));
     xdata::clear(&mut c);
     assert_eq!(c.xdata, vec![tag(1001, "ACME"), tag(1000, "a")]);
@@ -381,7 +403,7 @@ fn ubot_xdata_survives_dxf_round_trip() {
     d.header.set_i64("INSUNITS", 4);
     add_block(&mut d, "UBOT_H13_7", vec![(Common::default(), square(-260.0, -260.0, 520.0))]);
     let mut box_common = Common { xdata: vec![tag(1001, "ACME"), tag(1000, "keep me"), tag(1070, "7")], ..Common::default() };
-    xdata::write(&mut box_common, &instance_tag());
+    xdata::write(&mut box_common, &instance_tag()).unwrap();
     let boxed = d.add(&Space::Model, box_common, insert("UBOT_H13_7", [500.0, 500.0], 1, 1)).unwrap();
     let (c, k) = tagged(square(0.0, 0.0, 6600.0), Some(&layout_tag()));
     let boundary = d.add(&Space::Model, c, k).unwrap();
@@ -395,6 +417,17 @@ fn ubot_xdata_survives_dxf_round_trip() {
     let acme: Vec<RawTag> = s.doc().unwrap().entity(boxed).unwrap().common.xdata.iter().take(3).cloned().collect();
 
     let data = s.execute("document.bytes", &json!({ "format": "dxf" })).unwrap()["data"].as_str().unwrap().to_string();
+    let text = String::from_utf8(cadcraft_engine::cmd::file::base64_decode(&data).unwrap()).unwrap();
+    let groups: Vec<&str> = text.lines().map(str::trim).collect();
+    // Group pairs of each APPID record: its name (group 2) must be LPC_UBOT for one of them.
+    let pairs: Vec<(&str, &str)> = groups.chunks(2).filter_map(|p| Some((*p.first()?, *p.get(1)?))).collect();
+    let appid = pairs
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| **p == ("0", "APPID"))
+        .any(|(i, _)| pairs.iter().skip(i + 1).take_while(|p| p.0 != "0").any(|p| *p == ("2", APP)));
+    assert!(appid, "the APPID table registers LPC_UBOT");
+    assert!(groups.windows(2).any(|w| w == ["1070", "3"]), "count multiplier is saved");
     s.execute("open", &json!({ "data": data, "name": "roundtrip.dxf" })).unwrap();
     let back = s.doc().unwrap();
     for (h, t) in &want {
@@ -409,6 +442,7 @@ fn ubot_xdata_survives_dxf_round_trip() {
     assert_eq!(inst[0].handle, boxed.hex());
     assert_eq!(inst[0].instance_id.as_deref(), Some("0123456789abcdef:3:4"));
     assert_eq!(inst[0].insert, [500.0, 500.0]);
+    assert!(matches!(xdata::read(&back.entity(boxed).unwrap().common), Some(Ok(UbotTag::Instance { count_multiplier: 3, .. }))));
 }
 
 #[test]
@@ -434,6 +468,9 @@ fn count_items_nested_cluster_and_minsert() {
     add_block(&mut d, "LEGACY3", (0..3).map(|i| tagged(insert("UB-1", [700.0 * f64::from(i), 0.0], 1, 1), None)).collect());
     add_block(&mut d, "LOOP_A", vec![tagged(insert("LOOP_B", [0.0, 0.0], 1, 1), None), tagged(insert("UB-1", [0.0, 0.0], 1, 1), None)]);
     add_block(&mut d, "LOOP_B", vec![tagged(insert("LOOP_A", [0.0, 0.0], 1, 1), None)]);
+    // A cluster holding a tagged MINSERT row of three boxes.
+    add_block(&mut d, "ROW3", vec![tagged(insert("UBOT_H13_7", [0.0, 0.0], 3, 1), Some(&boxed("ubot-h20-7")))]);
+    let five = UbotTag::Instance { instance_id: "x:9:9".into(), product_id: "ubot-h17-7".into(), layout_id: "x".into(), count_multiplier: 5 };
     let model = vec![
         tagged(insert("CLUSTER", [0.0, 0.0], 1, 1), None),                             // 4
         tagged(insert("CLUSTER", [5000.0, 0.0], 1, 1), None),                          // 4
@@ -444,7 +481,9 @@ fn count_items_nested_cluster_and_minsert() {
         tagged(insert("LEGACY3", [0.0, -4000.0], 1, 2), None),                         // legacy 3 × 2 = 6
         tagged(insert("DOOR", [0.0, -6000.0], 1, 1), None),                            // not a box
         tagged(insert("LOOP_A", [0.0, -8000.0], 1, 1), None),                          // legacy 1 inside a cycle
-        tagged(insert("MISSING", [0.0, -9000.0], 1, 1), None),                         // no such block
+        tagged(insert("MISSING", [0.0, -9000.0], 1, 1), None),
+        tagged(insert("ROW3", [0.0, -10000.0], 2, 1), None), // MINSERT 3×1 inside a cluster inserted 2×1: 6
+        tagged(insert("UBOT_H13_7", [0.0, -12000.0], 1, 2), Some(&five)), // count multiplier 5 × MINSERT 1×2: 10                         // no such block
     ];
     for (common, kind) in model {
         d.add(&Space::Model, common, kind).unwrap();
@@ -457,12 +496,14 @@ fn count_items_nested_cluster_and_minsert() {
     assert_eq!(sum(CountSource::Tagged, Some("ubot-h13-7")), 4 + 4 + 8 + 8);
     assert_eq!(sum(CountSource::Tagged, Some("ubot-h10-7")), 6);
     assert_eq!(sum(CountSource::Legacy, None), 1 + 6 + 1);
+    assert_eq!(sum(CountSource::Tagged, Some("ubot-h20-7")), 6);
+    assert_eq!(sum(CountSource::Tagged, Some("ubot-h17-7")), 10);
     let counts = cadcraft_ubot::count(&items, &catalog);
-    assert_eq!(counts.total, 24 + 6 + 8);
+    assert_eq!(counts.total, 24 + 6 + 8 + 6 + 10);
 
     // Only model-space box references are existing instances: the tagged MINSERT and the bare UB-1.
     let existing = existing_instances(&d, &catalog);
-    assert_eq!(existing.iter().map(|e| e.block_name.as_str()).collect::<Vec<_>>(), ["UBOT_H13_7", "UB-1"]);
+    assert_eq!(existing.iter().map(|e| e.block_name.as_str()).collect::<Vec<_>>(), ["UBOT_H13_7", "UB-1", "UBOT_H13_7"]);
     assert_eq!(existing[1].product_id, None, "legacy boxes leave the product to the mapping");
 }
 
@@ -476,15 +517,15 @@ fn write_helpers_make_layer_block_and_commit_atomically() {
     assert_eq!(d.layer(LAYER).unwrap().color, cadcraft_engine::doc::color::Color::from_aci(55));
     let name = Catalog::default_block_name(product);
     assert_eq!(name, "UBOT_H13_7");
-    // Centimetre drawing: the square is 52 × 52 units around the origin.
-    ensure_product_block(&mut d, product, &name, 10.0).unwrap();
+    // Box blocks are drawn in mm (one block unit = 1 mm) whatever the drawing units, origin at the centre.
+    ensure_product_block(&mut d, product, &name).unwrap();
     let b = d.block(&name).unwrap().clone();
     let EntityKind::LwPolyline(pl) = &b.entities.iter().next().unwrap().kind else { panic!("outline") };
     assert!(pl.closed);
-    assert_eq!(pl.vertices.iter().map(|v| [v.p.x, v.p.y]).collect::<Vec<_>>(), [[-26.0, -26.0], [26.0, -26.0], [26.0, 26.0], [-26.0, 26.0]]);
-    ensure_product_block(&mut d, product, &name, 1.0).unwrap();
+    assert_eq!(pl.vertices.iter().map(|v| [v.p.x, v.p.y]).collect::<Vec<_>>(), [[-260.0, -260.0], [260.0, -260.0], [260.0, 260.0], [-260.0, 260.0]]);
+    ensure_product_block(&mut d, product, &name).unwrap();
     assert!(Arc::ptr_eq(&b, d.block(&name).unwrap()), "an existing block is kept");
-    assert!(ensure_product_block(&mut d, product, "OTHER", 0.0).is_err());
+    assert!(ensure_product_block(&mut d, product, "  ").is_err());
 
     let mut s = metric_session(d);
     let doc = s.state().unwrap().doc.clone();
@@ -502,4 +543,65 @@ fn write_helpers_make_layer_block_and_commit_atomically() {
     .unwrap();
     assert_eq!(r["added"], 1);
     assert_eq!(s.doc().unwrap().model.len(), doc.model.len() + 1);
+}
+
+#[test]
+fn box_block_is_mm_and_scaled_by_the_inverse_unit_scale() {
+    use cadcraft_engine::cmd::ubot::write::ensure_product_block;
+    let catalog = Catalog::builtin();
+    let product = catalog.product("ubot-h13-7").unwrap();
+    let mut d = Drawing::new_metric();
+    d.header.set_i64("INSUNITS", 5);
+    ensure_product_block(&mut d, product, "UBOT_H13_7").unwrap();
+    let s = metric_session(d);
+    let mm_per_unit = unit_scale(&s, None).unwrap();
+    assert_eq!(mm_per_unit, 10.0);
+    let d = s.doc().unwrap();
+    let block = d.block("UBOT_H13_7").unwrap();
+    let EntityKind::LwPolyline(pl) = &block.entities.iter().next().unwrap().kind else { panic!("outline") };
+    let xs: Vec<f64> = pl.vertices.iter().map(|v| v.p.x).collect();
+    assert_eq!(xs.iter().cloned().fold(f64::MIN, f64::max) - xs.iter().cloned().fold(f64::MAX, f64::min), 520.0, "block square is 520 units (mm)");
+    // An insert at scale 1/unit_scale covers the true 520 mm = 52 cm of the drawing.
+    let EntityKind::Insert(mut ins) = insert("UBOT_H13_7", [1000.0, 1000.0], 1, 1) else { unreachable!() };
+    ins.scale = Vec3::new(1.0 / mm_per_unit, 1.0 / mm_per_unit, 1.0);
+    let m = ins.transform(block.base.xy());
+    let world: Vec<Vec2> = pl.vertices.iter().map(|v| m.apply(v.p)).collect();
+    let (lo, hi) = world.iter().fold((f64::MAX, f64::MIN), |(lo, hi), p| (lo.min(p.x), hi.max(p.x)));
+    assert!((hi - lo - 52.0).abs() < 1e-9, "{lo}..{hi}");
+    assert!((world[0].x - 974.0).abs() < 1e-9 && (world[0].y - 974.0).abs() < 1e-9, "{:?}", world[0]);
+}
+
+#[test]
+fn xdata_write_rejects_long_strings_and_revision_overflow() {
+    let other = vec![tag(1001, "ACME"), tag(1000, "a")];
+    let mut c = Common { xdata: other.clone(), ..Common::default() };
+    xdata::write(&mut c, &instance_tag()).unwrap();
+    let before = c.xdata.clone();
+    let long = |n: usize| UbotTag::Instance { instance_id: "i".into(), product_id: "p".repeat(n), layout_id: "l".into(), count_multiplier: 1 };
+    assert!(xdata::write(&mut c, &long(256)).is_err(), "a 256-byte string does not fit a 1000 group");
+    assert_eq!(c.xdata, before, "a refused write changes nothing");
+    // Bytes, not characters: 128 two-byte letters are 256 bytes.
+    let wide = UbotTag::Zone { zone_id: "đ".repeat(128), zone_type: ZoneType::Wall, clearance_mm: None, alt_product_id: None };
+    assert!(xdata::write(&mut c, &wide).is_err());
+    xdata::write(&mut c, &long(255)).unwrap();
+    assert_eq!(xdata::read(&c), Some(Ok(long(255))));
+
+    let UbotTag::Layout { mut record, boundary_handle } = layout_tag() else { unreachable!() };
+    record.revision = i32::MAX as u32 + 1;
+    let too_new = UbotTag::Layout { record: record.clone(), boundary_handle: boundary_handle.clone() };
+    assert!(xdata::write(&mut c, &too_new).is_err(), "1071 is a 32-bit signed group");
+    record.revision = i32::MAX as u32;
+    xdata::write(&mut c, &UbotTag::Layout { record, boundary_handle }).unwrap();
+
+    // The reader refuses the same values from a file.
+    let record = |fields: Vec<RawTag>| Common { xdata: std::iter::once(tag(1001, APP)).chain(fields).collect(), ..Common::default() };
+    let long_id = "x".repeat(256);
+    let i = vec![tag(1000, "ubot/1"), tag(1000, "I"), tag(1000, &long_id), tag(1000, "p"), tag(1000, "l"), tag(1070, "1")];
+    assert!(matches!(xdata::read(&record(i)), Some(Err(_))));
+    let mut c = Common::default();
+    xdata::write(&mut c, &layout_tag()).unwrap();
+    if let Some(rev) = c.xdata.iter_mut().find(|t| t.code == 1071) {
+        rev.value = "2147483648".into();
+    }
+    assert!(matches!(xdata::read(&c), Some(Err(_))));
 }

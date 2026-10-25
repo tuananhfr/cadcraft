@@ -5,8 +5,12 @@ use cadcraft_ubot::{LayoutRecord, ZoneType};
 
 pub const APP: &str = "LPC_UBOT";
 pub const VERSION: &str = "ubot/1";
+/// Longest `1000` string a DXF/DWG xdata group holds; ids and hashes are refused, never cut.
+pub const MAX_STRING_BYTES: usize = 255;
 /// `1040 -1` on a zone means "the rulepack's clearance".
 const RULEPACK_CLEARANCE: f64 = -1.0;
+/// File values quoted in messages are cut to this many characters.
+const SHOWN_CHARS: usize = 20;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UbotTag {
@@ -23,10 +27,11 @@ pub fn read(common: &Common) -> Option<Result<UbotTag, String>> {
 }
 
 /// Replaces the `LPC_UBOT` record (or appends one); other applications' data keeps its place and order.
+/// A string over 255 bytes or a revision outside the 32-bit group is refused and nothing changes.
 /// Numbers must be finite: a non-finite value is written as is and reads back as invalid.
-pub fn write(common: &mut Common, tag: &UbotTag) {
+pub fn write(common: &mut Common, tag: &UbotTag) -> Result<(), String> {
     let mut tags = vec![RawTag { code: 1001, value: APP.into() }];
-    tags.extend(fields(tag));
+    tags.extend(fields(tag)?);
     match block_range(&common.xdata) {
         Some(range) => {
             let at = range.start;
@@ -38,6 +43,7 @@ pub fn write(common: &mut Common, tag: &UbotTag) {
         }
         None => common.xdata.extend(tags),
     }
+    Ok(())
 }
 
 /// Removes every `LPC_UBOT` record.
@@ -57,12 +63,8 @@ fn block_range_from(xdata: &[RawTag], from: usize) -> Option<std::ops::Range<usi
     Some(start..end)
 }
 
-fn s(v: &str) -> RawTag {
-    RawTag { code: 1000, value: v.to_string() }
-}
-
-fn real(v: f64) -> RawTag {
-    RawTag { code: 1040, value: format!("{v}") }
+fn shown(v: &str) -> String {
+    v.chars().take(SHOWN_CHARS).collect()
 }
 
 pub fn zone_type_name(t: ZoneType) -> &'static str {
@@ -88,13 +90,19 @@ pub fn parse_zone_type(name: &str) -> Option<ZoneType> {
     })
 }
 
-fn fields(tag: &UbotTag) -> Vec<RawTag> {
+/// The record's fields after `1001 LPC_UBOT`, checked against the group limits.
+fn fields(tag: &UbotTag) -> Result<Vec<RawTag>, String> {
+    let s = |v: &str| RawTag { code: 1000, value: v.to_string() };
+    let real = |v: f64| RawTag { code: 1040, value: format!("{v}") };
     let mut out = vec![s(VERSION)];
     match tag {
         UbotTag::Instance { instance_id, product_id, layout_id, count_multiplier } => {
             out.extend([s("I"), s(instance_id), s(product_id), s(layout_id), RawTag { code: 1070, value: count_multiplier.to_string() }]);
         }
         UbotTag::Layout { record: r, boundary_handle } => {
+            if i32::try_from(r.revision).is_err() {
+                return Err(format!("revision {} is larger than {}", r.revision, i32::MAX));
+            }
             out.extend([
                 s("L"),
                 s(&r.layout_id),
@@ -121,37 +129,45 @@ fn fields(tag: &UbotTag) -> Vec<RawTag> {
             ]);
         }
     }
-    out
+    if let Some(n) = out.iter().position(|t| t.code == 1000 && t.value.len() > MAX_STRING_BYTES) {
+        return Err(format!("field {} is longer than {MAX_STRING_BYTES} bytes", n + 1));
+    }
+    Ok(out)
 }
 
-/// Positional reader over the fields after `1001 LPC_UBOT`.
+/// Positional reader over the fields after `1001 LPC_UBOT`; fields are numbered from 1.
 struct Fields<'a> {
     tags: &'a [RawTag],
     at: usize,
 }
 
 impl<'a> Fields<'a> {
-    fn next(&mut self, code: i32, what: &str) -> Result<&'a str, String> {
-        let t = self.tags.get(self.at).ok_or_else(|| format!("missing field {} ({what})", self.at + 1))?;
+    fn next(&mut self, code: i32) -> Result<&'a str, String> {
+        let n = self.at + 1;
+        let t = self.tags.get(self.at).ok_or_else(|| format!("missing field {n}"))?;
         if t.code != code {
-            return Err(format!("field {} ({what}) has group code {}, expected {code}", self.at + 1, t.code));
+            return Err(format!("field {n} has group code {}, expected {code}", t.code));
         }
         self.at += 1;
         Ok(t.value.trim())
     }
 
-    fn text(&mut self, what: &str) -> Result<String, String> {
-        self.next(1000, what).map(str::to_string)
+    fn text(&mut self) -> Result<String, String> {
+        let v = self.next(1000)?;
+        if v.len() > MAX_STRING_BYTES {
+            return Err(format!("field {} is longer than {MAX_STRING_BYTES} bytes", self.at));
+        }
+        Ok(v.to_string())
     }
 
-    fn id(&mut self, what: &str) -> Result<String, String> {
-        let v = self.text(what)?;
-        if v.is_empty() { Err(format!("{what} is empty")) } else { Ok(v) }
+    fn id(&mut self) -> Result<String, String> {
+        let v = self.text()?;
+        if v.is_empty() { Err(format!("field {} is empty", self.at)) } else { Ok(v) }
     }
 
-    fn real(&mut self, what: &str) -> Result<f64, String> {
-        let v = self.next(1040, what)?;
-        v.parse::<f64>().ok().filter(|x| x.is_finite()).ok_or_else(|| format!("{what} is not a finite number"))
+    fn real(&mut self) -> Result<f64, String> {
+        let v = self.next(1040)?;
+        v.parse::<f64>().ok().filter(|x| x.is_finite()).ok_or_else(|| format!("field {} is not a finite number", self.at))
     }
 
     fn end(&self) -> Result<(), String> {
@@ -161,42 +177,47 @@ impl<'a> Fields<'a> {
 
 fn parse(tags: &[RawTag]) -> Result<UbotTag, String> {
     let mut f = Fields { tags, at: 0 };
-    let version = f.text("version")?;
+    let version = f.text()?;
     if version != VERSION {
-        return Err(format!("unsupported record version '{version}'"));
+        return Err(format!("unsupported record version '{}'", shown(&version)));
     }
-    let tag = match f.text("kind")?.as_str() {
+    let tag = match f.text()?.as_str() {
         "I" => {
-            let instance_id = f.id("instance id")?;
-            let product_id = f.id("product id")?;
-            let layout_id = f.id("layout id")?;
-            let count_multiplier = f.next(1070, "count multiplier")?.parse::<i16>().map_err(|_| "count multiplier is not an integer".to_string())?;
+            let instance_id = f.id()?;
+            let product_id = f.id()?;
+            let layout_id = f.id()?;
+            let count_multiplier = f.next(1070)?.parse::<i16>().map_err(|_| "count multiplier is not an integer".to_string())?;
             if count_multiplier < 1 {
                 return Err("count multiplier must be at least 1".into());
             }
             UbotTag::Instance { instance_id, product_id, layout_id, count_multiplier }
         }
         "L" => {
-            let layout_id = f.id("layout id")?;
-            let revision = f.next(1071, "revision")?.parse::<u32>().map_err(|_| "revision is not a non-negative integer".to_string())?;
-            let product_id = f.id("product id")?;
-            let rulepack = f.id("rulepack")?;
-            let origin = [f.real("origin x")?, f.real("origin y")?];
-            let angle_deg = f.real("angle")?;
-            let pitch_x_mm = f.real("pitch x")?;
-            let pitch_y_mm = f.real("pitch y")?;
-            let unit_scale = f.real("unit scale")?;
-            let geometry_hash = f.id("geometry hash")?;
-            let boundary_handle = f.id("boundary handle")?;
+            let layout_id = f.id()?;
+            let revision = f
+                .next(1071)?
+                .parse::<i32>()
+                .ok()
+                .and_then(|r| u32::try_from(r).ok())
+                .ok_or_else(|| "revision is not a 32-bit non-negative integer".to_string())?;
+            let product_id = f.id()?;
+            let rulepack = f.id()?;
+            let origin = [f.real()?, f.real()?];
+            let angle_deg = f.real()?;
+            let pitch_x_mm = f.real()?;
+            let pitch_y_mm = f.real()?;
+            let unit_scale = f.real()?;
+            let geometry_hash = f.id()?;
+            let boundary_handle = f.id()?;
             let record =
                 LayoutRecord { layout_id, revision, product_id, rulepack, origin, angle_deg, pitch_x_mm, pitch_y_mm, unit_scale, geometry_hash };
             UbotTag::Layout { record, boundary_handle }
         }
         "Z" => {
-            let zone_id = f.id("zone id")?;
-            let type_name = f.text("zone type")?;
-            let zone_type = parse_zone_type(&type_name).ok_or_else(|| format!("unknown zone type '{type_name}'"))?;
-            let clearance = f.real("clearance")?;
+            let zone_id = f.id()?;
+            let type_name = f.text()?;
+            let zone_type = parse_zone_type(&type_name).ok_or_else(|| format!("unknown zone type '{}'", shown(&type_name)))?;
+            let clearance = f.real()?;
             let clearance_mm = if clearance == RULEPACK_CLEARANCE {
                 None
             } else if clearance >= 0.0 {
@@ -204,11 +225,11 @@ fn parse(tags: &[RawTag]) -> Result<UbotTag, String> {
             } else {
                 return Err("clearance must be -1 (rulepack) or at least 0".into());
             };
-            let alt = f.text("alternative product")?;
+            let alt = f.text()?;
             let alt_product_id = (!alt.is_empty()).then_some(alt);
             UbotTag::Zone { zone_id, zone_type, clearance_mm, alt_product_id }
         }
-        other => return Err(format!("unknown record kind '{other}'")),
+        other => return Err(format!("unknown record kind '{}'", shown(other))),
     };
     f.end()?;
     Ok(tag)
