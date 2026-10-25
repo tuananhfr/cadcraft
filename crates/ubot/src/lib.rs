@@ -4,10 +4,15 @@
 
 mod catalog;
 mod error;
+mod geometry;
 mod hash;
 mod model;
 
 pub use catalog::Catalog;
 pub use error::UbotError;
+pub use geometry::{
+    EdgeIndex, Footprint, Ring, RingInput, distance_footprint_ring_edges, footprint, footprint_intersects_ring, point_in_ring,
+    ring_contains_footprint, ring_from_input,
+};
 pub use hash::input_hash;
 pub use model::{Anchor, ApprovalStatus, BlockMapping, Product, RulePack};
