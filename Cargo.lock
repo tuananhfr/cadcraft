@@ -643,6 +643,7 @@ dependencies = [
  "cadcraft-geom",
  "cadcraft-io",
  "cadcraft-render",
+ "cadcraft-ubot",
  "craft-docpath",
  "log",
  "rstar",

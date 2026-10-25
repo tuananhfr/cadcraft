@@ -671,6 +671,8 @@ pub struct Session {
     /// The window last picked with PLOTWINDOW (the Plot dialog's "Window <").
     pub plot_window: Option<cadcraft_geom::Bounds2>,
     pub ubplot: cmd::ubplot::UbplotState,
+    /// The U-BOT catalog in use (UBLIB).
+    pub ubot: cmd::ubot::UbotState,
     pub(crate) plot_jobs: sheetplan::queue::SessionJobs,
     print_profile_store: Box<dyn sheetplan::profile::PrintProfileStore>,
     /// AutoLISP: each drawing's symbols and the routine running ([`lisp`]).
@@ -726,6 +728,7 @@ impl Session {
             clipboard_source: None,
             plot_window: None,
             ubplot: cmd::ubplot::UbplotState::default(),
+            ubot: cmd::ubot::UbotState::default(),
             plot_jobs: sheetplan::queue::SessionJobs::default(),
             print_profile_store: Box::new(sheetplan::profile::MemoryPrintProfileStore::default()),
             lisp: lisp::LispState::default(),

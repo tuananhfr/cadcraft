@@ -395,6 +395,7 @@ tolerance
 transparencydisplay
 trim
 u
+ublib
 ubplot
 ubplot.approve
 ubplot.compare
@@ -406,6 +407,7 @@ ubplot.publish
 ubplot.report
 ubplot.scan
 ubplot.templates
+ubzone
 undo
 ungroup
 union

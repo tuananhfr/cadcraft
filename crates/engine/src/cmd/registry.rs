@@ -92,6 +92,7 @@ pub const FILE_IDS: &[&str] = &[
     "ubplot.folder",
     "ubplot.jobs",
     "ubplot.report",
+    "ublib",
     "xref",
     "-xref",
     "xattach",

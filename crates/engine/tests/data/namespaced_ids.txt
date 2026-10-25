@@ -395,6 +395,7 @@ tolerance	cad.dimension.tolerance
 transparencydisplay	cad.other.transparencydisplay
 trim	cad.modify.trim
 u	cad.edit.u
+ublib	cad.tools.ublib
 ubplot	cad.file.ubplot
 ubplot.approve	cad.other.ubplot.approve
 ubplot.compare	cad.other.ubplot.compare
@@ -406,6 +407,7 @@ ubplot.publish	cad.other.ubplot.publish
 ubplot.report	cad.other.ubplot.report
 ubplot.scan	cad.other.ubplot.scan
 ubplot.templates	cad.other.ubplot.templates
+ubzone	cad.tools.ubzone
 undo	cad.other.undo
 ungroup	cad.tools.ungroup
 union	cad.modify.union
