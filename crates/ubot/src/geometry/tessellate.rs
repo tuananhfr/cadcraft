@@ -4,7 +4,8 @@ use super::{MAX_RING_VERTICES, POINT_TOL_MM};
 use crate::UbotError;
 
 /// Expands bulge segments into chords within `tol_mm` and removes consecutive duplicates.
-/// Returns points plus per-edge flags (edge i starts at point i) marking arc-derived edges.
+/// Arc chord counts come from `cadcraft_geom::arc_segments`, which floors the tolerance at radius*1e-6 (so only arcs over 500 m
+/// exceed `tol_mm`) and caps one arc at 4096 chords. Returns points plus per-edge flags (edge i starts at point i) marking arc-derived edges.
 pub(crate) fn tessellate(vertices: &[[f64; 3]], unit_scale: f64, tol_mm: f64) -> Result<(Vec<Vec2>, Vec<bool>), UbotError> {
     let n = vertices.len();
     let mut points: Vec<Vec2> = Vec::with_capacity(n);

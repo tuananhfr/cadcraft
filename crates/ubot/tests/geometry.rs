@@ -1,7 +1,7 @@
 use cadcraft_geom::{Bounds2, Vec2};
 use cadcraft_ubot::{
-    EdgeIndex, Footprint, Ring, RingInput, UbotError, distance_footprint_ring_edges, footprint, footprint_intersects_ring, point_in_ring,
-    ring_contains_footprint, ring_from_input,
+    EdgeIndex, Footprint, Ring, RingInput, UbotError, distance_footprint_ring_edges, distance_footprint_ring_edges_with, footprint,
+    footprint_intersects_ring, footprint_intersects_ring_with, point_in_ring, ring_contains_footprint, ring_contains_footprint_with, ring_from_input,
 };
 
 fn input(v: &[[f64; 2]]) -> RingInput {
@@ -104,6 +104,10 @@ fn semicircle_bulge_tessellates_within_half_mm() {
         assert!((d - 1000.0).abs() <= 0.5, "{p:?} {d}");
     }
     assert!(r.points.iter().any(|p| p.y < -900.0));
+    for i in 0..r.points.len() - 1 {
+        let mid = r.points[i].mid(r.points[i + 1]);
+        assert!((mid.dist(Vec2::ZERO) - 1000.0).abs() <= 0.5, "sagitta at edge {i}");
+    }
 }
 
 #[test]
@@ -226,24 +230,152 @@ fn edge_index_hostile_queries_and_cell_sizes() {
     assert_eq!(EdgeIndex::new(&[], 10.0).query(Bounds2::new(Vec2::ZERO, Vec2::new(1.0, 1.0)), 0.0).count(), 0);
 }
 
+fn ring_of(v: &[[f64; 2]]) -> Ring {
+    ring_from_input(&input(v), 1.0, 0.5).unwrap()
+}
+
+fn box_at(x: f64, y: f64) -> Footprint {
+    footprint(Vec2::new(x, y), 520.0, 520.0, 0.0)
+}
+
 #[test]
-fn large_ring_validates_quickly() {
-    // Comb-shaped simple polygon with ~19 800 vertices.
-    let teeth = 6_600;
-    let mut v: Vec<[f64; 2]> = Vec::new();
-    for t in 0..teeth {
-        let x = t as f64 * 20.0;
-        v.push([x, 0.0]);
-        v.push([x + 5.0, 100.0]);
-        v.push([x + 15.0, 100.0]);
-        v.push([x + 20.0, 0.0]);
+fn hole_flush_with_box_sides_still_intersects() {
+    // A: hole overlaps the box by 220x520 and has vertices exactly on the box boundary.
+    let f = box_at(260.0, 260.0);
+    let a = ring_of(&[[300.0, 0.0], [1000.0, 0.0], [1000.0, 520.0], [300.0, 520.0]]);
+    assert!(footprint_intersects_ring(&f, &a));
+    // B: triangle whose hypotenuse is the box diagonal.
+    let b = ring_of(&[[0.0, 0.0], [520.0, 0.0], [520.0, 520.0]]);
+    assert!(footprint_intersects_ring(&f, &b));
+    // D: rotated box, triangle through three of its corners.
+    let r = footprint(Vec2::ZERO, 520.0, 520.0, 45.0);
+    let c = r.corners;
+    let d = ring_of(&[[c[1].x, c[1].y], [c[2].x, c[2].y], [c[3].x, c[3].y]]);
+    assert!(footprint_intersects_ring(&r, &d));
+    // A hole merely sharing a side does not intersect.
+    let touching = ring_of(&[[520.0, 0.0], [1000.0, 0.0], [1000.0, 520.0], [520.0, 520.0]]);
+    assert!(!footprint_intersects_ring(&f, &touching));
+}
+
+#[test]
+fn slot_with_vertices_on_box_boundary_breaks_containment() {
+    // C: notch x 300..400 reaching y=520 cuts into the box; wall vertices sit at y=0 and y=520.
+    let ring = ring_of(&[
+        [-1000.0, -1000.0],
+        [300.0, -1000.0],
+        [300.0, 0.0],
+        [300.0, 520.0],
+        [400.0, 520.0],
+        [400.0, 0.0],
+        [400.0, -1000.0],
+        [2000.0, -1000.0],
+        [2000.0, 2000.0],
+        [-1000.0, 2000.0],
+    ]);
+    assert!(!ring_contains_footprint(&ring, &box_at(260.0, 260.0)));
+    assert!(ring_contains_footprint(&ring, &box_at(1000.0, 1000.0)));
+}
+
+#[test]
+fn l_and_u_shapes() {
+    let l = ring_of(&[[0.0, 0.0], [2000.0, 0.0], [2000.0, 1000.0], [1000.0, 1000.0], [1000.0, 2000.0], [0.0, 2000.0]]);
+    assert!(ring_contains_footprint(&l, &box_at(500.0, 1500.0)));
+    assert!(!ring_contains_footprint(&l, &box_at(1200.0, 1200.0)));
+    assert!(footprint_intersects_ring(&box_at(1200.0, 1200.0), &l));
+    let u = ring_of(&[
+        [0.0, 0.0],
+        [3000.0, 0.0],
+        [3000.0, 2000.0],
+        [2000.0, 2000.0],
+        [2000.0, 1000.0],
+        [1000.0, 1000.0],
+        [1000.0, 2000.0],
+        [0.0, 2000.0],
+    ]);
+    let bridge = footprint(Vec2::new(1500.0, 1500.0), 1200.0, 200.0, 0.0);
+    assert!(!ring_contains_footprint(&u, &bridge));
+    assert!(ring_contains_footprint(&u, &box_at(500.0, 500.0)));
+}
+
+#[test]
+fn skew_edge_and_rotated_box_flush_against_it() {
+    let tri = ring_of(&[[0.0, 0.0], [2000.0, 0.0], [0.0, 2000.0]]);
+    assert!(ring_contains_footprint(&tri, &box_at(500.0, 500.0)));
+    assert!(!ring_contains_footprint(&tri, &box_at(900.0, 900.0)));
+    // Box side lies exactly on the hypotenuse x + y = 2000.
+    let k = 260.0 / 2f64.sqrt();
+    let flush = footprint(Vec2::new(1000.0 - k, 1000.0 - k), 520.0, 520.0, -45.0);
+    assert!(ring_contains_footprint(&tri, &flush));
+    let out = footprint(Vec2::new(1001.0 - k, 1001.0 - k), 520.0, 520.0, -45.0);
+    assert!(!ring_contains_footprint(&tri, &out));
+}
+
+#[test]
+fn candidate_variants_match_full_scan() {
+    let ring = ring_of(&[[0.0, 0.0], [2000.0, 0.0], [2000.0, 1000.0], [1000.0, 1000.0], [1000.0, 2000.0], [0.0, 2000.0]]);
+    let idx = EdgeIndex::new(&[&ring], 300.0);
+    for (x, y) in [(500.0, 1500.0), (1200.0, 1200.0), (1000.0, 500.0), (5000.0, 5000.0), (1000.0, 1000.0)] {
+        let f = box_at(x, y);
+        let near: Vec<usize> = idx.query(cadcraft_geom::Bounds2::from_points(f.corners), 1.0).map(|(_, e)| e).collect();
+        assert_eq!(ring_contains_footprint_with(&ring, &f, near.iter().copied()), ring_contains_footprint(&ring, &f), "{x},{y}");
+        assert_eq!(footprint_intersects_ring_with(&f, &ring, near.iter().copied()), footprint_intersects_ring(&f, &ring), "{x},{y}");
     }
-    v.push([teeth as f64 * 20.0, -50.0]);
-    v.push([0.0, -50.0]);
-    v.dedup();
+    let f = box_at(500.0, 1500.0);
+    let (d, c) = distance_footprint_ring_edges_with(&f, &ring, [3usize]);
+    assert!((d - 240.0).abs() < 1e-9 && !c);
+    assert_eq!(distance_footprint_ring_edges_with(&f, &ring, std::iter::empty()).0, f64::INFINITY);
+}
+
+#[test]
+fn curved_flag_true_when_any_nearest_edge_is_curved() {
+    // Box corner touches the vertex between a straight and a curved edge: both at distance 0.
+    let i = RingInput { vertices: vec![[-1000.0, 0.0, 1.0], [1000.0, 0.0, 0.0]] };
+    let ring = ring_from_input(&i, 1.0, 0.5).unwrap();
+    let f = footprint(Vec2::new(1000.0 - 50.0, 50.0), 100.0, 100.0, 0.0);
+    let (d, curved) = distance_footprint_ring_edges(&f, &ring);
+    assert_eq!(d, 0.0);
+    assert!(curved);
+}
+
+fn comb(teeth: usize, height: f64) -> Vec<[f64; 2]> {
+    let mut v = Vec::new();
+    for t in 0..teeth {
+        let x = t as f64;
+        v.extend([[x, 0.0], [x, height], [x + 0.4, height], [x + 0.4, 0.0]]);
+    }
+    v.push([teeth as f64, -1.0]);
+    v.push([0.0, -1.0]);
+    v
+}
+
+#[test]
+fn adversarial_tall_comb_validates_quickly() {
+    // 19 602 vertices, every edge ~10 000 mm long and 1 mm apart: defeats a bucket grid sized by edge length.
+    let v = comb(4_900, 10_000.0);
     assert!(v.len() <= 20_000);
     let start = std::time::Instant::now();
     let r = ring_from_input(&input(&v), 1.0, 0.5).unwrap();
-    assert!(r.points.len() > 19_000);
-    assert!(start.elapsed().as_secs_f64() < 5.0, "{:?}", start.elapsed());
+    let secs = start.elapsed().as_secs_f64();
+    assert_eq!(r.points.len(), v.len());
+    let bound = if cfg!(debug_assertions) { 5.0 } else { 0.5 };
+    assert!(secs < bound, "{secs}");
+}
+
+#[test]
+fn adversarial_wide_comb_validates_quickly() {
+    // Same comb rotated 90 degrees so the long edges are horizontal.
+    let v: Vec<[f64; 2]> = comb(4_900, 10_000.0).into_iter().map(|p| [p[1], p[0]]).collect();
+    let start = std::time::Instant::now();
+    ring_from_input(&input(&v), 1.0, 0.5).unwrap();
+    let bound = if cfg!(debug_assertions) { 5.0 } else { 0.5 };
+    assert!(start.elapsed().as_secs_f64() < bound, "{:?}", start.elapsed());
+}
+
+#[test]
+fn comb_with_touching_tooth_is_rejected() {
+    let mut v = comb(50, 100.0);
+    // Pull one tooth wall onto its neighbour.
+    v[5][0] = 2.0;
+    v[6][0] = 2.0;
+    assert!(matches!(ring_from_input(&input(&v), 1.0, 0.5), Err(UbotError::Geometry(_))));
 }

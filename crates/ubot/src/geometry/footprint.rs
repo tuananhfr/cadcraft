@@ -1,4 +1,4 @@
-use cadcraft_geom::{Bounds2, Vec2, point_in_polygon};
+use cadcraft_geom::{Vec2, point_in_polygon, shoelace};
 
 use super::POINT_TOL_MM;
 use super::ring::Ring;
@@ -32,85 +32,103 @@ impl Footprint {
         }
     }
 
-    fn bounds(&self) -> Bounds2 {
-        Bounds2::from_points(self.corners)
-    }
-
     fn center(&self) -> Vec2 {
         self.corners[0].mid(self.corners[2])
     }
 }
 
-fn ring_edges(ring: &Ring) -> impl Iterator<Item = (usize, Vec2, Vec2)> + '_ {
-    (0..ring.edge_count()).filter_map(|i| ring.edge(i).map(|(a, b)| (i, a, b)))
+/// Candidate edges as endpoints; indices out of range are ignored.
+fn edges_of<'a>(ring: &'a Ring, edges: impl IntoIterator<Item = usize> + 'a) -> impl Iterator<Item = (usize, Vec2, Vec2)> + 'a {
+    edges.into_iter().filter_map(move |i| ring.edge(i).map(|(a, b)| (i, a, b)))
 }
 
-fn distance_to_boundary(poly: &[Vec2], p: Vec2) -> f64 {
-    let n = poly.len();
-    (0..n)
-        .filter_map(|i| Some((*poly.get(i)?, *poly.get((i + 1) % n)?)))
-        .map(|(a, b)| segment::dist_to_segment(a, b, p))
-        .fold(f64::INFINITY, f64::min)
+/// True when segment c-d passes through the open interior of the footprint, shrunk inward by `POINT_TOL_MM`.
+/// Liang-Barsky against the four half-planes; exact for the convex box, so edges lying on or touching the boundary are not "entering".
+fn edge_enters_interior(fp: &Footprint, c: Vec2, d: Vec2) -> bool {
+    if shoelace(&fp.corners) <= 0.0 {
+        return false;
+    }
+    let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
+    for k in 0..4 {
+        let (a, b) = fp.edge(k);
+        let len = a.dist(b);
+        if len <= POINT_TOL_MM {
+            return false;
+        }
+        let side = |p: Vec2| (b - a).cross(p - a) / len - POINT_TOL_MM;
+        let (sc, sd) = (side(c), side(d));
+        let den = sd - sc;
+        if den.abs() <= 1e-12 {
+            if sc <= 0.0 {
+                return false;
+            }
+        } else if den > 0.0 {
+            t0 = t0.max(-sc / den);
+        } else {
+            t1 = t1.min(-sc / den);
+        }
+        if t0 >= t1 {
+            return false;
+        }
+    }
+    true
 }
 
-fn strictly_inside(poly: &[Vec2], p: Vec2) -> bool {
-    point_in_polygon(poly, p) && distance_to_boundary(poly, p) > POINT_TOL_MM
+fn any_edge_enters(fp: &Footprint, ring: &Ring, edges: impl IntoIterator<Item = usize>) -> bool {
+    edges_of(ring, edges).any(|(_, c, d)| edge_enters_interior(fp, c, d))
 }
 
-fn inside_or_on(poly: &[Vec2], p: Vec2) -> bool {
-    point_in_polygon(poly, p) || distance_to_boundary(poly, p) <= POINT_TOL_MM
+/// Without a ring edge through the box interior the interior is wholly inside or outside the ring, so the centre decides.
+fn center_inside(fp: &Footprint, ring: &Ring) -> bool {
+    point_in_polygon(&ring.points, fp.center())
 }
 
-fn crosses_ring(fp: &Footprint, ring: &Ring) -> bool {
-    let fb = fp.bounds().expand(POINT_TOL_MM);
-    ring_edges(ring).filter(|(_, c, d)| fb.intersects(&Bounds2::from_points([*c, *d]))).any(|(_, c, d)| {
-        (0..4).any(|k| {
-            let (a, b) = fp.edge(k);
-            segment::cross_properly(a, b, c, d)
-        })
-    })
-}
-
-fn ring_vertex_strictly_inside_footprint(fp: &Footprint, ring: &Ring) -> bool {
-    let fb = fp.bounds();
-    ring.points.iter().any(|v| fb.contains(*v) && strictly_inside(&fp.corners, *v))
+fn all_edges(ring: &Ring) -> std::ops::Range<usize> {
+    0..ring.edge_count()
 }
 
 /// True when the footprint lies wholly inside the ring; touching the boundary is allowed.
 pub fn ring_contains_footprint(ring: &Ring, fp: &Footprint) -> bool {
-    if !fp.is_finite() || ring.edge_count() < 3 {
-        return false;
-    }
-    let pts = &ring.points;
-    let inside = (0..4).all(|k| {
-        let (a, b) = fp.edge(k);
-        inside_or_on(pts, a) && inside_or_on(pts, a.mid(b))
-    });
-    inside && !crosses_ring(fp, ring) && !ring_vertex_strictly_inside_footprint(fp, ring)
+    ring_contains_footprint_with(ring, fp, all_edges(ring))
 }
 
-/// True when the footprint overlaps the ring's interior or crosses its boundary; mere touching is not overlap.
+/// Like [`ring_contains_footprint`] but only `edges` (ring edge indices, e.g. from `EdgeIndex::query` on the footprint bounds
+/// with margin >= 1e-6 mm) are tested. With no candidate edge the centre point alone decides.
+pub fn ring_contains_footprint_with(ring: &Ring, fp: &Footprint, edges: impl IntoIterator<Item = usize>) -> bool {
+    fp.is_finite() && ring.edge_count() >= 3 && !any_edge_enters(fp, ring, edges) && center_inside(fp, ring)
+}
+
+/// True when the footprint overlaps the ring region (including lying inside it) or a ring edge crosses it; mere touching is not overlap.
 pub fn footprint_intersects_ring(fp: &Footprint, ring: &Ring) -> bool {
-    if !fp.is_finite() || ring.edge_count() < 3 {
-        return false;
-    }
-    let pts = &ring.points;
-    crosses_ring(fp, ring)
-        || fp.corners.iter().any(|c| strictly_inside(pts, *c))
-        || strictly_inside(pts, fp.center())
-        || ring_vertex_strictly_inside_footprint(fp, ring)
+    footprint_intersects_ring_with(fp, ring, all_edges(ring))
 }
 
-/// Minimum distance from the footprint boundary to the ring's edges (0 on contact) and whether the nearest edge is an arc.
+/// Candidate-edge variant of [`footprint_intersects_ring`]; with no candidate edge the centre point alone decides.
+pub fn footprint_intersects_ring_with(fp: &Footprint, ring: &Ring, edges: impl IntoIterator<Item = usize>) -> bool {
+    fp.is_finite() && ring.edge_count() >= 3 && (any_edge_enters(fp, ring, edges) || center_inside(fp, ring))
+}
+
+/// Minimum distance between the footprint boundary and the ring's edges, and whether any nearest edge is an arc.
+/// It is 0 when the boundaries touch or cross and positive when one lies wholly inside the other, so combine with
+/// `footprint_intersects_ring` / `ring_contains_footprint` for containment.
 pub fn distance_footprint_ring_edges(fp: &Footprint, ring: &Ring) -> (f64, bool) {
+    distance_footprint_ring_edges_with(fp, ring, all_edges(ring))
+}
+
+/// Candidate-edge variant of [`distance_footprint_ring_edges`]; `(INFINITY, false)` when there is no candidate edge.
+pub fn distance_footprint_ring_edges_with(fp: &Footprint, ring: &Ring, edges: impl IntoIterator<Item = usize>) -> (f64, bool) {
     if !fp.is_finite() {
         return (f64::INFINITY, false);
     }
+    const TIE_MM: f64 = 1e-9;
     let mut best = (f64::INFINITY, false);
-    for (i, c, d) in ring_edges(ring) {
+    for (i, c, d) in edges_of(ring, edges) {
         let dist = (0..4).map(|k| fp.edge(k)).map(|(a, b)| segment::distance(a, b, c, d)).fold(f64::INFINITY, f64::min);
-        if dist < best.0 {
-            best = (dist, ring.curved.get(i).copied().unwrap_or(false));
+        let curved = ring.curved.get(i).copied().unwrap_or(false);
+        if dist < best.0 - TIE_MM {
+            best = (dist, curved);
+        } else if dist <= best.0 + TIE_MM {
+            best = (best.0.min(dist), best.1 || curved);
         }
     }
     best

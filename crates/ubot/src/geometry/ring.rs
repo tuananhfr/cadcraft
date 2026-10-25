@@ -1,7 +1,6 @@
 use cadcraft_geom::{Bounds2, Vec2, point_in_polygon, shoelace};
 use serde::{Deserialize, Serialize};
 
-use super::index::EdgeIndex;
 use super::tessellate::tessellate;
 use super::{MAX_RING_VERTICES, POINT_TOL_MM, segment};
 use crate::UbotError;
@@ -87,25 +86,57 @@ fn reverse_ccw(points: &mut [Vec2], curved: &mut [bool]) {
     }
 }
 
+struct SweepEdge {
+    idx: usize,
+    lo: f64,
+    hi: f64,
+    other_lo: f64,
+    other_hi: f64,
+}
+
+/// Plane sweep over edge extents, along the axis where edges are shortest so the active set stays small.
 fn check_simple(ring: &Ring) -> Result<(), UbotError> {
     let n = ring.points.len();
-    let idx = EdgeIndex::new(&[ring], typical_edge_len(ring));
+    let mut edges: Vec<SweepEdge> = Vec::with_capacity(n);
+    let (mut load_x, mut load_y) = (0.0, 0.0);
     for i in 0..n {
         let Some((a, b)) = ring.edge(i) else { continue };
-        for (_, j) in idx.query(Bounds2::from_points([a, b]), 0.0) {
-            if j <= i {
+        load_x += (a.x - b.x).abs();
+        load_y += (a.y - b.y).abs();
+    }
+    let along_x = load_x <= load_y;
+    for i in 0..n {
+        let Some((a, b)) = ring.edge(i) else { continue };
+        let (pa, pb, qa, qb) = if along_x { (a.x, b.x, a.y, b.y) } else { (a.y, b.y, a.x, b.x) };
+        edges.push(SweepEdge { idx: i, lo: pa.min(pb), hi: pa.max(pb), other_lo: qa.min(qb), other_hi: qa.max(qb) });
+    }
+    edges.sort_by(|x, y| x.lo.total_cmp(&y.lo).then(x.idx.cmp(&y.idx)));
+    let mut active: Vec<usize> = Vec::new();
+    for pos in 0..edges.len() {
+        let Some(cur) = edges.get(pos) else { continue };
+        active.retain(|&k| edges.get(k).is_some_and(|e| e.hi >= cur.lo - POINT_TOL_MM));
+        for &k in &active {
+            let Some(other) = edges.get(k) else { continue };
+            if other.other_lo > cur.other_hi + POINT_TOL_MM || other.other_hi < cur.other_lo - POINT_TOL_MM {
                 continue;
             }
-            let Some((c, d)) = ring.edge(j) else { continue };
-            let next = j == i + 1;
-            if next || (i == 0 && j == n - 1) {
-                if adjacent_fold_back(a, b, c, d, next) {
-                    return Err(UbotError::Geometry(format!("ring edge {j} folds back onto edge {i}")));
-                }
-            } else if segment::touch(a, b, c, d) {
-                return Err(UbotError::Geometry(format!("ring edges {i} and {j} intersect")));
-            }
+            check_pair(ring, other.idx.min(cur.idx), other.idx.max(cur.idx))?;
         }
+        active.push(pos);
+    }
+    Ok(())
+}
+
+fn check_pair(ring: &Ring, i: usize, j: usize) -> Result<(), UbotError> {
+    let n = ring.points.len();
+    let (Some((a, b)), Some((c, d))) = (ring.edge(i), ring.edge(j)) else { return Ok(()) };
+    let next = j == i + 1;
+    if next || (i == 0 && j == n - 1) {
+        if adjacent_fold_back(a, b, c, d, next) {
+            return Err(UbotError::Geometry(format!("ring edge {j} folds back onto edge {i}")));
+        }
+    } else if segment::touch(a, b, c, d) {
+        return Err(UbotError::Geometry(format!("ring edges {i} and {j} intersect")));
     }
     Ok(())
 }
@@ -115,14 +146,4 @@ fn adjacent_fold_back(a: Vec2, b: Vec2, c: Vec2, d: Vec2, next: bool) -> bool {
     // next: edges a→b and b→d share b. Otherwise the closing edge c→d ends where a→b starts.
     let (shared, far1, far2) = if next { (b, a, d) } else { (a, b, c) };
     segment::dist_to_segment(shared, far1, far2) <= POINT_TOL_MM || segment::dist_to_segment(shared, far2, far1) <= POINT_TOL_MM
-}
-
-fn typical_edge_len(ring: &Ring) -> f64 {
-    let mut lens: Vec<f64> = (0..ring.edge_count()).filter_map(|i| ring.edge(i)).map(|(a, b)| a.dist(b)).collect();
-    if lens.is_empty() {
-        return 1.0;
-    }
-    let mid = lens.len() / 2;
-    let (_, median, _) = lens.select_nth_unstable_by(mid, |x, y| x.total_cmp(y));
-    (*median * 2.0).max(1e-3)
 }
