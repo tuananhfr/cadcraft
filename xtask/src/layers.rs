@@ -50,6 +50,7 @@ pub const TABLE: &[(&str, Class)] = &[
     // apps and tooling
     ("cadcraft", Class::Exempt),
     ("cli", Class::Exempt),
+    ("ubot-core", Class::Exempt),
     ("web", Class::Exempt),
     ("xtask", Class::Exempt),
 ];
@@ -308,7 +309,7 @@ mod tests {
 
     #[test]
     fn apps_and_xtask_exempt() {
-        for app in ["cadcraft", "cadcraft-cli", "cadcraft-web", "xtask"] {
+        for app in ["cadcraft", "cadcraft-cli", "cadcraft-web", "ubot-core", "xtask"] {
             assert!(check(&[c(app, &[("egui", Normal, false), ("cadcraft-ui-egui", Normal, true)])]).is_empty());
         }
     }

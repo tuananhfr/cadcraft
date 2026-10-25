@@ -10,6 +10,7 @@ mod geometry;
 mod hash;
 mod model;
 mod placement;
+mod protocol;
 mod quantity;
 mod replace;
 
@@ -27,5 +28,6 @@ pub use geometry::{
 pub use hash::input_hash;
 pub use model::{Anchor, ApprovalStatus, BlockMapping, Product, RulePack};
 pub use placement::{center_from_insert, insert_from_center, relative_scale};
+pub use protocol::{MAX_INPUT_BYTES, handle_json, handle_json_status};
 pub use quantity::{CountItem, CountRow, CountSource, Counts, count, count_in};
 pub use replace::{ReplaceChange, ReplaceRequest, ReplaceResult, replace};
