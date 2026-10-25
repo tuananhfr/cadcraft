@@ -74,7 +74,8 @@ fn edge_enters_interior(fp: &Footprint, c: Vec2, d: Vec2) -> bool {
     true
 }
 
-fn any_edge_enters(fp: &Footprint, ring: &Ring, edges: impl IntoIterator<Item = usize>) -> bool {
+/// True when any of `edges` passes through the footprint interior; lets callers that know the centre side skip the centre test.
+pub(crate) fn any_edge_enters(fp: &Footprint, ring: &Ring, edges: impl IntoIterator<Item = usize>) -> bool {
     edges_of(ring, edges).any(|(_, c, d)| edge_enters_interior(fp, c, d))
 }
 

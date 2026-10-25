@@ -6,6 +6,7 @@ mod ring;
 mod segment;
 mod tessellate;
 
+pub(crate) use footprint::any_edge_enters;
 pub use footprint::{
     Footprint, distance_footprint_ring_edges, distance_footprint_ring_edges_with, footprint, footprint_intersects_ring,
     footprint_intersects_ring_with, ring_contains_footprint, ring_contains_footprint_with,
