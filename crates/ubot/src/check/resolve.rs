@@ -9,7 +9,7 @@ use crate::catalog::Catalog;
 use crate::error::UbotError;
 use crate::geometry::{Footprint, footprint};
 use crate::model::{BlockMapping, Product};
-use crate::placement::{center_from_insert, relative_scale};
+use crate::placement::{center_from_insert_xy, relative_scale};
 
 pub(super) struct Geom {
     pub fp: Footprint,
@@ -65,7 +65,8 @@ pub(super) fn resolve<'a>(
     if !(b.insert.iter().all(|c| c.is_finite()) && b.rotation_deg.is_finite()) {
         return Err(bad(inst, "insert and rotation must be finite"));
     }
-    if !(b.scale.is_finite() && b.scale != 0.0) {
+    let scale_y = b.scale_y.unwrap_or(b.scale);
+    if !(b.scale.is_finite() && b.scale != 0.0 && scale_y.is_finite() && scale_y != 0.0) {
         return Err(bad(inst, "scale must be finite and non-zero"));
     }
     let mapping = lookup.mapping(&b.block_name);
@@ -81,7 +82,9 @@ pub(super) fn resolve<'a>(
         }
     };
     let insert_mm = Vec2::new(b.insert[0], b.insert[1]) * unit_scale;
-    let center_mm = center_from_insert(mapping, size.map_or(0.0, |s| s.y), insert_mm, b.rotation_deg, relative_scale(mapping, b.scale, unit_scale));
+    // Per-axis signed scales: a mirrored box flips its anchor offset with it.
+    let rel = [relative_scale(mapping, b.scale, unit_scale), relative_scale(mapping, scale_y, unit_scale)];
+    let center_mm = center_from_insert_xy(mapping, size.map_or(0.0, |s| s.y), insert_mm, b.rotation_deg, rel);
     let angle_deg = b.rotation_deg - mapping.map_or(0.0, |m| m.rotation_offset_deg);
     if !(center_mm.is_finite() && angle_deg.is_finite()) {
         return Err(bad(inst, "position overflows in mm"));

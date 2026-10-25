@@ -4587,3 +4587,23 @@ echo	No block named {block}.	Không có khối tên {block}.
 echo	{handle}: non-uniform scale {x} x {y} with an anchor offset: the box centre is ambiguous	{handle}: tỉ lệ không đều {x} x {y} khi điểm chèn lệch tâm: không xác định được tâm hộp
 echo	{handle}: block {block} is {from} mm per block unit, {to} is {to_units}; with the INSERT scale kept the box would change size	{handle}: khối {block} là {from} mm mỗi đơn vị khối, {to} là {to_units}; giữ nguyên tỉ lệ INSERT thì hộp sẽ đổi kích thước
 	box size changed: run UBCHECK to re-check cells	kích thước hộp đã đổi: chạy UBCHECK để kiểm tra lại các ô
+# U-BOT toolkit: UBCOUNT, UBLEGEND, UBCHECK and their messages
+	U-BOT Count	Đếm hộp U-BOT
+	Count Boxes	Đếm hộp
+	U-BOT Legend	Bảng thống kê U-BOT
+	Box Legend	Bảng thống kê hộp
+	U-BOT Check	Kiểm tra U-BOT
+	Check Drawing	Kiểm tra bản vẽ
+	Insertion point	Điểm chèn
+	`boundary` must be an object handle (a hex string such as "1A2")	`boundary` phải là mã đối tượng (chuỗi hệ mười sáu như "1A2")
+echo	{name}: {total} (tagged {tagged}, legacy {legacy})	{name}: {total} (đã gán {tagged}, cũ {legacy})
+	UBCOUNT: no U-BOT boxes.	UBCOUNT: không có hộp U-BOT nào.
+echo	UBCOUNT: {count} boxes.	UBCOUNT: {count} hộp.
+echo	the boxes expand to more than {max} block references	các hộp bung ra quá {max} tham chiếu khối
+echo	`textHeight` must be at most {max}	`textHeight` tối đa là {max}
+	no U-BOT boxes to count	không có hộp U-BOT nào để đếm
+echo	{count} box types are too many for one table (at most {max})	{count} loại hộp là quá nhiều cho một bảng (tối đa {max})
+echo	UBLEGEND: table of {rows} box types, {total} boxes.	UBLEGEND: bảng {rows} loại hộp, {total} hộp.
+echo	{code} {handle} at {x},{y}: {message}	{code} {handle} tại {x},{y}: {message}
+	UBCHECK: no issues.	UBCHECK: không có vấn đề nào.
+echo	UBCHECK: {count} issues: {errors} errors, {warnings} warnings, {info} info.	UBCHECK: {count} vấn đề: {errors} lỗi, {warnings} cảnh báo, {info} thông tin.

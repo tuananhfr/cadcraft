@@ -12,7 +12,7 @@ use crate::catalog::Catalog;
 use crate::error::UbotError;
 use crate::geometry::{Footprint, Ring, footprint};
 use crate::model::{BlockMapping, Product};
-use crate::placement::{center_from_insert, insert_from_center, relative_scale};
+use crate::placement::{center_from_insert_xy, insert_from_center, relative_scale};
 
 /// Existing boxes per run (spec §6).
 pub(super) const MAX_EXISTING: usize = 100_000;
@@ -98,7 +98,8 @@ pub(super) fn split_existing<'e>(
         if !(e.insert.iter().all(|c| c.is_finite()) && e.rotation_deg.is_finite()) {
             return Err(bad_existing(e, "insert and rotation must be finite"));
         }
-        if !(e.scale.is_finite() && e.scale != 0.0) {
+        let scale_y = e.scale_y.unwrap_or(e.scale);
+        if !(e.scale.is_finite() && e.scale != 0.0 && scale_y.is_finite() && scale_y != 0.0) {
             return Err(bad_existing(e, "scale must be finite and non-zero"));
         }
         let mapping = *blocks.entry(e.block_name.to_ascii_lowercase()).or_insert_with(|| catalog.mapping_for_block(&e.block_name));
@@ -108,7 +109,9 @@ pub(super) fn split_existing<'e>(
             None => main.size(),
         };
         let insert_mm = Vec2::new(e.insert[0], e.insert[1]) * unit_scale;
-        let center_mm = center_from_insert(mapping, size.y, insert_mm, e.rotation_deg, relative_scale(mapping, e.scale, unit_scale));
+        // Per-axis signed scales: a mirrored box flips its anchor offset with it.
+        let rel = [relative_scale(mapping, e.scale, unit_scale), relative_scale(mapping, scale_y, unit_scale)];
+        let center_mm = center_from_insert_xy(mapping, size.y, insert_mm, e.rotation_deg, rel);
         let angle_deg = e.rotation_deg - mapping.map_or(0.0, |m| m.rotation_offset_deg);
         if !(center_mm.is_finite() && angle_deg.is_finite()) {
             return Err(bad_existing(e, "position overflows in mm"));

@@ -396,7 +396,10 @@ transparencydisplay
 trim
 tubab
 u
+ubcheck
+ubcount
 ubfill
+ublegend
 ublib
 ubplot
 ubplot.approve

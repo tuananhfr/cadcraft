@@ -41,6 +41,7 @@ pub struct ReplaceChange {
     /// Uniform INSERT scale that draws the block at true size: mm per block unit over mm per drawing unit.
     pub scale: f64,
     /// The INSERT X and Y scales to write: `scale` with the target's mirror signs.
+    #[serde(default)]
     pub scale_xy: [f64; 2],
     /// The drawn footprint changes size (another product, or a box that was not drawn at true size).
     #[serde(default)]

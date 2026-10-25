@@ -4000,3 +4000,23 @@ echo	No block named {block}.	Немає блока з іменем {block}.
 echo	{handle}: non-uniform scale {x} x {y} with an anchor offset: the box centre is ambiguous	{handle}: нерівномірний масштаб {x} x {y} зі зміщеною точкою вставки: центр короба неоднозначний
 echo	{handle}: block {block} is {from} mm per block unit, {to} is {to_units}; with the INSERT scale kept the box would change size	{handle}: блок {block} має {from} мм на одиницю блока, {to} має {to_units}; зі збереженим масштабом INSERT короб змінить розмір
 	box size changed: run UBCHECK to re-check cells	розмір короба змінено: запустіть UBCHECK, щоб перевірити комірки
+# U-BOT toolkit: UBCOUNT, UBLEGEND, UBCHECK and their messages
+	U-BOT Count	Підрахунок U-BOT
+	Count Boxes	Підрахувати бокси
+	U-BOT Legend	Відомість U-BOT
+	Box Legend	Відомість боксів
+	U-BOT Check	Перевірка U-BOT
+	Check Drawing	Перевірити креслення
+	Insertion point	Точка вставлення
+	`boundary` must be an object handle (a hex string such as "1A2")	`boundary` має бути ідентифікатором об’єкта (шістнадцятковим рядком на кшталт "1A2")
+echo	{name}: {total} (tagged {tagged}, legacy {legacy})	{name}: {total} (з тегом {tagged}, старих {legacy})
+	UBCOUNT: no U-BOT boxes.	UBCOUNT: боксів U-BOT немає.
+echo	UBCOUNT: {count} boxes.	UBCOUNT: боксів: {count}.
+echo	the boxes expand to more than {max} block references	бокси розгортаються більш ніж у {max} посилань на блоки
+echo	`textHeight` must be at most {max}	`textHeight` має бути не більше {max}
+	no U-BOT boxes to count	немає боксів U-BOT для підрахунку
+echo	{count} box types are too many for one table (at most {max})	{count} типів боксів забагато для однієї таблиці (не більше {max})
+echo	UBLEGEND: table of {rows} box types, {total} boxes.	UBLEGEND: таблиця з {rows} типів боксів, боксів: {total}.
+echo	{code} {handle} at {x},{y}: {message}	{code} {handle} у точці {x},{y}: {message}
+	UBCHECK: no issues.	UBCHECK: проблем немає.
+echo	UBCHECK: {count} issues: {errors} errors, {warnings} warnings, {info} info.	UBCHECK: проблем: {count}; помилок: {errors}, попереджень: {warnings}, відомостей: {info}.

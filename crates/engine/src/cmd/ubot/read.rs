@@ -1,9 +1,11 @@
 //! Drawing → core requests: rings, tagged zones, boxes already placed and count items, all from model space.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::rc::Rc;
 
-use cadcraft_doc::{Common, Drawing, Entity, EntityKind, Handle, Insert};
-use cadcraft_ubot::{Catalog, CountItem, CountSource, ExistingInstance, RingInput, ZoneInput};
+use cadcraft_doc::{Common, Drawing, Entity, EntityKind, Handle, Insert, entity_bounds};
+use cadcraft_geom::{Bounds2, Mat3, Vec2};
+use cadcraft_ubot::{Catalog, CountItem, CountSource, ExistingInstance, RingInput, ZoneInput, center_from_insert_xy, relative_scale};
 
 use super::xdata::{self, UbotTag};
 
@@ -131,43 +133,173 @@ pub fn existing_instances(drawing: &Drawing, catalog: &Catalog) -> Vec<ExistingI
         .collect()
 }
 
+/// References expanded while locating boxes (MINSERT cells and nested copies one by one); past it the walk stops.
+pub const MAX_LOCATE_WORK: usize = 2_000_000;
+
 /// Box references to count: tagged, mapped or generated-block references are items (MINSERT cells multiply); any
 /// other reference is a cluster whose boxes are counted through it, never itself.
 pub fn count_items(drawing: &Drawing, catalog: &Catalog) -> Vec<CountItem> {
-    let mut walker = Walker { drawing, catalog, generated: generated_blocks(catalog), memo: HashMap::new(), visiting: HashSet::new() };
-    let mut out = Vec::new();
-    for e in drawing.model.iter() {
-        let EntityKind::Insert(ins) = &e.kind else { continue };
-        let cells = cells(ins);
-        match walker.item_of(e, ins) {
-            Some(mut item) => {
-                item.multiplier = item.multiplier.saturating_mul(cells);
-                out.push(item);
-            }
-            None => {
-                for item in walker.block_items(&ins.block, 1) {
-                    out.push(CountItem { multiplier: item.multiplier.saturating_mul(cells), ..item });
-                }
-            }
-        }
+    let mut walker = Walker::new(drawing, catalog);
+    let totals: Totals = walker.contents(drawing.model.iter().map(|e| e.as_ref()), 0);
+    totals.into_items()
+}
+
+/// [`count_items`] one box cell at a time with its footprint centre in drawing units, for counting inside a slab
+/// boundary (spec §14.3). `Err` when the drawing expands to more than [`MAX_LOCATE_WORK`] references.
+pub fn count_items_at(drawing: &Drawing, catalog: &Catalog) -> Result<Vec<(CountItem, [f64; 2])>, String> {
+    let mut walker = Walker::new(drawing, catalog);
+    let located: Located = walker.contents(drawing.model.iter().map(|e| e.as_ref()), 0);
+    if located.overflow {
+        return Err(format!("the boxes expand to more than {MAX_LOCATE_WORK} block references"));
     }
-    out
+    Ok(located.items.into_iter().map(|(item, c)| ((*item).clone(), [c.x, c.y])).collect())
 }
 
 fn cells(ins: &Insert) -> u64 {
     u64::from(ins.cols.max(1)).saturating_mul(u64::from(ins.rows.max(1)))
 }
 
-struct Walker<'a> {
+/// The cells of one reference; MINSERT copies are offset along its rotated columns and rows, unscaled (as drawn).
+struct Cells<'a> {
+    ins: &'a Insert,
+    base: Vec2,
+}
+
+impl Cells<'_> {
+    fn count(&self) -> u64 {
+        cells(self.ins)
+    }
+
+    fn transforms(&self) -> impl Iterator<Item = Mat3> + '_ {
+        let (ins, m) = (self.ins, self.ins.transform(self.base));
+        (0..ins.rows.max(1)).flat_map(move |r| {
+            (0..ins.cols.max(1)).map(move |c| {
+                let off = Vec2::new(ins.col_spacing * f64::from(c), ins.row_spacing * f64::from(r)).rotate(ins.rotation);
+                Mat3::translate(off).then_before(m)
+            })
+        })
+    }
+}
+
+/// What the references of one space or block add up to, in its coordinates.
+trait Contents: Default {
+    /// Box centres are wanted (a box of unknown size costs one extents pass over its block).
+    const LOCATED: bool;
+    /// A box reference: `item` stands for one cell, `centre` is the footprint centre in the box block's coordinates.
+    fn add_box(&mut self, item: CountItem, cells: &Cells<'_>, centre: Vec2, budget: &mut usize);
+    /// A cluster reference whose block holds `inner`.
+    fn add_cluster(&mut self, inner: &Self, cells: &Cells<'_>, budget: &mut usize);
+}
+
+/// Boxes summed per (product, block, legacy).
+#[derive(Default)]
+struct Totals(BTreeMap<(Option<String>, String, bool), u64>);
+
+impl Totals {
+    fn add(&mut self, key: (Option<String>, String, bool), n: u64) {
+        let slot = self.0.entry(key).or_insert(0);
+        *slot = slot.saturating_add(n);
+    }
+
+    fn into_items(self) -> Vec<CountItem> {
+        self.0
+            .into_iter()
+            .map(|((product_id, block_name, legacy), multiplier)| CountItem {
+                product_id,
+                block_name,
+                multiplier,
+                source: if legacy { CountSource::Legacy } else { CountSource::Tagged },
+            })
+            .collect()
+    }
+}
+
+impl Contents for Totals {
+    const LOCATED: bool = false;
+
+    fn add_box(&mut self, item: CountItem, cells: &Cells<'_>, _centre: Vec2, _budget: &mut usize) {
+        let n = item.multiplier.saturating_mul(cells.count());
+        self.add((item.product_id, item.block_name, item.source == CountSource::Legacy), n);
+    }
+
+    fn add_cluster(&mut self, inner: &Self, cells: &Cells<'_>, _budget: &mut usize) {
+        let k = cells.count();
+        for (key, n) in &inner.0 {
+            self.add(key.clone(), n.saturating_mul(k));
+        }
+    }
+}
+
+/// Every box cell with its centre; `overflow` once the walk ran out of budget.
+#[derive(Default)]
+struct Located {
+    items: Vec<(Rc<CountItem>, Vec2)>,
+    overflow: bool,
+}
+
+impl Located {
+    fn spend(&mut self, n: u64, budget: &mut usize) -> bool {
+        match usize::try_from(n) {
+            Ok(n) if !self.overflow && n <= *budget => {
+                *budget -= n;
+                true
+            }
+            _ => {
+                self.overflow = true;
+                false
+            }
+        }
+    }
+}
+
+impl Contents for Located {
+    const LOCATED: bool = true;
+
+    fn add_box(&mut self, item: CountItem, cells: &Cells<'_>, centre: Vec2, budget: &mut usize) {
+        if !self.spend(cells.count(), budget) {
+            return;
+        }
+        let item = Rc::new(item);
+        self.items.extend(cells.transforms().map(|m| (Rc::clone(&item), m.apply(centre))));
+    }
+
+    fn add_cluster(&mut self, inner: &Self, cells: &Cells<'_>, budget: &mut usize) {
+        self.overflow |= inner.overflow;
+        let n = u64::try_from(inner.items.len()).unwrap_or(u64::MAX).saturating_mul(cells.count());
+        if !self.spend(n, budget) {
+            return;
+        }
+        for m in cells.transforms() {
+            self.items.extend(inner.items.iter().map(|(item, c)| (Rc::clone(item), m.apply(*c))));
+        }
+    }
+}
+
+struct Walker<'a, C> {
     drawing: &'a Drawing,
     catalog: &'a Catalog,
     generated: HashMap<String, String>,
-    /// Boxes in one reference of a block, by upper-case block name; each block is walked once.
-    memo: HashMap<String, Vec<CountItem>>,
+    /// Contents of one reference of a block, by upper-case block name; each block is walked once.
+    memo: HashMap<String, Rc<C>>,
     visiting: HashSet<String>,
+    /// Extents centres of box blocks, by upper-case block name.
+    extents: HashMap<String, Option<Vec2>>,
+    budget: usize,
 }
 
-impl Walker<'_> {
+impl<'a, C: Contents> Walker<'a, C> {
+    fn new(drawing: &'a Drawing, catalog: &'a Catalog) -> Self {
+        Walker {
+            drawing,
+            catalog,
+            generated: generated_blocks(catalog),
+            memo: HashMap::new(),
+            visiting: HashSet::new(),
+            extents: HashMap::new(),
+            budget: MAX_LOCATE_WORK,
+        }
+    }
+
     /// The reference as a box (multiplier for one cell), or `None` when it is not a box.
     fn item_of(&self, e: &Entity, ins: &Insert) -> Option<CountItem> {
         if let Some(Ok(UbotTag::Instance { product_id, count_multiplier, .. })) = xdata::read(&e.common) {
@@ -178,45 +310,74 @@ impl Walker<'_> {
         Some(CountItem { product_id, block_name: ins.block.clone(), multiplier: 1, source: CountSource::Legacy })
     }
 
-    fn block_items(&mut self, name: &str, depth: usize) -> Vec<CountItem> {
-        let Some(block) = self.drawing.block(name) else { return Vec::new() };
-        let key = block.name.to_ascii_uppercase();
-        if let Some(items) = self.memo.get(&key) {
-            return items.clone();
-        }
-        // A cycle or a nesting past the limit contributes nothing (a hostile file); the walk stays finite.
-        if depth > MAX_COUNT_DEPTH || !self.visiting.insert(key.clone()) {
-            return Vec::new();
-        }
-        let block = block.clone();
-        let mut sum: BTreeMap<(Option<String>, String, bool), u64> = BTreeMap::new();
-        let mut add = |item: CountItem, by: u64| {
-            let slot = sum.entry((item.product_id, item.block_name, item.source == CountSource::Legacy)).or_insert(0);
-            *slot = slot.saturating_add(item.multiplier.saturating_mul(by));
-        };
-        for e in block.entities.iter() {
+    fn contents<'e>(&mut self, entities: impl Iterator<Item = &'e Entity>, depth: usize) -> C {
+        let mut out = C::default();
+        for e in entities {
             let EntityKind::Insert(ins) = &e.kind else { continue };
-            let cells = cells(ins);
+            let base = self.drawing.block(&ins.block).map_or(Vec2::ZERO, |b| b.base.xy());
+            let cells = Cells { ins, base };
             match self.item_of(e, ins) {
-                Some(item) => add(item, cells),
+                Some(item) => {
+                    let centre = if C::LOCATED { self.box_centre(&item, ins, base) } else { base };
+                    out.add_box(item, &cells, centre, &mut self.budget);
+                }
                 None => {
-                    for item in self.block_items(&ins.block, depth + 1) {
-                        add(item, cells);
-                    }
+                    let inner = self.block_contents(&ins.block, depth + 1);
+                    out.add_cluster(&inner, &cells, &mut self.budget);
                 }
             }
         }
+        out
+    }
+
+    fn block_contents(&mut self, name: &str, depth: usize) -> Rc<C> {
+        let d = self.drawing;
+        let Some(block) = d.block(name) else { return Rc::default() };
+        let key = block.name.to_ascii_uppercase();
+        if let Some(c) = self.memo.get(&key) {
+            return Rc::clone(c);
+        }
+        // A cycle or a nesting past the limit contributes nothing (a hostile file); the walk stays finite.
+        if depth > MAX_COUNT_DEPTH || !self.visiting.insert(key.clone()) {
+            return Rc::default();
+        }
+        let c = Rc::new(self.contents(block.entities.iter().map(|e| e.as_ref()), depth));
         self.visiting.remove(&key);
-        let items: Vec<CountItem> = sum
-            .into_iter()
-            .map(|((product_id, block_name, legacy), multiplier)| CountItem {
-                product_id,
-                block_name,
-                multiplier,
-                source: if legacy { CountSource::Legacy } else { CountSource::Tagged },
-            })
-            .collect();
-        self.memo.insert(key, items.clone());
-        items
+        self.memo.insert(key, Rc::clone(&c));
+        c
+    }
+
+    /// The footprint centre in the box block's coordinates: through the catalog anchor when the box size is known,
+    /// as the core places boxes, else the centre of the block's extents.
+    fn box_centre(&mut self, item: &CountItem, ins: &Insert, base: Vec2) -> Vec2 {
+        let catalog = self.catalog;
+        let mapping = catalog.mapping_for_block(&ins.block);
+        let product = match item.product_id.as_deref() {
+            Some(id) => catalog.product(id),
+            None => mapping.and_then(|m| m.product_id.as_deref()).and_then(|id| catalog.product(id)),
+        };
+        if let Some(p) = product {
+            // At insert scale 1 and 1 mm per drawing unit the core's offset comes out in block units.
+            let k = relative_scale(mapping, 1.0, 1.0);
+            let c = base + center_from_insert_xy(mapping, p.length_mm, Vec2::ZERO, 0.0, [k, k]);
+            if c.is_finite() {
+                return c;
+            }
+        }
+        self.extents_centre(&ins.block).unwrap_or(base)
+    }
+
+    fn extents_centre(&mut self, name: &str) -> Option<Vec2> {
+        let d = self.drawing;
+        let block = d.block(name)?;
+        let key = block.name.to_ascii_uppercase();
+        if let Some(c) = self.extents.get(&key) {
+            return *c;
+        }
+        let b =
+            block.entities.iter().filter(|e| !matches!(e.kind, EntityKind::AttDef(_))).fold(Bounds2::EMPTY, |b, e| b.union(&entity_bounds(d, e, 1)));
+        let c = (!b.is_empty()).then(|| b.center()).filter(|c| c.is_finite());
+        self.extents.insert(key, c);
+        c
     }
 }

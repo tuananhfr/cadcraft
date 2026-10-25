@@ -396,7 +396,10 @@ transparencydisplay	cad.other.transparencydisplay
 trim	cad.modify.trim
 tubab	cad.tools.tubab
 u	cad.edit.u
+ubcheck	cad.tools.ubcheck
+ubcount	cad.tools.ubcount
 ubfill	cad.tools.ubfill
+ublegend	cad.tools.ublegend
 ublib	cad.tools.ublib
 ubplot	cad.file.ubplot
 ubplot.approve	cad.other.ubplot.approve

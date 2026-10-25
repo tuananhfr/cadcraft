@@ -1,9 +1,13 @@
 //! U-BOT toolkit commands (spec §7): drawing reads and one-step writes around the `cadcraft-ubot` core.
 
+mod check_cmd;
+mod check_input;
+mod count_cmd;
 mod fill_apply;
 mod fill_cmd;
 mod fill_input;
 mod fill_interactive;
+mod legend;
 mod lib_cmd;
 pub mod read;
 mod replace_cmd;
@@ -24,5 +28,5 @@ pub use zone::zone_id;
 use super::CommandSpec;
 
 pub fn specs() -> Vec<CommandSpec> {
-    vec![lib_cmd::spec(), zone::spec(), fill_cmd::spec(), replace_cmd::spec(), tubab::spec()]
+    vec![lib_cmd::spec(), zone::spec(), fill_cmd::spec(), replace_cmd::spec(), tubab::spec(), count_cmd::spec(), legend::spec(), check_cmd::spec()]
 }

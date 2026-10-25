@@ -412,7 +412,10 @@ UI-only recovery status: `ui.recovery.status` (registered in `ui-egui::menus::UI
 | `trim` | `cad.modify.trim` | Modify | model, paper | available | edit | tr |
 | `tubab` | `cad.tools.tubab` | Tools | model, paper | available | edit |  |
 | `u` | `cad.edit.u` | Edit | model, paper | available | edit |  |
+| `ubcheck` | `cad.tools.ubcheck` | Tools | model, paper | available | read |  |
+| `ubcount` | `cad.tools.ubcount` | Tools | model, paper | available | read |  |
 | `ubfill` | `cad.tools.ubfill` | Tools | model, paper | available | edit | ubot |
+| `ublegend` | `cad.tools.ublegend` | Tools | model, paper | available | edit |  |
 | `ublib` | `cad.tools.ublib` | Tools | model, paper | available | file |  |
 | `ubplot` | `cad.file.ubplot` | File | model, paper | available | file | ubp |
 | `ubplot.approve` | `cad.other.ubplot.approve` | Other | model, paper | available | edit |  |

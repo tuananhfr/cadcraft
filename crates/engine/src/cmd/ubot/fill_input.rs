@@ -194,7 +194,7 @@ pub(super) fn existing(d: &Drawing, catalog: &Catalog) -> Result<Vec<ExistingIns
             insert: [at.x, at.y],
             rotation_deg: ins.rotation.to_degrees(),
             scale: ins.scale.x,
-            scale_y: None,
+            scale_y: (ins.scale.y != ins.scale.x).then_some(ins.scale.y),
         };
         let origin = Vec2::new(ins.insert.x, ins.insert.y);
         match role {
