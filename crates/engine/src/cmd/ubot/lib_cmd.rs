@@ -61,7 +61,7 @@ fn load(s: &mut Session, p: &Value) -> Result<()> {
     let overlay = Catalog::from_json(&text).map_err(|e| bad(CMD, e.to_string()))?;
     let catalog = Catalog::builtin().overlay(&overlay);
     s.echo(format!("U-BOT catalog '{}' {} loaded: {} products.", overlay.catalog_id, overlay.version, catalog.products.len()));
-    s.ubot = UbotState { catalog, overlay_source: Some(source) };
+    s.ubot = UbotState { catalog, overlay_source: Some(source), ..UbotState::default() };
     Ok(())
 }
 

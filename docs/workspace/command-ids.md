@@ -411,6 +411,7 @@ UI-only recovery status: `ui.recovery.status` (registered in `ui-egui::menus::UI
 | `transparencydisplay` | `cad.other.transparencydisplay` | Other | model, paper | available | read |  |
 | `trim` | `cad.modify.trim` | Modify | model, paper | available | edit | tr |
 | `u` | `cad.edit.u` | Edit | model, paper | available | edit |  |
+| `ubfill` | `cad.tools.ubfill` | Tools | model, paper | available | edit | ubot |
 | `ublib` | `cad.tools.ublib` | Tools | model, paper | available | file |  |
 | `ubplot` | `cad.file.ubplot` | File | model, paper | available | file | ubp |
 | `ubplot.approve` | `cad.other.ubplot.approve` | Other | model, paper | available | edit |  |

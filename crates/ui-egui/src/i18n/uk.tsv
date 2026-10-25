@@ -3909,3 +3909,45 @@ ribbon	Shapes	Фігури
 	U-BOT Zone	Зона U-BOT
 	Catalog	Каталог
 	Tag Zone	Позначити зону
+# U-BOT toolkit: UBFILL
+	U-BOT Fill	Розкладка U-BOT
+	Fill Boxes	Розкласти бокси
+	Select slab boundary	Виберіть контур плити
+	Select holes and zones	Виберіть отвори та зони
+	Drawing units	Одиниці креслення
+	Box type	Тип боксу
+	Rib	Ребро
+	Apply?	Застосувати?
+echo	the slab boundary {handle} must be a closed polyline	контур плити {handle} має бути замкненою полілінією
+echo	{handle} is tagged as a U-BOT zone; select the slab boundary	{handle} позначено як зону U-BOT; виберіть контур плити
+echo	{handle} is the slab boundary, not a hole	{handle} — це контур плити, а не отвір
+echo	hole {handle} is not a closed polyline or circle	отвір {handle} не є замкненою полілінією чи колом
+echo	zone {handle}: {error}	зона {handle}: {error}
+echo	zone {handle}: clearance {clearance} mm is over {max} mm	зона {handle}: зазор {clearance} мм перевищує {max} мм
+echo	zone {handle}: an alt_product zone needs an alternative product	зона {handle}: зоні alt_product потрібен альтернативний продукт
+echo	zone {handle}: alternative product '{product}' is not in the catalog	зона {handle}: альтернативного продукту '{product}' немає в каталозі
+echo	zone {handle}: alternative product '{product}' is {width}x{length} mm, the boxes are {box_width}x{box_length} mm	зона {handle}: альтернативний продукт '{product}' має розмір {width}x{length} мм, а бокси — {box_width}x{box_length} мм
+echo	{count} existing boxes (MINSERT cells counted), the limit is {max}	{count} наявних боксів (з урахуванням комірок MINSERT), межа — {max}
+	`boundary` must be the handle of a closed polyline (a hex string such as 2F)	`boundary` має бути дескриптором замкненої полілінії (шістнадцятковий рядок, наприклад 2F)
+echo	`holes`: {value} is not an object handle	`holes`: {value} не є дескриптором об'єкта
+	`holes` must be an array of object handles	`holes` має бути масивом дескрипторів об'єктів
+	`product` (a product id, see UBLIB) is required	потрібен `product` (ідентифікатор продукту, див. UBLIB)
+	`origin` must be [x, y]	`origin` має бути [x, y]
+echo	unknown mode '{mode}' (use preview or commit)	невідомий режим '{mode}' (використовуйте preview або commit)
+echo	CONFLICT: inputs changed since preview (expected {expected}, now {now})	CONFLICT: вхідні дані змінилися після попереднього перегляду (очікувалося {expected}, зараз {now})
+	UBFILL: nothing to change.	UBFILL: змінювати нічого.
+echo	UBFILL: wrote {added} new, {updated} updated and {removed} removed boxes.	UBFILL: записано {added} нових, {updated} оновлених і {removed} видалених боксів.
+echo	UBFILL: +{added} boxes, -{removed} boxes, {updated} updated, {invalid} invalid cells, {uncertain} uncertain cells	UBFILL: +{added} боксів, -{removed} боксів, {updated} оновлено, {invalid} недійсних комірок, {uncertain} сумнівних комірок
+echo	boundary {handle}: {error}	контур {handle}: {error}
+echo	block {block} has no usable scale	блок {block} не має придатного масштабу
+	Select a closed polyline as the slab boundary.	Виберіть замкнену полілінію як контур плити.
+echo	{count} object(s) ignored (not closed polylines or circles)	пропущено об'єктів: {count} (не замкнені полілінії чи кола)
+	The U-BOT catalog has no products (see UBLIB).	У каталозі U-BOT немає продуктів (див. UBLIB).
+	Choose one of the listed ribs.	Виберіть одне з наведених ребер.
+	Grid changed: boxes will be re-laid on the new grid (manual moves are lost).	Сітку змінено: бокси буде розкладено за новою сіткою (ручні переміщення буде втрачено).
+echo	UBFILL warning: {warning}	Попередження UBFILL: {warning}
+	No problems.	Проблем немає.
+echo	cell {i},{j} at {x},{y}: {reasons}	комірка {i},{j} у точці {x},{y}: {reasons}
+echo	... and {count} more	... і ще {count}
+	Answer Yes, No or List.	Відповідайте Yes, No або List.
+	Enter mm, cm, m or in.	Введіть mm, cm, m або in.

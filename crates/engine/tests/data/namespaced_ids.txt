@@ -395,6 +395,7 @@ tolerance	cad.dimension.tolerance
 transparencydisplay	cad.other.transparencydisplay
 trim	cad.modify.trim
 u	cad.edit.u
+ubfill	cad.tools.ubfill
 ublib	cad.tools.ublib
 ubplot	cad.file.ubplot
 ubplot.approve	cad.other.ubplot.approve

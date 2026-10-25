@@ -4496,3 +4496,45 @@ echo	{handle} is an open polyline; a zone must be closed	{handle} là đa tuyế
 echo	{handle}: {kind} zones are not supported yet; trace it with a closed polyline (BOUNDARY)	{handle}: chưa hỗ trợ vùng dạng {kind}; hãy vẽ lại bằng đa tuyến kín (BOUNDARY)
 echo	{handle} ({kind}) is not a closed polyline or circle	{handle} ({kind}) không phải đa tuyến kín hoặc đường tròn
 echo	{count} zone(s) tagged as {zone_type}.	Đã gán {count} vùng loại {zone_type}.
+# U-BOT toolkit: UBFILL and its messages
+	U-BOT Fill	Rải hộp U-BOT
+	Fill Boxes	Rải hộp
+	Select slab boundary	Chọn biên sàn
+	Select holes and zones	Chọn lỗ mở và vùng
+	Drawing units	Đơn vị bản vẽ
+	Box type	Loại hộp
+	Rib	Sườn
+	Apply?	Áp dụng?
+echo	the slab boundary {handle} must be a closed polyline	biên sàn {handle} phải là đa tuyến kín
+echo	{handle} is tagged as a U-BOT zone; select the slab boundary	{handle} đã được gán là vùng U-BOT; hãy chọn biên sàn
+echo	{handle} is the slab boundary, not a hole	{handle} là biên sàn, không phải lỗ mở
+echo	hole {handle} is not a closed polyline or circle	lỗ mở {handle} không phải đa tuyến kín hoặc đường tròn
+echo	zone {handle}: {error}	vùng {handle}: {error}
+echo	zone {handle}: clearance {clearance} mm is over {max} mm	vùng {handle}: khoảng hở {clearance} mm vượt quá {max} mm
+echo	zone {handle}: an alt_product zone needs an alternative product	vùng {handle}: vùng alt_product cần có sản phẩm thay thế
+echo	zone {handle}: alternative product '{product}' is not in the catalog	vùng {handle}: sản phẩm thay thế '{product}' không có trong danh mục
+echo	zone {handle}: alternative product '{product}' is {width}x{length} mm, the boxes are {box_width}x{box_length} mm	vùng {handle}: sản phẩm thay thế '{product}' có kích thước {width}x{length} mm, còn hộp là {box_width}x{box_length} mm
+echo	{count} existing boxes (MINSERT cells counted), the limit is {max}	có {count} hộp sẵn có (tính từng ô MINSERT), giới hạn là {max}
+	`boundary` must be the handle of a closed polyline (a hex string such as 2F)	`boundary` phải là handle của một đa tuyến kín (chuỗi hex, ví dụ 2F)
+echo	`holes`: {value} is not an object handle	`holes`: {value} không phải handle của đối tượng
+	`holes` must be an array of object handles	`holes` phải là mảng các handle đối tượng
+	`product` (a product id, see UBLIB) is required	cần có `product` (mã sản phẩm, xem UBLIB)
+	`origin` must be [x, y]	`origin` phải có dạng [x, y]
+echo	unknown mode '{mode}' (use preview or commit)	chế độ '{mode}' không hợp lệ (dùng preview hoặc commit)
+echo	CONFLICT: inputs changed since preview (expected {expected}, now {now})	CONFLICT: dữ liệu vào đã thay đổi từ lúc xem trước (mong đợi {expected}, hiện tại {now})
+	UBFILL: nothing to change.	UBFILL: không có gì cần thay đổi.
+echo	UBFILL: wrote {added} new, {updated} updated and {removed} removed boxes.	UBFILL: đã ghi {added} hộp mới, cập nhật {updated} hộp và xoá {removed} hộp.
+echo	UBFILL: +{added} boxes, -{removed} boxes, {updated} updated, {invalid} invalid cells, {uncertain} uncertain cells	UBFILL: +{added} hộp, -{removed} hộp, {updated} cập nhật, {invalid} ô không hợp lệ, {uncertain} ô không chắc chắn
+echo	boundary {handle}: {error}	biên {handle}: {error}
+echo	block {block} has no usable scale	khối {block} không có tỉ lệ dùng được
+	Select a closed polyline as the slab boundary.	Hãy chọn một đa tuyến kín làm biên sàn.
+echo	{count} object(s) ignored (not closed polylines or circles)	bỏ qua {count} đối tượng (không phải đa tuyến kín hoặc đường tròn)
+	The U-BOT catalog has no products (see UBLIB).	Danh mục U-BOT không có sản phẩm nào (xem UBLIB).
+	Choose one of the listed ribs.	Hãy chọn một trong các sườn đã liệt kê.
+	Grid changed: boxes will be re-laid on the new grid (manual moves are lost).	Lưới đã thay đổi: hộp sẽ được rải lại theo lưới mới (các dịch chuyển thủ công sẽ mất).
+echo	UBFILL warning: {warning}	Cảnh báo UBFILL: {warning}
+	No problems.	Không có vấn đề nào.
+echo	cell {i},{j} at {x},{y}: {reasons}	ô {i},{j} tại {x},{y}: {reasons}
+echo	... and {count} more	... và {count} mục khác
+	Answer Yes, No or List.	Hãy trả lời Yes, No hoặc List.
+	Enter mm, cm, m or in.	Hãy nhập mm, cm, m hoặc in.
