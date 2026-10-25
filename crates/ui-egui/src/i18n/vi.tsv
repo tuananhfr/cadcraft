@@ -4584,3 +4584,6 @@ echo	TUBAB: {count} references of {from} to replace with {to}, {unchanged} uncha
 echo	No selected references of block {block}.	Không có tham chiếu nào đã chọn của khối {block}.
 echo	No block named {block}.	Không có khối tên {block}.
 	expectHash ignored in preview	expectHash bị bỏ qua khi xem trước
+echo	{handle}: non-uniform scale {x} x {y} with an anchor offset: the box centre is ambiguous	{handle}: tỉ lệ không đều {x} x {y} khi điểm chèn lệch tâm: không xác định được tâm hộp
+echo	{handle}: block {block} is {from} mm per block unit, {to} is {to_units}; with the INSERT scale kept the box would change size	{handle}: khối {block} là {from} mm mỗi đơn vị khối, {to} là {to_units}; giữ nguyên tỉ lệ INSERT thì hộp sẽ đổi kích thước
+	box size changed: run UBCHECK to re-check cells	kích thước hộp đã đổi: chạy UBCHECK để kiểm tra lại các ô

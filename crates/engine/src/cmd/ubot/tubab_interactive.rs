@@ -1,11 +1,9 @@
 //! TUBAB prompts, as LPC's TUBxy: boxes → block to replace → block to replace it with → summary → Apply.
 
-use std::collections::BTreeMap;
-
 use cadcraft_doc::{EntityKind, Handle};
 
 use super::swap_input::MAX_TARGETS;
-use super::tubab::{CMD, Params, commit_checked, plan, summary_line};
+use super::tubab::{CMD, Params, commit_checked, known_target, plan, summary_line};
 use crate::cmd::bad;
 use crate::cmd::machines::{SelOutcome, SelectPhase};
 use crate::{Accept, Input, Interactive, Prompt, Result, Session, Step};
@@ -15,30 +13,19 @@ const APPLY_KEYWORDS: [&str; 2] = ["Yes", "No"];
 #[derive(Default)]
 pub(super) struct TubabM {
     selection: SelectPhase,
-    /// The block most of the picked references use: the default of `Replace block`.
-    common_block: Option<String>,
     from: Option<String>,
     /// The planned swap and its hash, once `With block` is answered.
     shown: Option<(Params, String)>,
 }
 
-/// The block name used by the most picked references (first seen wins a tie); `None` when none is a reference.
-fn most_common_block(s: &Session, handles: &[Handle]) -> Option<String> {
-    let d = s.doc().ok()?;
-    let mut counts: BTreeMap<String, (usize, usize, String)> = BTreeMap::new();
-    for (order, h) in handles.iter().enumerate() {
-        if let Some(EntityKind::Insert(ins)) = d.entity(*h).map(|e| &e.kind) {
-            let slot = counts.entry(ins.block.to_ascii_uppercase()).or_insert((0, order, ins.block.clone()));
-            slot.0 += 1;
-        }
-    }
-    counts.into_values().max_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1))).map(|(_, _, name)| name)
+/// The defaults of `Replace block` and `With block`: LPC's `UB-1` → `UB-2`, then the last TUBAB of this session.
+fn defaults(s: &Session) -> (String, String) {
+    s.ubot.tubab_last.clone().unwrap_or_else(|| ("UB-1".to_string(), "UB-2".to_string()))
 }
 
 impl TubabM {
     fn selected(&mut self, s: &mut Session) -> Step {
-        self.common_block = most_common_block(s, &self.selection.picked);
-        if self.common_block.is_none() {
+        if !any_reference(s, &self.selection.picked) {
             s.echo("No block references selected.");
             return Step::Done;
         }
@@ -60,7 +47,7 @@ impl TubabM {
 
     fn choose_from(&mut self, s: &mut Session, input: &Input) -> Step {
         let name = match input {
-            Input::Enter => self.common_block.clone().unwrap_or_default(),
+            Input::Enter => defaults(s).0,
             Input::Text(t) | Input::Keyword(t) => t.trim().to_string(),
             _ => return Step::Continue,
         };
@@ -75,11 +62,11 @@ impl TubabM {
 
     fn choose_to(&mut self, s: &mut Session, input: &Input) -> Result<Step> {
         let name = match input {
-            Input::Enter => return Ok(Step::Cancel),
+            Input::Enter => defaults(s).1,
             Input::Text(t) | Input::Keyword(t) => t.trim().to_string(),
             _ => return Ok(Step::Continue),
         };
-        if s.doc()?.block(&name).is_none() {
+        if !known_target(s, &name) {
             s.echo(format!("No block named {name}."));
             return Ok(Step::Continue);
         }
@@ -115,6 +102,12 @@ impl TubabM {
     }
 }
 
+/// Whether any picked object is a block reference.
+fn any_reference(s: &Session, handles: &[Handle]) -> bool {
+    let Ok(d) = s.doc() else { return false };
+    handles.iter().any(|h| matches!(d.entity(*h).map(|e| &e.kind), Some(EntityKind::Insert(_))))
+}
+
 /// Whether any picked reference uses block `name` (any case).
 fn uses_block(s: &Session, handles: &[Handle], name: &str) -> bool {
     let Ok(d) = s.doc() else { return false };
@@ -134,19 +127,16 @@ impl Interactive for TubabM {
         Ok(Step::Continue)
     }
 
-    fn prompt(&self, _s: &Session) -> Prompt {
+    fn prompt(&self, s: &Session) -> Prompt {
         if !self.selection.done {
             return if self.selection.removing { self.selection.prompt() } else { Prompt::new("Select boxes", Accept::SELECT) };
         }
+        let (from, to) = defaults(s);
         if self.from.is_none() {
-            let p = Prompt::new("Replace block", Accept::TEXT);
-            return match &self.common_block {
-                Some(name) => p.default(name.clone()),
-                None => p,
-            };
+            return Prompt::new("Replace block", Accept::TEXT).default(from);
         }
         if self.shown.is_none() {
-            return Prompt::new("With block", Accept::TEXT);
+            return Prompt::new("With block", Accept::TEXT).default(to);
         }
         Prompt::new("Apply?", Accept::TEXT).kw(&APPLY_KEYWORDS).default("Yes")
     }

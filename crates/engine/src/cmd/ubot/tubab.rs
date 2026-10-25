@@ -3,9 +3,11 @@
 
 use std::collections::HashMap;
 
-use cadcraft_doc::{EntityKind, Handle};
+use cadcraft_doc::{Drawing, EntityKind, Handle};
 use cadcraft_geom::Vec2;
-use cadcraft_ubot::{Anchor, BlockMapping, Catalog, Product, center_from_insert, input_hash, insert_from_center, relative_scale};
+use cadcraft_ubot::{
+    Anchor, BlockMapping, Catalog, Product, center_from_insert_xy, has_anchor_offset, input_hash, insert_from_center_xy, relative_scale,
+};
 use serde_json::{Value, json};
 
 use super::read::{generated_blocks, untagged_box_product};
@@ -23,7 +25,7 @@ pub(super) fn spec() -> CommandSpec {
     CommandSpec::new(CMD, "U-BOT Swap Block", run)
         .menu(&["Tools", "U-BOT", "Swap Box Block"])
         .params(
-            "{handles?: [handle] (default: the selection; references of other blocks are left out), from: block name (any case), to: existing block name, mode?: preview|commit (default preview), expectHash?: inputHash of the preview} → {mode, inputHash, from, to, summary: {selected, matched, replaced, unchanged}, changes: [{handle, blockName, insert, rotationDeg, scale, productId}], written?: {replaced}}",
+            "{handles?: [handle] (default: the selection; references of other blocks are left out, a matching reference outside model space fails the run), from: block name (any case) or product id, to: existing block name or product id (its mapped block, else UBOT_<SKU>, defined when missing), mode?: preview|commit (default preview), expectHash?: inputHash of the preview (it covers the references and planned changes, not the target block definition)} → {mode, inputHash, from, to, summary: {selected, matched, replaced, unchanged}, changes: [{handle, blockName, insert, rotationDeg, scale, productId}], written?: {replaced}}",
         )
         .interactive(|_| Ok(Box::new(TubabM::default())))
 }
@@ -43,6 +45,8 @@ pub(super) struct Plan {
     pub matched: usize,
     pub swaps: Vec<Swap>,
     pub unchanged: usize,
+    /// The generated product block to define when `to` named a product whose block the drawing lacks.
+    pub generate: Vec<(Product, String)>,
 }
 
 fn name_param<'a>(p: &'a Value, key: &str) -> Option<&'a str> {
@@ -104,19 +108,22 @@ fn rotation_offset(m: Option<&BlockMapping>) -> f64 {
     m.map_or(0.0, |m| m.rotation_offset_deg)
 }
 
+fn mm_per_block_unit(m: Option<&BlockMapping>) -> f64 {
+    m.map_or(1.0, |m| m.units_mm_per_block_unit)
+}
+
 /// Both blocks put the insert point at the same place of the box, so the LPC rule (keep the insert point) keeps
-/// the box where it was too.
+/// the box where it was too. Blocks drawn in other units are refused before this.
 fn same_frame(a: Option<&BlockMapping>, b: Option<&BlockMapping>) -> bool {
-    let mm = |m: Option<&BlockMapping>| m.map_or(1.0, |m| m.units_mm_per_block_unit);
-    anchor(a) == anchor(b) && rotation_offset(a) == rotation_offset(b) && (anchor(a) == Anchor::Center || mm(a) == mm(b))
+    anchor(a) == anchor(b) && rotation_offset(a) == rotation_offset(b)
 }
 
 fn needs_length(m: Option<&BlockMapping>) -> bool {
     anchor(m) == Anchor::TopCenter
 }
 
-/// Insert point and rotation (radians) of the new block that keep the box centre and orientation. The INSERT scale
-/// is kept, so the unit scale cancels out and the core helpers work in drawing units.
+/// Insert point and rotation (radians) of the new block that keep the box centre and orientation. The raw signed
+/// INSERT scales are kept, so the unit scale cancels out and the core helpers work in drawing units.
 fn placement(
     t: &Target,
     from: Option<&BlockMapping>,
@@ -128,17 +135,25 @@ fn placement(
     if same_frame(from, to) {
         return Ok(([i.insert.x, i.insert.y], i.rotation));
     }
+    // A stretched box has no single length along which its anchor offset lies (ruling R21).
+    let (ax, ay) = (i.scale.x.abs(), i.scale.y.abs());
+    if (ax - ay).abs() > 1e-9 * ax.max(ay) && (has_anchor_offset(from) || has_anchor_offset(to)) {
+        return Err(bad(
+            CMD,
+            format!("{}: non-uniform scale {} x {} with an anchor offset: the box centre is ambiguous", t.handle.hex(), i.scale.x, i.scale.y),
+        ));
+    }
     let [from_len, to_len] = lengths;
     for (m, len, name) in [(from, from_len, names[0]), (to, to_len, names[1])] {
         if needs_length(m) && len.is_none() {
             return Err(bad(CMD, format!("{}: the box size of block {name} is unknown, so its centre cannot be kept", t.handle.hex())));
         }
     }
+    let rel = |m: Option<&BlockMapping>| [relative_scale(m, i.scale.x, 1.0), relative_scale(m, i.scale.y, 1.0)];
     let rotation_deg = i.rotation.to_degrees();
-    let center =
-        center_from_insert(from, from_len.unwrap_or(0.0), Vec2::new(i.insert.x, i.insert.y), rotation_deg, relative_scale(from, i.scale.x, 1.0));
+    let center = center_from_insert_xy(from, from_len.unwrap_or(0.0), Vec2::new(i.insert.x, i.insert.y), rotation_deg, rel(from));
     let new_deg = rotation_deg - rotation_offset(from) + rotation_offset(to);
-    let insert = insert_from_center(to, to_len.unwrap_or(0.0), center, new_deg, relative_scale(to, i.scale.x, 1.0));
+    let insert = insert_from_center_xy(to, to_len.unwrap_or(0.0), center, new_deg, rel(to));
     let rotation = if rotation_offset(from) == rotation_offset(to) { i.rotation } else { new_deg.to_radians() };
     if !(insert.is_finite() && rotation.is_finite()) {
         return Err(bad(CMD, format!("{}: the insert point and rotation must be finite numbers", t.handle.hex())));
@@ -146,21 +161,45 @@ fn placement(
     Ok(([insert.x, insert.y], rotation))
 }
 
+/// `name` as a block: a block of that name in the drawing, else a product id's block (its mapped block when the
+/// drawing has it, else the generated `UBOT_<SKU>`) with that product (spec §7).
+fn resolve<'a>(d: &Drawing, catalog: &'a Catalog, name: &str) -> (String, Option<&'a Product>) {
+    if let Some(b) = d.block(name) {
+        return (b.name.clone(), None);
+    }
+    match catalog.product(name) {
+        Some(p) => {
+            let mapped = catalog.mapping_for_product(&p.id).and_then(|m| d.block(&m.block_name)).map(|b| b.name.clone());
+            (mapped.unwrap_or_else(|| Catalog::default_block_name(p)), Some(p))
+        }
+        None => (name.to_string(), None),
+    }
+}
+
+/// Whether `name` names a block of the drawing or a catalog product (an answer to `With block`).
+pub(super) fn known_target(s: &Session, name: &str) -> bool {
+    s.doc().is_ok_and(|d| d.block(name).is_some()) || s.ubot.catalog.product(name).is_some()
+}
+
 pub(super) fn plan(s: &Session, p: &Params) -> Result<Plan> {
     let d = s.doc()?;
-    let to_block = d.block(&p.to).ok_or_else(|| bad(CMD, format!("no block `{}`", p.to)))?;
-    if to_block.xref_path.is_some() {
-        return Err(bad(CMD, "external references cannot be replaced"));
-    }
-    let to_name = to_block.name.clone();
     let catalog = &s.ubot.catalog;
+    let (from_name, _) = resolve(d, catalog, &p.from);
+    let (to_name, to_id_product) = resolve(d, catalog, &p.to);
+    let generate = match (d.block(&to_name), to_id_product) {
+        (Some(b), _) if b.xref_path.is_some() => return Err(bad(CMD, "external references cannot be replaced")),
+        (Some(_), _) => None,
+        // A product id whose block the drawing lacks: the generated mm block is defined on commit.
+        (None, Some(product)) => Some((product.clone(), to_name.clone())),
+        (None, None) => return Err(bad(CMD, format!("no block `{}`", p.to))),
+    };
     let generated = generated_blocks(catalog);
     let to_product = block_product(catalog, &generated, &to_name);
     let to_mapping = catalog.mapping_for_block(&to_name);
     let mut targets = Vec::new();
     for &h in &p.handles {
         let e = d.entity(h).ok_or_else(|| bad(CMD, format!("no object {}", h.hex())))?;
-        if matches!(&e.kind, EntityKind::Insert(ins) if ins.block.eq_ignore_ascii_case(&p.from)) {
+        if matches!(&e.kind, EntityKind::Insert(ins) if ins.block.eq_ignore_ascii_case(&from_name)) {
             targets.push(target(s, CMD, h)?);
         }
     }
@@ -194,6 +233,17 @@ pub(super) fn plan(s: &Session, p: &Params) -> Result<Plan> {
                 ),
             ));
         }
+        if mm_per_block_unit(from_mapping) != mm_per_block_unit(to_mapping) {
+            return Err(bad(
+                CMD,
+                format!(
+                    "{}: block {block} is {} mm per block unit, {to_name} is {}; with the INSERT scale kept the box would change size",
+                    t.handle.hex(),
+                    mm_per_block_unit(from_mapping),
+                    mm_per_block_unit(to_mapping)
+                ),
+            ));
+        }
         let lengths = [from_product.or(to_product).map(|p| p.length_mm), to_product.or(from_product).map(|p| p.length_mm)];
         let (insert, rotation) = placement(t, from_mapping, to_mapping, lengths, [block, &to_name])?;
         let tag = t.tag.as_ref().zip(to_product).map(|(tag, product)| tag.with_product(&product.id));
@@ -212,13 +262,15 @@ pub(super) fn plan(s: &Session, p: &Params) -> Result<Plan> {
         "targets": targets.iter().map(Target::hash_value).collect::<Vec<_>>(),
         "changes": swaps.iter().map(Swap::to_json).collect::<Vec<_>>(),
     }));
-    Ok(Plan { input_hash, to: to_name, selected: p.handles.len(), matched: targets.len(), swaps, unchanged })
+    let generate = if swaps.is_empty() { Vec::new() } else { generate.into_iter().collect() };
+    Ok(Plan { input_hash, to: to_name, selected: p.handles.len(), matched: targets.len(), swaps, unchanged, generate })
 }
 
 /// Plans again and writes when the inputs still hash to `expect`; `None` written means there was nothing to change.
 pub(super) fn commit_checked(s: &mut Session, p: &Params, expect: Option<&str>, echo_summary: bool) -> Result<(Plan, Option<usize>)> {
     let plan = plan(s, p)?;
     check_expected(CMD, expect, &plan.input_hash)?;
+    s.ubot.tubab_last = Some((p.from.clone(), p.to.clone()));
     if echo_summary {
         s.echo(summary_line(p, &plan));
     }
@@ -226,7 +278,7 @@ pub(super) fn commit_checked(s: &mut Session, p: &Params, expect: Option<&str>, 
         s.echo("TUBAB: nothing to change.");
         return Ok((plan, None));
     }
-    let n = apply(s, CMD, &plan.swaps, &[])?;
+    let n = apply(s, CMD, &plan.swaps, &plan.generate)?;
     s.echo(format!("TUBAB: replaced {n} block references."));
     Ok((plan, Some(n)))
 }

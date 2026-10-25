@@ -65,8 +65,11 @@ pub struct ExistingInstance {
     pub block_name: String,
     pub insert: [f64; 2],
     pub rotation_deg: f64,
-    /// Uniform INSERT scale.
+    /// INSERT X scale (the uniform scale of a box drawn with one scale).
     pub scale: f64,
+    /// INSERT Y scale when it differs from `scale` (a mirrored or stretched box); `None` means `scale`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale_y: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

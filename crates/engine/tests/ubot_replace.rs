@@ -737,3 +737,175 @@ fn hostile_targets_and_params_fail_cleanly() {
     let e = err(&mut s, "ubreplace", json!({ "handles": [ghost.hex()], "to": "ubot-h10-7" }));
     assert!(e.contains("is not a U-BOT box"), "{e}");
 }
+
+// ---------------- fix round 1 ----------------
+
+/// The world corners of the reference's box outline (the block's first polyline), rounded and sorted.
+fn footprint(s: &Session, h: Handle) -> Vec<[f64; 2]> {
+    let d = s.doc().unwrap();
+    let ins = insert_of(s, h);
+    let block = d.block(&ins.block).unwrap();
+    let m = ins.transform(block.base.xy());
+    let EntityKind::LwPolyline(pl) = &block.entities.iter().next().unwrap().kind else { panic!("outline") };
+    let mut corners: Vec<[f64; 2]> =
+        pl.vertices.iter().map(|v| m.apply(v.p)).map(|p| [(p.x * 1e6).round() / 1e6, (p.y * 1e6).round() / 1e6]).collect();
+    corners.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    corners
+}
+
+/// A UB-1 at 30°, mirrored with MIRROR about a horizontal line; returns the session and the mirrored reference.
+fn mirrored_ub1() -> (Session, Handle) {
+    let mut d = drawing(4);
+    legacy_block(&mut d, "UB-1", &[]);
+    generated_block(&mut d, "UBOT_H13_7", &[]);
+    let h = add_box(&mut d, BoxSpec { block: "UB-1", at: [1000.0, 2000.0], rotation_deg: 30.0, ..BoxSpec::default() });
+    let mut s = session(d);
+    let r = s.execute("mirror", &json!({ "handles": [h.hex()], "p1": [0, 500], "p2": [10, 500], "erase": true })).unwrap();
+    let m = Handle::parse_hex(r["handles"][0].as_str().unwrap()).unwrap();
+    let ins = insert_of(&s, m);
+    assert!(ins.scale.x * ins.scale.y < 0.0, "MIRROR leaves a mirrored reference: {:?}", ins.scale);
+    (s, m)
+}
+
+#[test]
+fn mirrored_box_keeps_its_footprint_through_ubreplace_and_tubab() {
+    // R21: the anchor offset follows the mirror, so the box stays exactly where it was.
+    let (mut s, h) = mirrored_ub1();
+    let before = footprint(&s, h);
+    let signs = insert_of(&s, h).scale;
+    s.execute("ubreplace", &json!({ "handles": [h.hex()], "to": "ubot-h13-7", "mode": "commit" })).unwrap();
+    let after = insert_of(&s, h);
+    assert_eq!(after.block, "UBOT_H13_7");
+    assert_eq!(footprint(&s, h), before, "same footprint");
+    assert_eq!((after.scale.x.signum(), after.scale.y.signum()), (signs.x.signum(), signs.y.signum()), "the mirror is kept");
+    assert!(close(after.scale.x.abs(), 1.0) && close(after.scale.y.abs(), 1.0));
+
+    let (mut s, h) = mirrored_ub1();
+    let before = footprint(&s, h);
+    let raw = insert_of(&s, h).scale;
+    s.execute("tubab", &json!({ "handles": [h.hex()], "from": "UB-1", "to": "UBOT_H13_7", "mode": "commit" })).unwrap();
+    assert_eq!(footprint(&s, h), before, "same footprint");
+    assert_eq!(insert_of(&s, h).scale, raw, "TUBAB keeps the raw signed scale");
+}
+
+#[test]
+fn non_uniform_scale_with_an_anchor_offset_is_refused() {
+    let mut d = drawing(4);
+    legacy_block(&mut d, "UB-1", &[]);
+    generated_block(&mut d, "UBOT_H13_7", &[]);
+    let h = add_box(&mut d, BoxSpec { block: "UB-1", ..BoxSpec::default() });
+    d.modify_entity(h, |e| {
+        if let EntityKind::Insert(i) = &mut e.kind {
+            i.scale = Vec3::new(1.0, 2.0, 1.0);
+        }
+    })
+    .unwrap();
+    let mut s = session(d);
+    let before = doc(&s);
+    let preview = s.execute("ubreplace", &json!({ "handles": [h.hex()], "to": "ubot-h13-7" })).unwrap();
+    assert_eq!(preview["refused"][0]["handle"], h.hex());
+    assert!(preview["refused"][0]["message"].as_str().unwrap().contains("non-uniform"), "{}", preview["refused"]);
+    let e = err(&mut s, "ubreplace", json!({ "handles": [h.hex()], "to": "ubot-h13-7", "mode": "commit" }));
+    assert!(e.contains("non-uniform") && e.contains(&h.hex()), "{e}");
+    let e = err(&mut s, "tubab", json!({ "handles": [h.hex()], "from": "UB-1", "to": "UBOT_H13_7", "mode": "commit" }));
+    assert!(e.contains("non-uniform") && e.contains(&h.hex()), "{e}");
+    assert!(Arc::ptr_eq(&doc(&s), &before));
+}
+
+#[test]
+fn size_change_warns_to_run_ubcheck() {
+    // R22: cells are re-checked by UBCHECK, so a box that changes size says so.
+    const WARNING: &str = "box size changed: run UBCHECK to re-check cells";
+    let mut d = drawing(4);
+    generated_block(&mut d, "UBOT_H13_7", &[]);
+    let a = add_box(&mut d, BoxSpec { tag: Some(instance("ubot-h13-7", 0, 1)), ..BoxSpec::default() });
+    let doubled = add_box(&mut d, BoxSpec { at: [2000.0, 0.0], scale: 2.0, ..BoxSpec::default() });
+    let mut s = session(d);
+    overlay(&mut s, json!([product("ubot-big", "BIG", 600.0)]), json!([]));
+    let has = |r: &Value| r["warnings"].as_array().unwrap().iter().any(|w| w == WARNING);
+    let same = s.execute("ubreplace", &json!({ "handles": [a.hex()], "to": "ubot-h10-7" })).unwrap();
+    assert!(!has(&same), "{}", same["warnings"]);
+    let p = json!({ "handles": [a.hex()], "to": "ubot-big", "allowResize": true });
+    assert!(has(&s.execute("ubreplace", &p).unwrap()));
+    let mut c = p.clone();
+    c["mode"] = json!("commit");
+    assert!(has(&s.execute("ubreplace", &c).unwrap()));
+    // A box drawn at twice the size comes back at true size: a size change too, shown in the interactive echo.
+    s.set_selection(Vec::new());
+    s.start("ubreplace").unwrap();
+    s.input(Input::Pick(vec![doubled])).unwrap();
+    s.input(Input::Enter).unwrap();
+    s.input(Input::Keyword("ubot-h10-7".into())).unwrap();
+    let line = format!("UBREPLACE warning: {WARNING}");
+    assert!(s.log.contains(&line), "{:?}", s.log.iter().rev().take(4).collect::<Vec<_>>());
+    s.input(Input::Cancel).unwrap();
+}
+
+#[test]
+fn tubab_accepts_product_ids() {
+    // S1: a product id names its block (the mapped one, else the generated UBOT_<SKU>, made when missing).
+    let mut d = drawing(4);
+    generated_block(&mut d, "UBOT_H13_7", &[]);
+    let h = add_box(&mut d, BoxSpec { tag: Some(instance("ubot-h13-7", 2, 1)), ..BoxSpec::default() });
+    let mut s = session(d);
+    let r = s.execute("tubab", &json!({ "handles": [h.hex()], "from": "ubot-h13-7", "to": "ubot-h10-7", "mode": "commit" })).unwrap();
+    assert_eq!(r["to"], "UBOT_H10_7");
+    assert_eq!(insert_of(&s, h).block, "UBOT_H10_7");
+    assert_eq!(s.doc().unwrap().block("UBOT_H10_7").unwrap().units, 4, "generated in mm");
+    assert!(matches!(tag_of(&s, h), Some(UbotTag::Instance { product_id, .. }) if product_id == "ubot-h10-7"));
+}
+
+#[test]
+fn tubab_refuses_blocks_in_other_units() {
+    // S2: same anchor, but the new block is in cm, so the kept INSERT scale would draw it ten times too big.
+    let mut d = drawing(4);
+    generated_block(&mut d, "UBOT_H13_7", &[]);
+    add_block(&mut d, "BOX_CM", [-26.0, -26.0], [52.0, 52.0], &[]);
+    let h = add_box(&mut d, BoxSpec::default());
+    let mut s = session(d);
+    let mut cm = mapping("BOX_CM", Some("ubot-h10-7"), "center");
+    cm["unitsMmPerBlockUnit"] = json!(10.0);
+    overlay(&mut s, json!([]), json!([cm]));
+    let before = doc(&s);
+    let e = err(&mut s, "tubab", json!({ "handles": [h.hex()], "from": "UBOT_H13_7", "to": "BOX_CM" }));
+    assert!(e.contains(&h.hex()) && e.contains("per block unit"), "{e}");
+    assert!(Arc::ptr_eq(&doc(&s), &before));
+}
+
+#[test]
+fn tubab_interactive_remembers_the_last_blocks() {
+    // S4: `UB-1` → `UB-2` at first, then the blocks of the last TUBAB in this session.
+    let mut d = drawing(4);
+    for name in ["UB-1", "UB-2", "UB-3"] {
+        legacy_block(&mut d, name, &[]);
+    }
+    let a = add_box(&mut d, BoxSpec { block: "UB-1", ..BoxSpec::default() });
+    let mut s = session(d);
+    let start = |s: &mut Session| {
+        s.set_selection(Vec::new());
+        s.start("tubab").unwrap();
+        s.input(Input::Pick(vec![a])).unwrap();
+        s.input(Input::Enter).unwrap();
+    };
+    start(&mut s);
+    assert_eq!(s.current_prompt().unwrap().display(), "Replace block <UB-1>:");
+    s.input(Input::Enter).unwrap();
+    assert_eq!(s.current_prompt().unwrap().display(), "With block <UB-2>:");
+    s.input(Input::Enter).unwrap();
+    s.input(Input::Enter).unwrap();
+    assert!(s.running.is_none());
+    assert_eq!(insert_of(&s, a).block, "UB-2");
+
+    start(&mut s);
+    assert_eq!(s.current_prompt().unwrap().display(), "Replace block <UB-1>:");
+    s.input(Input::Text("UB-2".into())).unwrap();
+    s.input(Input::Text("UB-3".into())).unwrap();
+    s.input(Input::Enter).unwrap();
+    assert_eq!(insert_of(&s, a).block, "UB-3");
+
+    start(&mut s);
+    assert_eq!(s.current_prompt().unwrap().display(), "Replace block <UB-2>:");
+    s.input(Input::Text("UB-3".into())).unwrap();
+    assert_eq!(s.current_prompt().unwrap().display(), "With block <UB-3>:");
+    s.input(Input::Cancel).unwrap();
+}

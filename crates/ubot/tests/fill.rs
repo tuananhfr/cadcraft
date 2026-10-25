@@ -72,6 +72,7 @@ fn as_existing(res: &FillResult) -> Vec<ExistingInstance> {
             insert: p.insert,
             rotation_deg: p.rotation_deg,
             scale: 1.0,
+            scale_y: None,
         })
         .collect()
 }
@@ -505,6 +506,7 @@ fn copied_floor_previous_layout_is_rehomed() {
         insert: [9900.0, 6270.0],
         rotation_deg: 0.0,
         scale: 1.0,
+        scale_y: None,
     });
     let mut r = req(rect(10_000.0, 0.0, 16_600.0, 6600.0));
     r.layout_id = NEW.into();
@@ -601,6 +603,7 @@ fn other_layout_instances_block_cells() {
             insert: [330.0, 6270.0],
             rotation_deg: 0.0,
             scale: 1.0,
+            scale_y: None,
         },
         // Untagged legacy UB-1 (top_center anchor): insert (990, 6530) → centre (990, 6270) = cell (1, 0).
         ExistingInstance {
@@ -612,6 +615,7 @@ fn other_layout_instances_block_cells() {
             insert: [990.0, 6530.0],
             rotation_deg: 0.0,
             scale: 1.0,
+            scale_y: None,
         },
         // Our own layout id but outside the boundary: not ours, and it overlaps nothing.
         ExistingInstance {
@@ -623,6 +627,7 @@ fn other_layout_instances_block_cells() {
             insert: [-5000.0, -5000.0],
             rotation_deg: 0.0,
             scale: 1.0,
+            scale_y: None,
         },
         // Flush against cell (9, 9)'s right side (6530..7050): touching is not overlapping.
         ExistingInstance {
@@ -634,6 +639,7 @@ fn other_layout_instances_block_cells() {
             insert: [6790.0, 330.0],
             rotation_deg: 0.0,
             scale: 1.0,
+            scale_y: None,
         },
     ];
     let res = run(&r);

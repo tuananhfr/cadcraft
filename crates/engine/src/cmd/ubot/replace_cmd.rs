@@ -18,6 +18,7 @@ use crate::cmd::{CommandSpec, bad, str_param};
 use crate::{Result, Session};
 
 pub(super) const CMD: &str = "ubreplace";
+pub(super) const RESIZED_WARNING: &str = "box size changed: run UBCHECK to re-check cells";
 /// Refusals quoted in the commit error; the preview lists them all.
 const MAX_QUOTED: usize = 5;
 
@@ -126,6 +127,7 @@ fn existing(t: &Target, catalog: &cadcraft_ubot::Catalog, generated: &HashMap<St
         insert: [i.insert.x, i.insert.y],
         rotation_deg: i.rotation.to_degrees(),
         scale: i.scale.x,
+        scale_y: (i.scale.y != i.scale.x).then_some(i.scale.y),
     })
 }
 
@@ -152,13 +154,14 @@ pub(super) fn plan(s: &Session, p: &Params) -> Result<Plan> {
         let t = by_handle.get(&c.handle).ok_or_else(|| bad(CMD, format!("no object {}", c.handle)))?;
         let i = &t.insert;
         let old_deg = i.rotation.to_degrees();
-        let scale = c.scale;
+        let [sx, sy] = c.scale_xy;
+        let sz = if i.scale.z < 0.0 { -c.scale } else { c.scale };
         let swap = Swap {
             handle: t.handle,
             block: c.block_name.clone(),
             insert: [snap(i.insert.x, c.insert[0]), snap(i.insert.y, c.insert[1])],
             rotation: if snap(old_deg, c.rotation_deg) == old_deg { i.rotation } else { c.rotation_deg.to_radians() },
-            scale: Vec3::new(snap(i.scale.x, scale), snap(i.scale.y, scale), snap(i.scale.z, scale)),
+            scale: Vec3::new(snap(i.scale.x, sx), snap(i.scale.y, sy), snap(i.scale.z, sz)),
             tag: t.tag.as_ref().map(|tag| tag.with_product(&c.product_id)),
         };
         if swap.changes(t) {
@@ -172,7 +175,11 @@ pub(super) fn plan(s: &Session, p: &Params) -> Result<Plan> {
         Some(sw) if d.block(&sw.block).is_none() => vec![(to.clone(), sw.block.clone())],
         _ => Vec::new(),
     };
-    let warnings = result.warnings.iter().map(issue_line).collect();
+    let mut warnings: Vec<String> = result.warnings.iter().map(issue_line).collect();
+    // Cells around a box that changed size are re-checked by UBCHECK (ruling R22), not here.
+    if result.changes.iter().any(|c| c.resized) {
+        warnings.push(RESIZED_WARNING.into());
+    }
     let input_hash = input_hash(&json!({
         "command": CMD,
         "unitScale": unit_scale,

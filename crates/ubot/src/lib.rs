@@ -27,7 +27,7 @@ pub use geometry::{
 };
 pub use hash::input_hash;
 pub use model::{Anchor, ApprovalStatus, BlockMapping, Product, RulePack};
-pub use placement::{center_from_insert, insert_from_center, relative_scale};
+pub use placement::{center_from_insert, center_from_insert_xy, has_anchor_offset, insert_from_center, insert_from_center_xy, relative_scale};
 pub use protocol::{MAX_INPUT_BYTES, handle_json, handle_json_status};
 pub use quantity::{CountItem, CountRow, CountSource, Counts, count, count_in};
 pub use replace::{ReplaceChange, ReplaceRequest, ReplaceResult, replace};

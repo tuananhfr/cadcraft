@@ -1,6 +1,9 @@
 //! Writes UBREPLACE / TUBAB swaps: new block, placement and tag per reference, attributes kept by tag, one commit.
 
-use cadcraft_doc::{Attrib, Drawing, EntityKind, Handle};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use cadcraft_doc::{Attrib, Block, Drawing, EntityKind, Handle};
 use cadcraft_geom::Vec3;
 use cadcraft_ubot::Product;
 use serde_json::{Value, json};
@@ -67,7 +70,7 @@ pub(super) fn snap(old: f64, new: f64) -> f64 {
 }
 
 /// The attribute definitions a reference of `block` takes, as BLOCKREPLACE reads them.
-fn definitions(block: &cadcraft_doc::Block) -> Vec<&Attrib> {
+fn definitions(block: &Block) -> Vec<&Attrib> {
     block
         .entities
         .iter()
@@ -86,10 +89,20 @@ pub(super) fn apply(s: &mut Session, cmd: &str, swaps: &[Swap], generate: &[(Pro
         for (product, name) in generate {
             ensure_product_block(d, product, name)?;
         }
+        // Each target block is read once, however many references take it.
+        let mut blocks: BTreeMap<String, Arc<Block>> = BTreeMap::new();
+        for sw in swaps {
+            if let std::collections::btree_map::Entry::Vacant(slot) = blocks.entry(sw.block.to_ascii_uppercase()) {
+                slot.insert(d.block(&sw.block).cloned().ok_or_else(|| bad(cmd, format!("no block `{}`", sw.block)))?);
+            }
+        }
+        let defs: BTreeMap<&str, Vec<&Attrib>> = blocks.iter().map(|(k, b)| (k.as_str(), definitions(b))).collect();
         let mut attributes = 0usize;
         for sw in swaps {
-            let block = d.block(&sw.block).cloned().ok_or_else(|| bad(cmd, format!("no block `{}`", sw.block)))?;
-            let defs = definitions(&block);
+            let key = sw.block.to_ascii_uppercase();
+            let (Some(block), Some(defs)) = (blocks.get(&key), defs.get(key.as_str())) else {
+                return Err(bad(cmd, format!("no block `{}`", sw.block)));
+            };
             attributes = attributes.saturating_add(defs.len());
             if attributes > MAX_ATTRIBUTES {
                 return Err(bad(cmd, format!("too many attributes (at most {MAX_ATTRIBUTES})")));
@@ -101,7 +114,7 @@ pub(super) fn apply(s: &mut Session, cmd: &str, swaps: &[Swap], generate: &[(Pro
                     ins.insert = Vec3::new(sw.insert[0], sw.insert[1], ins.insert.z);
                     ins.rotation = sw.rotation;
                     ins.scale = sw.scale;
-                    ins.attribs = synced(&block, &defs, ins);
+                    ins.attribs = synced(block, defs, ins);
                 }
                 if let Some(tag) = &sw.tag {
                     tagged = xdata::write(&mut e.common, tag);

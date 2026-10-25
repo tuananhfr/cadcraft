@@ -10,10 +10,12 @@ use crate::check::{Issue, IssueCode, Severity};
 use crate::error::UbotError;
 use crate::fill::ExistingInstance;
 use crate::model::Product;
-use crate::placement::{center_from_insert, insert_from_center, relative_scale};
+use crate::placement::{center_from_insert_xy, has_anchor_offset, insert_from_center_xy, relative_scale};
 
 const MAX_TARGETS: usize = 100_000;
 const SIZE_TOL_MM: f64 = 1e-6;
+/// Relative scales closer than this are one uniform scale.
+const SIZE_TOL_REL: f64 = 1e-9;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -38,6 +40,11 @@ pub struct ReplaceChange {
     pub rotation_deg: f64,
     /// Uniform INSERT scale that draws the block at true size: mm per block unit over mm per drawing unit.
     pub scale: f64,
+    /// The INSERT X and Y scales to write: `scale` with the target's mirror signs.
+    pub scale_xy: [f64; 2],
+    /// The drawn footprint changes size (another product, or a box that was not drawn at true size).
+    #[serde(default)]
+    pub resized: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -77,7 +84,8 @@ pub fn replace(req: &ReplaceRequest, catalog: &Catalog) -> Result<ReplaceResult,
         if !(t.insert.iter().all(|c| c.is_finite()) && t.rotation_deg.is_finite()) {
             return Err(UbotError::BadInput(format!("target {}: insert and rotation must be finite", t.handle)));
         }
-        if !(t.scale.is_finite() && t.scale != 0.0) {
+        let scale_y = t.scale_y.unwrap_or(t.scale);
+        if !(t.scale.is_finite() && t.scale != 0.0 && scale_y.is_finite() && scale_y != 0.0) {
             return Err(UbotError::BadInput(format!("target {}: scale must be finite and non-zero", t.handle)));
         }
         let issue = |code, severity, message: String| Issue { code, severity, handle: Some(t.handle.clone()), at: t.insert, message };
@@ -106,13 +114,27 @@ pub fn replace(req: &ReplaceRequest, catalog: &Catalog) -> Result<ReplaceResult,
             continue;
         }
         let old_mapping = catalog.mapping_for_block(&t.block_name);
+        let rel = [relative_scale(old_mapping, t.scale, req.unit_scale), relative_scale(old_mapping, scale_y, req.unit_scale)];
+        // A stretched box has no single length along which its anchor offset lies.
+        if (rel[0].abs() - rel[1].abs()).abs() > SIZE_TOL_REL * rel[0].abs().max(rel[1].abs())
+            && (has_anchor_offset(old_mapping) || has_anchor_offset(new_mapping))
+        {
+            out.refused.push(issue(
+                IssueCode::Clearance,
+                Severity::Error,
+                format!("non-uniform scale {} x {} with an anchor offset: the box centre is ambiguous", t.scale, scale_y),
+            ));
+            continue;
+        }
         let insert_mm = Vec2::new(t.insert[0], t.insert[1]) * req.unit_scale;
-        let center_mm =
-            center_from_insert(old_mapping, from.length_mm, insert_mm, t.rotation_deg, relative_scale(old_mapping, t.scale, req.unit_scale));
+        let center_mm = center_from_insert_xy(old_mapping, from.length_mm, insert_mm, t.rotation_deg, rel);
         let angle_deg = t.rotation_deg - old_mapping.map_or(0.0, |m| m.rotation_offset_deg);
         let rotation_deg = angle_deg + new_mapping.map_or(0.0, |m| m.rotation_offset_deg);
-        // The new box is drawn at true size, as fill places it.
-        let insert = insert_from_center(new_mapping, to.length_mm, center_mm, rotation_deg, 1.0) / req.unit_scale;
+        // The new box is drawn at true size, as fill places it, keeping the target's mirror signs.
+        let signs = [rel[0].signum(), rel[1].signum()];
+        let insert = insert_from_center_xy(new_mapping, to.length_mm, center_mm, rotation_deg, signs) / req.unit_scale;
+        let resized =
+            (from.width_mm * rel[0].abs() - to.width_mm).abs() > SIZE_TOL_MM || (from.length_mm * rel[1].abs() - to.length_mm).abs() > SIZE_TOL_MM;
         if !(insert.is_finite() && rotation_deg.is_finite()) {
             return Err(UbotError::BadInput(format!("target {}: position overflows in mm", t.handle)));
         }
@@ -123,6 +145,8 @@ pub fn replace(req: &ReplaceRequest, catalog: &Catalog) -> Result<ReplaceResult,
             insert: [insert.x, insert.y],
             rotation_deg,
             scale: new_scale,
+            scale_xy: [signs[0] * new_scale, signs[1] * new_scale],
+            resized,
         });
     }
     Ok(out)

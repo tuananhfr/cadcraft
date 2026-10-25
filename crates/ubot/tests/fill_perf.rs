@@ -64,6 +64,7 @@ fn ten_thousand_boxes_under_two_seconds() {
             insert: p.insert,
             rotation_deg: p.rotation_deg,
             scale: 1.0,
+            scale_y: None,
         })
         .collect();
     let t = Instant::now();

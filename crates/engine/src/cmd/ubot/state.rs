@@ -8,6 +8,8 @@ pub struct UbotState {
     pub overlay_source: Option<String>,
     /// Layout ids UBFILL made up for untagged (or copied) boundaries, oldest first, so a commit matches its preview.
     pub(crate) fresh_layout: Vec<FreshLayout>,
+    /// The `from` and `to` of the last TUBAB run: the defaults of its next prompts.
+    pub(crate) tubab_last: Option<(String, String)>,
 }
 
 /// Boundaries whose fresh layout id is remembered; the oldest is forgotten first.
@@ -25,6 +27,6 @@ pub(crate) struct FreshLayout {
 
 impl Default for UbotState {
     fn default() -> Self {
-        Self { catalog: Catalog::builtin(), overlay_source: None, fresh_layout: Vec::new() }
+        Self { catalog: Catalog::builtin(), overlay_source: None, fresh_layout: Vec::new(), tubab_last: None }
     }
 }

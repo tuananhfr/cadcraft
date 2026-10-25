@@ -119,6 +119,7 @@ pub fn existing_instances(drawing: &Drawing, catalog: &Catalog) -> Vec<ExistingI
                 insert: [ins.insert.x, ins.insert.y],
                 rotation_deg: ins.rotation.to_degrees(),
                 scale: ins.scale.x,
+                scale_y: (ins.scale.y != ins.scale.x).then_some(ins.scale.y),
             };
             match xdata::read(&e.common) {
                 Some(Ok(UbotTag::Instance { instance_id, product_id, layout_id, .. })) => {

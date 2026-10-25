@@ -3997,3 +3997,6 @@ echo	TUBAB: {count} references of {from} to replace with {to}, {unchanged} uncha
 echo	No selected references of block {block}.	Серед вибраного немає посилань на блок {block}.
 echo	No block named {block}.	Немає блока з іменем {block}.
 	expectHash ignored in preview	expectHash ігнорується в попередньому перегляді
+echo	{handle}: non-uniform scale {x} x {y} with an anchor offset: the box centre is ambiguous	{handle}: нерівномірний масштаб {x} x {y} зі зміщеною точкою вставки: центр короба неоднозначний
+echo	{handle}: block {block} is {from} mm per block unit, {to} is {to_units}; with the INSERT scale kept the box would change size	{handle}: блок {block} має {from} мм на одиницю блока, {to} має {to_units}; зі збереженим масштабом INSERT короб змінить розмір
+	box size changed: run UBCHECK to re-check cells	розмір короба змінено: запустіть UBCHECK, щоб перевірити комірки
