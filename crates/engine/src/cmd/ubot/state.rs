@@ -6,9 +6,12 @@ pub struct UbotState {
     pub catalog: Catalog,
     /// Where the overlay came from (`path` or `"text"`); `None` while only the built-in catalog is in use.
     pub overlay_source: Option<String>,
-    /// The layout id UBFILL made up for an untagged (or copied) boundary, so a commit matches its preview.
-    pub(crate) fresh_layout: Option<FreshLayout>,
+    /// Layout ids UBFILL made up for untagged (or copied) boundaries, oldest first, so a commit matches its preview.
+    pub(crate) fresh_layout: Vec<FreshLayout>,
 }
+
+/// Boundaries whose fresh layout id is remembered; the oldest is forgotten first.
+pub(crate) const MAX_FRESH_LAYOUTS: usize = 64;
 
 /// A generated layout id and what it was generated for.
 #[derive(Debug, Clone, PartialEq)]
@@ -22,6 +25,6 @@ pub(crate) struct FreshLayout {
 
 impl Default for UbotState {
     fn default() -> Self {
-        Self { catalog: Catalog::builtin(), overlay_source: None, fresh_layout: None }
+        Self { catalog: Catalog::builtin(), overlay_source: None, fresh_layout: Vec::new() }
     }
 }

@@ -4533,6 +4533,10 @@ echo	{count} object(s) ignored (not closed polylines or circles)	bỏ qua {count
 	Choose one of the listed ribs.	Hãy chọn một trong các sườn đã liệt kê.
 	Grid changed: boxes will be re-laid on the new grid (manual moves are lost).	Lưới đã thay đổi: hộp sẽ được rải lại theo lưới mới (các dịch chuyển thủ công sẽ mất).
 echo	UBFILL warning: {warning}	Cảnh báo UBFILL: {warning}
+echo	hole {handle} carries U-BOT data that is not a zone; select another object	lỗ mở {handle} mang dữ liệu U-BOT không phải vùng; hãy chọn đối tượng khác
+echo	hole {handle}: {error}	lỗ mở {handle}: {error}
+	the U-BOT catalog has no rulepack (see UBLIB)	danh mục U-BOT không có bộ quy tắc nào (xem UBLIB)
+	That polyline is a U-BOT zone; select the slab boundary.	Đa tuyến này là vùng U-BOT; hãy chọn biên sàn.
 	No problems.	Không có vấn đề nào.
 echo	cell {i},{j} at {x},{y}: {reasons}	ô {i},{j} tại {x},{y}: {reasons}
 echo	... and {count} more	... và {count} mục khác

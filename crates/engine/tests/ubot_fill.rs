@@ -393,8 +393,310 @@ fn zone_inside_bbox_is_picked_up_by_default() {
     let with_zone = preview(&mut s, b, json!({ "holes": [z.hex()] }));
     assert_eq!(with_zone["summary"]["added"], 99);
     let with_hole = preview(&mut s, b, json!({ "holes": [hole.hex()] }));
-    assert!(with_hole["summary"]["added"].as_u64().unwrap() < 99);
-    assert!(!problem_cells(&with_hole, "IN_HOLE").is_empty());
+    // The hole goes to the core as an opening zone (ruling R15): inside reads IN_HOLE, as a plain hole did.
+    assert_eq!(with_hole["summary"]["added"], 95);
+    assert_eq!(problem_cells(&with_hole, "IN_HOLE"), vec![[4, 4], [5, 4], [4, 5], [5, 5]], "{}", with_hole["problems"]);
+    assert_eq!(problem_cells(&with_hole, "IN_ZONE"), vec![[0, 0]]);
+}
+
+#[test]
+fn selected_hole_becomes_an_opening_zone_on_commit() {
+    let (mut s, b) = slab(4, 6600.0);
+    // Covers cells (4, 4), (5, 4), (4, 5) and (5, 5) near the slab centre.
+    let hole = s.doc_mut().unwrap().add(&Space::Model, Common::default(), square(2900.0, 2900.0, 800.0)).unwrap();
+    let p = preview(&mut s, b, json!({ "holes": [hole.hex()] }));
+    assert_eq!(problem_cells(&p, "IN_HOLE"), vec![[4, 4], [5, 4], [4, 5], [5, 5]], "{}", p["problems"]);
+    assert!(xdata::read(&s.doc().unwrap().entity(hole).unwrap().common).is_none(), "preview tags nothing");
+    let r = commit(&mut s, b, json!({ "holes": [hole.hex()], "expectHash": p["inputHash"] }));
+    assert_eq!(r["written"]["added"], 96);
+    let ring = ring_of(s.doc().unwrap().entity(hole).unwrap()).unwrap();
+    let expected = UbotTag::Zone {
+        zone_id: cadcraft_engine::cmd::ubot::zone_id(hole, &ring),
+        zone_type: cadcraft_ubot::ZoneType::Opening,
+        clearance_mm: Some(0.0),
+        alt_product_id: None,
+    };
+    assert_eq!(xdata::read(&s.doc().unwrap().entity(hole).unwrap().common), Some(Ok(expected)), "the hole is kept as an opening zone");
+    assert_eq!(zones(s.doc().unwrap()).len(), 1);
+    // The opening reads back as a zone: the same geometry, so nothing to do without selecting it again.
+    let before = doc(&s);
+    let undo = undo_len(&s);
+    let r = commit(&mut s, b, json!({}));
+    assert!(r.get("written").is_none(), "{}", r["summary"]);
+    let r = commit(&mut s, b, json!({ "holes": [hole.hex()] }));
+    assert!(r.get("written").is_none(), "a tagged zone selected again is a no-op");
+    assert!(Arc::ptr_eq(&before, &doc(&s)));
+    assert_eq!(undo_len(&s), undo);
+
+    // A hole that carries other U-BOT data is refused.
+    let (mut s, b) = slab(4, 6600.0);
+    let mut tagged = Common::default();
+    let tag = UbotTag::Instance {
+        instance_id: "aaaaaaaaaaaaaaaa:0:0".into(),
+        product_id: "ubot-h13-7".into(),
+        layout_id: "aaaaaaaaaaaaaaaa".into(),
+        count_multiplier: 1,
+    };
+    xdata::write(&mut tagged, &tag).unwrap();
+    let odd = s.doc_mut().unwrap().add(&Space::Model, tagged, square(2900.0, 2900.0, 800.0)).unwrap();
+    let err = s.execute("ubfill", &json!({ "boundary": b.hex(), "product": "ubot-h13-7", "holes": [odd.hex()] })).unwrap_err().to_string();
+    assert!(err.contains(&format!("hole {}", odd.hex())), "{err}");
+    // S1: a NaN hole is named.
+    let nan = s.doc_mut().unwrap().add(&Space::Model, Common::default(), poly(&[[10.0, 10.0], [f64::NAN, 10.0], [20.0, 20.0]])).unwrap();
+    let err = s.execute("ubfill", &json!({ "boundary": b.hex(), "product": "ubot-h13-7", "holes": [nan.hex()] })).unwrap_err().to_string();
+    assert!(err.contains(&format!("hole {}", nan.hex())), "{err}");
+    // A hole on a locked layer is refused before anything is written.
+    let (mut s, b) = slab(4, 6600.0);
+    let d = s.doc_mut().unwrap();
+    d.ensure_layer("LOCKED");
+    d.layer_mut("LOCKED").unwrap().locked = true;
+    let locked = d.add(&Space::Model, Common { layer: "LOCKED".into(), ..Common::default() }, square(2900.0, 2900.0, 800.0)).unwrap();
+    let before = doc(&s);
+    let err = s
+        .execute("ubfill", &json!({ "boundary": b.hex(), "product": "ubot-h13-7", "holes": [locked.hex()], "mode": "commit" }))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains(&locked.hex()) && err.contains("locked"), "{err}");
+    assert!(Arc::ptr_eq(&before, &doc(&s)));
+}
+
+#[test]
+fn hand_inserted_generated_block_blocks_its_cell() {
+    let (mut s, b) = slab(4, 6600.0);
+    s.doc_mut().unwrap().add(&Space::Model, Common::default(), insert("UBOT_H13_7", [990.0, 6270.0], 1, 1, 0.0)).unwrap();
+    let r = preview(&mut s, b, json!({}));
+    assert_eq!(problem_cells(&r, "OVERLAPS_EXISTING"), vec![[1, 0]], "{}", r["problems"]);
+    assert_eq!(r["summary"]["added"], 99);
+}
+
+fn tag_zone(s: &mut Session, h: Handle, id: &str, zone_type: cadcraft_ubot::ZoneType) {
+    let tag = UbotTag::Zone { zone_id: id.into(), zone_type, clearance_mm: None, alt_product_id: None };
+    s.doc_mut().unwrap().modify_entity(h, |e| xdata::write(&mut e.common, &tag).unwrap()).unwrap();
+}
+
+#[test]
+fn broken_zone_shape_in_reach_is_an_error_far_away_it_is_not() {
+    let (mut s, b) = slab(4, 6600.0);
+    let mut open = square(1000.0, 1000.0, 300.0);
+    if let EntityKind::LwPolyline(pl) = &mut open {
+        pl.closed = false;
+    }
+    let z = s.doc_mut().unwrap().add(&Space::Model, Common::default(), open).unwrap();
+    tag_zone(&mut s, z, "00112233445566cc", cadcraft_ubot::ZoneType::Column);
+    let err = s.execute("ubfill", &json!({ "boundary": b.hex(), "product": "ubot-h13-7" })).unwrap_err().to_string();
+    assert!(err.contains(&format!("zone {}", z.hex())), "{err}");
+    // On another floor, far beyond any clearance, it is not this slab's business.
+    s.doc_mut()
+        .unwrap()
+        .modify_entity(z, |e| {
+            if let EntityKind::LwPolyline(pl) = &mut e.kind {
+                for v in &mut pl.vertices {
+                    v.p.x += 100_000.0;
+                }
+            }
+        })
+        .unwrap();
+    assert_eq!(preview(&mut s, b, json!({}))["summary"]["added"], 100);
+}
+
+#[test]
+fn zones_on_other_floors_do_not_block_but_nan_zones_do() {
+    let (mut s, b) = slab(4, 6600.0);
+    let clean = preview(&mut s, b, json!({}));
+    let far = 100_000.0;
+    let bow = poly(&[[far, 0.0], [far + 1000.0, 1000.0], [far + 1000.0, 0.0], [far, 1000.0]]);
+    let bow = s.doc_mut().unwrap().add(&Space::Model, Common::default(), bow).unwrap();
+    let dense: Vec<[f64; 2]> =
+        (0..20_000).map(|k| f64::from(k) * std::f64::consts::TAU / 20_000.0).map(|a| [far + 5000.0 + 1000.0 * a.cos(), 1000.0 * a.sin()]).collect();
+    let many = s.doc_mut().unwrap().add(&Space::Model, Common::default(), poly(&dense)).unwrap();
+    tag_zone(&mut s, bow, "00000000000000b1", cadcraft_ubot::ZoneType::Exclusion);
+    tag_zone(&mut s, many, "00000000000000b2", cadcraft_ubot::ZoneType::Exclusion);
+    let r = preview(&mut s, b, json!({}));
+    assert_eq!(r["summary"]["added"], 100);
+    assert_eq!(r["layout"]["geometryHash"], clean["layout"]["geometryHash"]);
+    let nan = s.doc_mut().unwrap().add(&Space::Model, Common::default(), poly(&[[1e9, 0.0], [f64::NAN, 0.0], [1e9, 10.0]])).unwrap();
+    tag_zone(&mut s, nan, "00000000000000b3", cadcraft_ubot::ZoneType::Exclusion);
+    let err = s.execute("ubfill", &json!({ "boundary": b.hex(), "product": "ubot-h13-7" })).unwrap_err().to_string();
+    assert!(err.contains(&format!("zone {}", nan.hex())), "{err}");
+}
+
+#[test]
+fn fresh_ids_of_two_boundaries_do_not_evict_each_other() {
+    cadcraft_engine::cmd::ubplot::set_clock(ticking_clock);
+    let (mut s, a) = slab(4, 6600.0);
+    let b = s.doc_mut().unwrap().add(&Space::Model, Common::default(), square(20_000.0, 0.0, 6600.0)).unwrap();
+    let pa = preview(&mut s, a, json!({}));
+    let pb = preview(&mut s, b, json!({}));
+    assert_ne!(pa["layoutId"], pb["layoutId"]);
+    let ra = commit(&mut s, a, json!({ "expectHash": pa["inputHash"] }));
+    assert_eq!(ra["layoutId"], pa["layoutId"]);
+    let rb = commit(&mut s, b, json!({ "expectHash": pb["inputHash"] }));
+    assert_eq!(rb["layoutId"], pb["layoutId"], "committing A keeps B's remembered id");
+}
+
+#[test]
+fn failed_commit_writes_nothing() {
+    let (mut s, b) = slab(4, 6600.0);
+    commit(&mut s, b, json!({}));
+    s.doc_mut().unwrap().layer_mut("UBOT").unwrap().locked = true;
+    let before = doc(&s);
+    let undo = undo_len(&s);
+    let err = s.execute("ubfill", &json!({ "boundary": b.hex(), "product": "ubot-h10-7", "mode": "commit" })).unwrap_err().to_string();
+    assert!(err.contains("locked layer"), "{err}");
+    assert!(Arc::ptr_eq(&before, &doc(&s)));
+    assert_eq!(undo_len(&s), undo);
+}
+
+fn ub_block(s: &mut Session, name: &str, kind: EntityKind, mm_per_unit: f64, anchor: &str) {
+    let d = s.doc_mut().unwrap();
+    let mut block = Block::new(name);
+    let handle = d.new_handle();
+    block.entities.push(Entity { handle, common: Common::default(), kind });
+    d.blocks.insert(name.into(), Arc::new(block));
+    let overlay = json!({
+        "schema": "ubot.catalog/1", "catalogId": "lpc-project", "version": "1", "products": [], "rulepacks": [],
+        "mappings": [{ "productId": "ubot-h13-7", "cadEngine": "any", "blockName": name, "unitsMmPerBlockUnit": mm_per_unit, "anchor": anchor, "rotationOffsetDeg": 0.0 }]
+    });
+    s.execute("ublib", &json!({ "action": "load", "text": overlay.to_string() })).unwrap();
+}
+
+#[test]
+fn top_center_anchor_follows_the_grid_angle() {
+    let (mut s, b) = slab(4, 6600.0);
+    ub_block(&mut s, "UB-1", square(-260.0, -520.0, 520.0), 1.0, "top_center");
+    let r = commit(&mut s, b, json!({ "angle": 30 }));
+    let first = &r["add"][0];
+    let (cx, cy) = (first["center"][0].as_f64().unwrap(), first["center"][1].as_f64().unwrap());
+    let a = 30f64.to_radians();
+    let expected = [cx - 260.0 * a.sin(), cy + 260.0 * a.cos()];
+    let got = [first["insert"][0].as_f64().unwrap(), first["insert"][1].as_f64().unwrap()];
+    assert!((got[0] - expected[0]).abs() < 1e-9 && (got[1] - expected[1]).abs() < 1e-9, "{got:?} vs {expected:?}");
+    let placed = boxes(s.doc().unwrap());
+    let ins = &placed.iter().find(|(_, _, c)| instance_of(c).0 == first["instanceId"].as_str().unwrap()).unwrap().1;
+    assert_eq!([ins.insert.x, ins.insert.y], got);
+    assert!((ins.rotation - a).abs() < 1e-12, "{}", ins.rotation);
+    let before = doc(&s);
+    commit(&mut s, b, json!({ "angle": 30 }));
+    assert!(Arc::ptr_eq(&before, &doc(&s)), "rotated anchored boxes read back in place");
+}
+
+#[test]
+fn mapped_block_units_set_the_insert_scale() {
+    let (mut s, b) = slab(4, 6600.0);
+    // Drawn in cm: 52 block units are the 520 mm box.
+    ub_block(&mut s, "UB-2", square(-26.0, -26.0, 52.0), 10.0, "center");
+    commit(&mut s, b, json!({}));
+    let placed = boxes(s.doc().unwrap());
+    assert_eq!(placed.len(), 100);
+    assert!(placed.iter().all(|(_, i, _)| i.block == "UB-2" && i.scale == Vec3::new(10.0, 10.0, 10.0)), "{:?}", placed[0].1.scale);
+    let before = doc(&s);
+    commit(&mut s, b, json!({}));
+    assert!(Arc::ptr_eq(&before, &doc(&s)));
+}
+
+fn interactive_enter_through(s: &mut Session, b: Handle) {
+    s.start("ubfill").unwrap();
+    s.input(Input::Pick(vec![b])).unwrap();
+    for _ in 0..4 {
+        s.input(Input::Enter).unwrap();
+    }
+    assert!(s.running.is_none(), "{:?}", s.current_prompt());
+}
+
+#[test]
+fn interactive_rerun_is_a_noop() {
+    let (mut s, b) = slab(4, 6600.0);
+    interactive_enter_through(&mut s, b);
+    assert_eq!(boxes(s.doc().unwrap()).len(), 100);
+    let before = doc(&s);
+    let undo = undo_len(&s);
+    interactive_enter_through(&mut s, b);
+    assert!(Arc::ptr_eq(&before, &doc(&s)));
+    assert_eq!(undo_len(&s), undo);
+
+    // A custom grid made through JSON survives an interactive re-run that takes every default.
+    let (mut s, b) = slab(4, 6600.0);
+    commit(&mut s, b, json!({ "angle": 15, "origin": [400.0, 6200.0], "pitchX": 700, "pitchY": 680, "product": "ubot-h20-7" }));
+    let before = doc(&s);
+    let undo = undo_len(&s);
+    s.start("ubfill").unwrap();
+    s.input(Input::Pick(vec![b])).unwrap();
+    s.input(Input::Enter).unwrap();
+    assert_eq!(s.current_prompt().unwrap().default.as_deref(), Some("ubot-h20-7"), "the stored product is the default");
+    s.input(Input::Enter).unwrap();
+    assert_eq!(s.current_prompt().unwrap().default.as_deref(), Some("180"), "rib default from the stored pitch");
+    s.input(Input::Enter).unwrap();
+    s.input(Input::Enter).unwrap();
+    assert!(s.running.is_none());
+    assert!(Arc::ptr_eq(&before, &doc(&s)), "no-op");
+    assert_eq!(undo_len(&s), undo);
+    // JSON with origin, angle and pitch omitted keeps them too.
+    let r = preview(&mut s, b, json!({ "product": "ubot-h20-7" }));
+    assert_eq!((r["summary"]["kept"].as_u64(), r["reset"].as_bool()), (Some(boxes(s.doc().unwrap()).len() as u64), Some(false)), "{}", r["summary"]);
+    // Another product or rib lets the core lay a new grid.
+    let r = preview(&mut s, b, json!({ "product": "ubot-h20-7", "rib": 140 }));
+    assert_eq!((r["layout"]["pitchXMm"].as_f64(), r["layout"]["angleDeg"].as_f64()), (Some(660.0), Some(15.0)));
+    assert_eq!(r["reset"], true);
+}
+
+#[test]
+fn copied_floor_uses_its_own_grid_origin() {
+    let (mut s, b) = slab(4, 6600.0);
+    commit(&mut s, b, json!({ "origin": [400.0, 6200.0] }));
+    let handles: Vec<String> = std::iter::once(b.hex()).chain(boxes(s.doc().unwrap()).iter().map(|(h, _, _)| h.hex())).collect();
+    let copied = s.execute("copy", &json!({ "handles": handles, "delta": [10000.0, 0.0] })).unwrap();
+    let copy_b = Handle::parse_hex(copied["handles"][0].as_str().unwrap()).unwrap();
+    let r = preview(&mut s, copy_b, json!({}));
+    assert_eq!(r["layout"]["origin"], json!([10330.0, 6270.0]), "the default origin of the copy, not the original's stored one");
+}
+
+#[test]
+fn interactive_refuses_a_zone_as_boundary_and_keeps_the_selection() {
+    let (mut s, b) = slab(4, 6600.0);
+    let z = s.doc_mut().unwrap().add(&Space::Model, Common::default(), square(200.0, 200.0, 100.0)).unwrap();
+    s.execute("ubzone", &json!({ "handles": [z.hex()], "type": "column" })).unwrap();
+    s.set_selection(vec![z]);
+    s.start("ubfill").unwrap();
+    s.input(Input::Pick(vec![z])).unwrap();
+    assert_eq!(s.current_prompt().unwrap().message, "Select slab boundary", "a zone is not a boundary");
+    s.input(Input::Pick(vec![b])).unwrap();
+    s.input(Input::Pick(vec![z])).unwrap();
+    assert_eq!(s.selection(), vec![z]);
+    s.input(Input::Cancel).unwrap();
+    assert!(s.running.is_none());
+    assert_eq!(s.selection(), vec![z], "Esc leaves the selection as it was");
+}
+
+#[test]
+fn expect_hash_in_preview_is_reported() {
+    let (mut s, b) = slab(4, 6600.0);
+    let r = preview(&mut s, b, json!({ "expectHash": "abc" }));
+    assert!(r["warnings"].as_array().unwrap().iter().any(|w| w == "expectHash ignored in preview"), "{}", r["warnings"]);
+}
+
+#[test]
+fn block_change_drops_attributes() {
+    let (mut s, b) = slab(4, 6600.0);
+    ub_block(&mut s, "UB-1", square(-260.0, -520.0, 520.0), 1.0, "top_center");
+    commit(&mut s, b, json!({}));
+    let attrib: cadcraft_engine::doc::Attrib =
+        serde_json::from_value(json!({ "tag": "MARK", "text": { "insert": { "x": 0.0, "y": 0.0, "z": 0.0 }, "height": 100.0, "value": "A" } }))
+            .unwrap();
+    let first = boxes(s.doc().unwrap())[0].0;
+    s.doc_mut()
+        .unwrap()
+        .modify_entity(first, |e| {
+            if let EntityKind::Insert(i) = &mut e.kind {
+                i.attribs.push(attrib.clone());
+            }
+        })
+        .unwrap();
+    s.execute("ublib", &json!({ "action": "reset" })).unwrap();
+    let r = commit(&mut s, b, json!({}));
+    assert_eq!(r["written"]["updated"], 100, "{}", r["summary"]);
+    let EntityKind::Insert(ins) = s.doc().unwrap().entity(first).unwrap().kind.clone() else { panic!("insert") };
+    assert_eq!(ins.block, "UBOT_H13_7");
+    assert!(ins.attribs.is_empty(), "attributes of the old block are dropped");
 }
 
 fn start_to_apply(s: &mut Session, b: Handle) {
@@ -507,8 +809,11 @@ fn grid_change_relays_boxes_without_manual_moved() {
     let (mut s, b) = slab(4, 6600.0);
     let r = commit(&mut s, b, json!({ "pitchX": 700 }));
     assert_eq!(r["written"]["added"], 90);
-    // Back to the default pitch: the stored grid differs, so boxes follow the new grid.
+    // Omitted, the stored pitch holds (ruling R16).
     let r = commit(&mut s, b, json!({}));
+    assert!(r.get("written").is_none(), "{}", r["summary"]);
+    // Another rib gives the default pitch: the stored grid differs, so boxes follow the new grid.
+    let r = commit(&mut s, b, json!({ "rib": 140 }));
     assert_eq!(r["reset"], true);
     assert!(r["warnings"].as_array().unwrap().iter().any(|w| w == "GRID_CHANGED"), "{}", r["warnings"]);
     assert!(problem_cells(&r, "MANUAL_MOVED").is_empty(), "{}", r["problems"]);

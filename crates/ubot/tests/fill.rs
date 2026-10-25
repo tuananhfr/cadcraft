@@ -925,3 +925,41 @@ fn json_shape_is_camel_case_and_self_describing() {
     assert_eq!(serde_json::to_value(ZoneType::AltProduct).unwrap(), "alt_product");
     assert_eq!(serde_json::to_value(Reason::CurvedEdgeTolerance).unwrap(), "CURVED_EDGE_TOLERANCE");
 }
+
+/// A self-intersecting bow tie: `ring_from_input` refuses it.
+fn bow_tie(x: f64, y: f64) -> RingInput {
+    poly(&[[x, y], [x + 1000.0, y + 1000.0], [x + 1000.0, y], [x, y + 1000.0]])
+}
+
+#[test]
+fn zones_out_of_reach_are_dropped_before_any_check() {
+    let base = run(&req(square()));
+    let mut r = req(square());
+    // A broken zone and a 20 000-vertex zone on another floor, both beyond MAX_CLEARANCE_MM of the slab.
+    let far = 6600.0 + MAX_CLEARANCE_MM + 1000.0;
+    let many = RingInput {
+        vertices: (0..20_000)
+            .map(|k| {
+                let a = f64::from(k) * std::f64::consts::TAU / 20_000.0;
+                [far + 5000.0 + 1000.0 * a.cos(), 1000.0 * a.sin(), 0.0]
+            })
+            .collect(),
+    };
+    r.zones = vec![zone("broken", bow_tie(far, 0.0), ZoneType::Exclusion), zone("many", many, ZoneType::Column)];
+    let res = run(&r);
+    assert_eq!(res.summary, base.summary);
+    assert_eq!(res.input_hash, base.input_hash, "far zones do not change the request hash");
+    assert_eq!(res.layout.geometry_hash, base.layout.geometry_hash);
+    // Within reach the broken zone is an error again.
+    r.zones = vec![zone("broken", bow_tie(1000.0, 1000.0), ZoneType::Exclusion)];
+    assert!(fill(&r, &Catalog::builtin()).is_err());
+}
+
+#[test]
+fn non_finite_zone_is_an_error_wherever_it_is() {
+    let mut r = req(square());
+    r.zones = vec![zone("nan", poly(&[[1e9, 0.0], [f64::NAN, 0.0], [1e9, 10.0]]), ZoneType::Exclusion)];
+    let err = fill(&r, &Catalog::builtin()).unwrap_err();
+    assert!(matches!(&err, UbotError::BadInput(m) if m.contains("zone nan")), "{err}");
+    assert!(geometry_hash(1.0, &square(), &[], &r.zones).is_err());
+}

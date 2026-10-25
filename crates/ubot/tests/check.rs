@@ -528,3 +528,22 @@ fn legacy_block_with_a_mapped_product_gets_a_footprint_and_can_overlap() {
     assert!(codes.contains(&IssueCode::Overlap) && codes.contains(&IssueCode::LegacyBlock), "{issues:?}");
     assert_eq!(issues.len(), 2);
 }
+
+#[test]
+fn far_broken_zone_does_not_fail_check_but_nan_zone_does() {
+    let res = filled();
+    let mut r = request(&res);
+    let far = 6600.0 + 10_000.0 + 1000.0;
+    let bow = RingInput { vertices: vec![[far, 0.0, 0.0], [far + 1000.0, 1000.0, 0.0], [far + 1000.0, 0.0, 0.0], [far, 1000.0, 0.0]] };
+    r.zones.push(ZoneInput { id: "broken".into(), ring: bow, zone_type: ZoneType::Exclusion, clearance_mm: None, alt_product_id: None });
+    assert!(run(&r).is_empty());
+    r.zones.push(ZoneInput {
+        id: "nan".into(),
+        ring: rect(f64::NAN, 0.0, 1.0, 1.0),
+        zone_type: ZoneType::Exclusion,
+        clearance_mm: None,
+        alt_product_id: None,
+    });
+    let err = check(&r, &Catalog::builtin()).unwrap_err();
+    assert!(matches!(&err, UbotError::BadInput(m) if m.contains("zone nan")), "{err}");
+}

@@ -3946,6 +3946,10 @@ echo	{count} object(s) ignored (not closed polylines or circles)	пропуще�
 	Choose one of the listed ribs.	Виберіть одне з наведених ребер.
 	Grid changed: boxes will be re-laid on the new grid (manual moves are lost).	Сітку змінено: бокси буде розкладено за новою сіткою (ручні переміщення буде втрачено).
 echo	UBFILL warning: {warning}	Попередження UBFILL: {warning}
+echo	hole {handle} carries U-BOT data that is not a zone; select another object	отвір {handle} містить дані U-BOT, що не є зоною; виберіть інший об'єкт
+echo	hole {handle}: {error}	отвір {handle}: {error}
+	the U-BOT catalog has no rulepack (see UBLIB)	каталог U-BOT не має набору правил (див. UBLIB)
+	That polyline is a U-BOT zone; select the slab boundary.	Ця полілінія є зоною U-BOT; виберіть контур плити.
 	No problems.	Проблем немає.
 echo	cell {i},{j} at {x},{y}: {reasons}	комірка {i},{j} у точці {x},{y}: {reasons}
 echo	... and {count} more	... і ще {count}

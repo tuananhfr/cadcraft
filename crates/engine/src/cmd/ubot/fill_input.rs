@@ -1,13 +1,14 @@
 //! UBFILL inputs from the drawing: the slab boundary and its layout tag, holes, checked zones and the boxes in the way.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use cadcraft_doc::{Drawing, EntityKind, Handle, Insert, Space};
+use cadcraft_doc::{Drawing, Entity, EntityKind, Handle, Insert, Space, entity_bounds};
 use cadcraft_geom::Vec2;
-use cadcraft_ubot::{Catalog, ExistingInstance, LayoutRecord, MAX_CLEARANCE_MM, Product, RingInput, ZoneInput, ZoneType, ring_from_input};
+use cadcraft_ubot::{Catalog, ExistingInstance, LayoutRecord, MAX_CLEARANCE_MM, Product, RingInput, ZoneInput, ZoneReach, ZoneType, ring_from_input};
 
-use super::read::{ring_of, zone_ring_of, zones};
+use super::read::{invalid_tags, ring_of, zone_ring_of, zones};
 use super::xdata::{self, UbotTag};
+use super::zone_id;
 use crate::Result;
 use crate::cmd::bad;
 
@@ -44,8 +45,9 @@ pub(super) fn boundary(d: &Drawing, h: Handle) -> Result<(RingInput, Stored)> {
     Ok((ring, stored))
 }
 
-/// Untagged closed polylines and circles are holes; a tagged zone is used anyway, so selecting it changes nothing.
-pub(super) fn holes(d: &Drawing, boundary: Handle, handles: &[Handle]) -> Result<Vec<RingInput>> {
+/// Selected holes as opening zones the commit tags (ruling R15), so UBCHECK and later fills read the same geometry.
+/// `clearance_mm` is this run's edge clearance and stays on the tag. A tagged zone is used anyway, so it is skipped.
+pub(super) fn hole_zones(d: &Drawing, boundary: Handle, handles: &[Handle], unit_scale: f64, clearance_mm: f64) -> Result<Vec<(Handle, ZoneInput)>> {
     if handles.len() > MAX_HOLES {
         return Err(bad(CMD, format!("too many objects (at most {MAX_HOLES})")));
     }
@@ -59,18 +61,56 @@ pub(super) fn holes(d: &Drawing, boundary: Handle, handles: &[Handle]) -> Result
         if d.space_of(h) != Some(Space::Model) {
             return Err(bad(CMD, format!("{} is not in model space", h.hex())));
         }
-        if matches!(xdata::read(&e.common), Some(Ok(UbotTag::Zone { .. }))) {
-            continue;
+        match xdata::read(&e.common) {
+            Some(Ok(UbotTag::Zone { .. })) => continue,
+            // Tagging it as a zone would erase that data.
+            Some(_) => return Err(bad(CMD, format!("hole {} carries U-BOT data that is not a zone; select another object", h.hex()))),
+            None => {}
         }
-        out.push(zone_ring_of(e).ok_or_else(|| bad(CMD, format!("hole {} is not a closed polyline or circle", h.hex())))?);
+        let ring = zone_ring_of(e).ok_or_else(|| bad(CMD, format!("hole {} is not a closed polyline or circle", h.hex())))?;
+        ring_from_input(&ring, unit_scale, RING_TOL_MM).map_err(|e| bad(CMD, format!("hole {}: {e}", h.hex())))?;
+        let zone = ZoneInput { id: zone_id(h, &ring), ring, zone_type: ZoneType::Opening, clearance_mm: Some(clearance_mm), alt_product_id: None };
+        out.push((h, zone));
     }
     Ok(out)
 }
 
-/// Every tagged zone in model space (the core filters them by geometry), each checked so a bad one is named.
-pub(super) fn checked_zones(d: &Drawing, unit_scale: f64, catalog: &Catalog, main: &Product) -> Result<Vec<ZoneInput>> {
+/// The bounding box of a zone object that is not a ring, so the reach filter can place it; `None` when unplaceable.
+fn broken_zone_extent(d: &Drawing, e: &Entity) -> Option<RingInput> {
+    if let EntityKind::LwPolyline(pl) = &e.kind
+        && !pl.vertices.iter().all(|v| v.p.is_finite())
+    {
+        return None;
+    }
+    let b = entity_bounds(d, e, 0);
+    if b.is_empty() || !(b.min.is_finite() && b.max.is_finite()) {
+        return None;
+    }
+    Some(RingInput { vertices: vec![[b.min.x, b.min.y, 0.0], [b.max.x, b.min.y, 0.0], [b.max.x, b.max.y, 0.0], [b.min.x, b.max.y, 0.0]] })
+}
+
+/// The tagged zones in model space within `reach` of the slab, each checked so a bad one is named. A zone record on
+/// a shape that is no ring is an error in reach too, never dropped; a non-finite zone is an error wherever it is.
+pub(super) fn checked_zones(d: &Drawing, unit_scale: f64, reach: &ZoneReach, catalog: &Catalog, main: &Product) -> Result<Vec<ZoneInput>> {
+    let named = |h: Handle, why: &dyn std::fmt::Display| bad(CMD, format!("zone {}: {why}", h.hex()));
+    for (h, why) in invalid_tags(d) {
+        let Some(e) = d.entity(h) else { continue };
+        if !matches!(xdata::read(&e.common), Some(Ok(UbotTag::Zone { .. }))) {
+            continue;
+        }
+        let near = match broken_zone_extent(d, e) {
+            Some(extent) => reach.reaches(unit_scale, &extent).map_err(|e| named(h, &e))?,
+            None => true,
+        };
+        if near {
+            return Err(named(h, &why));
+        }
+    }
     let mut out = Vec::new();
     for (h, z) in zones(d) {
+        if !reach.reaches(unit_scale, &z.ring).map_err(|e| named(h, &e))? {
+            continue;
+        }
         ring_from_input(&z.ring, unit_scale, RING_TOL_MM).map_err(|e| bad(CMD, format!("zone {}: {e}", h.hex())))?;
         if let Some(c) = z.clearance_mm.filter(|c| *c > MAX_CLEARANCE_MM) {
             return Err(bad(CMD, format!("zone {}: clearance {c} mm is over {MAX_CLEARANCE_MM} mm", h.hex())));
@@ -108,7 +148,10 @@ enum Role {
     Obstacle { product_id: Option<String> },
 }
 
-fn role(e: &cadcraft_doc::Entity, ins: &Insert, catalog: &Catalog) -> Option<Role> {
+/// Product ids by the upper-case name of their generated `UBOT_<SKU>` block.
+type Generated = HashMap<String, String>;
+
+fn role(e: &Entity, ins: &Insert, catalog: &Catalog, generated: &Generated) -> Option<Role> {
     let single = cells(ins) <= 1;
     match xdata::read(&e.common) {
         Some(Ok(UbotTag::Instance { instance_id, product_id, layout_id, .. })) if single => {
@@ -119,7 +162,8 @@ fn role(e: &cadcraft_doc::Entity, ins: &Insert, catalog: &Catalog) -> Option<Rol
         // Malformed or misplaced U-BOT data still marks a box.
         Some(_) => Some(Role::Obstacle { product_id: None }),
         None if catalog.mapping_for_block(&ins.block).is_some() => Some(Role::Obstacle { product_id: None }),
-        None => None,
+        // A generated box block inserted by hand: untagged, so only in the way (spec §14.1).
+        None => generated.get(&ins.block.to_ascii_uppercase()).map(|id| Role::Obstacle { product_id: Some(id.clone()) }),
     }
 }
 
@@ -128,13 +172,14 @@ fn cells(ins: &Insert) -> u64 {
 }
 
 /// Boxes already in model space for the core: tagged single boxes with their ids, everything else as obstacles
-/// (malformed tags, tagged MINSERT cells one by one, untagged mapped blocks).
+/// (malformed tags, tagged MINSERT cells one by one, untagged mapped or generated box blocks).
 pub(super) fn existing(d: &Drawing, catalog: &Catalog) -> Result<Vec<ExistingInstance>> {
-    let refs: Vec<(&cadcraft_doc::Entity, &Insert, Role)> = d
+    let generated: Generated = catalog.products.iter().map(|p| (Catalog::default_block_name(p), p.id.clone())).collect();
+    let refs: Vec<(&Entity, &Insert, Role)> = d
         .model
         .iter()
         .filter_map(|e| match &e.kind {
-            EntityKind::Insert(ins) => role(e, ins, catalog).map(|r| (e.as_ref(), ins, r)),
+            EntityKind::Insert(ins) => role(e, ins, catalog, &generated).map(|r| (e.as_ref(), ins, r)),
             _ => None,
         })
         .collect();

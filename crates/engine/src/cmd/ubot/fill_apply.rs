@@ -40,12 +40,14 @@ fn tag_error(h: Handle, why: String) -> EngineError {
     EngineError::Other(format!("{}: {why}", h.hex()))
 }
 
-/// Applies `plan` as one edit; refuses up front when the boundary or a box to change sits on a locked layer.
+/// Applies `plan` as one edit; refuses up front when the boundary, a hole to tag or a box to change sits on a locked
+/// layer.
 pub(super) fn apply(s: &mut Session, plan: &Plan) -> Result<Written> {
     let r = &plan.result;
     let remove: Vec<Handle> = r.remove.iter().map(|h| parse(h)).collect::<Result<_>>()?;
     let update: Vec<(Handle, &Placement)> = r.update.iter().map(|u| Ok((parse(&u.handle)?, &u.placement))).collect::<Result<_>>()?;
-    for h in std::iter::once(plan.boundary).chain(remove.iter().copied()).chain(update.iter().map(|u| u.0)) {
+    let holes = plan.hole_tags.iter().map(|(h, _)| *h);
+    for h in std::iter::once(plan.boundary).chain(holes).chain(remove.iter().copied()).chain(update.iter().map(|u| u.0)) {
         if crate::cmd::curves::is_locked(s, h) {
             return Err(bad(CMD, format!("{} is on a locked layer", h.hex())));
         }
@@ -64,6 +66,7 @@ pub(super) fn apply(s: &mut Session, plan: &Plan) -> Result<Written> {
     let scale_of = |name: &str| scales.get(name).copied().ok_or_else(|| bad(CMD, format!("block {name} has no usable scale")));
     let layout_id = plan.record.layout_id.as_str();
     let written = Written { added: r.add.len(), updated: update.len(), removed: remove.len() };
+    let (doc_uid, boundary_hex) = (s.state()?.uid, plan.boundary.hex());
     commit(s, |d: &mut Drawing| {
         if !products.is_empty() {
             ensure_layer_ubot(d);
@@ -84,6 +87,10 @@ pub(super) fn apply(s: &mut Session, plan: &Plan) -> Result<Written> {
             let mut tagged = Ok(());
             d.modify_entity(h, |e| {
                 if let EntityKind::Insert(ins) = &mut e.kind {
+                    // Attributes belong to the old block's definitions; all of them go with it.
+                    if !ins.block.eq_ignore_ascii_case(&p.block_name) {
+                        ins.attribs.clear();
+                    }
                     ins.insert = Vec3::new(p.insert[0], p.insert[1], ins.insert.z);
                     ins.rotation = p.rotation_deg.to_radians();
                     ins.block = p.block_name.clone();
@@ -111,10 +118,13 @@ pub(super) fn apply(s: &mut Session, plan: &Plan) -> Result<Written> {
             d.add(&Space::Model, common, EntityKind::Insert(insert))?;
         }
         set_tag(d, plan.boundary, &UbotTag::Layout { record: plan.record.clone(), boundary_handle: plan.boundary.hex() })?;
+        for (h, tag) in &plan.hole_tags {
+            set_tag(d, *h, tag)?;
+        }
         Ok(Value::Null)
     })?;
     // The id is on the boundary now; erased boxes leave the selection.
-    s.ubot.fresh_layout = None;
+    s.ubot.fresh_layout.retain(|f| !(f.doc_uid == doc_uid && f.boundary == boundary_hex));
     if !remove.is_empty() {
         let gone: HashSet<Handle> = remove.into_iter().collect();
         let kept: Vec<Handle> = s.selection().into_iter().filter(|h| !gone.contains(h)).collect();

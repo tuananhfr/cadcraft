@@ -224,30 +224,60 @@ fn ring_extent(r: &RingInput) -> Bounds2 {
     extent.expand(bulge_reach.min(1e12))
 }
 
-/// `input_hash` of the boundary and holes plus the zones that can touch the slab, all in mm. Zones are hashed one by one
-/// and sorted, and a zone further than `MAX_CLEARANCE_MM` from the boundary's extent is left out, so fill and check agree
-/// whatever other zones the drawing holds and in whatever order they are read.
+fn ring_mm(r: &RingInput, unit_scale: f64, what: &str) -> Result<RingInput, UbotError> {
+    let vertices: Vec<[f64; 3]> = r.vertices.iter().map(|v| [v[0] * unit_scale, v[1] * unit_scale, v[2]]).collect();
+    if vertices.iter().flatten().all(|c| c.is_finite()) {
+        Ok(RingInput { vertices })
+    } else {
+        Err(UbotError::BadInput(format!("{what}: ring vertex is not a finite number in mm")))
+    }
+}
+
+/// Which zones can touch a slab: those whose (arc-grown) extent comes within `MAX_CLEARANCE_MM` of the boundary's.
+/// Fill, check and the hash all filter zones with it, so far-away zones never change or block a layout.
+#[derive(Debug, Clone, Copy)]
+pub struct ZoneReach {
+    reach: Bounds2,
+}
+
+impl ZoneReach {
+    pub fn new(unit_scale: f64, boundary: &RingInput) -> Result<Self, UbotError> {
+        positive(unit_scale, "unitScale")?;
+        Ok(ZoneReach { reach: ring_extent(&ring_mm(boundary, unit_scale, "boundary")?).expand(MAX_CLEARANCE_MM) })
+    }
+
+    /// A non-finite ring is an error, never "out of reach": a broken zone must not vanish silently.
+    pub fn reaches(&self, unit_scale: f64, zone: &RingInput) -> Result<bool, UbotError> {
+        Ok(ring_extent(&ring_mm(zone, unit_scale, "zone")?).intersects(&self.reach))
+    }
+
+    /// The zones within reach, in input order; the error names the first non-finite zone.
+    pub fn filter<'z>(&self, unit_scale: f64, zones: &'z [ZoneInput]) -> Result<Vec<&'z ZoneInput>, UbotError> {
+        let mut out = Vec::new();
+        for z in zones {
+            let near = self.reaches(unit_scale, &z.ring).map_err(|e| match e {
+                UbotError::BadInput(m) => UbotError::BadInput(format!("zone {}: {m}", z.id)),
+                other => other,
+            })?;
+            if near {
+                out.push(z);
+            }
+        }
+        Ok(out)
+    }
+}
+
+/// `input_hash` of the boundary and holes plus the zones that can touch the slab ([`ZoneReach`]), all in mm. Zones are
+/// hashed one by one and sorted, so fill and check agree whatever other zones the drawing holds and in whatever order.
 pub fn geometry_hash(unit_scale: f64, boundary: &RingInput, holes: &[RingInput], zones: &[ZoneInput]) -> Result<String, UbotError> {
-    positive(unit_scale, "unitScale")?;
-    let mm = |r: &RingInput| -> Result<RingInput, UbotError> {
-        let vertices: Vec<[f64; 3]> = r.vertices.iter().map(|v| [v[0] * unit_scale, v[1] * unit_scale, v[2]]).collect();
-        if vertices.iter().flatten().all(|c| c.is_finite()) {
-            Ok(RingInput { vertices })
-        } else {
-            Err(UbotError::BadInput("ring vertex is not a finite number in mm".into()))
-        }
-    };
-    let boundary = mm(boundary)?;
-    let reach = ring_extent(&boundary).expand(MAX_CLEARANCE_MM);
+    let reach = ZoneReach::new(unit_scale, boundary)?;
     let mut zone_digests = Vec::new();
-    for z in zones {
-        let zone = ZoneInput { ring: mm(&z.ring)?, ..z.clone() };
-        if ring_extent(&zone.ring).intersects(&reach) {
-            zone_digests.push(input_hash(&zone));
-        }
+    for z in reach.filter(unit_scale, zones)? {
+        zone_digests.push(input_hash(&ZoneInput { ring: ring_mm(&z.ring, unit_scale, "zone")?, ..z.clone() }));
     }
     zone_digests.sort_unstable();
-    let view = GeometryView { boundary, holes: holes.iter().map(mm).collect::<Result<_, _>>()?, zones: zone_digests };
+    let holes = holes.iter().map(|h| ring_mm(h, unit_scale, "hole")).collect::<Result<_, _>>()?;
+    let view = GeometryView { boundary: ring_mm(boundary, unit_scale, "boundary")?, holes, zones: zone_digests };
     Ok(input_hash(&view))
 }
 
@@ -268,7 +298,7 @@ struct RequestView<'a> {
     reset: bool,
     boundary: &'a RingInput,
     holes: &'a [RingInput],
-    zones: &'a [ZoneInput],
+    zones: Vec<&'a ZoneInput>,
     product_id: &'a str,
     rulepack_id: Option<&'a str>,
     rib_mm: Option<f64>,
@@ -281,7 +311,7 @@ struct RequestView<'a> {
 }
 
 impl<'a> RequestView<'a> {
-    fn of(r: &'a FillRequest) -> Self {
+    fn of(r: &'a FillRequest, zones: Vec<&'a ZoneInput>) -> Self {
         RequestView {
             unit_scale: r.unit_scale,
             layout_id: &r.layout_id,
@@ -289,7 +319,7 @@ impl<'a> RequestView<'a> {
             reset: r.reset,
             boundary: &r.boundary,
             holes: &r.holes,
-            zones: &r.zones,
+            zones,
             product_id: &r.product_id,
             rulepack_id: r.rulepack_id.as_deref(),
             rib_mm: r.rib_mm,
@@ -350,8 +380,8 @@ fn settings(req: &FillRequest, product: &Product, rulepack: &RulePack) -> Result
     })
 }
 
-fn build_domain<'c>(req: &FillRequest, catalog: &'c Catalog, main: &Product, s: &Settings) -> Result<Domain<'c>, UbotError> {
-    let raw = req.holes.iter().chain(req.zones.iter().map(|z| &z.ring)).fold(req.boundary.vertices.len(), |n, r| n.saturating_add(r.vertices.len()));
+fn build_domain<'c>(req: &FillRequest, zones: &[&ZoneInput], catalog: &'c Catalog, main: &Product, s: &Settings) -> Result<Domain<'c>, UbotError> {
+    let raw = req.holes.iter().chain(zones.iter().map(|z| &z.ring)).fold(req.boundary.vertices.len(), |n, r| n.saturating_add(r.vertices.len()));
     if raw > MAX_VERTICES {
         return Err(UbotError::Limit(format!("{raw} boundary, hole and zone vertices, the limit is {MAX_VERTICES}")));
     }
@@ -362,7 +392,7 @@ fn build_domain<'c>(req: &FillRequest, catalog: &'c Catalog, main: &Product, s: 
         rings.push(ring(h)?);
         roles.push(Role::Hole);
     }
-    for z in &req.zones {
+    for z in zones {
         let clearance_mm = match z.clearance_mm {
             Some(c) => clearance_mm(c, &format!("zone {} clearanceMm", z.id))?,
             None => s.exclusion_clearance_mm,
@@ -433,7 +463,9 @@ pub fn fill(req: &FillRequest, catalog: &Catalog) -> Result<FillResult, UbotErro
         })
     })?;
     let s = settings(req, main, rulepack)?;
-    let domain = build_domain(req, catalog, main, &s)?;
+    // Out-of-reach zones are dropped before any check, so a broken zone on another floor cannot block this one.
+    let zones = ZoneReach::new(req.unit_scale, &req.boundary)?.filter(req.unit_scale, &req.zones)?;
+    let domain = build_domain(req, &zones, catalog, main, &s)?;
     let boundary = domain.rings.first().ok_or_else(|| UbotError::Geometry("missing boundary".into()))?;
     let spec =
         GridSpec { angle_deg: req.angle_deg, origin_mm, size_mm: Vec2::new(main.width_mm, main.length_mm), rib_mm: s.rib_mm, pitch_mm: s.pitch_mm };
@@ -483,7 +515,7 @@ pub fn fill(req: &FillRequest, catalog: &Catalog) -> Result<FillResult, UbotErro
     let mut warnings = draft_warnings(rulepack, &products);
     warnings.extend(d.warnings);
     Ok(FillResult {
-        input_hash: input_hash(&RequestView::of(req)),
+        input_hash: input_hash(&RequestView::of(req, zones)),
         layout: LayoutRecord {
             layout_id: req.layout_id.clone(),
             revision: 0,

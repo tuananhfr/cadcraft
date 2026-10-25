@@ -2,10 +2,10 @@
 
 use cadcraft_doc::{EntityKind, Handle, LwPolyline, Space};
 use cadcraft_geom::{PolyVertex, Vec2};
-use cadcraft_ubot::{Candidate, Status, footprint};
+use cadcraft_ubot::{Candidate, LayoutRecord, Status, footprint};
 
 use super::fill_cmd::{Params, commit_checked, plan, summary_line};
-use super::fill_input::{CMD, MAX_HOLES};
+use super::fill_input::{CMD, MAX_HOLES, Stored, boundary};
 use super::read::{ring_of, zone_ring_of};
 use super::units::unit_scale;
 use crate::cmd::bad;
@@ -34,7 +34,11 @@ struct Shown {
 
 #[derive(Default)]
 pub(super) struct FillM {
+    /// The session selection at the start; UBFILL never changes it, so Esc leaves it as it was.
+    selection: Vec<Handle>,
     boundary: Option<Handle>,
+    /// The boundary's own stored fill: its product and rib are the defaults (ruling R16).
+    stored: Option<LayoutRecord>,
     holes: SelectPhase,
     needs_units: bool,
     units: Option<String>,
@@ -59,16 +63,21 @@ fn reason_name<T: serde::Serialize>(r: &T) -> String {
 }
 
 impl FillM {
-    fn default_product(s: &Session) -> Option<String> {
+    fn default_product(&self, s: &Session) -> Option<String> {
         let c = &s.ubot.catalog;
-        c.product(DEFAULT_PRODUCT).or_else(|| c.products.first()).map(|p| p.id.clone())
+        let stored = self.stored.as_ref().and_then(|r| c.product(&r.product_id));
+        stored.or_else(|| c.product(DEFAULT_PRODUCT)).or_else(|| c.products.first()).map(|p| p.id.clone())
     }
 
-    fn ribs(s: &Session) -> (Vec<f64>, Option<f64>) {
-        match s.ubot.catalog.rulepack(None) {
-            Some(r) => (r.rib_mm_choices.clone(), Some(r.rib_mm_default)),
-            None => (Vec::new(), None),
-        }
+    /// The rib choices and the default: the gap of the stored X pitch while the product is unchanged, else the rulepack's.
+    fn ribs(&self, s: &Session) -> (Vec<f64>, Option<f64>) {
+        let c = &s.ubot.catalog;
+        let choices = c.rulepack(None).map(|r| r.rib_mm_choices.clone()).unwrap_or_default();
+        let stored = self.stored.as_ref().zip(self.product.as_deref().and_then(|id| c.product(id))).and_then(|(r, main)| {
+            let rib = r.pitch_x_mm - main.width_mm;
+            (r.product_id == main.id && rib.is_finite() && rib >= 0.0).then_some(rib)
+        });
+        (choices, stored.or_else(|| c.rulepack(None).map(|r| r.rib_mm_default)))
     }
 
     fn pick_boundary(&mut self, s: &mut Session, handles: &[Handle]) -> Step {
@@ -77,11 +86,15 @@ impl FillM {
             Err(_) => return Step::Cancel,
         };
         let found = handles.iter().copied().find(|h| d.space_of(*h) == Some(Space::Model) && d.entity(*h).and_then(|e| ring_of(e)).is_some());
-        match found {
-            Some(h) => {
+        match found.map(|h| (h, boundary(d, h))) {
+            Some((h, Ok((_, stored)))) => {
                 self.boundary = Some(h);
-                s.set_selection(vec![h]);
+                self.stored = match stored {
+                    Stored::Own(r) => Some(r),
+                    Stored::Copied(_) | Stored::None => None,
+                };
             }
+            Some((_, Err(_))) => s.echo("That polyline is a U-BOT zone; select the slab boundary."),
             None => s.echo("Select a closed polyline as the slab boundary."),
         }
         Step::Continue
@@ -109,7 +122,10 @@ impl FillM {
             }
             other => other.clone(),
         };
-        if let SelOutcome::Done(_) | SelOutcome::Empty = self.holes.feed(s, &input)? {
+        let outcome = self.holes.feed(s, &input)?;
+        // Picked holes are not highlighted: the selection stays the one UBFILL started with.
+        s.set_selection(self.selection.clone());
+        if let SelOutcome::Done(_) | SelOutcome::Empty = outcome {
             self.holes.done = true;
             self.needs_units = unit_scale(s, None).is_err();
         }
@@ -118,7 +134,7 @@ impl FillM {
 
     fn choose_product(&mut self, s: &mut Session, input: &Input) -> Step {
         let id = match input {
-            Input::Enter => match Self::default_product(s) {
+            Input::Enter => match self.default_product(s) {
                 Some(id) => id,
                 None => {
                     s.echo("The U-BOT catalog has no products (see UBLIB).");
@@ -146,33 +162,35 @@ impl FillM {
     }
 
     fn choose_rib(&mut self, s: &mut Session, input: &Input) -> Result<Step> {
-        let (choices, default) = Self::ribs(s);
+        let (choices, default) = self.ribs(s);
+        let is_default = |r: f64| default.is_some_and(|d| (d - r).abs() < 1e-9);
         let rib = match input {
             Input::Enter => default,
             Input::Text(t) | Input::Keyword(t) => t.trim().parse::<f64>().ok().filter(|v| v.is_finite() && *v >= 0.0),
             _ => return Ok(Step::Continue),
         };
-        let Some(rib) = rib.filter(|r| choices.is_empty() || choices.iter().any(|c| (c - r).abs() < 1e-9)) else {
+        let Some(rib) = rib.filter(|r| choices.is_empty() || is_default(*r) || choices.iter().any(|c| (c - r).abs() < 1e-9)) else {
             s.echo("Choose one of the listed ribs.");
             return Ok(Step::Continue);
         };
-        self.show(s, rib)?;
+        // The default is left to the fill, so a stored pitch (which may differ per axis) is kept as it is.
+        self.show(s, (!is_default(rib)).then_some(rib))?;
         Ok(Step::Continue)
     }
 
-    fn params(&self, rib: f64) -> Params {
+    fn params(&self, rib: Option<f64>) -> Params {
         Params {
             boundary: self.boundary.unwrap_or_default(),
             holes: self.holes.picked.clone(),
             product: self.product.clone().unwrap_or_default(),
-            rib: Some(rib),
+            rib,
             units: self.units.clone(),
             ..Params::default()
         }
     }
 
     /// Plans the fill, prints the summary and keeps what the preview and marks draw.
-    fn show(&mut self, s: &mut Session, rib: f64) -> Result<()> {
+    fn show(&mut self, s: &mut Session, rib: Option<f64>) -> Result<()> {
         let params = self.params(rib);
         let plan = plan(s, &params)?;
         s.echo(summary_line(&plan.result));
@@ -243,6 +261,11 @@ impl Interactive for FillM {
         "UBFILL"
     }
 
+    fn begin(&mut self, s: &mut Session) -> Result<Step> {
+        self.selection = s.selection();
+        Ok(Step::Continue)
+    }
+
     fn prompt(&self, s: &Session) -> Prompt {
         if self.boundary.is_none() {
             return Prompt::new("Select slab boundary", Accept::SELECT);
@@ -259,13 +282,13 @@ impl Interactive for FillM {
             if products.len() <= MAX_KEYWORDS {
                 p.keywords = products.iter().map(|p| p.id.clone()).collect();
             }
-            return match Self::default_product(s) {
+            return match self.default_product(s) {
                 Some(id) => p.default(id),
                 None => p,
             };
         }
         if self.shown.is_none() {
-            let (choices, default) = Self::ribs(s);
+            let (choices, default) = self.ribs(s);
             let mut p = Prompt::new("Rib", Accept::TEXT);
             p.keywords = choices.iter().map(|c| num(*c)).collect();
             return match default {

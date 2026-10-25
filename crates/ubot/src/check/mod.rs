@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::catalog::Catalog;
 use crate::error::UbotError;
-use crate::fill::{ExistingInstance, LayoutRecord, MAX_CLEARANCE_MM, MAX_VERTICES, ZoneInput, geometry_hash, handle_key};
+use crate::fill::{ExistingInstance, LayoutRecord, MAX_CLEARANCE_MM, MAX_VERTICES, ZoneInput, ZoneReach, geometry_hash, handle_key};
 use crate::geometry::RingInput;
 use crate::model::RulePack;
 use containment::{LayoutCtx, Zones, check_layout, check_zones};
@@ -133,10 +133,6 @@ fn validate(req: &CheckRequest) -> Result<(), UbotError> {
             return Err(UbotError::Limit(format!("{len} {what}, the limit is {max}")));
         }
     }
-    let zone_vertices = req.zones.iter().fold(0usize, |n, z| n.saturating_add(z.ring.vertices.len()));
-    if zone_vertices > MAX_VERTICES {
-        return Err(UbotError::Limit(format!("{zone_vertices} zone vertices, the limit is {MAX_VERTICES}")));
-    }
     for l in &req.layouts {
         let n = l.holes.iter().fold(l.boundary.vertices.len(), |n, h| n.saturating_add(h.vertices.len()));
         if n > MAX_VERTICES {
@@ -146,9 +142,37 @@ fn validate(req: &CheckRequest) -> Result<(), UbotError> {
     Ok(())
 }
 
+/// Zones within reach of some layout ([`ZoneReach`], as fill uses); without layouts every zone is kept, so loose
+/// boxes are still checked against them. A non-finite zone is an error wherever it is.
+fn reachable_zones(req: &CheckRequest) -> Result<Vec<ZoneInput>, UbotError> {
+    let reaches = req.layouts.iter().map(|l| ZoneReach::new(req.unit_scale, &l.boundary)).collect::<Result<Vec<_>, _>>()?;
+    let mut out = Vec::new();
+    for z in &req.zones {
+        if z.ring.vertices.iter().flatten().any(|c| !(c * req.unit_scale).is_finite()) {
+            return Err(UbotError::BadInput(format!("zone {}: ring vertex is not a finite number in mm", z.id)));
+        }
+        let mut near = reaches.is_empty();
+        for r in &reaches {
+            if near {
+                break;
+            }
+            near = r.reaches(req.unit_scale, &z.ring)?;
+        }
+        if near {
+            out.push(z.clone());
+        }
+    }
+    let zone_vertices = out.iter().fold(0usize, |n, z| n.saturating_add(z.ring.vertices.len()));
+    if zone_vertices > MAX_VERTICES {
+        return Err(UbotError::Limit(format!("{zone_vertices} zone vertices, the limit is {MAX_VERTICES}")));
+    }
+    Ok(out)
+}
+
 /// Audits boxes, layouts and zones as given; nothing is modified. Issues run top-down, then left to right.
 pub fn check(req: &CheckRequest, catalog: &Catalog) -> Result<Vec<Issue>, UbotError> {
     validate(req)?;
+    let near_zones = reachable_zones(req)?;
     let mut out: Vec<Issue> = Vec::new();
     let mut lookup = Lookup::new(catalog);
 
@@ -186,7 +210,7 @@ pub fn check(req: &CheckRequest, catalog: &Catalog) -> Result<Vec<Issue>, UbotEr
     }
     let default_exclusion = clearance_mm(catalog.rulepack(None).map_or(0.0, |r| r.exclusion_clearance_mm), "exclusionClearanceMm")?;
     let widest_default = ctxs.iter().fold(default_exclusion, |m, c| m.max(c.exclusion_mm));
-    let zones = Zones::new(&req.zones, req.unit_scale, widest_default, &mut points)?;
+    let zones = Zones::new(&near_zones, req.unit_scale, widest_default, &mut points)?;
 
     // Stale: the slab geometry no longer matches what the fill saw.
     for l in &req.layouts {
