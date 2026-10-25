@@ -85,7 +85,7 @@ impl Interactive for AttdispM {
 /// The attributes `ins` gets from the definitions `defs` of its block `blk`: placed, styled and
 /// shown as defined, keeping the values of attributes whose tag (any case) is still defined.
 /// Properties set on single attributes (layer, colour, …) go back to the definitions', as in AutoCAD.
-pub(super) fn synced(blk: &Block, defs: &[&Attrib], ins: &Insert) -> Vec<Attrib> {
+pub(crate) fn synced(blk: &Block, defs: &[&Attrib], ins: &Insert) -> Vec<Attrib> {
     let m = ins.transform(blk.base.xy());
     defs.iter()
         .map(|ad| {

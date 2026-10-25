@@ -848,5 +848,5 @@ impl Interactive for AttdefM {
     }
 }
 
-mod attribs;
+pub(crate) mod attribs;
 mod battman;

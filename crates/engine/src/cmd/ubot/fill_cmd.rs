@@ -195,7 +195,7 @@ fn response(plan: &Plan, commit: bool, written: Option<&Written>) -> Value {
 
 /// The session catalog where a product mapping to a block the drawing lacks is dropped (spec §7: then the
 /// generated `UBOT_<SKU>` block is used); legacy detection by block name keeps working.
-fn placement_catalog(catalog: &Catalog, d: &Drawing) -> Catalog {
+pub(super) fn placement_catalog(catalog: &Catalog, d: &Drawing) -> Catalog {
     let mut c = catalog.clone();
     for m in c.mappings.iter_mut().filter(|m| m.product_id.is_some() && d.block(&m.block_name).is_none()) {
         m.product_id = None;

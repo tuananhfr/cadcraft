@@ -6,7 +6,7 @@ use cadcraft_doc::{Drawing, Entity, EntityKind, Handle, Insert, Space, entity_bo
 use cadcraft_geom::Vec2;
 use cadcraft_ubot::{Catalog, ExistingInstance, LayoutRecord, MAX_CLEARANCE_MM, Product, RingInput, ZoneInput, ZoneReach, ZoneType, ring_from_input};
 
-use super::read::{invalid_tags, ring_of, zone_ring_of, zones};
+use super::read::{generated_blocks, invalid_tags, ring_of, untagged_box_product, zone_ring_of, zones};
 use super::xdata::{self, UbotTag};
 use super::zone_id;
 use crate::Result;
@@ -148,10 +148,7 @@ enum Role {
     Obstacle { product_id: Option<String> },
 }
 
-/// Product ids by the upper-case name of their generated `UBOT_<SKU>` block.
-type Generated = HashMap<String, String>;
-
-fn role(e: &Entity, ins: &Insert, catalog: &Catalog, generated: &Generated) -> Option<Role> {
+fn role(e: &Entity, ins: &Insert, catalog: &Catalog, generated: &HashMap<String, String>) -> Option<Role> {
     let single = cells(ins) <= 1;
     match xdata::read(&e.common) {
         Some(Ok(UbotTag::Instance { instance_id, product_id, layout_id, .. })) if single => {
@@ -161,9 +158,8 @@ fn role(e: &Entity, ins: &Insert, catalog: &Catalog, generated: &Generated) -> O
         Some(Ok(UbotTag::Instance { product_id, .. })) => Some(Role::Obstacle { product_id: Some(product_id) }),
         // Malformed or misplaced U-BOT data still marks a box.
         Some(_) => Some(Role::Obstacle { product_id: None }),
-        None if catalog.mapping_for_block(&ins.block).is_some() => Some(Role::Obstacle { product_id: None }),
-        // A generated box block inserted by hand: untagged, so only in the way (spec §14.1).
-        None => generated.get(&ins.block.to_ascii_uppercase()).map(|id| Role::Obstacle { product_id: Some(id.clone()) }),
+        // Untagged legacy or generated box blocks inserted by hand are only in the way (spec §14.1).
+        None => untagged_box_product(catalog, generated, &ins.block).map(|product_id| Role::Obstacle { product_id }),
     }
 }
 
@@ -174,7 +170,7 @@ fn cells(ins: &Insert) -> u64 {
 /// Boxes already in model space for the core: tagged single boxes with their ids, everything else as obstacles
 /// (malformed tags, tagged MINSERT cells one by one, untagged mapped or generated box blocks).
 pub(super) fn existing(d: &Drawing, catalog: &Catalog) -> Result<Vec<ExistingInstance>> {
-    let generated: Generated = catalog.products.iter().map(|p| (Catalog::default_block_name(p), p.id.clone())).collect();
+    let generated = generated_blocks(catalog);
     let refs: Vec<(&Entity, &Insert, Role)> = d
         .model
         .iter()

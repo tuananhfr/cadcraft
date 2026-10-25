@@ -394,6 +394,7 @@ time
 tolerance
 transparencydisplay
 trim
+tubab
 u
 ubfill
 ublib
@@ -408,6 +409,7 @@ ubplot.publish
 ubplot.report
 ubplot.scan
 ubplot.templates
+ubreplace
 ubzone
 undo
 ungroup

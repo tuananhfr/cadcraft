@@ -394,6 +394,7 @@ time	cad.tools.time
 tolerance	cad.dimension.tolerance
 transparencydisplay	cad.other.transparencydisplay
 trim	cad.modify.trim
+tubab	cad.tools.tubab
 u	cad.edit.u
 ubfill	cad.tools.ubfill
 ublib	cad.tools.ublib
@@ -408,6 +409,7 @@ ubplot.publish	cad.other.ubplot.publish
 ubplot.report	cad.other.ubplot.report
 ubplot.scan	cad.other.ubplot.scan
 ubplot.templates	cad.other.ubplot.templates
+ubreplace	cad.tools.ubreplace
 ubzone	cad.tools.ubzone
 undo	cad.other.undo
 ungroup	cad.tools.ungroup

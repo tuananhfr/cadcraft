@@ -4542,3 +4542,45 @@ echo	cell {i},{j} at {x},{y}: {reasons}	ô {i},{j} tại {x},{y}: {reasons}
 echo	... and {count} more	... và {count} mục khác
 	Answer Yes, No or List.	Hãy trả lời Yes, No hoặc List.
 	Enter mm, cm, m or in.	Hãy nhập mm, cm, m hoặc in.
+# U-BOT toolkit: UBREPLACE, TUBAB and their messages
+	U-BOT Replace	Thay hộp U-BOT
+	Replace Boxes	Thay hộp
+	U-BOT Swap Block	Đổi khối hộp U-BOT
+	Swap Box Block	Đổi khối hộp
+	Select boxes	Chọn hộp
+	Replace with	Thay bằng
+	Replace block	Khối cần thay
+	With block	Bằng khối
+echo	{handle} is not a U-BOT box	{handle} không phải hộp U-BOT
+	no U-BOT boxes selected	chưa chọn hộp U-BOT nào
+echo	{count} box(es) refused, nothing replaced: {list}; pass allowResize: true to change the box size	từ chối {count} hộp, không thay hộp nào: {list}; truyền allowResize: true để đổi kích thước hộp
+echo	{count} box(es) refused, nothing replaced: {list}	từ chối {count} hộp, không thay hộp nào: {list}
+	UBREPLACE: nothing to change.	UBREPLACE: không có gì cần thay đổi.
+echo	UBREPLACE: replaced {count} boxes.	UBREPLACE: đã thay {count} hộp.
+echo	UBREPLACE: {replaced} boxes to replace, {unchanged} unchanged, {refused} refused	UBREPLACE: {replaced} hộp sẽ thay, {unchanged} không đổi, {refused} bị từ chối
+	`to` (the product id to replace with, see UBLIB) is required	cần có `to` (mã sản phẩm thay vào, xem UBLIB)
+	`allowResize` must be true or false	`allowResize` phải là true hoặc false
+echo	UBREPLACE warning: {warning}	Cảnh báo UBREPLACE: {warning}
+echo	UBREPLACE refused: {issue}	UBREPLACE từ chối: {issue}
+	Nothing replaced.	Không thay hộp nào.
+echo	{count} object(s) ignored (not U-BOT boxes)	bỏ qua {count} đối tượng (không phải hộp U-BOT)
+echo	{count} object(s) on a locked layer ignored	bỏ qua {count} đối tượng nằm trên lớp bị khóa
+echo	too many attributes (at most {max})	quá nhiều thuộc tính (tối đa {max})
+echo	{handle} is a block array (MINSERT); explode it first	{handle} là mảng khối (MINSERT); hãy phá khối trước
+echo	{handle} references an external drawing	{handle} tham chiếu tới bản vẽ ngoài
+echo	{handle} carries U-BOT data that is not a box	{handle} mang dữ liệu U-BOT không phải hộp
+echo	{handle} carries malformed U-BOT data ({error})	{handle} mang dữ liệu U-BOT sai định dạng ({error})
+echo	{handle}: the box size of block {block} is unknown, so its centre cannot be kept	{handle}: chưa biết kích thước hộp của khối {block} nên không giữ được tâm hộp
+echo	{handle}: the insert point and rotation must be finite numbers	{handle}: điểm chèn và góc xoay phải là số hữu hạn
+echo	no references of block `{block}` in the selection	không có tham chiếu nào của khối `{block}` trong tập chọn
+echo	{handle}: target block is not a known U-BOT box ({block})	{handle}: khối đích không phải hộp U-BOT đã biết ({block})
+echo	{handle}: size differs: {from} is {from_width}x{from_length} mm, {to} is {to_width}x{to_length} mm; TUBAB keeps the box size (UBREPLACE with allowResize changes it)	{handle}: khác kích thước: {from} là {from_width}x{from_length} mm, {to} là {to_width}x{to_length} mm; TUBAB giữ nguyên kích thước hộp (UBREPLACE với allowResize sẽ đổi kích thước)
+	TUBAB: nothing to change.	TUBAB: không có gì cần thay đổi.
+echo	TUBAB: replaced {count} block references.	TUBAB: đã thay {count} tham chiếu khối.
+echo	TUBAB: {count} references of {from} to replace with {to}, {unchanged} unchanged	TUBAB: {count} tham chiếu của {from} sẽ thay bằng {to}, {unchanged} không đổi
+	`from` (the block name to replace) is required	cần có `from` (tên khối cần thay)
+	`to` (the block name to replace it with) is required	cần có `to` (tên khối thay vào)
+	No block references selected.	Chưa chọn tham chiếu khối nào.
+echo	No selected references of block {block}.	Không có tham chiếu nào đã chọn của khối {block}.
+echo	No block named {block}.	Không có khối tên {block}.
+	expectHash ignored in preview	expectHash bị bỏ qua khi xem trước

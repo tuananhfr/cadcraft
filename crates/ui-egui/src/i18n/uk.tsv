@@ -3955,3 +3955,45 @@ echo	cell {i},{j} at {x},{y}: {reasons}	комірка {i},{j} у точці {x}
 echo	... and {count} more	... і ще {count}
 	Answer Yes, No or List.	Відповідайте Yes, No або List.
 	Enter mm, cm, m or in.	Введіть mm, cm, m або in.
+# U-BOT toolkit: UBREPLACE, TUBAB and their messages
+	U-BOT Replace	Заміна U-BOT
+	Replace Boxes	Замінити бокси
+	U-BOT Swap Block	Заміна блока U-BOT
+	Swap Box Block	Замінити блок боксу
+	Select boxes	Виберіть бокси
+	Replace with	Замінити на
+	Replace block	Блок для заміни
+	With block	На блок
+echo	{handle} is not a U-BOT box	{handle} не є боксом U-BOT
+	no U-BOT boxes selected	не вибрано жодного боксу U-BOT
+echo	{count} box(es) refused, nothing replaced: {list}; pass allowResize: true to change the box size	відхилено боксів: {count}, нічого не замінено: {list}; передайте allowResize: true, щоб змінити розмір боксу
+echo	{count} box(es) refused, nothing replaced: {list}	відхилено боксів: {count}, нічого не замінено: {list}
+	UBREPLACE: nothing to change.	UBREPLACE: змінювати нічого.
+echo	UBREPLACE: replaced {count} boxes.	UBREPLACE: замінено боксів: {count}.
+echo	UBREPLACE: {replaced} boxes to replace, {unchanged} unchanged, {refused} refused	UBREPLACE: до заміни {replaced} боксів, без змін {unchanged}, відхилено {refused}
+	`to` (the product id to replace with, see UBLIB) is required	потрібен `to` (ідентифікатор продукту для заміни, див. UBLIB)
+	`allowResize` must be true or false	`allowResize` має бути true або false
+echo	UBREPLACE warning: {warning}	Попередження UBREPLACE: {warning}
+echo	UBREPLACE refused: {issue}	UBREPLACE відхилено: {issue}
+	Nothing replaced.	Нічого не замінено.
+echo	{count} object(s) ignored (not U-BOT boxes)	пропущено об'єктів: {count} (не бокси U-BOT)
+echo	{count} object(s) on a locked layer ignored	пропущено об'єктів на заблокованому шарі: {count}
+echo	too many attributes (at most {max})	забагато атрибутів (не більше {max})
+echo	{handle} is a block array (MINSERT); explode it first	{handle} є масивом блоків (MINSERT); спочатку розчленуйте його
+echo	{handle} references an external drawing	{handle} посилається на зовнішнє креслення
+echo	{handle} carries U-BOT data that is not a box	{handle} містить дані U-BOT, що не є боксом
+echo	{handle} carries malformed U-BOT data ({error})	{handle} містить пошкоджені дані U-BOT ({error})
+echo	{handle}: the box size of block {block} is unknown, so its centre cannot be kept	{handle}: розмір боксу блока {block} невідомий, тому його центр не можна зберегти
+echo	{handle}: the insert point and rotation must be finite numbers	{handle}: точка вставки й поворот мають бути скінченними числами
+echo	no references of block `{block}` in the selection	у виборі немає посилань на блок `{block}`
+echo	{handle}: target block is not a known U-BOT box ({block})	{handle}: цільовий блок не є відомим боксом U-BOT ({block})
+echo	{handle}: size differs: {from} is {from_width}x{from_length} mm, {to} is {to_width}x{to_length} mm; TUBAB keeps the box size (UBREPLACE with allowResize changes it)	{handle}: розміри різняться: {from} має {from_width}x{from_length} мм, {to} має {to_width}x{to_length} мм; TUBAB зберігає розмір боксу (UBREPLACE з allowResize змінює його)
+	TUBAB: nothing to change.	TUBAB: змінювати нічого.
+echo	TUBAB: replaced {count} block references.	TUBAB: замінено посилань на блоки: {count}.
+echo	TUBAB: {count} references of {from} to replace with {to}, {unchanged} unchanged	TUBAB: до заміни {count} посилань на {from} блоком {to}, без змін {unchanged}
+	`from` (the block name to replace) is required	потрібен `from` (ім'я блока для заміни)
+	`to` (the block name to replace it with) is required	потрібен `to` (ім'я блока, яким замінити)
+	No block references selected.	Не вибрано жодного посилання на блок.
+echo	No selected references of block {block}.	Серед вибраного немає посилань на блок {block}.
+echo	No block named {block}.	Немає блока з іменем {block}.
+	expectHash ignored in preview	expectHash ігнорується в попередньому перегляді

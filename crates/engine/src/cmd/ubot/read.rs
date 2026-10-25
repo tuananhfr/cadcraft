@@ -87,8 +87,24 @@ pub fn invalid_tags(drawing: &Drawing) -> Vec<(Handle, String)> {
         .collect()
 }
 
-/// Box references in model space: those with an instance tag, and untagged ones whose block has a (legacy) mapping.
+/// Product ids by the upper-case name of their generated `UBOT_<SKU>` block (spec §7).
+pub fn generated_blocks(catalog: &Catalog) -> HashMap<String, String> {
+    catalog.products.iter().map(|p| (Catalog::default_block_name(p), p.id.clone())).collect()
+}
+
+/// The product an untagged reference of `block` is a box of: `Some(None)` for a mapped (legacy) block whose product
+/// the mapping leaves out, `Some(Some(id))` for a generated `UBOT_<SKU>` block, `None` when it is no box block.
+pub fn untagged_box_product(catalog: &Catalog, generated: &HashMap<String, String>, block: &str) -> Option<Option<String>> {
+    if catalog.mapping_for_block(block).is_some() {
+        return Some(None);
+    }
+    generated.get(&block.to_ascii_uppercase()).map(|id| Some(id.clone()))
+}
+
+/// Box references in model space: those with an instance tag, and untagged ones whose block has a (legacy) mapping
+/// or is a generated `UBOT_<SKU>` block (then the product is known).
 pub fn existing_instances(drawing: &Drawing, catalog: &Catalog) -> Vec<ExistingInstance> {
+    let generated = generated_blocks(catalog);
     drawing
         .model
         .iter()
@@ -108,17 +124,16 @@ pub fn existing_instances(drawing: &Drawing, catalog: &Catalog) -> Vec<ExistingI
                 Some(Ok(UbotTag::Instance { instance_id, product_id, layout_id, .. })) => {
                     Some(base(Some(instance_id), Some(layout_id), Some(product_id)))
                 }
-                _ if catalog.mapping_for_block(&ins.block).is_some() => Some(base(None, None, None)),
-                _ => None,
+                _ => untagged_box_product(catalog, &generated, &ins.block).map(|product_id| base(None, None, product_id)),
             }
         })
         .collect()
 }
 
-/// Box references to count: tagged or mapped references are items (MINSERT cells multiply); any other reference
-/// is a cluster whose boxes are counted through it, never itself.
+/// Box references to count: tagged, mapped or generated-block references are items (MINSERT cells multiply); any
+/// other reference is a cluster whose boxes are counted through it, never itself.
 pub fn count_items(drawing: &Drawing, catalog: &Catalog) -> Vec<CountItem> {
-    let mut walker = Walker { drawing, catalog, memo: HashMap::new(), visiting: HashSet::new() };
+    let mut walker = Walker { drawing, catalog, generated: generated_blocks(catalog), memo: HashMap::new(), visiting: HashSet::new() };
     let mut out = Vec::new();
     for e in drawing.model.iter() {
         let EntityKind::Insert(ins) = &e.kind else { continue };
@@ -145,6 +160,7 @@ fn cells(ins: &Insert) -> u64 {
 struct Walker<'a> {
     drawing: &'a Drawing,
     catalog: &'a Catalog,
+    generated: HashMap<String, String>,
     /// Boxes in one reference of a block, by upper-case block name; each block is walked once.
     memo: HashMap<String, Vec<CountItem>>,
     visiting: HashSet<String>,
@@ -157,8 +173,8 @@ impl Walker<'_> {
             let multiplier = u64::try_from(count_multiplier).unwrap_or(1).max(1);
             return Some(CountItem { product_id: Some(product_id), block_name: ins.block.clone(), multiplier, source: CountSource::Tagged });
         }
-        self.catalog.mapping_for_block(&ins.block)?;
-        Some(CountItem { product_id: None, block_name: ins.block.clone(), multiplier: 1, source: CountSource::Legacy })
+        let product_id = untagged_box_product(self.catalog, &self.generated, &ins.block)?;
+        Some(CountItem { product_id, block_name: ins.block.clone(), multiplier: 1, source: CountSource::Legacy })
     }
 
     fn block_items(&mut self, name: &str, depth: usize) -> Vec<CountItem> {

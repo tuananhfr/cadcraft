@@ -18,9 +18,9 @@ const MAX_SHOWN: usize = 20_000;
 /// Problems printed by List.
 const MAX_LISTED: usize = 1_000;
 /// More products than this are listed with `?` instead of as keywords.
-const MAX_KEYWORDS: usize = 12;
+pub(super) const MAX_KEYWORDS: usize = 12;
 const DEFAULT_PRODUCT: &str = "ubot-h13-7";
-const UNIT_KEYWORDS: [&str; 4] = ["MM", "CM", "M", "IN"];
+pub(super) const UNIT_KEYWORDS: [&str; 4] = ["MM", "CM", "M", "IN"];
 const APPLY_KEYWORDS: [&str; 3] = ["Yes", "No", "List"];
 
 /// The previewed fill the Apply prompt asks about.
@@ -47,7 +47,7 @@ pub(super) struct FillM {
 }
 
 /// Numbers in messages: up to 3 decimals, no trailing zeros.
-fn num(v: f64) -> String {
+pub(super) fn num(v: f64) -> String {
     let s = format!("{v:.3}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
     if s == "-0" { "0".into() } else { s.to_string() }
