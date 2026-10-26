@@ -36,7 +36,11 @@ pub(super) fn draw(b: &mut Builder, ctx: &Ctx, e: &Entity, h: &Hatch, rgb: Ink, 
             let tris = fill::triangulate_evenodd(&loops);
             match &h.gradient {
                 Some(g) => gradient(b, ctx, g, layer_color, &tris),
-                None => b.tris(ctx, rgb, &tris),
+                None => {
+                    let at = b.list.prims.len();
+                    b.tris(ctx, rgb, &tris);
+                    b.fill_path(ctx, at, &loops);
+                }
             }
         }
         return;
@@ -44,7 +48,9 @@ pub(super) fn draw(b: &mut Builder, ctx: &Ctx, e: &Entity, h: &Hatch, rgb: Ink, 
     if let Some(bg) = h.background
         && b.opts.fill
     {
+        let at = b.list.prims.len();
         b.tris(ctx, ink(bg, layer_color, ctx.block_color), &fill::triangulate_evenodd(&loops));
+        b.fill_path(ctx, at, &loops);
     }
     // The area being looked at, in the hatch's units.
     let view = b.opts.view.and_then(|v| {

@@ -349,6 +349,7 @@ fn run_preview(s: &mut Session, p: &Value) -> Result<Value> {
     let ropts = cadcraft_render::Options {
         tolerance: if tol.is_finite() && tol > 0.0 { tol } else { 0.01 },
         min_dash: 0.0,
+        min_linetype: cadcraft_render::plot_min_linetype(sheet.unit_mm, est),
         text: true,
         fill: true,
         lineweights,

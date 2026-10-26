@@ -55,7 +55,8 @@ fn assert_frame_edges(center: Vec2) {
             count += 1;
         }
     }
-    assert_eq!(count, 8, "only the four frame segments: {text}");
+    // The four frame segments meet end to end: one subpath of five points.
+    assert_eq!(count, 5, "only the four frame segments: {text}");
     for (got, want) in [(bounds.min.x, 0.0), (bounds.min.y, 0.0), (bounds.max.x, 1190.55), (bounds.max.y, 841.89)] {
         assert!((got - want).abs() < 0.05, "{bounds:?}, expected {want}, got {got}");
     }
