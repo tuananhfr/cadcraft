@@ -47,10 +47,13 @@ fn mb(n: u64) -> String {
     if m >= 100.0 { format!("{m:.0} MB") } else { format!("{m:.1} MB") }
 }
 
+mod hatch_edges;
+
 mod native {
     use std::io::{Cursor, Write};
     use std::panic::AssertUnwindSafe;
 
+    use super::hatch_edges::{Units, convert_ellipse_edges};
     use super::{Limits, mb};
 
     /// Read DWG bytes and return an ASCII DXF rendition, within [`Limits::DEFAULT`].
@@ -88,6 +91,7 @@ mod native {
         let mut doc = outcome.document;
         table_merges(&mut doc);
         table_style_rows(&mut doc, false);
+        convert_ellipse_edges(&mut doc, Units::ToDegrees);
         let mut out = CappedWriter { chunks: Vec::new(), len: 0, limit: limits.max_dxf_bytes, exceeded: false };
         let written = std::panic::catch_unwind(AssertUnwindSafe(|| acadrust::DxfWriter::new(&doc).write_to_writer(&mut out)))
             .map_err(|_| "the DWG→DXF conversion failed on this file".to_string())?;
@@ -434,6 +438,7 @@ mod native {
             None => {}
         }
         table_style_rows(&mut doc, true);
+        convert_ellipse_edges(&mut doc, Units::ToRadians);
         drop_unwritable(&mut doc);
         std::panic::catch_unwind(AssertUnwindSafe(|| acadrust::DwgWriter::write_to_vec(&doc)))
             .map_err(|_| "the DWG writer failed on this drawing".to_string())?
