@@ -31,7 +31,7 @@ pub(super) struct LayoutCtx<'c> {
     pub product: Option<&'c Product>,
 }
 
-/// Subdivides one ring and counts its points against the request-wide cap before the next ring is built.
+/// Subdivides one ring and counts its points against the cap before the next ring of the same set is built.
 fn build_ring(r: &RingInput, unit_scale: f64, points: &mut usize) -> Result<Ring, UbotError> {
     let ring = ring_from_input(r, unit_scale, NEAR_BAND_MM)?;
     *points = points.saturating_add(ring.points.len());
@@ -40,7 +40,7 @@ fn build_ring(r: &RingInput, unit_scale: f64, points: &mut usize) -> Result<Ring
 }
 
 impl<'c> LayoutCtx<'c> {
-    /// `points` counts ring vertices after arc subdivision across the whole request.
+    /// `points` counts this slab's ring vertices after arc subdivision; the zones that reach it are added later.
     pub fn new(
         boundary: &RingInput,
         holes: &[RingInput],
@@ -67,6 +67,7 @@ enum Kind {
 struct Zone {
     id: String,
     ring: Ring,
+    points: usize,
     bounds: Bounds2,
     kind: Kind,
     clearance_mm: Option<f64>,
@@ -80,8 +81,9 @@ pub(super) struct Zones {
 }
 
 impl Zones {
-    /// `max_default_mm` is the widest clearance a zone without its own value can inherit.
-    pub fn new(inputs: &[ZoneInput], unit_scale: f64, max_default_mm: f64, points: &mut usize) -> Result<Self, UbotError> {
+    /// `max_default_mm` is the widest clearance a zone without its own value can inherit. Each zone is held to the
+    /// vertex cap on its own; the points of every zone are charged to the drawing-wide `work`.
+    pub fn new(inputs: &[ZoneInput], unit_scale: f64, max_default_mm: f64, work: &mut Work, built: &mut usize) -> Result<Self, UbotError> {
         let mut zones = Vec::with_capacity(inputs.len());
         let mut widest = max_default_mm;
         for z in inputs {
@@ -89,14 +91,22 @@ impl Zones {
             if let Some(c) = z.clearance_mm {
                 widest = widest.max(super::clearance_mm(c, &format!("zone {} clearanceMm", z.id))?);
             }
-            let ring = build_ring(&z.ring, unit_scale, points)?;
-            zones.push(Zone { id: z.id.clone(), bounds: ring.bounds(), ring, kind, clearance_mm: z.clearance_mm });
+            let mut points = 0;
+            let ring = build_ring(&z.ring, unit_scale, &mut points)?;
+            work.spend(points)?;
+            super::charge_built(built, points)?;
+            zones.push(Zone { id: z.id.clone(), bounds: ring.bounds(), ring, points, kind, clearance_mm: z.clearance_mm });
         }
         let refs: Vec<&Ring> = zones.iter().map(|z| &z.ring).collect();
         let index = EdgeIndex::new(&refs, 2000.0);
         let margin = widest + NEAR_BAND_MM + QUERY_PAD_MM;
         let reach: Vec<Bounds2> = zones.iter().map(|z| z.bounds.expand(margin)).collect();
         Ok(Zones { grid: ZoneGrid::new(&reach), zones, index, margin })
+    }
+
+    /// Ring vertices of zone `k` after arc subdivision.
+    pub fn points(&self, k: usize) -> usize {
+        self.zones.get(k).map_or(0, |z| z.points)
     }
 }
 

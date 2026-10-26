@@ -288,7 +288,8 @@ Errors are explicit; nothing is cut silently.
 | --- | --- |
 | Grid cells tried per fill | 100 000 |
 | Boundary, hole and zone vertices after arc subdivision, per fill | 20 000 |
-| Same vertices in UBCHECK, over all layouts and the zones near them together | 20 000 |
+| Same vertices in UBCHECK, per slab with the zones that reach it, and per zone | 20 000 |
+| Vertices after arc subdivision UBCHECK holds at once, over all slabs and the zones it looks at | 1 000 000 |
 | Existing boxes within reach of the slab per fill (MINSERT cells counted) | 100 000 |
 | Boxes checked by UBCHECK | 100 000 |
 | Edge, exclusion or zone clearance | 0–10 000 mm |

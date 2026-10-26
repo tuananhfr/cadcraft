@@ -390,9 +390,26 @@ fn many_big_circular_zones_hit_the_vertex_limit_fast() {
     r.zones = (0..9_000)
         .map(|k| zone_rect(&format!("z{k}"), RingInput { vertices: vec![[-4.0e7, f64::from(k), 1.0], [4.0e7, f64::from(k), 1.0]] }, None))
         .collect();
+    // Each circle fits the per-zone cap; together they must hit the drawing-wide memory bound, not build 74 M points.
     let t = std::time::Instant::now();
-    assert!(matches!(check(&r, &Catalog::builtin()), Err(UbotError::Limit(_))));
+    let err = check(&r, &Catalog::builtin()).unwrap_err();
+    assert!(matches!(&err, UbotError::Limit(m) if m.contains("in the drawing, the limit is 1000000")), "{err:?}");
     assert!(t.elapsed().as_secs_f64() < 2.0, "{:?}", t.elapsed());
+}
+
+#[test]
+fn one_zone_over_the_vertex_cap_is_a_limit() {
+    let mut r = loose_req(vec![loose("10", None, 0.0, 0.0)]);
+    // 24 vertices, but 24 semicircles of about 1 100 chords each subdivide to more than 20 000 points.
+    let ring = (0..24u32)
+        .map(|v| {
+            let a = std::f64::consts::TAU * f64::from(v) / 24.0;
+            [1.0e7 * a.cos(), 1.0e7 * a.sin(), 1.0]
+        })
+        .collect();
+    r.zones = vec![zone_rect("big", RingInput { vertices: ring }, None)];
+    let err = check(&r, &Catalog::builtin()).unwrap_err();
+    assert!(matches!(&err, UbotError::Limit(m) if m.contains("20000 vertices after arc subdivision")), "{err:?}");
 }
 
 #[test]

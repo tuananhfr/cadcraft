@@ -26,8 +26,20 @@ use zone_grid::ZoneGrid;
 const MAX_INSTANCES: usize = 100_000;
 const MAX_LAYOUTS: usize = 1_000;
 const MAX_ZONES: usize = 20_000;
-/// Zone vertices in a request before any are looked at; only zones near a slab or box count towards `MAX_VERTICES`.
+/// Zone vertices in a request before any are looked at; `MAX_VERTICES` then holds per slab (with its zones) and per zone.
 const MAX_RAW_ZONE_VERTICES: usize = 1_000_000;
+/// Ring vertices after arc subdivision held at once by one check (all slabs and relevant zones): a memory bound.
+const MAX_BUILT_VERTICES: usize = 1_000_000;
+
+fn charge_built(built: &mut usize, n: usize) -> Result<(), UbotError> {
+    *built = built.saturating_add(n);
+    if *built > MAX_BUILT_VERTICES {
+        return Err(UbotError::Limit(format!(
+            "more than {MAX_BUILT_VERTICES} vertices after arc subdivision in the drawing, the limit is {MAX_BUILT_VERTICES}"
+        )));
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -187,15 +199,23 @@ impl<'r> ZoneIndex<'r> {
 }
 
 /// Zones relevant to the check: within reach of any layout or near any box with a footprint, so loose boxes in a
-/// zone are checked with or without layouts. Only these count towards `MAX_VERTICES`.
-fn relevant_zones(req: &CheckRequest, index: &ZoneIndex<'_>, placed: &[Placed<'_>], work: &mut Work) -> Result<Vec<ZoneInput>, UbotError> {
+/// zone are checked with or without layouts. Also, per layout, the positions in the result of the zones reaching it.
+fn relevant_zones(
+    req: &CheckRequest,
+    index: &ZoneIndex<'_>,
+    placed: &[Placed<'_>],
+    work: &mut Work,
+) -> Result<(Vec<ZoneInput>, Vec<Vec<usize>>), UbotError> {
     let mut relevant = vec![false; req.zones.len()];
+    let mut reached = Vec::with_capacity(req.layouts.len());
     for l in &req.layouts {
-        for k in index.reached(&ZoneReach::new(req.unit_scale, &l.boundary)?, work)? {
+        let ks = index.reached(&ZoneReach::new(req.unit_scale, &l.boundary)?, work)?;
+        for &k in &ks {
             if let Some(r) = relevant.get_mut(k) {
                 *r = true;
             }
         }
+        reached.push(ks);
     }
     // Per zone, the first box within reach settles it; buckets of twice the reach keep each query to a few buckets.
     let boxes: Vec<Bounds2> = placed.iter().filter_map(|p| p.geom.as_ref().map(|g| g.bounds)).collect();
@@ -206,12 +226,30 @@ fn relevant_zones(req: &CheckRequest, index: &ZoneIndex<'_>, placed: &[Placed<'_
             *r = grid.any(&grown, work, |b| boxes.get(b).is_some_and(|b| b.intersects(&grown)))?;
         }
     }
-    let out: Vec<ZoneInput> = req.zones.iter().zip(&relevant).filter(|(_, r)| **r).map(|(z, _)| z.clone()).collect();
-    let zone_vertices = out.iter().fold(0usize, |n, z| n.saturating_add(z.ring.vertices.len()));
-    if zone_vertices > MAX_VERTICES {
-        return Err(UbotError::Limit(format!("{zone_vertices} zone vertices, the limit is {MAX_VERTICES}")));
+    let mut position = vec![None; req.zones.len()];
+    let mut out = Vec::new();
+    for ((z, &r), slot) in req.zones.iter().zip(&relevant).zip(position.iter_mut()) {
+        if r {
+            *slot = Some(out.len());
+            out.push(z.clone());
+        }
     }
-    Ok(out)
+    let reached = reached.into_iter().map(|ks| ks.into_iter().filter_map(|k| position.get(k).copied().flatten()).collect()).collect();
+    Ok((out, reached))
+}
+
+/// Spec §6 caps vertices per run of a slab: its boundary and holes plus the zones that reach it, after arc subdivision.
+fn check_slab_vertices(req: &CheckRequest, slab_points: &[usize], reached: &[Vec<usize>], zones: &Zones) -> Result<(), UbotError> {
+    for ((l, &own), ks) in req.layouts.iter().zip(slab_points).zip(reached) {
+        let total = ks.iter().fold(own, |n, &k| n.saturating_add(zones.points(k)));
+        if total > MAX_VERTICES {
+            return Err(UbotError::Limit(format!(
+                "layout {}: {total} vertices after arc subdivision (slab, holes and the zones that reach it), the limit is {MAX_VERTICES}",
+                l.layout_id
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Audits boxes, layouts and zones as given; nothing is modified. Issues run top-down, then left to right.
@@ -242,8 +280,9 @@ pub fn check(req: &CheckRequest, catalog: &Catalog) -> Result<Vec<Issue>, UbotEr
         }
     }
 
-    let mut points = 0usize;
     let mut ctxs: Vec<LayoutCtx<'_>> = Vec::with_capacity(req.layouts.len());
+    let mut slab_points: Vec<usize> = Vec::with_capacity(req.layouts.len());
+    let mut built = 0usize;
     for l in &req.layouts {
         let rulepack = rulepack_for(catalog, l);
         let edge_mm = match l.edge_clearance_mm {
@@ -252,7 +291,11 @@ pub fn check(req: &CheckRequest, catalog: &Catalog) -> Result<Vec<Issue>, UbotEr
         };
         let exclusion_mm = clearance_mm(rulepack.map_or(0.0, |r| r.exclusion_clearance_mm), "exclusionClearanceMm")?;
         let product = l.layout.as_ref().and_then(|r| lookup.product(&r.product_id));
+        let mut points = 0usize;
         ctxs.push(LayoutCtx::new(&l.boundary, &l.holes, req.unit_scale, (edge_mm, exclusion_mm), product, &mut points)?);
+        work.spend(points)?;
+        charge_built(&mut built, points)?;
+        slab_points.push(points);
     }
     let default_exclusion = clearance_mm(catalog.rulepack(None).map_or(0.0, |r| r.exclusion_clearance_mm), "exclusionClearanceMm")?;
     let widest_default = ctxs.iter().fold(default_exclusion, |m, c| m.max(c.exclusion_mm));
@@ -264,8 +307,9 @@ pub fn check(req: &CheckRequest, catalog: &Catalog) -> Result<Vec<Issue>, UbotEr
         placed.push(resolve(inst, layout.and_then(|k| ctxs.get(k)).and_then(|c| c.product), &mut lookup, req.unit_scale)?);
         layout_of.push(layout);
     }
-    let near_zones = relevant_zones(req, &index, &placed, &mut work)?;
-    let zones = Zones::new(&near_zones, req.unit_scale, widest_default, &mut points)?;
+    let (near_zones, reached) = relevant_zones(req, &index, &placed, &mut work)?;
+    let zones = Zones::new(&near_zones, req.unit_scale, widest_default, &mut work, &mut built)?;
+    check_slab_vertices(req, &slab_points, &reached, &zones)?;
 
     // Stale: the slab geometry no longer matches what the fill saw.
     for l in &req.layouts {

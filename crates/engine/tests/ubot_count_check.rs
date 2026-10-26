@@ -710,3 +710,57 @@ fn ubcheck_params_document_minsert_cells() {
     let spec = cadcraft_engine::find_command("ubcheck").unwrap();
     assert!(spec.params.contains("MINSERT"), "{}", spec.params);
 }
+
+/// `floors` 40 m slabs 60 m apart, each tagged as a layout and holding `columns` round column zones (r = 300 mm).
+fn floors_drawing(floors: u32, columns: u32) -> Session {
+    let mut d = Drawing::new_metric();
+    d.header.set_i64("INSUNITS", 4);
+    for f in 0..floors {
+        let x0 = f64::from(f) * 60_000.0;
+        let b = d.add(&Space::Model, Common::default(), square(x0, 0.0, 40_000.0)).unwrap();
+        let record = LayoutRecord {
+            layout_id: format!("{:016x}", 0xf000 + f),
+            revision: 1,
+            product_id: "ubot-h13-7".into(),
+            rulepack: "lpc-draft-1@draft-1".into(),
+            origin: [x0 + 330.0, 39_670.0],
+            angle_deg: 0.0,
+            pitch_x_mm: 660.0,
+            pitch_y_mm: 660.0,
+            unit_scale: 1.0,
+            geometry_hash: "ab".repeat(32),
+        };
+        let tag = UbotTag::Layout { record, boundary_handle: b.hex() };
+        d.modify_entity(b, |e| xdata::write(&mut e.common, &tag).unwrap()).unwrap();
+        for k in 0..columns {
+            let (cx, cy) = (x0 + 1000.0 + f64::from(k % 25) * 1500.0, 1000.0 + f64::from(k / 25) * 1500.0);
+            let mut c = Common::default();
+            let zone = UbotTag::Zone {
+                zone_id: format!("{:016x}", u64::from(f) << 20 | u64::from(k)),
+                zone_type: ZoneType::Column,
+                clearance_mm: None,
+                alt_product_id: None,
+            };
+            xdata::write(&mut c, &zone).unwrap();
+            let vertices = [[cx - 300.0, cy], [cx + 300.0, cy]]
+                .iter()
+                .map(|p| PolyVertex { p: Vec2::new(p[0], p[1]), bulge: 1.0, start_width: 0.0, end_width: 0.0 })
+                .collect();
+            d.add(&Space::Model, c, EntityKind::LwPolyline(LwPolyline { vertices, closed: true, const_width: 0.0, elevation: 0.0, plinegen: false }))
+                .unwrap();
+        }
+    }
+    session(d)
+}
+
+/// Final review CC-I3: the 20 000 vertex cap holds per slab (its boundary and the zones that reach it), not per drawing.
+#[test]
+fn ubcheck_vertex_cap_is_per_slab_not_per_drawing() {
+    let mut s = floors_drawing(12, 40);
+    let r = s.execute("ubcheck", &json!({})).unwrap();
+    assert!(issues_of(&r, "XDATA_INVALID").is_empty(), "{r}");
+
+    let mut s = floors_drawing(1, 500);
+    let err = s.execute("ubcheck", &json!({})).unwrap_err().to_string();
+    assert!(err.contains("the zones that reach it), the limit is 20000"), "{err}");
+}
