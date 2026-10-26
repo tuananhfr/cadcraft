@@ -20,7 +20,7 @@ fn drawing() -> (Session, [Handle; 3], Handle) {
 fn block(s: &mut Session) {
     s.start("ubplot").unwrap();
     assert_eq!(s.current_prompt().unwrap().accept, Accept::TEXT);
-    assert_eq!(s.current_prompt().unwrap().display(), "Plot frames by [Block/Window/Layout/Last] <Block>:");
+    assert_eq!(s.current_prompt().unwrap().display(), "Plot frames by [Block/Window/Layout/Last/Kcs] <Block>:");
     s.input(Input::Enter).unwrap();
     assert_eq!(s.current_prompt().unwrap().message, "Select frame blocks");
 }

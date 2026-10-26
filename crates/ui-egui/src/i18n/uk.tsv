@@ -8,7 +8,7 @@
 	Output	Виведення
 	Quick Plot	Швидкий друк
 	Quick Plot...	Швидкий друк...
-	Plot frames by [Block/Window/Layout/Last] <Block>:	Друкувати рамки за [Block/Window/Layout/Last] <Block>:
+	Plot frames by [Block/Window/Layout/Last/Kcs] <Block>:	Друкувати рамки за [Block/Window/Layout/Last/Kcs] <Block>:
 	Select frame blocks	Виберіть блоки рамок
 	Specify first corner of sheet window	Укажіть перший кут вікна аркуша
 	Enter layout names (comma-separated) or *	Введіть назви аркушів через кому або *
@@ -1920,7 +1920,7 @@ menu	Display Mode	Режим відображення
 	PASS {p} · INFO {i} · WARN {w} · BLOCK {b}	УСПІХ {p} · ІНФО {i} · УВАГА {w} · БЛОК {b}
 	No sheets to publish	Немає аркушів для публікації
 	Fix or exclude blocked sheets before publishing a merged PDF	Виправте або виключіть заблоковані аркуші перед публікацією об’єднаного PDF
-	Approve all warnings before publishing	Підтвердьте всі попередження перед публікацією
+	Approve or exclude the warnings under Exceptions to publish	Підтвердьте або виключіть попередження в розділі «Винятки», щоб опублікувати
 	{code} · {n} sheets · {severity}	{code} · {n} аркушів · {severity}
 	PASS	УСПІХ
 	INFO	ІНФО
@@ -3464,7 +3464,7 @@ echo	Current settings: Projection={proj}, Edge={value1}, Mode={value2}	Пото�
 echo	selection exceeds {MAX_SCAN_FRAMES} entries	вибір перевищує {MAX_SCAN_FRAMES} записи
 echo	selection exceeds {MAX_SCAN_FRAMES} frames	вибір перевищує {MAX_SCAN_FRAMES} рамки
 	input text exceeds 64 MiB	вхідний текст перевищує 64 MiB
-	choose Block, Window, Layout or Last	виберіть Block, Window, Layout або Last
+	choose Block, Window, Layout, Last or Kcs	виберіть Block, Window, Layout, Last або Kcs
 echo	selection exceeds {MAX_SCAN_FRAMES} windows	вибір перевищує {MAX_SCAN_FRAMES} вікна
 	sheet window must have positive width and height	вікно аркуша має мати додатну ширину й висоту
 	specify a finite window corner	задайте кут вікна зі скінченними координатами
@@ -3903,3 +3903,21 @@ ribbon	Shapes	Фігури
 	Tool Rail	Панель інструментів
 	Hide Tool Rail	Сховати панель інструментів
 	Create a new drawing or continue recent work.	Створіть нове креслення або продовжте недавню роботу.
+	KCS Plotter	Друк за зонами KCS
+	KCS Plot Area	Зона друку KCS
+	KCS plot areas (layer KCS_Plotter)	Зони друку KCS (шар KCS_Plotter)
+	KCS_LINE_DEGENERATE	Лінія зони KCS без ширини чи висоти
+	KCS_NOT_MARKER	Не маркер зони KCS
+
+# Xref files picked on the web.
+	Choose file…	Вибрати файл…
+echo	Xref not loaded: {names} — open the External References palette (XREF) and click Choose file…	Зовнішнє посилання не завантажено: {names} — відкрийте палітру External References (XREF) і натисніть Вибрати файл…
+echo	Choose file: the drawing with xref "{name}" is no longer open	Вибрати файл: креслення із зовнішнім посиланням "{name}" уже закрито
+	only DWG and DXF files can be attached	можна приєднати лише файли DWG і DXF
+echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are not loaded	вкладене зовнішнє посилання "{name}" не завантажено: {saved}: зовнішні посилання вибраного файлу не завантажуються
+
+# Xref palette and -XREF on the web.
+	Reload is not available on the web: use Choose file… in the External References palette (XREF)	Оновлення недоступне у вебверсії: скористайтеся «Вибрати файл…» у палітрі External References (XREF)
+	Path is not available on the web: use Choose file… in the External References palette (XREF)	Зміна шляху недоступна у вебверсії: скористайтеся «Вибрати файл…» у палітрі External References (XREF)
+	Attaching xrefs is not available on the web	Приєднання зовнішніх посилань недоступне у вебверсії
+	On the web, use Choose file… to load	У вебверсії скористайтеся «Вибрати файл…», щоб завантажити

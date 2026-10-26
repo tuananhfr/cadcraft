@@ -1769,7 +1769,7 @@ ribbon	Output	Xuất bản
 	Output	Xuất bản
 	Quick Plot	In nhanh
 	Quick Plot...	In nhanh...
-	Plot frames by [Block/Window/Layout/Last] <Block>:	In khung bản vẽ theo [Block/Window/Layout/Last] <Block>:
+	Plot frames by [Block/Window/Layout/Last/Kcs] <Block>:	In khung bản vẽ theo [Block/Window/Layout/Last/Kcs] <Block>:
 	Select frame blocks	Chọn các khối khung bản vẽ
 	Specify first corner of sheet window	Chỉ định góc thứ nhất của cửa sổ tờ bản vẽ
 	Enter layout names (comma-separated) or *	Nhập tên bố cục in (cách nhau bằng dấu phẩy) hoặc *
@@ -1921,7 +1921,7 @@ menu	Display Mode	Chế độ hiển thị
 	PASS {p} · INFO {i} · WARN {w} · BLOCK {b}	ĐẠT {p} · THÔNG TIN {i} · CẢNH BÁO {w} · CHẶN {b}
 	No sheets to publish	Không có tờ bản vẽ để xuất bản
 	Fix or exclude blocked sheets before publishing a merged PDF	Sửa hoặc loại trừ các tờ bị chặn trước khi xuất bản PDF gộp
-	Approve all warnings before publishing	Chấp nhận tất cả cảnh báo trước khi xuất bản
+	Approve or exclude the warnings under Exceptions to publish	Chấp nhận hoặc loại trừ các cảnh báo ở mục Ngoại lệ để xuất bản
 	{code} · {n} sheets · {severity}	{code} · {n} tờ · {severity}
 	PASS	ĐẠT
 	INFO	THÔNG TIN
@@ -4003,7 +4003,7 @@ echo	Current settings: Projection={proj}, Edge={value1}, Mode={value2}	Cài đ�
 echo	selection exceeds {MAX_SCAN_FRAMES} entries	vùng chọn vượt quá {MAX_SCAN_FRAMES} mục
 echo	selection exceeds {MAX_SCAN_FRAMES} frames	vùng chọn vượt quá {MAX_SCAN_FRAMES} khung bản vẽ
 	input text exceeds 64 MiB	văn bản đầu vào vượt quá 64 MiB
-	choose Block, Window, Layout or Last	hãy chọn Block, Window, Layout hoặc Last
+	choose Block, Window, Layout, Last or Kcs	hãy chọn Block, Window, Layout, Last hoặc Kcs
 echo	selection exceeds {MAX_SCAN_FRAMES} windows	vùng chọn vượt quá {MAX_SCAN_FRAMES} cửa sổ
 	sheet window must have positive width and height	cửa sổ tờ bản vẽ phải có chiều rộng và chiều cao dương
 	specify a finite window corner	hãy chỉ định góc cửa sổ có tọa độ hữu hạn
@@ -4441,3 +4441,28 @@ ribbon	Shapes	Hình
 	Tool Rail	Thanh Công cụ
 	Hide Tool Rail	Ẩn thanh Công cụ
 	Create a new drawing or continue recent work.	Tạo bản vẽ mới hoặc tiếp tục công việc gần đây.
+	KCS Plotter	In theo vùng in KCS
+	KCS Plot Area	Vẽ vùng in KCS
+	KCS plot areas (layer KCS_Plotter)	Vùng in KCS (layer KCS_Plotter)
+	KCS_LINE_DEGENERATE	Đường vùng in KCS không có chiều rộng hoặc chiều cao
+	KCS_NOT_MARKER	Đối tượng không phải dấu vùng in KCS
+	Specify first point of the plot area	Chọn điểm đầu
+	Specify last point of the plot area	Chọn điểm cuối
+	No KCS plot areas found: draw LINEs on layer KCS_Plotter (KL)	Không tìm thấy dấu hiệu của các vùng in!
+	the plot area needs a width and a height	vùng in cần có chiều rộng và chiều cao
+	mode must be kcs	mode phải là kcs
+echo	KCS scan exceeds {MAX_SCAN_FRAMES} plot areas	kết quả quét KCS vượt quá {MAX_SCAN_FRAMES} vùng in
+echo	exclude_layers exceeds {MAX_EXCLUDED_LAYERS} layers	exclude_layers vượt quá {MAX_EXCLUDED_LAYERS} lớp
+
+# Xref files picked on the web.
+	Choose file…	Chọn file…
+echo	Xref not loaded: {names} — open the External References palette (XREF) and click Choose file…	Xref chưa nạp: {names} — mở bảng External References (XREF) và bấm Chọn file…
+echo	Choose file: the drawing with xref "{name}" is no longer open	Chọn file: bản vẽ chứa tham chiếu ngoài "{name}" không còn mở
+	only DWG and DXF files can be attached	chỉ có thể đính kèm tệp DWG và DXF
+echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are not loaded	chưa tải tham chiếu ngoài lồng "{name}": {saved}: không tải các tham chiếu ngoài của tệp đã chọn
+
+# Xref palette and -XREF on the web.
+	Reload is not available on the web: use Choose file… in the External References palette (XREF)	Không thể tải lại trên web: dùng Chọn file… trong bảng External References (XREF)
+	Path is not available on the web: use Choose file… in the External References palette (XREF)	Không thể sửa đường dẫn trên web: dùng Chọn file… trong bảng External References (XREF)
+	Attaching xrefs is not available on the web	Không thể đính kèm tham chiếu ngoài trên web
+	On the web, use Choose file… to load	Trên web, dùng Chọn file… để nạp

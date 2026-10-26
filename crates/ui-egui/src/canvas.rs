@@ -306,6 +306,7 @@ fn ensure_list(app: &mut CadApp, xf: &Xf, views: &[(Bounds2, f64)], ctx: &egui::
         // Two pixels at the band's finest zoom: the list serves every zoom in the band, so its
         // level of detail must hold at the finest one.
         min_dash: 2f64.powi(lod_band) * 2.0,
+        min_linetype: 0.0,
         text: true,
         fill: true,
         lineweights: lwdisplay,
@@ -467,6 +468,7 @@ fn ensure_vp_content(app: &mut CadApp, xf_paper: &Xf, ctx: &egui::Context) -> Op
         let opts = cadcraft_render::Options {
             tolerance: 2f64.powi(band) * 0.5,
             min_dash: 2f64.powi(band) * 2.0,
+            min_linetype: 0.0,
             text: true,
             fill: true,
             lineweights: lwdisplay,

@@ -1,13 +1,15 @@
 //! The External References palette: the drawing's xrefs with their status, type and path, and
-//! Attach, Reload, Unload, Detach, Bind, Path and Open. A thin view over the engine's XREF
-//! commands (`xref`, `-xref`, `xattach`, `xopen`): it reads the drawing and acts through
-//! [`CadApp::run`] / [`CadApp::start`].
+//! Attach, Reload, Unload, Detach, Bind, Path and Open, plus Choose file… where the host picks
+//! xref files ([`crate::xref_pick`]); which of them show depends on the host
+//! ([`crate::xref_controls`]). A thin view over the engine's XREF commands (`xref`, `-xref`,
+//! `xattach`, `xopen`): it reads the drawing and acts through [`CadApp::run`] / [`CadApp::start`].
 
 use egui::RichText;
 use serde_json::{Value, json};
 
 use crate::CadApp;
 use crate::docking::Panel;
+use crate::xref_controls::{Control, Host};
 
 /// XREF typed or chosen from a menu opens this palette; XATTACH there asks for the file first
 /// (with the host's file picker, where there is one). JSON calls (with parameters) run the
@@ -117,6 +119,8 @@ fn rows(app: &CadApp, ui: &egui::Ui) -> Vec<Row> {
 enum Act {
     Start(&'static str),
     Run(&'static str, Value),
+    /// Ask the host for the file of this xref.
+    PickFile(String),
 }
 
 /// The palette body.
@@ -130,17 +134,28 @@ pub fn section(app: &mut CadApp, ui: &mut egui::Ui) {
         selected = rows.first().map(|r| r.name.clone());
     }
     let mut act = None;
+    let host = Host::of(app);
     ui.add_space(6.0);
-    ui.horizontal(|ui| {
-        ui.add_space(8.0);
-        if ui.button(crate::tl!("Attach DWG...")).clicked() {
-            act = Some(Act::Start("xattach"));
-        }
-        if ui.add_enabled(!rows.is_empty(), egui::Button::new(crate::tl!("Reload All"))).clicked() {
-            act = Some(Act::Run("-xref", json!({ "option": "reload", "names": "*" })));
-        }
-    });
-    ui.add_space(6.0);
+    let toolbar = crate::xref_controls::toolbar(host);
+    if !toolbar.is_empty() {
+        ui.horizontal(|ui| {
+            ui.add_space(8.0);
+            for control in toolbar {
+                let clicked = match control {
+                    Control::AttachDwg => ui.button(crate::tl!("Attach DWG...")).clicked().then_some(Act::Start("xattach")),
+                    Control::ReloadAll => ui
+                        .add_enabled(!rows.is_empty(), egui::Button::new(crate::tl!("Reload All")))
+                        .clicked()
+                        .then(|| Act::Run("-xref", json!({ "option": "reload", "names": "*" }))),
+                    _ => None,
+                };
+                if clicked.is_some() {
+                    act = clicked;
+                }
+            }
+        });
+        ui.add_space(6.0);
+    }
     if rows.is_empty() {
         ui.horizontal(|ui| {
             ui.add_space(8.0);
@@ -178,7 +193,7 @@ pub fn section(app: &mut CadApp, ui: &mut egui::Ui) {
     if let Some(r) = selected.as_ref().and_then(|s| rows.iter().find(|r| &r.name == s)) {
         ui.add_space(8.0);
         ui.separator();
-        details(ui, r, path_id, &mut act);
+        details(ui, r, path_id, host, &mut act);
     }
     match act {
         Some(Act::Start(id)) => app.start(id),
@@ -187,42 +202,49 @@ pub fn section(app: &mut CadApp, ui: &mut egui::Ui) {
                 app.set_status(e);
             }
         }
+        Some(Act::PickFile(name)) => crate::xref_pick::pick(app, &name),
         None => {}
     }
 }
 
-/// The selected xref: its actions, type and path.
-fn details(ui: &mut egui::Ui, r: &Row, path_id: egui::Id, act: &mut Option<Act>) {
+/// The selected xref: its actions, type and path, as far as `host` can act on them.
+fn details(ui: &mut egui::Ui, r: &Row, path_id: egui::Id, host: Host, act: &mut Option<Act>) {
     let name = r.name.clone();
     let loaded = r.status == "Loaded" || r.status == "Unreferenced";
     let op = |option: &str| json!({ "option": option, "names": name });
     ui.horizontal_wrapped(|ui| {
         ui.add_space(8.0);
-        if ui.button(crate::tl!("Reload")).clicked() {
-            *act = Some(Act::Run("-xref", op("reload")));
-        }
-        if ui.add_enabled(r.status != "Unloaded", egui::Button::new(crate::tl!("Unload"))).clicked() {
-            *act = Some(Act::Run("-xref", op("unload")));
-        }
-        if ui.button(crate::tl!("Detach")).clicked() {
-            *act = Some(Act::Run("-xref", op("detach")));
-        }
-        if ui
-            .add_enabled(loaded, egui::Button::new(crate::tl!("Bind")))
-            .on_hover_text(crate::tl!("Make it a block of this drawing; its layers become NAME$0$LAYER"))
-            .clicked()
-        {
-            *act = Some(Act::Run("-xref", op("bind")));
-        }
-        if ui
-            .add_enabled(loaded, egui::Button::new(crate::tl!("Insert")))
-            .on_hover_text(crate::tl!("Make it a block of this drawing, keeping its layer names"))
-            .clicked()
-        {
-            *act = Some(Act::Run("-xref", json!({ "option": "bind", "names": name, "insert": true })));
-        }
-        if ui.add_enabled(r.status != "Not Found", egui::Button::new(crate::tl!("Open"))).clicked() {
-            *act = Some(Act::Run("xopen", json!({ "name": name })));
+        for control in crate::xref_controls::row(host, &r.status) {
+            let clicked = match control {
+                Control::ChooseFile => ui.button(crate::tl!("Choose file…")).clicked().then(|| Act::PickFile(name.clone())),
+                // Without a disk, a file the user picks is the only way to load it.
+                Control::Reload => ui
+                    .button(crate::tl!("Reload"))
+                    .clicked()
+                    .then(|| if host.disk { Act::Run("-xref", op("reload")) } else { Act::PickFile(name.clone()) }),
+                Control::Unload => {
+                    ui.add_enabled(r.status != "Unloaded", egui::Button::new(crate::tl!("Unload"))).clicked().then(|| Act::Run("-xref", op("unload")))
+                }
+                Control::Detach => ui.button(crate::tl!("Detach")).clicked().then(|| Act::Run("-xref", op("detach"))),
+                Control::Bind => ui
+                    .add_enabled(loaded, egui::Button::new(crate::tl!("Bind")))
+                    .on_hover_text(crate::tl!("Make it a block of this drawing; its layers become NAME$0$LAYER"))
+                    .clicked()
+                    .then(|| Act::Run("-xref", op("bind"))),
+                Control::Insert => ui
+                    .add_enabled(loaded, egui::Button::new(crate::tl!("Insert")))
+                    .on_hover_text(crate::tl!("Make it a block of this drawing, keeping its layer names"))
+                    .clicked()
+                    .then(|| Act::Run("-xref", json!({ "option": "bind", "names": name, "insert": true }))),
+                Control::Open => ui
+                    .add_enabled(r.status != "Not Found", egui::Button::new(crate::tl!("Open")))
+                    .clicked()
+                    .then(|| Act::Run("xopen", json!({ "name": name }))),
+                Control::AttachDwg | Control::ReloadAll => None,
+            };
+            if clicked.is_some() {
+                *act = clicked;
+            }
         }
     });
     ui.add_space(4.0);
@@ -237,6 +259,10 @@ fn details(ui: &mut egui::Ui, r: &Row, path_id: egui::Id, act: &mut Option<Act>)
         }
     });
     ui.add_space(4.0);
+    if !host.disk {
+        saved_path_read_only(ui, &r.path);
+        return;
+    }
     ui.horizontal(|ui| {
         ui.add_space(8.0);
         ui.label(crate::tl!("Saved Path"));
@@ -253,5 +279,20 @@ fn details(ui: &mut egui::Ui, r: &Row, path_id: egui::Id, act: &mut Option<Act>)
         } else {
             ui.data_mut(|d| d.remove::<String>(path_id));
         }
+    });
+}
+
+/// The saved path where it can't be followed (the web): shown, not edited.
+fn saved_path_read_only(ui: &mut egui::Ui, path: &str) {
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.label(crate::tl!("Saved Path"));
+        let mut text = path.to_string();
+        let w = (ui.available_width() - 8.0).max(60.0);
+        ui.add(egui::TextEdit::singleline(&mut text).interactive(false).desired_width(w));
+    });
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.label(RichText::new(crate::tl!("On the web, use Choose file… to load")).color(crate::theme::Tokens::get().text_dim));
     });
 }

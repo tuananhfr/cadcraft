@@ -42,6 +42,8 @@ pub const PROFILE_LEVEL_SKIPPED: &str = "PROFILE_LEVEL_SKIPPED";
 pub const BASELINE_CHANGED: &str = "BASELINE_CHANGED";
 pub const AUDIT_LIMIT: &str = "AUDIT_LIMIT";
 pub const PLAN_INVALID: &str = "PLAN_INVALID";
+pub const KCS_LINE_DEGENERATE: &str = "KCS_LINE_DEGENERATE";
+pub const KCS_NOT_MARKER: &str = "KCS_NOT_MARKER";
 
 pub fn issue(severity: Severity, code: &str, message: impl Into<String>, sheet_id: Option<&str>) -> PreflightIssue {
     PreflightIssue { severity, code: code.into(), message: message.into(), sheet_id: sheet_id.map(str::to_string), approved_by_user: false }

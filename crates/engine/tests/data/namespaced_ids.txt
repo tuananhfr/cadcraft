@@ -214,6 +214,8 @@ isodraft	cad.other.isodraft
 isolateobjects	cad.tools.isolateobjects
 isoplane	cad.other.isoplane
 join	cad.modify.join
+kcsarea	cad.other.kcsarea
+kcsplotter	cad.other.kcsplotter
 laycur	cad.format.laycur
 laydel	cad.format.laydel
 layer	cad.format.layer

@@ -265,3 +265,30 @@ Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded 
   which were not supplied; project-sample checks do not replace that baseline audit.
 - Attribute text was observed in legacy TCVN3 (.VnTime), rather than Unicode. These checks
   pin the reviewed attributes; they do not establish legacy text conversion or font parity.
+
+## KCS Plotter areas (KP / KL)
+
+2026-10-26 · Print the way LPC prints with KCS Plotter (KetcauSoft) and a PDF printer.
+
+- UBPLOT scan mode `kcs`: each Model-space LINE on layer `KCS_Plotter` (any case) is the diagonal of one window sheet; `handles` limits it to selected markers. Sheets default to ISO A3, orient by the window's long side and fit to paper, with `scale_label` `1:n` snapped to a whole `n` within 0.5 %. Lines with no width or height are skipped with plan-level WARN `KCS_LINE_DEGENERATE`; none at all is an error ("Không tìm thấy dấu hiệu của các vùng in!" in Vietnamese).
+- Order replays KCS's own `Sap_Xep_Window_List` (decoded read-only from the plug-in's IL): an exchange sort over the lines in drawing order, top edge descending, then left edge ascending within a row of tolerance first-window-height / 12.5.
+- The marker layer never plots on KCS sheets, whatever its plot flag: sheets carry `exclude_layers` and publish/background jobs plot from a copy with those layers set not to plot. Publish already merges into one PDF by default.
+- `KP` (`kcsplotter`) scans all markers and opens the Quick Plot review with the new Source row on "Vùng in KCS (layer KCS_Plotter)"; `KL` (`kcsarea`) draws one marker from two points ("Chọn điểm đầu" / "Chọn điểm cuối"), creating `KCS_Plotter` with plotting off when missing, in one undo step. Typed UBPLOT gains the `Kcs` keyword. Fixed 0°/90° orientation is not offered (UBPLOT has no forced orientation); KPP (several files) is not ported.
+- Checked on LPC's drawing with its xref: 17 A3 sheets in KCS order (2 x 1:100, 8 x 1:110, 7 x 1:50), one merged 17-page PDF without the marker layer.
+
+## Xref files on the web
+
+- The browser can't follow an xref's saved path, so a drawing opened on the web lost its xrefs (the LPC title-block frames are one). Now, after such a drawing opens, the command line names the missing xrefs ("Xref chưa nạp: … — mở bảng External References (XREF) và bấm Chọn file…"), and the External References palette shows **Choose file…** (vi "Chọn file…") for an xref that is Not Found or Unresolved. The picked DWG or DXF is loaded into that xref as a Reload from disk would load it: same parsing and binding (`xref/load.rs`), status Loaded, one "External References" undo step. A file of another name is accepted and the echo names it. A file that can't be loaded (not DWG/DXF, unreadable, over the size limits) leaves the drawing unchanged with a message. The picked file's own xrefs are not looked for; they stay unloaded and are listed on the command line.
+- Engine: `Session::reload_xref_from_bytes` (`cmd/blocks/xref/picked.rs`) runs through `Session::execute_as`, the body of `execute` with the command's JSON form swapped for a call that takes bytes, so no base64 copy of the file is made. UI: `Services::pick_xref_file` (set only by the web app; the desktop palette is unchanged) and `CadApp::attach_xref_file`. Web: upload purpose `Purpose::Xref`.
+- Nothing is kept: after a reload the file has to be picked again (IndexedDB storage is future work). One pick loads every xref of the drawing that is Not Found or Unresolved and whose saved path has the same file name (folders and case ignored, `\` or `/`), in the same undo step, with one "loaded from" line each; xrefs already loaded or unloaded are left alone.
+- To avoid picking again on every visit: after the xref loads, **Bind** (or **Insert**) it in the palette and save the drawing. The frame then becomes part of the drawing, and the saved file keeps it.
+- The command-line hint and the "drawing no longer open" error are logged in English and translated when shown (`echo` context), like engine messages: on the web a drawing can open before the UI language applies, which left the hint in English on a Vietnamese UI.
+
+### XREF palette and -XREF on the web
+
+- Status table (`cmd/registry.rs`): on the web only `xattach` and `xopen` are unsupported (they read files from disk); `xref`, `-xref` and `xbind` are available. `option_status_on` marks -XREF's Reload, Path, Attach and Overlay options unsupported on the web; `-xref` refuses them there with a message pointing to Choose file… (JSON and typed forms alike). Unload, Detach, Bind, Insert (bind keeping layer names) and Type work in memory. The desktop is unchanged.
+- Palette (`ui-egui/src/xref_controls.rs` decides what shows): on the web, Attach DWG…, Reload All and Open are hidden; Reload shows only for an xref that is not loaded and opens Choose file…; the saved path is read-only with the note "On the web, use Choose file… to load" (vi "Trên web, dùng Chọn file… để nạp"), and Apply is hidden.
+
+### Quick Plot: why Publish is disabled
+
+- The reason now shows as a line next to Publish instead of only in a tooltip. Unapproved warnings read "Approve or exclude the warnings under Exceptions to publish" (vi "Chấp nhận hoặc loại trừ các cảnh báo ở mục Ngoại lệ để xuất bản"); the other reasons are "No sheets to publish" and "Fix or exclude blocked sheets before publishing a merged PDF".

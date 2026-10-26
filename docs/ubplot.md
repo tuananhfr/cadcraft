@@ -13,8 +13,9 @@ programmatic calls never open dialogs.
 
 Scan parameters:
 
-- `mode`: `block`, `window`, `layout`, `last`, or `plan`.
-- `handles`: hexadecimal INSERT handles, in pick order, for block mode.
+- `mode`: `block`, `window`, `layout`, `last`, `plan`, or `kcs`.
+- `handles`: hexadecimal INSERT handles, in pick order, for block mode; for `kcs`, the
+  marker lines to plot (default: all of them).
 - `windows`: two corners or four rectangle vertices per window.
 - `layouts`: layout names in order, or `["*"]` for layout tab order.
 - `paper`, `scale`: optional paper choice (below) and `"fit"` or ratio such as `"1:100"`.
@@ -23,6 +24,33 @@ Scan parameters:
 - `revisions`: optional sheet-id-to-revision register, for example `{"KT-01": "C"}`.
 - `device`: optional device name from PLOTTERMANAGER; UBPLOT still publishes PDF.
 - `plan`: a SheetPlan for `mode: "plan"`. Scan resolves flat block references into outlines.
+
+| Mode | Sheets come from |
+| --- | --- |
+| `block` | Frame block INSERTs matched by the frame templates. |
+| `window` | Two corners or four vertices per sheet. |
+| `layout` | Layout tabs and their page setups. |
+| `kcs` | KCS Plotter marker LINEs on layer `KCS_Plotter` in Model space. |
+| `last` | The previous scan request, rescanned. |
+| `plan` | A supplied SheetPlan. |
+
+`kcs` follows the KCS Plotter plug-in (KetcauSoft) used with a PDF printer: each LINE on
+layer `KCS_Plotter` (any letter case) is the diagonal of one window sheet. Lines with no
+width or height are skipped with a plan-level WARN `KCS_LINE_DEGENERATE` naming the handle;
+selected handles that are not marker lines get INFO `KCS_NOT_MARKER`. No marker line is an
+error ("No KCS plot areas found…", Vietnamese "Không tìm thấy dấu hiệu của các vùng in!").
+Sheets use ISO A3 unless `paper` says otherwise, orientation follows the window's long side,
+and the scale is Fit, reported in `scale_label` as `1:n` (a whole `n` when within 0.5 %).
+The marker layer never plots on these sheets, whatever its plot flag (`exclude_layers`).
+Sheet order replays KCS `Sap_Xep_Window_List`: an exchange sort over the lines in drawing
+order, top edge descending, and within a row (top edges no further apart than the first
+window's height / 12.5) left edge ascending. Publish merges them into one PDF by default.
+
+`KP` (`kcsplotter`) scans every marker line and opens the review dialog with the KCS source
+selected; its JSON form is `ubplot.scan` with `mode: "kcs"`. `KL` (`kcsarea`, JSON
+`{from: [x, y], to: [x, y]}`) draws one marker in Model space, creating `KCS_Plotter` with
+plotting off when it is missing; the current layer stays as it was and it is one undo step.
+The UBPLOT dialog's Source row can rescan any plan as KCS plot areas.
 
 `last` reuses the last scan request for the current drawing and rescans after edits.
 Scan ratios are physical ratios based on `INSUNITS`, independent of `MEASUREMENT`.
@@ -83,7 +111,8 @@ transforms and dynamic visibility. A block/window sheet uses its exact outline;
 a layout sheet also checks the model AABB visible through each enabled viewport.
 `NotFound`, `Unresolved`, and `NotLoaded` references intersecting a sheet add BLOCK
 `XREF_MISSING`, naming the reference and its path. On the web this also explains that
-external references are not loaded on the web. `Unloaded` adds WARN `XREF_UNLOADED`.
+external references are not loaded on the web; picking the file with **Choose file…** in the
+External References palette loads it for that visit. `Unloaded` adds WARN `XREF_UNLOADED`.
 Missing references outside all sheets add plan-level INFO `XREF_MISSING_OUTSIDE`.
 The AABB rule needs cached geometry: an empty definition or zero-area bound cannot
 establish an overlap, so it is reported at plan level rather than assigned to a sheet.
@@ -267,7 +296,8 @@ The review dialog shows WARN/BLOCK exceptions by default, grouped by code and se
 with an audit confirmation modal; approved rows have a locked `Approved` checkbox.
 BLOCK groups offer window/paper fixes or exclusion, with no approval control.
 The summary shows PASS/INFO/WARN/BLOCK sheet counts. Publish is disabled while WARNs
-remain unapproved, or while merged output contains a BLOCK, with a reason tooltip.
+remain unapproved, or while merged output contains a BLOCK, or when there are no sheets; the
+reason shows next to the button (for a BLOCK its tooltip names the first blocking code).
 Desktop device-size exceptions offer the split controls described below.
 
 Command errors include `PLAN_STALE` (drawing changed since scan), `PLAN_INVALID`

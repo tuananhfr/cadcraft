@@ -1,5 +1,6 @@
 mod interactive;
 mod jobs;
+mod kcs;
 pub mod profile;
 pub(crate) mod publish;
 mod templates;
@@ -75,6 +76,15 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("as ubplot.scan (JSON: scans and stores the plan, opens nothing); typed: prompts")
             .noundo()
             .interactive(|_| Ok(Box::new(interactive::UbplotM::default()))),
+        CommandSpec::new("kcsplotter", "KCS Plotter", kcs::run_kcsplotter)
+            .alias(&["kp"])
+            .params("as ubplot.scan with mode kcs: one A3 sheet per LINE on layer KCS_Plotter, in KCS order; typed: scans them all and opens the review")
+            .noundo()
+            .interactive(|_| Ok(Box::new(interactive::UbplotM::kcs()))),
+        CommandSpec::new("kcsarea", "KCS Plot Area", kcs::run_kcsarea)
+            .alias(&["kl"])
+            .params("{from: [x,y], to: [x,y]} → {handle}: the plot area's diagonal as a LINE on layer KCS_Plotter (created with plotting off); typed: two points")
+            .interactive(|_| Ok(Box::new(kcs::KcsAreaM::default()))),
         CommandSpec::new("ubplot.approve", "Approve Plot Warnings", run_approve)
             .params("{plan?: SheetPlan (default: the last plan), approvals?: [{sheetKey, code}], split?: [{sheetKey, overlapMm?}], by: user|agent:<name>} → SheetPlan; WARN approvals and explicit device splits are atomic")
             .noundo()
@@ -107,7 +117,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{plan: SheetPlan, format?: json|csv (json)} → {rows: [{order, sheet_id, revision, frame_template_id, status, issue_codes}]} or {text: UTF-8 CSV with BOM}")
             .noundo(),
         CommandSpec::new("ubplot.scan", "Scan Plot Frames", run_scan)
-            .params("{mode: block|window|layout|last|plan, handles?, windows?: [[[x1,y1],[x2,y2]] | [[x,y]×4]], layouts?, paper?, scale?: \"1:100\"|\"fit\", device?: name, revisions?: {sheet_id: revision}, overrides?: {sheet_key: {paper?, scale?, window?, sheetId?}}, exclude?: [sheet_key], plan? (mode plan)} → SheetPlan + summary")
+            .params("{mode: block|window|layout|last|plan|kcs, handles? (kcs: marker lines to plot, default all), windows?: [[[x1,y1],[x2,y2]] | [[x,y]×4]], layouts?, paper?, scale?: \"1:100\"|\"fit\", device?: name, revisions?: {sheet_id: revision}, overrides?: {sheet_key: {paper?, scale?, window?, sheetId?}}, exclude?: [sheet_key], plan? (mode plan)} → SheetPlan + summary")
             .noundo()
             .enabled(has_doc),
         CommandSpec::new("ubplot.templates", "Plot Frame Templates", templates::run_templates)

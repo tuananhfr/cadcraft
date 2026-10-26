@@ -34,6 +34,8 @@ pub mod hatchdlg;
 mod mtext_editor;
 pub mod spacemouse;
 // The External References palette.
+mod xref_controls;
+mod xref_pick;
 pub mod xrefs;
 
 pub mod dyngrips;
@@ -223,6 +225,9 @@ pub struct Services {
     pub pick_save: Option<Box<dyn Fn(&str) -> Option<String>>>,
     pub pick_open_kind: Option<Box<dyn Fn(&FileKind) -> Option<String>>>,
     pub pick_save_kind: Option<Box<dyn Fn(&str, &FileKind) -> Option<String>>>,
+    /// Pick the file for xref `name` of drawing `doc` (its uid) where saved paths can't be
+    /// followed (the web); the host hands it back through [`CadApp::attach_xref_file`].
+    pub pick_xref_file: Option<Box<dyn Fn(u64, &str)>>,
 }
 
 impl Services {
@@ -645,6 +650,7 @@ impl CadApp {
                     self.set_status(w.to_string());
                 }
                 self.notify_missing_fonts();
+                xref_pick::hint_missing(self);
                 // A dynamic block's own drawing: ask whether to open it in the Block Editor.
                 if self.session.state().is_ok_and(|st| cadcraft_engine::blockedit::has_authoring_elements(&st.doc)) {
                     self.ui.dialog = Some("authoring".into());

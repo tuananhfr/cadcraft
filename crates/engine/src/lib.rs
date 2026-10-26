@@ -874,6 +874,19 @@ impl Session {
     /// Run a command with JSON parameters (no dialogs). Records undo when the drawing changes.
     pub fn execute(&mut self, id: &str, params: &Value) -> Result<Value> {
         let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
+        let run = spec.run;
+        self.execute_as(id, spec, params, &mut |s, p| run(s, p))
+    }
+
+    /// [`Self::execute`] with `run` in place of the command's JSON form, for input JSON can't carry
+    /// cheaply (file bytes): the checks, undo step and post-command passes stay the command's.
+    pub(crate) fn execute_as(
+        &mut self,
+        id: &str,
+        spec: &CommandSpec,
+        params: &Value,
+        run: &mut dyn FnMut(&mut Session, &Value) -> Result<Value>,
+    ) -> Result<Value> {
         lisp::trust::check_command(self, spec.id, params)?;
         (spec.enabled)(self).map_err(|m| EngineError::Disabled(spec.id.into(), m))?;
         if let Some(why) = cmd::blocks::bedit::refused_in_editor(self, spec.id) {
@@ -882,7 +895,6 @@ impl Session {
         let before = self.state().ok().map(|s| (s.doc.clone(), s.selection.clone(), s.uid));
         let editing = self.state().is_ok_and(|s| s.block_edit.is_some());
         self.lisp_audit_command(spec.id);
-        let run = spec.run;
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             #[cfg(not(target_arch = "wasm32"))]
             lisp::sandbox::check_command(self, spec.id, params)?;

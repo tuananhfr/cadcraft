@@ -8,6 +8,7 @@ use super::{LastPlan, bad, io, source_hash};
 use crate::cmd::file::base64_encode;
 use crate::sheetplan::approval::{carry_over, issues, merge_audit, refresh_status, validate_approvals, validate_issue_approvals};
 use crate::sheetplan::codes::{self, issue};
+use crate::sheetplan::exclude::plot_drawing;
 use crate::sheetplan::ids::{sha256_hex, sheet_key};
 use crate::sheetplan::paper::sheet_margins;
 use crate::sheetplan::queue::store::validate_output_file_name;
@@ -170,7 +171,8 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
         for (index, group) in groups.iter().enumerate() {
             let sheets = plan.sheets.get(group.clone()).ok_or_else(|| bad(COMMAND, "missing output group"))?;
             let rendered = sheets.iter().map(|sheet| sheet_pages(s, sheet)).collect::<std::result::Result<Vec<_>, _>>().and_then(|pages| {
-                plot(s.doc().map_err(|error| error.to_string())?, &Space::Model, &options(pages.into_iter().flatten().collect(), title))
+                let drawing = plot_drawing(s.doc().map_err(|error| error.to_string())?, sheets);
+                plot(&drawing, &Space::Model, &options(pages.into_iter().flatten().collect(), title))
             });
             let result = rendered.and_then(|bytes| finish(&destinations, index, path.is_some(), &plan.job_id, sheets, &bytes));
             match result {
@@ -197,7 +199,10 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
                 continue;
             }
             let result = sheet_pages(s, sheet)
-                .and_then(|pages| plot(s.doc().map_err(|error| error.to_string())?, &Space::Model, &options(pages, title)))
+                .and_then(|pages| {
+                    let drawing = plot_drawing(s.doc().map_err(|error| error.to_string())?, std::slice::from_ref(sheet));
+                    plot(&drawing, &Space::Model, &options(pages, title))
+                })
                 .and_then(|bytes| finish(&destinations, index, path.is_some(), &plan.job_id, std::slice::from_ref(sheet), &bytes));
             match result {
                 Ok(file) => {
