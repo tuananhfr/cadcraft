@@ -24,9 +24,14 @@ use serde_json::Value;
 use crate::{IoError, Result};
 
 mod fonts;
+mod path;
 
 /// PDF points per millimetre.
 const PT_PER_MM: f64 = 72.0 / 25.4;
+
+/// Path points within this distance on paper (mm) of a straight run are left out (a 600 dpi
+/// printer dot is 0.042 mm).
+const SIMPLIFY_MM: f64 = 0.005;
 /// Most sheets (pages) in one file.
 pub const MAX_PAGES: usize = cadcraft_doc::MAX_PLOT_PAGES;
 /// Most PDF layers in one file; objects on further layers print without one.
@@ -565,6 +570,7 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
         transparency: o.plot_transparency.unwrap_or(page.plot_transparency),
         tolerance: 0.001,
         min_dash: 0.0,
+        min_linetype: 0.0,
         text: true,
         fill: true,
         lineweights,
@@ -584,9 +590,10 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
     let est = plot_scale(&window.unwrap_or_else(|| d.extents(space)), &sheet, fit, o.scale);
     let tol = 0.05 / unit_mm / est.max(1e-300);
     let tolerance = if tol.is_finite() && tol > 0.0 { tol } else { ropts.tolerance };
+    let min_linetype = cadcraft_render::plot_min_linetype(unit_mm, est);
     // Relative point sizes follow the plotted window (else the extents).
     let view_height = window.map(|w| w.height()).unwrap_or(0.0);
-    let mut list = cadcraft_render::build_plot(d, space, &cadcraft_render::Options { tolerance, view_height, ..ropts });
+    let mut list = cadcraft_render::build_plot(d, space, &cadcraft_render::Options { tolerance, min_linetype, view_height, ..ropts });
     check_cancelled(o)?;
     if let Some(frame) = o.frame {
         list.rotate_about(frame.center, -frame.rotation);
@@ -689,6 +696,13 @@ fn cull_window(list: &mut cadcraft_render::DisplayList, window: Bounds2, mm_per_
         }
         Some(None) => false,
         None => intersects(text.bounds),
+    });
+    list.fill_paths.retain_mut(|f| match remap.get(f.prim as usize) {
+        Some(Some(index)) => {
+            f.prim = *index;
+            true
+        }
+        _ => false,
     });
 }
 
@@ -857,13 +871,8 @@ fn content_stream(
     let mut stroke: Option<Rgb> = None;
     let mut fill: Option<Rgb> = None;
     let mut width: Option<f64> = None;
-    let mut pending = false;
-    let flush = |c: &mut String, pending: &mut bool| {
-        if *pending {
-            c.push_str("S\n");
-            *pending = false;
-        }
-    };
+    let mut strokes = path::Strokes::new(SIMPLIFY_MM * PT_PER_MM / user_unit);
+    let mut fill_paths = list.fill_paths.iter().peekable();
     // The PDF layer (optional content) the marks are in: `/OC /L<i> BDC` … `EMC`.
     let mut layer: Option<u32> = None;
     // Inside a text object (`BT` … `ET`), with this font set.
@@ -872,6 +881,8 @@ fn content_stream(
     let mut alpha: u8 = 0;
     let mut alphas: Vec<u8> = Vec::new();
     for (i, p) in list.prims.iter().enumerate() {
+        while fill_paths.next_if(|f| (f.prim as usize) < i).is_some() {}
+        let fill_path = fill_paths.next_if(|f| f.prim as usize == i);
         let want = list.prim_layers.get(i).copied().filter(|l| marked.contains(l));
         let text = u32::try_from(i).ok().and_then(|i| texts.get(&i));
         if text_font.is_some() && (text.is_none() || want != layer) {
@@ -879,7 +890,7 @@ fn content_stream(
             text_font = None;
         }
         if want != layer {
-            flush(&mut c, &mut pending);
+            strokes.flush(&mut c);
             if layer.is_some() {
                 c.push_str("EMC\n");
             }
@@ -896,7 +907,7 @@ fn content_stream(
         // A wipeout's mask always hides what is under it.
         let t = if p.kind == Kind::Mask { 0 } else { p.transparency.min(cadcraft_render::MAX_TRANSPARENCY) };
         if t != alpha {
-            flush(&mut c, &mut pending);
+            strokes.flush(&mut c);
             let _ = writeln!(c, "/T{t} gs");
             if !alphas.contains(&t) {
                 alphas.push(t);
@@ -929,10 +940,10 @@ fn content_stream(
                 // contents and viewport contents share their reference's handle, so this goes
                 // by primitive, not by object.
                 if t > 0 {
-                    flush(&mut c, &mut pending);
+                    strokes.flush(&mut c);
                 }
                 if stroke != Some(rgb) || width != Some(w) {
-                    flush(&mut c, &mut pending);
+                    strokes.flush(&mut c);
                     if stroke != Some(rgb) {
                         color(&mut c, rgb, "RG");
                         stroke = Some(rgb);
@@ -943,14 +954,10 @@ fn content_stream(
                         width = Some(w);
                     }
                 }
-                for (i, q) in pts.iter().enumerate() {
-                    pt(&mut c, *q);
-                    c.push_str(if i == 0 { " m\n" } else { " l\n" });
-                }
-                pending = true;
+                strokes.add(&mut c, &pts);
             }
             Kind::Tris | Kind::Mask => {
-                flush(&mut c, &mut pending);
+                strokes.flush(&mut c);
                 // A wipeout's mask is paper white.
                 let rgb = if p.kind == Kind::Mask { white } else { rgb };
                 if fill != Some(rgb) {
@@ -961,28 +968,35 @@ fn content_stream(
                     glyph(&mut c, &mut text_font, *font, t, map);
                     continue;
                 }
-                let mut any = false;
-                for t in raw.as_chunks::<3>().0 {
-                    for (i, q) in t.iter().enumerate() {
-                        pt(&mut c, map.pt(*q));
-                        c.push_str(if i == 0 { " m\n" } else { " l\n" });
+                // A solid hatch fills its boundary (nonzero rule) instead of its triangles.
+                let any = match fill_path {
+                    Some(f) if p.kind == Kind::Tris => path::loops(&mut c, f.loops.iter().map(Vec::as_slice), |q| map.pt(q), strokes.tolerance()),
+                    _ => {
+                        let mut any = false;
+                        for t in raw.as_chunks::<3>().0 {
+                            for (i, q) in t.iter().enumerate() {
+                                path::point(&mut c, map.pt(*q));
+                                c.push_str(if i == 0 { " m\n" } else { " l\n" });
+                            }
+                            c.push_str("h\n");
+                            any = true;
+                        }
+                        any
                     }
-                    c.push_str("h\n");
-                    any = true;
-                }
+                };
                 if any {
                     c.push_str("f\n");
                 }
             }
             Kind::Point => {
                 let Some(q) = raw.first() else { continue };
-                flush(&mut c, &mut pending);
+                strokes.flush(&mut c);
                 if fill != Some(rgb) {
                     color(&mut c, rgb, "rg");
                     fill = Some(rgb);
                 }
                 let half = w.max(0.5 / user_unit) / 2.0;
-                pt(&mut c, map.pt(*q) - Vec2::new(half, half));
+                path::point(&mut c, map.pt(*q) - Vec2::new(half, half));
                 c.push(' ');
                 num(&mut c, half * 2.0);
                 c.push(' ');
@@ -991,7 +1005,7 @@ fn content_stream(
             }
         }
     }
-    flush(&mut c, &mut pending);
+    strokes.flush(&mut c);
     if text_font.is_some() {
         c.push_str("ET\n");
     }
@@ -1035,7 +1049,7 @@ fn glyph(c: &mut String, text_font: &mut Option<Option<usize>>, font: usize, t: 
         num(c, v);
         c.push(' ');
     }
-    pt(c, map.pt(g.origin));
+    path::point(c, map.pt(g.origin));
     let _ = writeln!(c, " Tm <{:04X}> Tj", g.gid);
 }
 
@@ -1316,7 +1330,7 @@ fn assemble(d: &Drawing, pages: impl ExactSizeIterator<Item = Result<SheetPage>>
 mod tests {
     use super::*;
     use cadcraft_render::pen::Pen;
-    use cadcraft_render::{DPrim, DisplayList, PlotText};
+    use cadcraft_render::{DPrim, DisplayList, FillPath, PlotText};
 
     fn prim(handle: u64, kind: Kind, start: u32, len: u32) -> DPrim {
         DPrim { handle: Handle(handle), color: Rgb(0, 0, 0), aci7: false, lw: 0.0, transparency: 0, kind, start, len }
@@ -1366,6 +1380,7 @@ mod tests {
             prim_layers: (0..9).collect(),
             pens: pens.clone(),
             texts: vec![text(2, near), text(3, far), text(PlotText::NONE, near), text(PlotText::CLIPPED, far), text(PlotText::NONE, Bounds2::EMPTY)],
+            fill_paths: [2, 3, 4].map(|prim| FillPath { prim, loops: Vec::new() }).to_vec(),
             ..DisplayList::default()
         };
         cull_window(&mut list, near, 1.0);
@@ -1374,6 +1389,7 @@ mod tests {
         assert_eq!(list.pens, [pens[1], pens[2], pens[4], pens[5], pens[6], pens[7], pens[8]]);
         assert_eq!(list.texts.iter().map(|t| t.prim).collect::<Vec<_>>(), [1, PlotText::NONE, PlotText::NONE]);
         assert_eq!(list.texts.first().map(|t| t.bounds), Some(near));
+        assert_eq!(list.fill_paths.iter().map(|f| f.prim).collect::<Vec<_>>(), [1, 2]);
     }
 
     #[test]

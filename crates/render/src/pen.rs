@@ -66,13 +66,15 @@ const ROUND_STEPS: usize = 12;
 
 /// Turn the pens of `list` into geometry for output where one drawing unit is `mm_per_unit`
 /// millimetres on paper. Lines with end or join styles become filled outlines and patterned
-/// fills become the pattern's pieces. Each primitive stays one primitive (same order, handle and
-/// colour) and the pens are used up, so applying twice changes nothing.
+/// fills become the pattern's pieces (and lose their fill path). Each primitive stays one
+/// primitive (same order, handle and colour) and the pens are used up, so applying twice
+/// changes nothing.
 pub fn apply(list: &mut DisplayList, mm_per_unit: f64) {
     let pens = std::mem::take(&mut list.pens);
     if !(mm_per_unit.is_finite() && mm_per_unit > 0.0) {
         return;
     }
+    let mut replaced: Vec<u32> = Vec::new();
     let mut budget = MAX_PATTERN_CELLS;
     for (i, pen) in pens.iter().enumerate() {
         let Some(p) = list.prims.get(i).copied() else { break };
@@ -95,7 +97,16 @@ pub fn apply(list: &mut DisplayList, mm_per_unit: f64) {
         prim.len = len;
         prim.lw = 0.0;
         list.tris.extend_from_slice(&tris);
+        if let Ok(i) = u32::try_from(i) {
+            replaced.push(i);
+        }
     }
+    // Both are in primitive order.
+    let mut replaced = replaced.into_iter().peekable();
+    list.fill_paths.retain(|f| {
+        while replaced.next_if(|r| *r < f.prim).is_some() {}
+        replaced.peek() != Some(&f.prim)
+    });
 }
 
 /// Push triangle `a b c` counter-clockwise (so overlapping pieces fill as a union under the

@@ -543,9 +543,9 @@ fn window_plot_keeps_entities_crossing_the_edge() {
     let common = Common { color: Color::Index(3), lineweight: Lineweight::Mm100(211), ..Common::default() };
     d.add(&Space::Model, common, EntityKind::Line(thick)).unwrap();
     let content = check_pdf(&pdf::pdf(&d, &Space::Model, &window_plot_options()).unwrap());
-    assert!(content.contains("-28.346 141.732 m\n28.346 141.732 l\n"), "{content}");
-    assert!(content.contains("0 0 1 RG") && content.contains("269.291 56.693 m\n269.291 113.386 l\n"), "{content}");
-    assert!(content.contains("0 1 0 RG") && content.contains("-1.417 198.425 m\n-1.417 226.772 l\n"), "{content}");
+    assert!(content.contains("-28.35 141.73 m\n28.35 141.73 l\n"), "{content}");
+    assert!(content.contains("0 0 1 RG") && content.contains("269.29 56.69 m\n269.29 113.39 l\n"), "{content}");
+    assert!(content.contains("0 1 0 RG") && content.contains("-1.42 198.43 m\n-1.42 226.77 l\n"), "{content}");
 }
 
 #[test]

@@ -10,6 +10,7 @@
 pub mod clip;
 mod dim;
 mod fill;
+mod fill_path;
 mod hatch;
 mod linetype;
 mod linetype_text;
@@ -32,6 +33,7 @@ use pen::Pen;
 
 pub use dim::{ArrowGeom, Arrowhead, DimGeometry, DimText, LineRole, arrowhead, dimension_geometry, dimension_geometry_with, format_linear_value};
 pub use fill::triangulate_evenodd;
+pub use fill_path::FillPath;
 pub use hatch::{fill_loops as hatch_fill_loops, pattern_swatch};
 pub use paper::{PAPER_SIZES, PaperSize, Sheet, paper_size, sheet};
 pub use tolerance::{gdt_points, tolerance_in};
@@ -98,6 +100,9 @@ pub struct DisplayList {
     /// Plot style end, join and fill style per primitive (parallel to `prims`; missing entries
     /// are "use object"), turned into geometry by [`pen::apply`].
     pub pens: Vec<Pen>,
+    /// Plots: solid hatch fills as their boundary loops, by primitive in drawing order, for
+    /// output that fills paths instead of the primitive's triangles (see [`FillPath`]).
+    pub fill_paths: Vec<FillPath>,
 }
 
 /// A glyph of plotted text: the font glyph and, in world coordinates, where it sits. It is
@@ -231,6 +236,9 @@ impl DisplayList {
         for p in &mut self.tris {
             *p = p.rotate_about(center, radians);
         }
+        for p in self.fill_paths.iter_mut().flat_map(|f| f.loops.iter_mut().flatten()) {
+            *p = p.rotate_about(center, radians);
+        }
         for text in &mut self.texts {
             text.glyph.origin = text.glyph.origin.rotate_about(center, radians);
             text.glyph.x = text.glyph.x.rotate(radians);
@@ -273,6 +281,17 @@ impl DisplayList {
     }
 }
 
+/// Plots draw a linetype whose pattern repeats in less than this on paper (mm) as a continuous
+/// line: its dashes and gaps are too small to print apart.
+pub const PLOT_MIN_LINETYPE_MM: f64 = 0.1;
+
+/// [`Options::min_linetype`] for a plot where a drawing unit is `scale` paper units of
+/// `unit_mm` millimetres: [`PLOT_MIN_LINETYPE_MM`] in drawing units (0 when unknown).
+pub fn plot_min_linetype(unit_mm: f64, scale: f64) -> f64 {
+    let v = PLOT_MIN_LINETYPE_MM / unit_mm / scale;
+    if v.is_finite() && v > 0.0 { v } else { 0.0 }
+}
+
 /// Build options.
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -281,6 +300,9 @@ pub struct Options {
     /// Two pixels in world units: shorter dashes are continuous and filled font text uses
     /// screen-size detail. Zero keeps full detail (plots and image/vector exports).
     pub min_dash: f64,
+    /// Linetype patterns shorter than this (world units) are drawn continuous, like
+    /// [`Options::min_dash`] but for linetypes only: plots set it with [`plot_min_linetype`].
+    pub min_linetype: f64,
     /// Draw text (off for very coarse previews).
     pub text: bool,
     /// Highlighted (selected) handles are not special here; the canvas overlays them.
@@ -308,6 +330,10 @@ pub struct Options {
 }
 
 impl Options {
+    /// The shortest linetype pattern drawn dashed (world units of the space being built).
+    fn linetype_min(&self) -> f64 {
+        self.min_dash.max(self.min_linetype)
+    }
     /// Whether [`Options::cancel`] has been set.
     pub fn cancelled(&self) -> bool {
         self.cancel.as_ref().is_some_and(|c| c.load(std::sync::atomic::Ordering::Relaxed))
@@ -319,6 +345,7 @@ impl Default for Options {
         Options {
             tolerance: 0.001,
             min_dash: 0.0,
+            min_linetype: 0.0,
             text: true,
             fill: true,
             lineweights: false,
@@ -464,6 +491,16 @@ impl Builder<'_> {
             start,
             len: tris.len() as u32,
         });
+    }
+    /// Plots: note `loops` (in `ctx`'s coordinates) as the boundary of the fill primitive pushed
+    /// at index `at`, when there is one.
+    fn fill_path(&mut self, ctx: &Ctx, at: usize, loops: &[Vec<Vec2>]) {
+        if !self.plotting || self.list.prims.len() <= at {
+            return;
+        }
+        let (Ok(prim), Some(loops)) = (u32::try_from(at), fill_path::oriented(loops)) else { return };
+        let loops = loops.into_iter().map(|l| l.into_iter().map(|p| ctx.xf.apply(p)).collect()).collect();
+        self.list.fill_paths.push(FillPath { prim, loops });
     }
     /// Shaped text: strokes as polylines; TrueType glyphs filled (TEXTFILL) or outlined.
     fn shaped(&mut self, ctx: &Ctx, color: Ink, lw: f32, sh: &cadcraft_fonts::Shaped) {
@@ -673,6 +710,7 @@ fn append(dst: &mut DisplayList, src: DisplayList) {
         t
     }));
     dst.pens.extend(src.pens);
+    dst.fill_paths.extend(src.fill_paths.into_iter().map(|f| FillPath { prim: f.prim + prims, ..f }));
     dst.bounds = dst.bounds.union(&src.bounds);
     dst.expanded = dst.expanded.saturating_add(src.expanded);
 }
@@ -885,9 +923,13 @@ enum Clip<'a> {
     Poly(&'a clip::PolyClip),
 }
 
-/// Append `src` to `dst`, clipped to `clip`.
+/// Append `src` to `dst`, clipped to `clip`. Fill paths go along clipped to a rectangle; a clip
+/// boundary's outline leaves the fill to its triangles.
 fn append_clipped(dst: &mut DisplayList, src: &DisplayList, clip: &Clip) {
-    for p in &src.prims {
+    let mut fill_paths = src.fill_paths.iter().peekable();
+    for (i, p) in src.prims.iter().enumerate() {
+        while fill_paths.next_if(|f| (f.prim as usize) < i).is_some() {}
+        let fill_path = fill_paths.next_if(|f| f.prim as usize == i);
         let pts = src.points(p);
         match (p.kind, clip) {
             (Kind::Polyline, Clip::Rect(rect)) => {
@@ -902,7 +944,17 @@ fn append_clipped(dst: &mut DisplayList, src: &DisplayList, clip: &Clip) {
             }
             (Kind::Tris | Kind::Mask, Clip::Rect(rect)) => {
                 let t = clip::clip_triangles(pts, rect);
+                let at = dst.prims.len();
                 push_raw(dst, p, p.kind, &t);
+                if let Some(f) = fill_path
+                    && let Ok(prim) = u32::try_from(at)
+                    && dst.prims.len() > at
+                {
+                    let loops = fill_path::clipped(&f.loops, rect);
+                    if !loops.is_empty() {
+                        dst.fill_paths.push(FillPath { prim, loops });
+                    }
+                }
             }
             (Kind::Tris | Kind::Mask, Clip::Poly(c)) => {
                 let t = c.clip_triangles(pts);
@@ -1145,7 +1197,7 @@ fn entity_parts(b: &mut Builder, ctx: &Ctx, e: &Entity) {
     // Stroke a polyline with the entity's linetype.
     let stroke = |b: &mut Builder, pts: &[Vec2]| match &lt {
         Some(lt) => {
-            let min = b.opts.min_dash / ctx.xf.scale_factor().max(1e-12);
+            let min = b.opts.linetype_min() / ctx.xf.scale_factor().max(1e-12);
             for dash in linetype::apply(pts, lt, ltscale, min) {
                 if dash.len() == 1 {
                     if let Some(p) = dash.first() {
@@ -1205,7 +1257,7 @@ fn entity_parts(b: &mut Builder, ctx: &Ctx, e: &Entity) {
                 match &lt {
                     // Dashed: each dash a filled piece of the band; dots a line across it.
                     Some(lt) => {
-                        let min = b.opts.min_dash / ctx.xf.scale_factor().max(1e-12);
+                        let min = b.opts.linetype_min() / ctx.xf.scale_factor().max(1e-12);
                         let (tris, ticks) = wide::dashed(p, tol, lt, ltscale, min);
                         b.tris(ctx, rgb, &tris);
                         for t in &ticks {
@@ -1459,7 +1511,7 @@ pub fn dimension_in(d: &Drawing, dm: &cadcraft_doc::Dimension) -> DimGeometry {
 fn stroke_with(b: &mut Builder, ctx: &Ctx, rgb: Ink, lw: f32, lt: Option<&cadcraft_doc::Linetype>, ltscale: f64, pts: &[Vec2]) {
     match lt {
         Some(lt) => {
-            let min = b.opts.min_dash / ctx.xf.scale_factor().max(1e-12);
+            let min = b.opts.linetype_min() / ctx.xf.scale_factor().max(1e-12);
             for dash in linetype::apply(pts, lt, ltscale, min) {
                 match dash.as_slice() {
                     [p] => b.point(ctx, rgb, *p),

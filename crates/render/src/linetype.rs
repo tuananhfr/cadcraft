@@ -3,12 +3,18 @@
 use cadcraft_doc::Linetype;
 use cadcraft_geom::Vec2;
 
+/// Whether `lt` has no gap (no negative element): its dashes and dots abut, so the line looks
+/// continuous whatever the scale.
+pub fn gapless(lt: &Linetype) -> bool {
+    lt.pattern.iter().all(|d| d.length >= 0.0)
+}
+
 /// Split `pts` into dashes. Dots come back as single-point runs. When the scaled pattern is
-/// shorter than `min_pattern` (sub-pixel), the polyline is returned whole.
+/// shorter than `min_pattern` (sub-pixel) or has no gap ([`gapless`]), the polyline is returned whole.
 pub fn apply(pts: &[Vec2], lt: &Linetype, scale: f64, min_pattern: f64) -> Vec<Vec<Vec2>> {
     let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
     let total = lt.pattern_length() * scale;
-    if pts.len() < 2 || total <= 1e-12 || total < min_pattern {
+    if pts.len() < 2 || total <= 1e-12 || total < min_pattern || gapless(lt) {
         return vec![pts.to_vec()];
     }
     // Guard against huge dash counts (zoomed out a lot): fall back to continuous.
@@ -85,11 +91,11 @@ pub fn apply(pts: &[Vec2], lt: &Linetype, scale: f64, min_pattern: f64) -> Vec<V
 
 /// The dashes of the pattern along a run of length `len`, as (start, end) distances; a dot has
 /// start == end. Laid out like [`apply`]. `None` when the run is drawn continuous: the scaled
-/// pattern is shorter than `min_pattern` or would repeat too often.
+/// pattern is shorter than `min_pattern`, has no gap or would repeat too often.
 pub fn ranges(len: f64, lt: &Linetype, scale: f64, min_pattern: f64) -> Option<Vec<(f64, f64)>> {
     let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
     let total = lt.pattern_length() * scale;
-    if !(len.is_finite() && len > 0.0) || total <= 1e-12 || total < min_pattern || len / total > 50_000.0 {
+    if !(len.is_finite() && len > 0.0) || total <= 1e-12 || total < min_pattern || len / total > 50_000.0 || gapless(lt) {
         return None;
     }
     let mut out = Vec::new();
@@ -133,6 +139,23 @@ mod tests {
         let lt = Linetype::simple("DASHED", "", &[0.5, -0.25]);
         let d = apply(&[Vec2::ZERO, Vec2::new(3.0, 0.0)], &lt, 1.0, 10.0);
         assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn gapless_pattern_is_one_run() {
+        let line = [Vec2::ZERO, Vec2::new(3.0, 0.0), Vec2::new(3.0, 2.0)];
+        for dashes in [&[1.0, 1.0][..], &[0.5, 0.0, 0.25], &[0.0, 0.3]] {
+            let lt = Linetype::simple("KETCAU", "", dashes);
+            assert_eq!(apply(&line, &lt, 0.01, 0.0), vec![line.to_vec()], "{dashes:?}");
+            assert_eq!(ranges(5.0, &lt, 0.01, 0.0), None, "{dashes:?}");
+        }
+    }
+
+    #[test]
+    fn dashed_pattern_still_splits() {
+        let lt = Linetype::simple("DASHED", "", &[0.5, -0.25]);
+        assert_eq!(apply(&[Vec2::ZERO, Vec2::new(3.0, 0.0)], &lt, 1.0, 0.0).len(), 4);
+        assert_eq!(ranges(3.0, &lt, 1.0, 0.0).map(|r| r.len()), Some(4));
     }
 
     #[test]
