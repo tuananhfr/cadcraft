@@ -108,18 +108,18 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                     action = Some(Action::Publish);
                 }
                 if let Some(reason) = reason {
-                    button.on_disabled_hover_ui(|ui| {
-                        ui.label(reason);
-                        if !state.split
-                            && let Some(issue) = plan
-                                .issues
-                                .iter()
-                                .chain(plan.sheets.iter().flat_map(|sheet| &sheet.issues))
-                                .find(|issue| issue.severity == Severity::Block)
-                        {
+                    ui.label(egui::RichText::new(reason).color(crate::theme::Tokens::get().text_dim));
+                    let blocker = plan
+                        .issues
+                        .iter()
+                        .chain(plan.sheets.iter().flat_map(|sheet| &sheet.issues))
+                        .find(|issue| issue.severity == Severity::Block)
+                        .filter(|_| !state.split);
+                    if let Some(issue) = blocker {
+                        button.on_disabled_hover_ui(|ui| {
                             ui.label(super::exceptions::issue_label(&issue.code));
-                        }
-                    });
+                        });
+                    }
                 }
             });
         });
@@ -265,7 +265,7 @@ fn publish_reason(plan: &SheetPlan, split: bool) -> Option<&'static str> {
     {
         Some(crate::tl!("Fix or exclude blocked sheets before publishing a merged PDF"))
     } else if super::exceptions::has_unapproved_warnings(plan) {
-        Some(crate::tl!("Approve all warnings before publishing"))
+        Some(crate::tl!("Approve or exclude the warnings under Exceptions to publish"))
     } else {
         None
     }

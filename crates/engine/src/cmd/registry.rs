@@ -126,6 +126,10 @@ pub const LISP_IDS: &[&str] = &[
     "lispsandbox",
 ];
 pub const XREF_IDS: &[&str] = &["xref", "-xref", "xattach", "xopen", "xbind"];
+// Follow saved paths to drawing files on disk, which the web build has none of.
+pub const DISK_XREF_IDS: &[&str] = &["xattach", "xopen"];
+// -XREF options that read drawing files from disk; on the web a missing xref's file is picked instead.
+pub const DISK_XREF_OPTIONS: &[&str] = &["reload", "r", "path", "p", "attach", "a", "overlay", "o"];
 
 fn risk_of(spec: &CommandSpec) -> RiskClass {
     if EXECUTE_IDS.contains(&spec.id) {
@@ -213,7 +217,17 @@ pub fn namespaced_id(spec: &CommandSpec) -> String {
 }
 
 pub fn status_on(id: &str, target: Target) -> CommandStatus {
-    if target == Target::Web && capabilities_of(id).contains(&"xref") { CommandStatus::Unsupported } else { CommandStatus::Available }
+    if target == Target::Web && DISK_XREF_IDS.contains(&id) { CommandStatus::Unsupported } else { CommandStatus::Available }
+}
+
+/// The status of one option of command `id` (a JSON `option` value or its abbreviation).
+pub fn option_status_on(id: &str, option: &str, target: Target) -> CommandStatus {
+    let option = option.trim().to_ascii_lowercase();
+    if target == Target::Web && id == "-xref" && DISK_XREF_OPTIONS.contains(&option.as_str()) {
+        CommandStatus::Unsupported
+    } else {
+        status_on(id, target)
+    }
 }
 
 /// Resolve ids independently of user aliases, which must not change saved workspace references.

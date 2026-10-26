@@ -1921,7 +1921,7 @@ menu	Display Mode	Chế độ hiển thị
 	PASS {p} · INFO {i} · WARN {w} · BLOCK {b}	ĐẠT {p} · THÔNG TIN {i} · CẢNH BÁO {w} · CHẶN {b}
 	No sheets to publish	Không có tờ bản vẽ để xuất bản
 	Fix or exclude blocked sheets before publishing a merged PDF	Sửa hoặc loại trừ các tờ bị chặn trước khi xuất bản PDF gộp
-	Approve all warnings before publishing	Chấp nhận tất cả cảnh báo trước khi xuất bản
+	Approve or exclude the warnings under Exceptions to publish	Chấp nhận hoặc loại trừ các cảnh báo ở mục Ngoại lệ để xuất bản
 	{code} · {n} sheets · {severity}	{code} · {n} tờ · {severity}
 	PASS	ĐẠT
 	INFO	THÔNG TIN
@@ -4456,7 +4456,13 @@ echo	exclude_layers exceeds {MAX_EXCLUDED_LAYERS} layers	exclude_layers vượt 
 
 # Xref files picked on the web.
 	Choose file…	Chọn file…
-	Xref not loaded: {names} — open the External References palette (XREF) and click Choose file…	Xref chưa nạp: {names} — mở bảng External References (XREF) và bấm Chọn file…
-	Choose file: the drawing with xref "{name}" is no longer open	Chọn file: bản vẽ chứa tham chiếu ngoài "{name}" không còn mở
+echo	Xref not loaded: {names} — open the External References palette (XREF) and click Choose file…	Xref chưa nạp: {names} — mở bảng External References (XREF) và bấm Chọn file…
+echo	Choose file: the drawing with xref "{name}" is no longer open	Chọn file: bản vẽ chứa tham chiếu ngoài "{name}" không còn mở
 	only DWG and DXF files can be attached	chỉ có thể đính kèm tệp DWG và DXF
 echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are not loaded	chưa tải tham chiếu ngoài lồng "{name}": {saved}: không tải các tham chiếu ngoài của tệp đã chọn
+
+# Xref palette and -XREF on the web.
+	Reload is not available on the web: use Choose file… in the External References palette (XREF)	Không thể tải lại trên web: dùng Chọn file… trong bảng External References (XREF)
+	Path is not available on the web: use Choose file… in the External References palette (XREF)	Không thể sửa đường dẫn trên web: dùng Chọn file… trong bảng External References (XREF)
+	Attaching xrefs is not available on the web	Không thể đính kèm tham chiếu ngoài trên web
+	On the web, use Choose file… to load	Trên web, dùng Chọn file… để nạp

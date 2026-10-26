@@ -296,7 +296,8 @@ The review dialog shows WARN/BLOCK exceptions by default, grouped by code and se
 with an audit confirmation modal; approved rows have a locked `Approved` checkbox.
 BLOCK groups offer window/paper fixes or exclusion, with no approval control.
 The summary shows PASS/INFO/WARN/BLOCK sheet counts. Publish is disabled while WARNs
-remain unapproved, or while merged output contains a BLOCK, with a reason tooltip.
+remain unapproved, or while merged output contains a BLOCK, or when there are no sheets; the
+reason shows next to the button (for a BLOCK its tooltip names the first blocking code).
 Desktop device-size exceptions offer the split controls described below.
 
 Command errors include `PLAN_STALE` (drawing changed since scan), `PLAN_INVALID`

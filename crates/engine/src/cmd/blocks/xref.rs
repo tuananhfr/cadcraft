@@ -18,6 +18,7 @@ use serde_json::{Value, json};
 
 use self::load::{Outcome, Sym};
 use super::{InsStage, InsertM, insert_with, valid_block_name};
+use crate::cmd::registry::{CommandStatus, Target, option_status_on};
 use crate::cmd::{CommandSpec, bad, bool_or, f64_or, point_param, point_value, str_param};
 use crate::prompt::PromptArg;
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
@@ -216,8 +217,23 @@ fn run_xref(s: &mut Session, _p: &Value) -> Result<Value> {
     Ok(r)
 }
 
+/// Why -XREF `option` can't run on `target` (it reads drawing files from disk), or `None`.
+fn refused_on(target: Target, option: &str) -> Option<&'static str> {
+    if option_status_on("-xref", option, target) == CommandStatus::Available {
+        return None;
+    }
+    Some(match option.trim().to_ascii_lowercase().as_str() {
+        "reload" | "r" => "Reload is not available on the web: use Choose file… in the External References palette (XREF)",
+        "path" | "p" => "Path is not available on the web: use Choose file… in the External References palette (XREF)",
+        _ => "Attaching xrefs is not available on the web",
+    })
+}
+
 fn run_dash_xref(s: &mut Session, p: &Value) -> Result<Value> {
     let option = str_param(p, "option").unwrap_or("?").trim().to_ascii_lowercase();
+    if let Some(why) = refused_on(Target::current(), &option) {
+        return Err(bad("-xref", why));
+    }
     let host = host(s);
     match option.as_str() {
         "?" | "list" => {
@@ -463,6 +479,17 @@ impl Interactive for XrefM {
                     },
                     _ => return Ok(Step::Continue),
                 };
+                let option = match k.as_str() {
+                    "Path" => "path",
+                    "Reload" => "reload",
+                    "Overlay" => "overlay",
+                    "Attach" => "attach",
+                    _ => "",
+                };
+                if let Some(why) = refused_on(Target::current(), option) {
+                    s.echo(why);
+                    return Ok(Step::Done);
+                }
                 self.stage = match k.as_str() {
                     "?" => XStage::Names("?"),
                     "Bind" => XStage::Names("bind"),
@@ -591,5 +618,23 @@ impl Interactive for XbindM {
                 Ok(Step::Done)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn options_that_read_files_from_disk_are_refused_on_the_web_only() {
+        for option in ["reload", "R", "path", "p", "attach", "a", "overlay", " O "] {
+            assert!(refused_on(Target::Web, option).is_some(), "{option}");
+            assert_eq!(refused_on(Target::Desktop, option), None, "{option}");
+        }
+        for option in ["?", "list", "bind", "b", "detach", "d", "unload", "u", "type"] {
+            assert_eq!(refused_on(Target::Web, option), None, "{option}: acts on the drawing in memory");
+        }
+        assert!(refused_on(Target::Web, "reload").is_some_and(|why| why.contains("Choose file…")));
+        assert!(refused_on(Target::Web, "path").is_some_and(|why| why.contains("Choose file…")));
     }
 }

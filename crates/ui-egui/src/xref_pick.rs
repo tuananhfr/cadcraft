@@ -39,8 +39,15 @@ pub(crate) fn hint_missing(app: &mut CadApp) {
     if names.is_empty() {
         return;
     }
-    let line = crate::tf!("Xref not loaded: {names} — open the External References palette (XREF) and click Choose file…", names = names.join(", "));
+    let names = names.join(", ");
+    let line = english(|| crate::tf!("Xref not loaded: {names} — open the External References palette (XREF) and click Choose file…", names = names));
     app.session.echo(line);
+}
+
+/// A line for the command line or status bar, kept in English like the engine's: both translate
+/// it when shown (`echo` templates), whatever language was current when it was made.
+fn english(line: impl FnOnce() -> String) -> String {
+    crate::i18n::with_language("en", line)
 }
 
 impl CadApp {
@@ -48,7 +55,7 @@ impl CadApp {
     /// it; that drawing becomes the active one. Failures go to the command line and status bar.
     pub fn attach_xref_file(&mut self, doc: u64, xref: &str, file: &str, bytes: &[u8]) {
         let Some(i) = self.session.docs.iter().position(|d| d.uid == doc) else {
-            return self.open_failed(crate::tf!("Choose file: the drawing with xref \"{name}\" is no longer open", name = xref));
+            return self.open_failed(english(|| crate::tf!("Choose file: the drawing with xref \"{name}\" is no longer open", name = xref)));
         };
         if i != self.session.active
             && let Err(e) = self.run("document.switch", json!({ "index": i }))
@@ -57,11 +64,8 @@ impl CadApp {
         }
         match self.session.reload_xref_from_bytes(xref, file, bytes) {
             Ok(r) => {
-                // The outcome line is echoed just before the notes about nested xrefs.
-                let notes = r["nested"].as_array().map_or(0, Vec::len);
-                let at = self.session.log.len().checked_sub(notes + 1);
-                if let Some(line) = at.and_then(|i| self.session.log.get(i)).cloned() {
-                    self.set_status(line);
+                if let Some(line) = r["line"].as_str() {
+                    self.set_status(line.to_string());
                 }
             }
             Err(EngineError::BadParams { msg, .. }) => self.open_failed(msg),
@@ -82,6 +86,43 @@ mod tests {
         }
         for status in ["Loaded", "Unreferenced", "Unloaded", "Not loaded"] {
             assert!(!offers_file(true, status), "{status}");
+        }
+    }
+
+    fn app_with_missing_xref() -> CadApp {
+        use cadcraft_engine::doc::{Block, Drawing};
+        let mut d = Drawing::new_metric();
+        let mut b = Block::new("Khung");
+        b.xref_path = Some("Khung ten A3.dwg".into());
+        b.xref_status = XrefStatus::NotFound;
+        d.blocks.insert("Khung".into(), std::sync::Arc::new(b));
+        let mut session = cadcraft_engine::Session::empty();
+        session.open_drawing(d, "host", None);
+        let services = crate::Services { pick_xref_file: Some(Box::new(|_, _| {})), ..crate::Services::default() };
+        CadApp::new(session, services)
+    }
+
+    #[test]
+    fn lines_are_logged_in_english_and_shown_in_the_ui_language() {
+        let hint = "Xref not loaded: Khung — open the External References palette (XREF) and click Choose file…";
+        let gone = "Choose file: the drawing with xref \"Khung\" is no longer open";
+        // The web can open a drawing before the UI language is applied, or while it is.
+        for current in ["en", "vi"] {
+            let mut app = app_with_missing_xref();
+            app.session.log.clear();
+            crate::i18n::with_language(current, || {
+                hint_missing(&mut app);
+                app.attach_xref_file(u64::MAX, "Khung", "Khung ten A3.dwg", b"");
+            });
+            assert_eq!(app.session.log, [hint, gone], "{current}");
+            assert_eq!(app.status.as_ref().map(|(s, _)| s.as_str()), Some(gone), "{current}");
+        }
+        let shown = |language, line| crate::i18n::with_language(language, || crate::i18n::echo(line).into_owned());
+        assert_eq!(shown("vi", hint), "Xref chưa nạp: Khung — mở bảng External References (XREF) và bấm Chọn file…");
+        assert_eq!(shown("vi", gone), "Chọn file: bản vẽ chứa tham chiếu ngoài \"Khung\" không còn mở");
+        for line in [hint, gone] {
+            assert_ne!(shown("uk", line), line);
+            assert_eq!(shown("en", line), line);
         }
     }
 }
