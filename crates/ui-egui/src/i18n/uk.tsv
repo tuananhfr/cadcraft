@@ -1920,7 +1920,7 @@ menu	Display Mode	Режим відображення
 	PASS {p} · INFO {i} · WARN {w} · BLOCK {b}	УСПІХ {p} · ІНФО {i} · УВАГА {w} · БЛОК {b}
 	No sheets to publish	Немає аркушів для публікації
 	Fix or exclude blocked sheets before publishing a merged PDF	Виправте або виключіть заблоковані аркуші перед публікацією об’єднаного PDF
-	Approve all warnings before publishing	Підтвердьте всі попередження перед публікацією
+	Approve or exclude the warnings under Exceptions to publish	Підтвердьте або виключіть попередження в розділі «Винятки», щоб опублікувати
 	{code} · {n} sheets · {severity}	{code} · {n} аркушів · {severity}
 	PASS	УСПІХ
 	INFO	ІНФО
@@ -3911,7 +3911,13 @@ ribbon	Shapes	Фігури
 
 # Xref files picked on the web.
 	Choose file…	Вибрати файл…
-	Xref not loaded: {names} — open the External References palette (XREF) and click Choose file…	Зовнішнє посилання не завантажено: {names} — відкрийте палітру External References (XREF) і натисніть Вибрати файл…
-	Choose file: the drawing with xref "{name}" is no longer open	Вибрати файл: креслення із зовнішнім посиланням "{name}" уже закрито
+echo	Xref not loaded: {names} — open the External References palette (XREF) and click Choose file…	Зовнішнє посилання не завантажено: {names} — відкрийте палітру External References (XREF) і натисніть Вибрати файл…
+echo	Choose file: the drawing with xref "{name}" is no longer open	Вибрати файл: креслення із зовнішнім посиланням "{name}" уже закрито
 	only DWG and DXF files can be attached	можна приєднати лише файли DWG і DXF
 echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are not loaded	вкладене зовнішнє посилання "{name}" не завантажено: {saved}: зовнішні посилання вибраного файлу не завантажуються
+
+# Xref palette and -XREF on the web.
+	Reload is not available on the web: use Choose file… in the External References palette (XREF)	Оновлення недоступне у вебверсії: скористайтеся «Вибрати файл…» у палітрі External References (XREF)
+	Path is not available on the web: use Choose file… in the External References palette (XREF)	Зміна шляху недоступна у вебверсії: скористайтеся «Вибрати файл…» у палітрі External References (XREF)
+	Attaching xrefs is not available on the web	Приєднання зовнішніх посилань недоступне у вебверсії
+	On the web, use Choose file… to load	У вебверсії скористайтеся «Вибрати файл…», щоб завантажити

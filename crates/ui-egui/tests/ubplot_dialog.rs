@@ -555,7 +555,11 @@ fn block_group_has_no_approve_control() {
     assert!(h.query_by_label("Set paper for all").is_some());
     assert!(h.query_by_label("Exclude all").is_some());
     assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
+    assert!(h.query_by_label(BLOCKED_REASON).is_some(), "the reason shows next to Publish");
 }
+
+const BLOCKED_REASON: &str = "Fix or exclude blocked sheets before publishing a merged PDF";
+const WARNINGS_REASON: &str = "Approve or exclude the warnings under Exceptions to publish";
 
 #[test]
 fn publish_disabled_until_warnings_approved() {
@@ -571,6 +575,7 @@ fn publish_disabled_until_warnings_approved() {
     }));
     let mut h = harness(app);
     assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
+    assert!(h.query_by_label(WARNINGS_REASON).is_some(), "the reason shows next to Publish");
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").click();
     h.run_steps(3);
     assert_eq!(*picked.borrow(), 0);
@@ -578,6 +583,7 @@ fn publish_disabled_until_warnings_approved() {
     h.run_steps(3);
     assert_eq!(h.state().session.ubplot.last.as_ref().unwrap().plan.audit.len(), 1);
     assert!(!h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
+    assert!(h.query_by_label(WARNINGS_REASON).is_none(), "no reason once Publish is enabled");
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").click();
     h.run_steps(3);
     assert_eq!(*picked.borrow(), 1);
@@ -871,4 +877,21 @@ fn kcs_source_choice_rescans_a_block_plan_by_marker_lines() {
     assert_eq!(last.request.mode, cadcraft_engine::sheetplan::ScanMode::Kcs);
     assert_eq!(last.plan.sheets.len(), 2);
     assert!(last.plan.sheets.iter().all(|sheet| sheet.mode == SheetMode::Window && sheet.scale_label.as_deref() == Some("1:10")));
+}
+
+#[test]
+fn publish_reason_reads_in_vietnamese() {
+    assert_eq!(cadcraft_ui_egui::i18n::tr("vi", WARNINGS_REASON), "Chấp nhận hoặc loại trừ các cảnh báo ở mục Ngoại lệ để xuất bản");
+    assert_ne!(cadcraft_ui_egui::i18n::tr("uk", WARNINGS_REASON), WARNINGS_REASON);
+}
+
+#[test]
+fn an_empty_plan_says_there_is_nothing_to_publish() {
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false]);
+    review(&mut app, &frames);
+    app.session.ubplot.last.as_mut().unwrap().plan.sheets.clear();
+    let h = harness(app);
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
+    assert!(h.query_by_label("No sheets to publish").is_some());
 }

@@ -105,6 +105,7 @@ fn kcs_order_is_rows_top_down_then_left_to_right_whatever_the_drawing_order() {
     assert_eq!(top_left(&plan), [(0, 0), (21000, -3), (42000, 0), (0, -14850), (21000, -14853), (42000, -14850)]);
     let orders: Vec<_> = plan.sheets.iter().map(|sheet| sheet.order).collect();
     assert_eq!(orders, [1, 2, 3, 4, 5, 6]);
+    assert_eq!(assert_kcs_order(&plan), 2);
 }
 
 #[test]
@@ -264,27 +265,39 @@ fn kl_json_form_keeps_an_existing_layer_and_refuses_flat_areas() {
     assert_eq!(plan.sheets.len(), 1);
 }
 
-/// The KCS order of the LPC test drawing: top row of two 1:100 sheets, eight 1:110 sheets, then three rows of 1:50.
-const LPC_ORDER: [(i64, i64, &str); 17] = [
-    (108999, 59887, "1:100"),
-    (150999, 59887, "1:100"),
-    (108999, 2970, "1:110"),
-    (155199, 2970, "1:110"),
-    (201399, 2970, "1:110"),
-    (247599, 2970, "1:110"),
-    (293799, 2970, "1:110"),
-    (339999, 2970, "1:110"),
-    (386199, 2970, "1:110"),
-    (432399, 2970, "1:110"),
-    (108999, -29700, "1:50"),
-    (129999, -29700, "1:50"),
-    (108999, -44550, "1:50"),
-    (129999, -44550, "1:50"),
-    (150999, -44550, "1:50"),
-    (108999, -59400, "1:50"),
-    (129999, -59400, "1:50"),
-];
+/// The scales of the LPC test drawing's KCS sheets in plot order: two 1:100, eight 1:110, seven 1:50.
+fn lpc_scales() -> Vec<&'static str> {
+    [("1:100", 2), ("1:110", 8), ("1:50", 7)].into_iter().flat_map(|(label, n)| std::iter::repeat_n(label, n)).collect()
+}
 
+/// Checks the KCS order of `plan` from its own windows: rows top-down (each row's top edge no higher
+/// than the previous row's), left to right within a row. Rows are as KCS finds them: top edges within
+/// the first window's height / 12.5 of each other. Returns the number of rows.
+fn assert_kcs_order(plan: &SheetPlan) -> usize {
+    let height = |sheet: &cadcraft_engine::sheetplan::Sheet| match &sheet.source {
+        SheetSource::Window { outline, .. } => {
+            let ys = outline.map(|[_, y]| y);
+            ys.iter().copied().fold(f64::NEG_INFINITY, f64::max) - ys.iter().copied().fold(f64::INFINITY, f64::min)
+        }
+        other => panic!("KCS sheets are windows, got {other:?}"),
+    };
+    let tolerance = height(&plan.sheets[0]) / 12.5;
+    let corners = top_left(plan);
+    let mut rows = 1;
+    for (i, pair) in corners.windows(2).enumerate() {
+        let ((left_a, top_a), (left_b, top_b)) = (pair[0], pair[1]);
+        if (top_a - top_b).abs() as f64 <= tolerance {
+            assert!(left_b > left_a, "sheet {} is not right of sheet {} in its row", i + 2, i + 1);
+        } else {
+            assert!(top_b < top_a, "sheet {} starts a row above the previous one", i + 2);
+            rows += 1;
+        }
+    }
+    rows
+}
+
+/// The LPC drawing (path in `UBPLOT_KCS_DWG`; no customer data is committed): only aggregate facts
+/// are checked, the order rule is computed from the scan itself.
 #[test]
 fn kcs_real_drawing_matches_the_kcs_plotter_sheets() {
     let Ok(path) = std::env::var("UBPLOT_KCS_DWG") else {
@@ -296,10 +309,9 @@ fn kcs_real_drawing_matches_the_kcs_plotter_sheets() {
     let drawing = cadcraft_io::read(&bytes, &path).unwrap();
     s.open_drawing(drawing, "KCS", Some(path.clone()));
     let plan = scan(&mut s, json!({"mode": "kcs"}));
-    let found: Vec<_> = top_left(&plan).into_iter().zip(labels(&plan)).map(|((x, y), label)| (x, y, label)).collect();
-    for (index, sheet) in plan.sheets.iter().enumerate() {
-        eprintln!("{:>2} {} {:?} {:?}", index + 1, sheet.sheet_id, found.get(index), sheet.paper_name);
-    }
-    assert_eq!(found, LPC_ORDER);
-    assert!(plan.sheets.iter().all(|sheet| sheet.paper_mm == [297.0, 420.0] && sheet.landscape));
+    assert_eq!(plan.sheets.len(), 17);
+    assert!(plan.sheets.iter().all(|sheet| sheet.paper_mm == [297.0, 420.0] && sheet.landscape), "all A3 landscape");
+    assert_eq!(labels(&plan), lpc_scales());
+    let rows = assert_kcs_order(&plan);
+    eprintln!("{} sheets in {rows} rows", plan.sheets.len());
 }

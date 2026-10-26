@@ -133,6 +133,62 @@ fn a_file_that_cannot_be_loaded_changes_nothing() {
     assert!(s.reload_xref_from_bytes("Plain", "title.dxf", &dxf(&site())).is_err());
 }
 
+/// Adds xref `name` saved as `path` (not loaded) with one reference to it.
+fn attach_missing(d: &mut Drawing, name: &str, path: &str) {
+    let mut b = Block::new(name);
+    b.xref_path = Some(path.to_string());
+    d.blocks.insert(name.into(), Arc::new(b));
+    let h = d.new_handle();
+    d.model.push(Entity::new(h, insert(name)));
+}
+
+#[test]
+fn one_pick_loads_every_missing_xref_that_names_the_same_file() {
+    let mut host = host_with("frames/Title.dxf");
+    // The same file under another name and folder, with the other separator and case.
+    attach_missing(&mut host, "TitleA2", r"C:\Users\someone\Downloads\TITLE.DXF");
+    attach_missing(&mut host, "TitleOld", "old/title.dxf");
+    attach_missing(&mut host, "logo", "frames/logo.dxf");
+    attach_missing(&mut host, "TitleBak", "frames/Title.dxf.bak");
+    let (mut s, _) = opened("same-file", &host);
+    let undo = s.state().unwrap().undo.len();
+    let log = s.log.len();
+
+    let r = s.reload_xref_from_bytes("title", "Title block v2.dxf", &dxf(&site())).unwrap();
+    assert_eq!(r["name"], "Title");
+    assert_eq!(r["also"], json!(["TitleA2", "TitleOld"]), "{r}");
+    assert_eq!(r["line"], "\"Title\" loaded from Title block v2.dxf.");
+    let same = ["Title", "TitleA2", "TitleOld"];
+    for name in same {
+        assert_eq!((status(&s, name), objects(&s, name)), (Some(XrefStatus::Loaded), 2), "{name}");
+        assert!(s.doc().unwrap().layer(&format!("{name}|Walls")).is_some(), "{name}");
+    }
+    for name in ["logo", "TitleBak"] {
+        assert_eq!((status(&s, name), objects(&s, name)), (Some(XrefStatus::NotFound), 0), "{name}: another file");
+    }
+    let echoed: Vec<&String> = s.log[log..].iter().filter(|m| m.contains(" loaded from ")).collect();
+    let expected = same.map(|name| format!("\"{name}\" loaded from Title block v2.dxf."));
+    assert_eq!(echoed, expected.iter().collect::<Vec<_>>(), "one line per xref loaded: {:?}", s.log);
+
+    assert_eq!(s.state().unwrap().undo.len(), undo + 1, "one undo step for the whole pick");
+    s.undo().unwrap();
+    for name in same {
+        assert_ne!(status(&s, name), Some(XrefStatus::Loaded), "{name}: undone together");
+        assert_eq!(objects(&s, name), 0, "{name}");
+    }
+    s.redo().unwrap();
+
+    // Only missing xrefs get the file: a loaded or unloaded one is left as it is.
+    s.execute("-xref", &json!({ "option": "unload", "names": "TitleOld" })).unwrap();
+    s.execute("-xref", &json!({ "option": "reload", "names": "Title" })).unwrap();
+    assert_eq!(status(&s, "Title"), Some(XrefStatus::NotFound), "no such file on disk");
+    let kept = Arc::clone(s.doc().unwrap().block("TitleA2").unwrap());
+    let r = s.reload_xref_from_bytes("Title", "again.dxf", &dxf(&site())).unwrap();
+    assert_eq!(r["also"], json!([]), "{r}");
+    assert!(Arc::ptr_eq(&kept, s.doc().unwrap().block("TitleA2").unwrap()), "a loaded xref is not reloaded");
+    assert_eq!(status(&s, "TitleOld"), Some(XrefStatus::Unloaded));
+}
+
 #[test]
 fn undo_and_redo_match_a_reload_from_disk() {
     let (mut picked, _) = opened("undo-picked", &host_with("title.dxf"));
@@ -195,7 +251,7 @@ fn lpc_title_block_xref_loads_from_picked_bytes() {
     let mut s = Session::new();
     let f = cadcraft_engine::cmd::file::read_data(&bytes, main).unwrap();
     s.finish_open(f).unwrap();
-    // Two xrefs name that file (one by an absolute path from another computer); both load from it.
+    // Two xrefs name that file (one by an absolute path from another computer); one pick loads both.
     let keys: Vec<String> = s
         .doc()
         .unwrap()
@@ -216,9 +272,10 @@ fn lpc_title_block_xref_loads_from_picked_bytes() {
     let before = bounds(&s);
 
     let frame = std::fs::read(dir.join("Khung ten A3.dwg")).unwrap();
+    let r = s.reload_xref_from_bytes(&keys[0], "Khung ten A3.dwg", &frame).unwrap();
+    assert_eq!(r["status"], "Loaded");
+    assert_eq!(r["also"].as_array().map(Vec::len), Some(keys.len() - 1), "one pick loads them all: {r}");
     for key in &keys {
-        let r = s.reload_xref_from_bytes(key, "Khung ten A3.dwg", &frame).unwrap();
-        assert_eq!(r["status"], "Loaded");
         assert_eq!(status(&s, key), Some(XrefStatus::Loaded));
         assert!(objects(&s, key) > 0, "the frame's objects are in the xref");
     }
@@ -227,4 +284,16 @@ fn lpc_title_block_xref_loads_from_picked_bytes() {
     let grown = before.iter().zip(&after).filter(|((h, b), (k, a))| h == k && a.union(b) == *a && a != b).count();
     assert!(grown > 0, "the references holding the frames are drawn larger");
     eprintln!("xrefs {keys:?}: {grown} model-space references now draw the frames");
+}
+
+/// The web's way to keep a picked xref: Bind it and save, so the next visit needs no pick.
+#[test]
+fn a_bound_picked_xref_is_saved_with_the_drawing() {
+    let (mut s, _) = opened("bind", &host_with("title.dxf"));
+    s.reload_xref_from_bytes("title", "picked.dxf", &dxf(&site())).unwrap();
+    s.execute("-xref", &json!({ "option": "bind", "names": "title" })).unwrap();
+    let saved = cadcraft_io::read(&dxf(s.doc().unwrap()), "host.dxf").unwrap();
+    let b = saved.block("title").unwrap();
+    assert_eq!(b.xref_path, None, "a block of the drawing now");
+    assert_eq!(b.entities.len(), 2, "the frame's objects are saved");
 }
