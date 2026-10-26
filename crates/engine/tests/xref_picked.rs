@@ -246,8 +246,20 @@ fn lpc_title_block_xref_loads_from_picked_bytes() {
         return;
     };
     hooks();
-    let main = "260525_LPC_ST_KC PHONG BOM + BE PCCC.dwg";
-    let bytes = std::fs::read(dir.join(main)).unwrap();
+    // The host drawing is the folder's other DWG, so its file name stays out of the repo.
+    let hosts: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|p| {
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_ascii_lowercase();
+            name.ends_with(".dwg") && name != "khung ten a3.dwg"
+        })
+        .collect();
+    let [host] = hosts.as_slice() else {
+        panic!("XREF_LPC_DIR must hold Khung ten A3.dwg and one other DWG, found {hosts:?}");
+    };
+    let main = host.file_name().and_then(|n| n.to_str()).unwrap();
+    let bytes = std::fs::read(host).unwrap();
     let mut s = Session::new();
     let f = cadcraft_engine::cmd::file::read_data(&bytes, main).unwrap();
     s.finish_open(f).unwrap();
