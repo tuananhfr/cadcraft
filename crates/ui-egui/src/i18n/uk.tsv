@@ -8,7 +8,7 @@
 	Output	Виведення
 	Quick Plot	Швидкий друк
 	Quick Plot...	Швидкий друк...
-	Plot frames by [Block/Window/Layout/Last] <Block>:	Друкувати рамки за [Block/Window/Layout/Last] <Block>:
+	Plot frames by [Block/Window/Layout/Last/Kcs] <Block>:	Друкувати рамки за [Block/Window/Layout/Last/Kcs] <Block>:
 	Select frame blocks	Виберіть блоки рамок
 	Specify first corner of sheet window	Укажіть перший кут вікна аркуша
 	Enter layout names (comma-separated) or *	Введіть назви аркушів через кому або *
@@ -3464,7 +3464,7 @@ echo	Current settings: Projection={proj}, Edge={value1}, Mode={value2}	Пото�
 echo	selection exceeds {MAX_SCAN_FRAMES} entries	вибір перевищує {MAX_SCAN_FRAMES} записи
 echo	selection exceeds {MAX_SCAN_FRAMES} frames	вибір перевищує {MAX_SCAN_FRAMES} рамки
 	input text exceeds 64 MiB	вхідний текст перевищує 64 MiB
-	choose Block, Window, Layout or Last	виберіть Block, Window, Layout або Last
+	choose Block, Window, Layout, Last or Kcs	виберіть Block, Window, Layout, Last або Kcs
 echo	selection exceeds {MAX_SCAN_FRAMES} windows	вибір перевищує {MAX_SCAN_FRAMES} вікна
 	sheet window must have positive width and height	вікно аркуша має мати додатну ширину й висоту
 	specify a finite window corner	задайте кут вікна зі скінченними координатами
@@ -3903,3 +3903,8 @@ ribbon	Shapes	Фігури
 	Tool Rail	Панель інструментів
 	Hide Tool Rail	Сховати панель інструментів
 	Create a new drawing or continue recent work.	Створіть нове креслення або продовжте недавню роботу.
+	KCS Plotter	Друк за зонами KCS
+	KCS Plot Area	Зона друку KCS
+	KCS plot areas (layer KCS_Plotter)	Зони друку KCS (шар KCS_Plotter)
+	KCS_LINE_DEGENERATE	Лінія зони KCS без ширини чи висоти
+	KCS_NOT_MARKER	Не маркер зони KCS

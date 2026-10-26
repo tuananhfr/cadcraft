@@ -24,6 +24,7 @@ pub enum ScanMode {
     Layout,
     Last,
     Plan,
+    Kcs,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -234,6 +235,21 @@ pub(crate) fn build_plan_with_context(d: &Drawing, req: &ScanRequest, ctx: &Pref
             plan.issues = supplied.issues;
             plan.audit = supplied.audit;
         }
+        ScanMode::Kcs => {
+            let only = if req.handles.is_empty() {
+                None
+            } else {
+                Some(req.handles.iter().map(|text| parse_handle(text)).collect::<Result<BTreeSet<_>, _>>()?)
+            };
+            let scan = super::kcs::scan(d, only.as_ref())?;
+            plan.issues.extend(scan.issues);
+            for (index, window) in scan.windows.into_iter().enumerate() {
+                let mut sheet = empty_sheet(order(index)?, SheetSource::Window { outline: window.outline, rotation_deg: window.rotation_deg });
+                sheet.landscape = window.max.x - window.min.x > window.max.y - window.min.y;
+                sheet.exclude_layers = vec![super::kcs::KCS_LAYER.into()];
+                plan.sheets.push(sheet);
+            }
+        }
         ScanMode::Last => return Err("last mode requires session state".into()),
     }
     plan.issues.retain(|entry| entry.code != codes::UNITS_ASSUMED);
@@ -260,8 +276,13 @@ pub(crate) fn build_plan_with_context(d: &Drawing, req: &ScanRequest, ctx: &Pref
             plan.issues.push(issue(Severity::Info, codes::SHEET_EXCLUDED, format!("Sheet {key} was excluded."), Some(&sheet.sheet_id)));
             continue;
         }
+        let kcs = req.mode == ScanMode::Kcs;
         let paper = req.overrides.get(&key).and_then(|settings| settings.paper.as_deref()).or(req.paper.as_deref());
-        resolve_sheet_paper(d, &mut sheet, paper, unit_mm)?;
+        // KCS Plotter prints on A3 unless the user picks another paper.
+        resolve_sheet_paper(d, &mut sheet, paper.or(kcs.then_some("A3")), unit_mm)?;
+        if kcs && sheet.plot_scale == PlotScale::Fit {
+            sheet.scale_label = super::kcs::fit_label(&sheet, unit_mm, sheet_margins(d, &sheet));
+        }
         for entry in &mut sheet.issues {
             entry.sheet_id = Some(sheet.sheet_id.clone());
         }
@@ -431,6 +452,7 @@ fn empty_sheet(order: u32, source: SheetSource) -> Sheet {
         status: SheetStatus::NeedsPreview,
         issues: Vec::new(),
         attributes: BTreeMap::new(),
+        exclude_layers: Vec::new(),
     }
 }
 

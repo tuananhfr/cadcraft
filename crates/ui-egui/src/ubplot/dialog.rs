@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
 use cadcraft_doc::Handle;
-use cadcraft_engine::sheetplan::{ScanRequest, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, ids::sheet_key, verdict};
+use cadcraft_engine::sheetplan::{ScanMode, ScanRequest, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, ids::sheet_key, verdict};
 use egui::{TextureHandle, vec2};
 use serde_json::{Value, json};
 
@@ -77,6 +77,7 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                         action = Some(Action::Rescan);
                     }
                 });
+                source(ui, &request, &mut action);
                 ui.separator();
                 ui.heading(crate::tl!("Preview"));
                 thumbnails(app, ui, &plan, &mut state, compact);
@@ -150,6 +151,32 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     if *open {
         ctx.data_mut(|data| data.insert_temp(id, state));
     }
+}
+
+fn source(ui: &mut egui::Ui, request: &ScanRequest, action: &mut Option<Action>) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label(crate::tl!("Source"));
+        for (mode, label) in [
+            (ScanMode::Block, crate::tl!("Block")),
+            (ScanMode::Window, crate::tl!("Window")),
+            (ScanMode::Layout, crate::tl!("Layout")),
+            (ScanMode::Kcs, crate::tl!("KCS plot areas (layer KCS_Plotter)")),
+        ] {
+            let selected = request.mode == mode;
+            // Blocks, windows and layouts are picked in the drawing; KCS markers are found without picking.
+            let radio = ui.add_enabled(selected || mode == ScanMode::Kcs, egui::RadioButton::new(selected, label));
+            if radio.clicked() && !selected {
+                let kcs = ScanRequest {
+                    mode: ScanMode::Kcs,
+                    paper: request.paper.clone(),
+                    scale: request.scale.clone(),
+                    device: request.device.clone(),
+                    ..Default::default()
+                };
+                *action = Some(Action::Edit(Box::new(kcs)));
+            }
+        }
+    });
 }
 
 fn thumbnails(app: &mut CadApp, ui: &mut egui::Ui, plan: &SheetPlan, state: &mut State, compact: bool) {

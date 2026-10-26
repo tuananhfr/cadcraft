@@ -832,3 +832,43 @@ fn republishing_interrupted_plan_reports_resume_or_discard_without_queuing() {
         std::fs::remove_dir_all(root).unwrap();
     }
 }
+
+fn kcs_marker(app: &mut CadApp, x: f64) {
+    let common = Common { layer: "KCS_Plotter".into(), ..Common::default() };
+    let line = EntityKind::Line(Line { a: Vec3::new(x, -2000.0, 0.0), b: Vec3::new(x + 4200.0, 970.0, 0.0) });
+    app.session.doc_mut().unwrap().add(&Space::Model, common, line).unwrap();
+}
+
+#[test]
+fn kp_opens_the_dialog_with_the_kcs_source_selected() {
+    let _guard = test_lock();
+    let (mut app, _) = app(&[]);
+    kcs_marker(&mut app, 0.0);
+    kcs_marker(&mut app, 5000.0);
+    app.cmdline("KP");
+    let mut h = harness(app);
+    h.run_steps(3);
+    assert_eq!(h.state().ui.dialog.as_deref(), Some("ubplot"));
+    assert!(h.query_by_label("2 sheets").is_some());
+    let kcs = h.get_by_label("KCS plot areas (layer KCS_Plotter)");
+    assert!(!kcs.accesskit_node().is_disabled());
+    assert_eq!(h.state().session.ubplot.last.as_ref().unwrap().request.mode, cadcraft_engine::sheetplan::ScanMode::Kcs);
+}
+
+#[test]
+fn kcs_source_choice_rescans_a_block_plan_by_marker_lines() {
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false]);
+    kcs_marker(&mut app, 5000.0);
+    kcs_marker(&mut app, 10000.0);
+    review(&mut app, &frames);
+    let mut h = harness(app);
+    assert!(h.query_by_label("1 sheets").is_some());
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Window").accesskit_node().is_disabled());
+    h.get_by_label("KCS plot areas (layer KCS_Plotter)").click();
+    h.run_steps(3);
+    let last = h.state().session.ubplot.last.as_ref().unwrap();
+    assert_eq!(last.request.mode, cadcraft_engine::sheetplan::ScanMode::Kcs);
+    assert_eq!(last.plan.sheets.len(), 2);
+    assert!(last.plan.sheets.iter().all(|sheet| sheet.mode == SheetMode::Window && sheet.scale_label.as_deref() == Some("1:10")));
+}

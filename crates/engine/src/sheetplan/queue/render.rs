@@ -77,7 +77,8 @@ impl SheetRenderer for PdfSheetRenderer {
         let pages = sheet_pages_for_drawing(d, sheet).map_err(RenderFailure::Error)?;
         let plot = budget_plot().ok_or_else(|| RenderFailure::Error("budgeted PDF plotting is not available in this build".into()))?;
         let options = json!({"pages": pages, "output": "pdf"});
-        let result = plot(d, &Space::Model, &options, budget.cancel.clone(), budget.max_prims)
+        let drawing = crate::sheetplan::exclude::plot_drawing(d, std::slice::from_ref(sheet));
+        let result = plot(&drawing, &Space::Model, &options, budget.cancel.clone(), budget.max_prims)
             .map_err(|error| if error.contains("SHEET_TOO_LARGE") { RenderFailure::TooLarge(error) } else { RenderFailure::Error(error) });
         budget.check_result(result)
     }

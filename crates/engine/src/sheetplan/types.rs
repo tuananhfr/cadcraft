@@ -7,6 +7,7 @@ use serde_json::Value;
 pub const SHEETPLAN_SCHEMA: &str = "1.0";
 pub const MAX_SCAN_FRAMES: usize = 10_000;
 pub const MAX_AUDIT_ENTRIES: usize = 100_000;
+pub const MAX_EXCLUDED_LAYERS: usize = 256;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct SheetPlan {
@@ -63,6 +64,9 @@ pub struct Sheet {
     pub issues: Vec<PreflightIssue>,
     #[serde(default)]
     pub attributes: BTreeMap<String, String>,
+    /// Layers left out of this sheet's output whatever their plot flag, such as print markers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exclude_layers: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -224,6 +228,8 @@ struct SheetInput {
     issues: Vec<PreflightIssue>,
     #[serde(default)]
     attributes: BTreeMap<String, String>,
+    #[serde(default)]
+    exclude_layers: Vec<String>,
 }
 
 pub fn parse_plan(v: &Value) -> Result<SheetPlan, String> {
@@ -327,6 +333,9 @@ fn parse_sheet(v: &Value) -> Result<Sheet, String> {
     if input.order == 0 {
         return Err("sheet order must be at least 1".into());
     }
+    if input.exclude_layers.len() > MAX_EXCLUDED_LAYERS {
+        return Err(format!("exclude_layers exceeds {MAX_EXCLUDED_LAYERS} layers"));
+    }
     if !input.paper_mm.into_iter().all(positive_finite) {
         return Err("paper_mm dimensions must be finite and positive".into());
     }
@@ -373,6 +382,7 @@ fn parse_sheet(v: &Value) -> Result<Sheet, String> {
         status,
         issues: input.issues,
         attributes: input.attributes,
+        exclude_layers: input.exclude_layers,
     })
 }
 

@@ -265,3 +265,13 @@ Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded 
   which were not supplied; project-sample checks do not replace that baseline audit.
 - Attribute text was observed in legacy TCVN3 (.VnTime), rather than Unicode. These checks
   pin the reviewed attributes; they do not establish legacy text conversion or font parity.
+
+## KCS Plotter areas (KP / KL)
+
+2026-10-26 · Print the way LPC prints with KCS Plotter (KetcauSoft) and a PDF printer.
+
+- UBPLOT scan mode `kcs`: each Model-space LINE on layer `KCS_Plotter` (any case) is the diagonal of one window sheet; `handles` limits it to selected markers. Sheets default to ISO A3, orient by the window's long side and fit to paper, with `scale_label` `1:n` snapped to a whole `n` within 0.5 %. Lines with no width or height are skipped with plan-level WARN `KCS_LINE_DEGENERATE`; none at all is an error ("Không tìm thấy dấu hiệu của các vùng in!" in Vietnamese).
+- Order replays KCS's own `Sap_Xep_Window_List` (decoded read-only from the plug-in's IL): an exchange sort over the lines in drawing order, top edge descending, then left edge ascending within a row of tolerance first-window-height / 12.5.
+- The marker layer never plots on KCS sheets, whatever its plot flag: sheets carry `exclude_layers` and publish/background jobs plot from a copy with those layers set not to plot. Publish already merges into one PDF by default.
+- `KP` (`kcsplotter`) scans all markers and opens the Quick Plot review with the new Source row on "Vùng in KCS (layer KCS_Plotter)"; `KL` (`kcsarea`) draws one marker from two points ("Chọn điểm đầu" / "Chọn điểm cuối"), creating `KCS_Plotter` with plotting off when missing, in one undo step. Typed UBPLOT gains the `Kcs` keyword. Fixed 0°/90° orientation is not offered (UBPLOT has no forced orientation); KPP (several files) is not ported.
+- Checked on LPC's drawing with its xref: 17 A3 sheets in KCS order (2 x 1:100, 8 x 1:110, 7 x 1:50), one merged 17-page PDF without the marker layer.

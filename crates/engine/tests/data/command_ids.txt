@@ -214,6 +214,8 @@ isodraft
 isolateobjects
 isoplane
 join
+kcsarea
+kcsplotter
 laycur
 laydel
 layer

@@ -2535,12 +2535,12 @@ fn ubplot_source_prompt_translates_without_changing_keyword_metadata() {
     session.start("ubplot").unwrap();
     let prompt = session.current_prompt().unwrap();
     assert!(prompt.raw);
-    with_language("vi", || assert_eq!(prompt_message(&prompt), "In khung bản vẽ theo [Block/Window/Layout/Last] <Block>:"));
-    with_language("en", || assert_eq!(prompt_message(&prompt), "Plot frames by [Block/Window/Layout/Last] <Block>:"));
-    assert_eq!(prompt.keywords, ["Block", "Window", "Layout", "Last"]);
+    with_language("vi", || assert_eq!(prompt_message(&prompt), "In khung bản vẽ theo [Block/Window/Layout/Last/Kcs] <Block>:"));
+    with_language("en", || assert_eq!(prompt_message(&prompt), "Plot frames by [Block/Window/Layout/Last/Kcs] <Block>:"));
+    assert_eq!(prompt.keywords, ["Block", "Window", "Layout", "Last", "Kcs"]);
     assert_eq!(prompt.default.as_deref(), Some("Block"));
-    assert_eq!(prompt.display(), "Plot frames by [Block/Window/Layout/Last] <Block>:");
-    for (text, keyword) in [("b", "Block"), ("blo", "Block"), ("W", "Window"), ("L", "Layout"), ("last", "Last")] {
+    assert_eq!(prompt.display(), "Plot frames by [Block/Window/Layout/Last/Kcs] <Block>:");
+    for (text, keyword) in [("b", "Block"), ("blo", "Block"), ("W", "Window"), ("L", "Layout"), ("last", "Last"), ("kcs", "Kcs")] {
         assert_eq!(prompt.match_keyword(text).as_deref(), Some(keyword));
     }
 }

@@ -27,9 +27,15 @@ pub(super) struct UbplotM {
     select: SelectPhase,
     windows: Vec<Value>,
     first_corner: Option<Vec2>,
+    kcs: bool,
 }
 
 impl UbplotM {
+    /// KCS Plotter's KP: scans every marker line as soon as it starts.
+    pub(super) fn kcs() -> Self {
+        Self { kcs: true, ..Self::default() }
+    }
+
     fn finish(&self, s: &mut Session, request: ScanRequest) -> Result<Step> {
         if match request.mode {
             ScanMode::Block => request.handles.is_empty(),
@@ -86,6 +92,9 @@ impl Interactive for UbplotM {
     }
 
     fn begin(&mut self, s: &mut Session) -> Result<Step> {
+        if self.kcs {
+            return self.finish(s, ScanRequest { mode: ScanMode::Kcs, ..Default::default() });
+        }
         if s.settings.pickfirst {
             let selection = s.selection();
             if selection.len() > MAX_SCAN_FRAMES {
@@ -103,8 +112,8 @@ impl Interactive for UbplotM {
         match self.mode {
             Mode::Choose => {
                 // Keep the specified wording while retaining keywords for typed shortcut matching.
-                let mut prompt = Prompt::new("Plot frames by [Block/Window/Layout/Last] <Block>:", Accept::TEXT)
-                    .kw(&["Block", "Window", "Layout", "Last"])
+                let mut prompt = Prompt::new("Plot frames by [Block/Window/Layout/Last/Kcs] <Block>:", Accept::TEXT)
+                    .kw(&["Block", "Window", "Layout", "Last", "Kcs"])
                     .default("Block");
                 prompt.raw = true;
                 prompt
@@ -130,14 +139,15 @@ impl Interactive for UbplotM {
                 let choice = match input {
                     Input::Enter => "block".into(),
                     Input::Keyword(text) | Input::Text(text) => text.trim().to_ascii_lowercase(),
-                    _ => return Err(bad("ubplot", "choose Block, Window, Layout or Last")),
+                    _ => return Err(bad("ubplot", "choose Block, Window, Layout, Last or Kcs")),
                 };
                 self.mode = match choice.as_str() {
                     "b" | "block" => Mode::Block,
                     "w" | "window" => Mode::Window,
                     "l" | "layout" => Mode::Layout,
                     "last" => return self.finish(s, ScanRequest { mode: ScanMode::Last, ..Default::default() }),
-                    _ => return Err(bad("ubplot", "choose Block, Window, Layout or Last")),
+                    "k" | "kcs" => return self.finish(s, ScanRequest { mode: ScanMode::Kcs, ..Default::default() }),
+                    _ => return Err(bad("ubplot", "choose Block, Window, Layout, Last or Kcs")),
                 };
                 Ok(Step::Continue)
             }

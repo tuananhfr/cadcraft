@@ -230,6 +230,8 @@ UI-only recovery status: `ui.recovery.status` (registered in `ui-egui::menus::UI
 | `isolateobjects` | `cad.tools.isolateobjects` | Tools | model, paper | available | edit |  |
 | `isoplane` | `cad.other.isoplane` | Other | model, paper | available | read |  |
 | `join` | `cad.modify.join` | Modify | model, paper | available | edit | j |
+| `kcsarea` | `cad.other.kcsarea` | Other | model | available | edit | kl |
+| `kcsplotter` | `cad.other.kcsplotter` | Other | model, paper | available | file | kp |
 | `laycur` | `cad.format.laycur` | Format | model, paper | available | edit |  |
 | `laydel` | `cad.format.laydel` | Format | model, paper | available | edit |  |
 | `layer` | `cad.format.layer` | Format | model, paper | available | edit | la, layers, -layer |

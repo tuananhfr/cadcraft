@@ -42,7 +42,7 @@ pub const COMMAND_VERSION: &str = "1.0.0";
 
 /// Pin an existing namespace here before moving its command to another menu category.
 pub const NAMESPACE_PINS: &[(&str, &str)] = &[];
-pub const MODEL_ONLY: &[&str] = &["plotwindow"];
+pub const MODEL_ONLY: &[&str] = &["plotwindow", "kcsarea"];
 pub const PAPER_ONLY: &[&str] = &["mspace", "pspace", "mview", "mview.polygonal", "vpclip", "vplayer"];
 
 #[derive(Clone, Debug)]
@@ -87,6 +87,7 @@ pub const FILE_IDS: &[&str] = &[
     "publish",
     "pdfbook",
     "ubplot",
+    "kcsplotter",
     "ubplot.publish",
     "ubplot.profile",
     "ubplot.folder",

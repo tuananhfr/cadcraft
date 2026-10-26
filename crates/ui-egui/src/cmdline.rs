@@ -981,8 +981,8 @@ mod history_translation_tests {
                 text = painted_text(&output.shapes);
             }
             assert!(text.contains(prefix), "{language}: {text}");
-            assert!(text.contains(" [Block/Window/Layout/Last] <Block>:"), "{text}");
-            assert_eq!(app.session.current_prompt().unwrap().display(), "Plot frames by [Block/Window/Layout/Last] <Block>:");
+            assert!(text.contains(" [Block/Window/Layout/Last/Kcs] <Block>:"), "{text}");
+            assert_eq!(app.session.current_prompt().unwrap().display(), "Plot frames by [Block/Window/Layout/Last/Kcs] <Block>:");
         }
     }
 
