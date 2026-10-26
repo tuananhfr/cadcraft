@@ -6,8 +6,10 @@ use cadcraft_geom::Vec2;
 use cadcraft_ubot::Counts;
 use serde_json::{Value, json};
 
-use super::count_cmd::{Scope, counts, loose_unit_scale};
-use crate::cmd::table::make_table;
+use super::count_cmd::{Scope, counts};
+use super::fill_interactive::UNIT_KEYWORDS;
+use super::units::unit_scale;
+use crate::cmd::table::{make_table, style_of};
 use crate::cmd::{CommandSpec, bad, point_req, size_param};
 use crate::{Accept, Input, Interactive, Prompt, Result, Session, Step};
 
@@ -30,7 +32,7 @@ pub(super) fn spec() -> CommandSpec {
         .params(
             "{at: [x,y] (top-left corner), textHeight? (drawing units; default 250 mm), boundary?: handle (count only inside this slab), units?: mm|cm|m|in} → {handle, rows, total}",
         )
-        .interactive(|_| Ok(Box::new(LegendM)))
+        .interactive(|s| Ok(Box::new(LegendM { needs_units: unit_scale(s, None).is_err(), units: None })))
 }
 
 fn run(s: &mut Session, p: &Value) -> Result<Value> {
@@ -54,20 +56,13 @@ fn insert(s: &mut Session, at: Vec2, text_height: Option<f64>, scope: &Scope) ->
     }
     let th = match text_height {
         Some(h) => h,
-        None => TEXT_MM / loose_unit_scale(s, scope.units.as_deref())?,
+        None => TEXT_MM / unit_scale(s, scope.units.as_deref())?,
     };
-    let table = legend(&current_style(s)?, at, th, &c);
+    let table = legend(&style_of(s), at, th, &c);
     let h = s.add_entity(EntityKind::Table(table))?;
     let rows = c.rows.len();
     s.echo(format!("UBLEGEND: table of {rows} box types, {} boxes.", c.total));
     Ok(json!({ "handle": h.hex(), "rows": rows, "total": c.total }))
-}
-
-/// The drawing's current table style (CTABLESTYLE, else the first one).
-fn current_style(s: &Session) -> Result<TableStyle> {
-    let d = s.doc()?;
-    let cur = d.header.str("CTABLESTYLE", "Standard");
-    Ok(d.table_styles.iter().find(|t| t.name.eq_ignore_ascii_case(&cur)).or(d.table_styles.first()).cloned().unwrap_or_default())
 }
 
 /// Title, header, a row per counted box type and the total; text `th` high, the style's margins scaled with it.
@@ -94,8 +89,11 @@ fn legend(style: &TableStyle, at: Vec2, th: f64, c: &Counts) -> Table {
     t
 }
 
-/// UBLEGEND at the command line: one insertion point.
-struct LegendM;
+/// UBLEGEND at the command line: the drawing units when INSUNITS cannot give them, then the insertion point.
+struct LegendM {
+    needs_units: bool,
+    units: Option<String>,
+}
 
 impl Interactive for LegendM {
     fn name(&self) -> &'static str {
@@ -103,13 +101,24 @@ impl Interactive for LegendM {
     }
 
     fn prompt(&self, _s: &Session) -> Prompt {
+        if self.needs_units && self.units.is_none() {
+            return Prompt::new("Drawing units", Accept::TEXT).kw(&UNIT_KEYWORDS);
+        }
         Prompt::new("Insertion point", Accept::POINT)
     }
 
     fn input(&mut self, s: &mut Session, i: Input) -> Result<Step> {
+        if self.needs_units && self.units.is_none() {
+            match &i {
+                Input::Text(t) | Input::Keyword(t) if unit_scale(s, Some(t)).is_ok() => self.units = Some(t.trim().to_ascii_lowercase()),
+                Input::Enter => return Ok(Step::Cancel),
+                _ => s.echo("Enter mm, cm, m or in."),
+            }
+            return Ok(Step::Continue);
+        }
         match i {
             Input::Point(at) => {
-                insert(s, at, None, &Scope::default())?;
+                insert(s, at, None, &Scope { boundary: None, units: self.units.clone() })?;
                 Ok(Step::Done)
             }
             Input::Enter => Ok(Step::Cancel),

@@ -20,7 +20,7 @@ pub(super) fn spec() -> CommandSpec {
     CommandSpec::new(CMD, "U-BOT Check", run)
         .menu(&["Tools", "U-BOT", "Check Drawing"])
         .params(
-            "{units?: mm|cm|m|in (required when INSUNITS is not in/mm/cm/m)} → {issues: [{code, severity, handle, at, message}], counts: {CODE: n}, total}",
+            "{units?: mm|cm|m|in (required when INSUNITS is not in/mm/cm/m)} → {issues: [{code, severity, handle, at, message}], counts: {CODE: n}, total}; a tagged MINSERT is checked at its first cell only, so issues of its other cells go unreported",
         )
         .noundo()
 }

@@ -6,9 +6,9 @@ use std::sync::Arc;
 use cadcraft_engine::Input;
 use cadcraft_engine::Session;
 use cadcraft_engine::cmd::ubot::xdata::{self, UbotTag};
-use cadcraft_engine::doc::{Block, Common, Drawing, Entity, EntityKind, Handle, Insert, Line, LwPolyline, Space};
+use cadcraft_engine::doc::{Block, Common, Drawing, Entity, EntityKind, Handle, Insert, Line, LwPolyline, RawTag, Space};
 use cadcraft_engine::geom::{PolyVertex, Vec2, Vec3};
-use cadcraft_ubot::{ReplaceChange, ZoneType};
+use cadcraft_ubot::{LayoutRecord, ReplaceChange, ZoneType};
 use serde_json::{Value, json};
 
 fn poly(points: &[[f64; 2]], closed: bool) -> EntityKind {
@@ -561,4 +561,152 @@ fn count_and_check_10k_boxes_perf() {
     let check = t.elapsed();
     eprintln!("10 000 boxes: UBCOUNT {all:?}, UBCOUNT with boundary {inside:?}, UBCHECK {check:?}");
     assert!(check.as_secs_f64() < 2.0);
+}
+
+/// The block, layout record and one box handle of a filled slab.
+fn filled(s: &Session, b: Handle) -> (String, UbotTag, Handle) {
+    let d = s.doc().unwrap();
+    let (block, h) = d
+        .model
+        .iter()
+        .find_map(|e| match (&e.kind, xdata::read(&e.common)) {
+            (EntityKind::Insert(i), Some(Ok(UbotTag::Instance { .. }))) => Some((i.block.clone(), e.handle)),
+            _ => None,
+        })
+        .unwrap();
+    let layout = xdata::read(&d.entity(b).unwrap().common).unwrap().unwrap();
+    (block, layout, h)
+}
+
+fn malformed_tag() -> Common {
+    Common {
+        xdata: vec![
+            RawTag { code: 1001, value: xdata::APP.into() },
+            RawTag { code: 1000, value: xdata::VERSION.into() },
+            RawTag { code: 1000, value: "garbage".into() },
+        ],
+        ..Default::default()
+    }
+}
+
+fn layout_tag(layout: &UbotTag, id: &str, edit: impl FnOnce(&mut LayoutRecord)) -> Common {
+    let UbotTag::Layout { record, boundary_handle } = layout else { panic!("not a layout: {layout:?}") };
+    let mut record = record.clone();
+    record.layout_id = id.into();
+    edit(&mut record);
+    let mut c = Common::default();
+    xdata::write(&mut c, &UbotTag::Layout { record, boundary_handle: boundary_handle.clone() }).unwrap();
+    c
+}
+
+/// Fix round 1, M1: units are never guessed where they matter (boundary counts, the default legend text height).
+#[test]
+fn ubcount_and_ublegend_never_guess_units() {
+    let (mut s, b) = slab(0, 6600.0);
+    fill(&mut s, b, json!({ "units": "mm" }));
+    for insunits in [0, 2] {
+        s.doc_mut().unwrap().header.set_i64("INSUNITS", insunits);
+        assert_eq!(count(&mut s, json!({}))["total"], 100, "a plain count needs no units");
+        let e = s.execute("ubcount", &json!({ "boundary": b.hex() })).unwrap_err();
+        assert!(e.to_string().contains("drawing units are not set"), "INSUNITS {insunits}: {e}");
+        assert_eq!(count(&mut s, json!({ "boundary": b.hex(), "units": "mm" }))["total"], 100);
+        let undo = undo_len(&s);
+        let e = s.execute("ublegend", &json!({ "at": [0.0, 0.0] })).unwrap_err();
+        assert!(e.to_string().contains("drawing units are not set"), "INSUNITS {insunits}: {e}");
+        let e = s.execute("ublegend", &json!({ "at": [0.0, 0.0], "textHeight": 100, "boundary": b.hex() })).unwrap_err();
+        assert!(e.to_string().contains("drawing units are not set"), "INSUNITS {insunits}: {e}");
+        assert_eq!(undo_len(&s), undo);
+    }
+    let r = s.execute("ublegend", &json!({ "at": [0.0, 0.0], "textHeight": 100 })).unwrap();
+    assert_eq!(r["total"], 100);
+    let r = s.execute("ublegend", &json!({ "at": [0.0, 9000.0], "units": "cm" })).unwrap();
+    let t = tables(s.doc().unwrap()).into_iter().find(|(h, _)| r["handle"] == h.hex()).unwrap().1;
+    assert_eq!(t.text_height, 25.0);
+}
+
+/// Fix round 1, M1: interactive UBLEGEND asks for the drawing units when INSUNITS cannot give them.
+#[test]
+fn ublegend_asks_for_drawing_units() {
+    let (mut s, b) = slab(2, 6600.0);
+    fill(&mut s, b, json!({ "units": "cm" }));
+    let undo = undo_len(&s);
+    s.start("ublegend").unwrap();
+    assert_eq!(s.current_prompt().unwrap().message, "Drawing units");
+    s.input(Input::Text("furlong".into())).unwrap();
+    assert_eq!(s.current_prompt().unwrap().message, "Drawing units", "an unknown unit asks again");
+    s.input(Input::Keyword("CM".into())).unwrap();
+    assert_eq!(s.current_prompt().unwrap().message, "Insertion point");
+    s.input(Input::Point(Vec2::new(0.0, 0.0))).unwrap();
+    assert!(s.running.is_none());
+    assert_eq!(undo_len(&s), undo + 1);
+    let found = tables(s.doc().unwrap());
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].1.text_height, 25.0);
+
+    // A drawing in mm goes straight to the point.
+    let (mut s, b) = slab(4, 6600.0);
+    fill(&mut s, b, json!({}));
+    s.start("ublegend").unwrap();
+    assert_eq!(s.current_prompt().unwrap().message, "Insertion point");
+}
+
+/// Fix round 1, M2 (R10/R8a): each bad object is one XDATA_INVALID on its handle; the good ones are still checked.
+#[test]
+fn ubcheck_reports_each_bad_object_once_and_checks_the_rest() {
+    let (mut s, b) = slab(4, 6600.0);
+    fill(&mut s, b, json!({}));
+    let (block, layout, good_box) = filled(&s, b);
+    // A good box copied a little to the right: overlaps (and shares the id of) its original.
+    s.execute("copy", &json!({ "handles": [good_box.hex()], "delta": [100.0, 0.0] })).unwrap();
+
+    let corrupt_box = add(&mut s, malformed_tag(), one(&block, [20000.0, 0.0]));
+    let zero_scale = add(&mut s, box_tag("ubot-h13-7", "zz"), reference(&block, [21000.0, 0.0], 0.0, [0.0, 0.0], (1, 1, 0.0, 0.0)));
+    let nan_and_corrupt = add(&mut s, malformed_tag(), one(&block, [f64::NAN, 0.0]));
+    let pitch_zero = add(&mut s, layout_tag(&layout, "pitch0", |r| r.pitch_x_mm = 0.0), square(30000.0, 0.0, 1000.0));
+    let bow_tie =
+        add(&mut s, layout_tag(&layout, "bowtie", |_| {}), poly(&[[40000.0, 0.0], [42000.0, 1000.0], [42000.0, 0.0], [40000.0, 3000.0]], true));
+    let many: Vec<[f64; 2]> = (0..20_001)
+        .map(|i| {
+            let a = f64::from(i) / 20_001.0 * std::f64::consts::TAU;
+            [50000.0 + 1000.0 * a.cos(), 1000.0 * a.sin()]
+        })
+        .collect();
+    let too_many = add(&mut s, layout_tag(&layout, "many", |_| {}), poly(&many, true));
+    let open = add(&mut s, layout_tag(&layout, "open", |_| {}), poly(&[[60000.0, 0.0], [61000.0, 0.0], [61000.0, 1000.0]], false));
+    let bad = [corrupt_box, zero_scale, nan_and_corrupt, pitch_zero, bow_tie, too_many, open];
+
+    let (undo, before) = (undo_len(&s), doc(&s));
+    let r = s.execute("ubcheck", &json!({})).unwrap();
+    let invalid: Vec<&str> = issues_of(&r, "XDATA_INVALID").iter().map(|i| i["handle"].as_str().unwrap()).collect();
+    for h in bad {
+        assert_eq!(invalid.iter().filter(|x| **x == h.hex()).count(), 1, "{}: {r}", h.hex());
+    }
+    assert_eq!(invalid.len(), bad.len(), "nothing good is XDATA_INVALID: {r}");
+    // S1: a box with a corrupt record is not a legacy block.
+    assert!(issues_of(&r, "LEGACY_BLOCK").iter().all(|i| i["handle"] != corrupt_box.hex() && i["handle"] != nan_and_corrupt.hex()), "{r}");
+    // The good boxes are still checked.
+    assert!(!issues_of(&r, "OVERLAP").is_empty(), "{r}");
+    assert_eq!(issues_of(&r, "DUPLICATE_ID").len(), 1, "{r}");
+    assert_eq!(undo_len(&s), undo);
+    assert!(Arc::ptr_eq(&before, &doc(&s)));
+}
+
+/// Fix round 1, S3: past the locate limit the error blames the boxes, not the boundary.
+#[test]
+fn ubcount_locate_limit_blames_the_boxes() {
+    let (mut s, b) = slab(4, 6600.0);
+    fill(&mut s, b, json!({}));
+    let (block, _, _) = filled(&s, b);
+    add(&mut s, Common::default(), reference(&block, [0.0, 0.0], 0.0, [1.0, 1.0], (1001, 1000, 1.0, 1.0)));
+    let e = s.execute("ubcount", &json!({ "boundary": b.hex() })).unwrap_err().to_string();
+    assert!(e.contains("the boxes expand to more than"), "{e}");
+    assert!(!e.contains(&format!("boundary {}", b.hex())), "{e}");
+    assert_eq!(count(&mut s, json!({}))["total"], 100 + 1001 * 1000, "a plain count has no such limit");
+}
+
+/// Fix round 1, S5: the false negatives of a tagged MINSERT are documented.
+#[test]
+fn ubcheck_params_document_minsert_cells() {
+    let spec = cadcraft_engine::find_command("ubcheck").unwrap();
+    assert!(spec.params.contains("MINSERT"), "{}", spec.params);
 }

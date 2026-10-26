@@ -1,9 +1,9 @@
 //! UBCHECK inputs from model space: layouts on tagged boundaries, every tagged zone and every box. Each object is
 //! looked at first, so one the core could not use becomes an issue on its handle instead of failing the check (R10).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use cadcraft_doc::{Drawing, Entity, entity_bounds};
+use cadcraft_doc::{Drawing, Entity, Handle, entity_bounds};
 use cadcraft_geom::Vec2;
 use cadcraft_ubot::{
     Catalog, CheckInstance, CheckRequest, ExistingInstance, Issue, IssueCode, LayoutInput, LayoutRecord, MAX_CLEARANCE_MM, RingInput, Severity,
@@ -54,22 +54,32 @@ fn first_vertex(ring: &RingInput) -> [f64; 2] {
 pub(super) fn gather(d: &Drawing, catalog: &Catalog, unit_scale: f64) -> Gathered {
     let mut issues = Vec::new();
     let unreadable = invalid_tags(d);
-    let unreadable_hex: HashSet<String> = unreadable.iter().map(|(h, _)| h.hex()).collect();
+    let unreadable_hex: HashMap<String, &str> = unreadable.iter().map(|(h, why)| (h.hex(), why.as_str())).collect();
 
     let mut instances = Vec::new();
-    let mut checked_boxes: HashSet<String> = HashSet::new();
+    // Boxes already reported, by the core or here: one XDATA_INVALID per object.
+    let mut boxes: HashSet<String> = HashSet::new();
     for base in existing_instances(d, catalog) {
+        boxes.insert(base.handle.clone());
         if let Some(why) = unplaceable(&base, catalog, unit_scale) {
             let at = if base.insert.iter().all(|c| c.is_finite()) { base.insert } else { [0.0, 0.0] };
-            issues.push(issue(IssueCode::XdataInvalid, base.handle.clone(), at, format!("the box cannot be checked: {why}")));
+            let mut message = format!("the box cannot be checked: {why}");
+            if let Some(data) = unreadable_hex.get(&base.handle) {
+                message.push_str(&format!("; its U-BOT data cannot be used either: {data}"));
+            }
+            issues.push(issue(IssueCode::XdataInvalid, base.handle.clone(), at, message));
             continue;
         }
-        checked_boxes.insert(base.handle.clone());
-        instances.push(CheckInstance { xdata_valid: !unreadable_hex.contains(&base.handle), legacy: base.instance_id.is_none(), base });
+        // Legacy means no LPC_UBOT record at all; a box whose record cannot be read is reported as that alone.
+        let has_record = Handle::parse_hex(&base.handle).and_then(|h| d.entity(h)).is_some_and(|e| xdata::read(&e.common).is_some());
+        instances.push(CheckInstance {
+            xdata_valid: !unreadable_hex.contains_key(&base.handle),
+            legacy: base.instance_id.is_none() && !has_record,
+            base,
+        });
     }
-    // A checked box reports its unreadable data through the core; every other object here.
     for (h, why) in &unreadable {
-        if checked_boxes.contains(&h.hex()) {
+        if boxes.contains(&h.hex()) {
             continue;
         }
         let at = d.entity(*h).map_or([0.0, 0.0], |e| spot(d, e));

@@ -61,20 +61,18 @@ fn run(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(out)
 }
 
-/// `units`, else INSUNITS, else mm: counting only needs it for the arc tolerance (centres and ring scale alike).
-pub(super) fn loose_unit_scale(s: &Session, units: Option<&str>) -> Result<f64> {
-    match units {
-        Some(_) => unit_scale(s, units),
-        None => Ok(unit_scale(s, None).unwrap_or(1.0)),
-    }
-}
-
 /// The boxes of model space, or of those whose footprint centre lies inside the scope's boundary.
+/// Only the boundary test needs the drawing units (its arcs and the box anchors are in mm), so only it asks for them.
 pub(super) fn counts(s: &Session, cmd: &str, scope: &Scope) -> Result<Counts> {
-    let unit_scale = loose_unit_scale(s, scope.units.as_deref())?;
     let d = s.doc()?;
     let catalog = &s.ubot.catalog;
-    let Some(h) = scope.boundary else { return Ok(count(&count_items(d, catalog), catalog)) };
+    let Some(h) = scope.boundary else {
+        if scope.units.is_some() {
+            unit_scale(s, scope.units.as_deref())?;
+        }
+        return Ok(count(&count_items(d, catalog), catalog));
+    };
+    let unit_scale = unit_scale(s, scope.units.as_deref())?;
     let e = d.entity(h).ok_or_else(|| bad(cmd, format!("no object {}", h.hex())))?;
     if d.space_of(h) != Some(Space::Model) {
         return Err(bad(cmd, format!("{} is not in model space", h.hex())));

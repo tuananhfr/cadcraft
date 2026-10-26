@@ -45,7 +45,7 @@ fn usize_param(p: &Value, key: &str) -> Option<usize> {
     p.get(key).and_then(Value::as_u64).and_then(|v| usize::try_from(v).ok())
 }
 
-fn style_of(s: &Session) -> cadcraft_doc::TableStyle {
+pub(crate) fn style_of(s: &Session) -> cadcraft_doc::TableStyle {
     let Ok(d) = s.doc() else { return Default::default() };
     let cur = d.header.str("CTABLESTYLE", "Standard");
     d.table_styles.iter().find(|t| t.name.eq_ignore_ascii_case(&cur)).or(d.table_styles.first()).cloned().unwrap_or_default()

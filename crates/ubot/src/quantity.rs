@@ -10,7 +10,8 @@ use crate::error::UbotError;
 use crate::fill::NEAR_BAND_MM;
 use crate::geometry::{RingInput, point_in_ring, ring_from_input};
 
-const MAX_ITEMS: usize = 1_000_000;
+/// Items one count takes.
+pub const MAX_COUNT_ITEMS: usize = 1_000_000;
 /// Items × boundary edges tested for the inside check.
 const MAX_INSIDE_WORK: usize = 400_000_000;
 
@@ -118,8 +119,8 @@ fn tally<'a>(items: impl Iterator<Item = &'a CountItem>, catalog: &Catalog) -> C
 
 /// Counts the items whose centre (drawing units) lies inside `boundary`; `None` counts all. `boundary` carries the unit scale.
 pub fn count_in(items: &[(CountItem, [f64; 2])], boundary: Option<(&RingInput, f64)>, catalog: &Catalog) -> Result<Counts, UbotError> {
-    if items.len() > MAX_ITEMS {
-        return Err(UbotError::Limit(format!("{} items, the limit is {MAX_ITEMS}", items.len())));
+    if items.len() > MAX_COUNT_ITEMS {
+        return Err(UbotError::Limit(format!("{} items, the limit is {MAX_COUNT_ITEMS}", items.len())));
     }
     let Some((ring, unit_scale)) = boundary else {
         return Ok(tally(items.iter().map(|i| &i.0), catalog));

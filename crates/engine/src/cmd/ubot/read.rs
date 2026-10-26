@@ -134,7 +134,8 @@ pub fn existing_instances(drawing: &Drawing, catalog: &Catalog) -> Vec<ExistingI
 }
 
 /// References expanded while locating boxes (MINSERT cells and nested copies one by one); past it the walk stops.
-pub const MAX_LOCATE_WORK: usize = 2_000_000;
+/// No more than the core counts in one call, so a drawing too large to locate is reported as such.
+pub const MAX_LOCATE_WORK: usize = cadcraft_ubot::MAX_COUNT_ITEMS;
 
 /// Box references to count: tagged, mapped or generated-block references are items (MINSERT cells multiply); any
 /// other reference is a cluster whose boxes are counted through it, never itself.
