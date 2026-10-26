@@ -265,3 +265,54 @@ Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded 
   which were not supplied; project-sample checks do not replace that baseline audit.
 - Attribute text was observed in legacy TCVN3 (.VnTime), rather than Unicode. These checks
   pin the reviewed attributes; they do not establish legacy text conversion or font parity.
+
+## U-BOT Toolkit đợt 1
+
+2026-10-26 · Batch 1 of the LPC U-BOT CAD Toolkit. It adds new commands and crates and changes no
+existing command. Reference, protocol and limits: [U-BOT](docs/ubot.md).
+
+- Core `crates/ubot` (`cadcraft-ubot`, layer L1 in `xtask/src/layers.rs`; it depends only on
+  `cadcraft-geom`, serde, serde_json and sha2). It holds the draft catalog: four 520×520 products
+  and rulepack `lpc-draft-1`, all `approval_status: "draft"`. It also has ring and footprint
+  geometry with 0.5 mm arc subdivision, and the grid fill. The fill classifies each cell as valid,
+  invalid or uncertain with reasons, and gives boxes stable ids `<layout_id>:<i>:<j>`. Check, count
+  and replace planning are here too, with a SHA-256 `inputHash`. Limits: 100 000 cells, 20 000
+  vertices, 100 000 boxes, 32 block levels. Every limit is an explicit error.
+- Sidecar `apps/ubot-core` (exempt from layering): reads `ubot.req/1` on stdin and writes
+  `ubot.res/1` on stdout. Requests are at most 64 MiB; exit code 0 means ok and 1 any failure. The
+  AutoCAD adapter that calls it is an external .NET add-in in the ubot-build repo. It is not part of
+  this repository.
+- Commands in `crates/engine/src/cmd/ubot/`: UBLIB, UBZONE, UBFILL (alias UBOT), UBREPLACE, TUBAB,
+  UBCOUNT, UBLEGEND and UBCHECK. Their ids are `cad.tools.*`, and they are in Tools ▸ U-BOT.
+  - Each run writes on a clone of the drawing that becomes current in one step. Esc writes nothing,
+    one Undo reverts a run, and an unchanged re-run writes nothing.
+  - JSON callers get `mode: preview|commit` with `expectHash` (`CONFLICT` on mismatch).
+  - `LPC_UBOT` xdata goes on boxes, slab boundaries and zones. Generated `UBOT_<SKU>` blocks are
+    drawn in mm and go on layer `UBOT` (colour 55).
+  - The loaded catalog lives in the new session field `Session::ubot`.
+  - Edits to existing files are registration only: the command list, registry, Cargo workspace and
+    command-id snapshots. Only the visibility of two engine helpers changed: `blocks::attribs` (with `synced`) and
+    `table::style_of` are now `pub(crate)`.
+- Ribbon: a `ubot` tab ("U-BOT") after Home in `UBOTBUILD.json`. Its groups are Bố trí / Thay hộp /
+  Thống kê / Kiểm tra, with eight code-drawn icons in `icons.rs`. vi and uk catalog rows cover the
+  commands, prompts, messages and groups. They are AI-written and await native review. Profiles
+  saved by earlier builds get the tab; the exceptions are in the limitations.
+- Tests: `crates/ubot/tests/*`, `crates/engine/tests/ubot_{infra,fill,replace,count_check}.rs` and
+  `crates/ui-egui/tests/ubot_ribbon.rs`. `ws_profile::ribbon_presets_carry_the_expected_tabs` now
+  expects U-BOT after Home. Performance tests are `#[ignore]` and run in release only.
+- Known limits ([U-BOT limitations](docs/ubot.md#limitations)):
+  - A custom UBFILL clearance is not stored, so UBCHECK uses the rulepack's.
+  - UBCHECK checks a tagged MINSERT at cell (0, 0) only.
+  - UBFILL, UBREPLACE and UBCHECK need units; so do UBCOUNT with a boundary and UBLEGEND.
+  - Clearances are draft numbers.
+  - The ribbon tab is missing from full-layout or imported workspaces, and it can tie on `order`
+    with tabs an old build reordered.
+  - AutoCAD support has not run in a real AutoCAD yet; the first test is planned for 2026-10-26.
+- Local gate, Windows, 2026-10-26: per-crate `cargo fmt -p <crate> -- --check` passed for all 18 crates
+  (`cargo fmt --all` fails here with "The filename or extension is too long"). `cargo clippy --workspace
+  --all-targets -D warnings`, `xtask assets` and `xtask layers` passed. `cargo test --workspace
+  --no-fail-fast` passed 3402 tests and failed 4, all in `cadcraft-ui-egui` and all failing the same way
+  on 71c7c86, before this tab: three lib tests with "Dropped TexturesDelta", and
+  `density::compact_overflow_buttons_reach_every_command_with_keyboard_at_both_scales`. The host has
+  no wasm32 target, so `xtask wasm` was replaced by `cargo check --target wasm32-unknown-unknown -p
+  cadcraft-engine -p cadcraft-ubot` in the `ubotcad-web-build:local` image, which passed with no warnings.
