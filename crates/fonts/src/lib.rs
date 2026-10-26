@@ -16,6 +16,7 @@
 pub mod bidi;
 mod complex;
 mod legacy_vi;
+mod missing_bigfont;
 mod mtext;
 pub mod shx;
 mod shx_text;
@@ -30,6 +31,7 @@ use std::sync::Arc;
 use cadcraft_geom::{Bounds2, Vec2};
 
 pub use legacy_vi::LegacyVi;
+pub use missing_bigfont::MissingBigFont;
 pub use shx::{STANDARD_SHX, is_standard_shx};
 pub use substitution::{FontInfo, FontState, font_info, font_map, replacement, set_font_map};
 
@@ -296,14 +298,16 @@ pub struct TextFont {
     shx: Option<Arc<shx::ShxFont>>,
     /// The text was typed for a legacy Vietnamese font that isn't here: shown decoded.
     legacy: Option<LegacyVi>,
+    /// The style's bigfont, which isn't read: its known codes are shown as their characters.
+    big_font: Option<MissingBigFont>,
     codepage: Option<&'static encoding_rs::Encoding>,
 }
 
 impl TextFont {
-    pub const STROKE: TextFont = TextFont { face: None, shx: None, legacy: None, codepage: None };
+    pub const STROKE: TextFont = TextFont { face: None, shx: None, legacy: None, big_font: None, codepage: None };
 
     pub fn outline(face: ttf::Face) -> TextFont {
-        TextFont { face: Some(face), shx: None, legacy: None, codepage: None }
+        TextFont { face: Some(face), shx: None, legacy: None, big_font: None, codepage: None }
     }
     /// Resolve a text style font name: an installed TTF/OTF/TTC or an SHX font the user added when found; else, for a font we
     /// can't find (an SHX file, a missing TTF), the FONTALT font ([`ttf::font_alt`]) when set;
@@ -316,7 +320,12 @@ impl TextFont {
     /// font the names point to is shown decoded to Unicode.
     pub fn for_style(font: &str, family: &str) -> TextFont {
         let r = substitution::resolve(font, family);
-        TextFont { face: r.face, shx: r.shx, legacy: r.info.legacy, codepage: None }
+        TextFont { face: r.face, shx: r.shx, legacy: r.info.legacy, big_font: None, codepage: None }
+    }
+    /// Set the style's bigfont file name (empty for none).
+    pub fn with_big_font(mut self, name: &str) -> TextFont {
+        self.big_font = MissingBigFont::from_name(name);
+        self
     }
     /// Set the drawing's encoding for shapes fonts; `None` uses Windows-1252.
     pub fn with_codepage(mut self, enc: Option<&'static encoding_rs::Encoding>) -> TextFont {
@@ -341,9 +350,14 @@ impl TextFont {
     }
     /// `s` as the font shows it.
     fn text<'a>(&self, s: &'a str) -> Cow<'a, str> {
-        match self.legacy {
-            Some(l) => l.decode(s),
+        let s = match self.big_font {
+            Some(b) => b.decode(s),
             None => Cow::Borrowed(s),
+        };
+        match (self.legacy, s) {
+            (Some(l), Cow::Borrowed(s)) => l.decode(s),
+            (Some(l), Cow::Owned(s)) => Cow::Owned(l.decode(&s).into_owned()),
+            (None, s) => s,
         }
     }
 }

@@ -1426,7 +1426,7 @@ fn drawing_codepage(d: &Drawing) -> Option<&'static encoding_rs::Encoding> {
 }
 
 fn text_font(d: &Drawing, ts: &cadcraft_doc::TextStyle) -> cadcraft_fonts::TextFont {
-    cadcraft_fonts::TextFont::for_style(&ts.font, &ts.family).with_codepage(drawing_codepage(d))
+    cadcraft_fonts::TextFont::for_style(&ts.font, &ts.family).with_big_font(&ts.big_font).with_codepage(drawing_codepage(d))
 }
 
 /// Shape a TEXT / ATTRIB / ATTDEF with its style's font and generation flags.
