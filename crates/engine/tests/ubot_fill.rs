@@ -960,8 +960,8 @@ fn hostile_inputs_fail_cleanly() {
         count_multiplier: 1,
     };
     xdata::write(&mut tagged, &tag).unwrap();
-    // Exactly at the limit (100 000 cells, away from the slab) the fill still runs.
-    let many = s.doc_mut().unwrap().add(&Space::Model, tagged, insert("UBOT_H13_7", [1e6, 0.0], 400, 250, 600.0)).unwrap();
+    // Exactly at the limit (100 000 cells near the slab, none over a cell) the fill still runs.
+    let many = s.doc_mut().unwrap().add(&Space::Model, tagged, insert("UBOT_H13_7", [7600.0, 0.0], 400, 250, 600.0)).unwrap();
     let t = std::time::Instant::now();
     let r = s.execute("ubfill", &json!({ "boundary": b.hex(), "product": "ubot-h13-7" })).unwrap();
     assert_eq!(r["summary"]["added"], 100);
@@ -977,6 +977,19 @@ fn hostile_inputs_fail_cleanly() {
     let t = std::time::Instant::now();
     let err = bad(&mut s, json!({ "boundary": b.hex(), "product": "ubot-h13-7" }));
     assert!(err.contains("100000"), "{err}");
+    assert!(t.elapsed().as_secs() < 5);
+    // Out of the slab's reach the same array is never expanded and does not count.
+    s.doc_mut()
+        .unwrap()
+        .modify_entity(many, |e| {
+            if let EntityKind::Insert(i) = &mut e.kind {
+                i.insert.x = 1e8;
+            }
+        })
+        .unwrap();
+    let t = std::time::Instant::now();
+    let r = s.execute("ubfill", &json!({ "boundary": b.hex(), "product": "ubot-h13-7" })).unwrap();
+    assert_eq!(r["summary"]["added"], 100);
     assert!(t.elapsed().as_secs() < 5);
     assert_eq!(before.entity(b), s.doc().unwrap().entity(b), "boundary untouched");
     assert_eq!(undo_len(&s), 0);
@@ -996,4 +1009,57 @@ fn commit_10k_boxes_perf() {
     assert_eq!(r["summary"]["kept"], 10_000);
     eprintln!("UBFILL 10 000 boxes: commit {first:?}, no-op re-run {rerun:?}");
     assert!(first.as_secs_f64() < 2.0);
+}
+
+#[test]
+fn moving_a_filled_floor_keeps_every_box() {
+    let (mut s, b) = slab(4, 6600.0);
+    commit(&mut s, b, json!({}));
+    let all: Vec<String> = s.doc().unwrap().model.iter().map(|e| e.handle.hex()).collect();
+    s.execute("move", &json!({ "handles": all, "delta": [100, 0] })).unwrap();
+
+    let r = preview(&mut s, b, json!({}));
+    let moved = problem_cells(&r, "MANUAL_MOVED").len();
+    assert_eq!((r["summary"]["removed"].as_u64(), r["summary"]["kept"].as_u64(), moved), (Some(0), Some(100), 100), "{}", r["summary"]);
+    let before = doc(&s);
+    let r = commit(&mut s, b, json!({}));
+    assert_eq!(r["summary"]["removed"], 0, "{}", r["summary"]);
+    assert_eq!(boxes(s.doc().unwrap()).len(), 100);
+    assert_eq!(boxes(s.doc().unwrap()), boxes(&before), "every box stays where the user put it");
+
+    // reset: true still lays the grid again: boxes whose cell is no longer valid go.
+    let r = preview(&mut s, b, json!({ "reset": true }));
+    assert_eq!(r["summary"], json!({ "added": 0, "invalid": 20, "kept": 0, "removed": 10, "uncertain": 0, "updated": 90, "valid": 90 }));
+}
+
+/// Final review CC-I3: the 100 000 existing-box cap counts the boxes near this slab, not every floor of the drawing.
+#[test]
+fn existing_box_cap_counts_only_boxes_near_the_slab() {
+    let (mut s, b) = slab(4, 6600.0);
+    // 101 000 hand-inserted box cells on another floor, well beyond the reach of this slab.
+    s.doc_mut().unwrap().add(&Space::Model, Common::default(), insert("UBOT_H13_7", [100_000.0, 0.0], 1000, 101, 600.0)).unwrap();
+    let r = preview(&mut s, b, json!({}));
+    assert_eq!(r["summary"]["added"], 100, "{}", r["summary"]);
+
+    // The same array reaching into the slab still counts every cell.
+    s.doc_mut().unwrap().add(&Space::Model, Common::default(), insert("UBOT_H13_7", [-100_000.0, 3000.0], 1000, 101, 600.0)).unwrap();
+    let err = s.execute("ubfill", &json!({ "boundary": b.hex(), "product": "ubot-h13-7" })).unwrap_err().to_string();
+    assert!(err.contains("101000 existing boxes"), "{err}");
+}
+
+/// Final review CC-m7: a stored revision at the 32-bit limit is refused up front with a clear message; a no-op still runs.
+#[test]
+fn revision_at_the_limit_is_refused_before_commit() {
+    let (mut s, b) = slab(4, 6600.0);
+    commit(&mut s, b, json!({}));
+    let (mut record, owner) = layout_of(s.doc().unwrap(), b);
+    record.revision = i32::MAX as u32;
+    let tag = UbotTag::Layout { record, boundary_handle: owner };
+    s.doc_mut().unwrap().modify_entity(b, |e| xdata::write(&mut e.common, &tag).unwrap()).unwrap();
+    let before = doc(&s);
+    let r = preview(&mut s, b, json!({}));
+    assert_eq!(r["summary"]["kept"], 100, "a no-op keeps the revision");
+    let err = s.execute("ubfill", &json!({ "boundary": b.hex(), "product": "ubot-h10-7" })).unwrap_err().to_string();
+    assert!(err.contains("revision 2147483647") && err.contains(&b.hex()), "{err}");
+    assert!(Arc::ptr_eq(&before, &doc(&s)), "nothing written");
 }

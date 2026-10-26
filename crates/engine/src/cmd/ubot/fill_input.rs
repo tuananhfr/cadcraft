@@ -4,7 +4,9 @@ use std::collections::{HashMap, HashSet};
 
 use cadcraft_doc::{Drawing, Entity, EntityKind, Handle, Insert, Space, entity_bounds};
 use cadcraft_geom::Vec2;
-use cadcraft_ubot::{Catalog, ExistingInstance, LayoutRecord, MAX_CLEARANCE_MM, Product, RingInput, ZoneInput, ZoneReach, ZoneType, ring_from_input};
+use cadcraft_ubot::{
+    Catalog, ExistingInstance, ExistingReach, LayoutRecord, MAX_CLEARANCE_MM, Product, RingInput, ZoneInput, ZoneReach, ZoneType, ring_from_input,
+};
 
 use super::read::{generated_blocks, invalid_tags, ring_of, untagged_box_product, zone_ring_of, zones};
 use super::xdata::{self, UbotTag};
@@ -13,7 +15,7 @@ use crate::Result;
 use crate::cmd::bad;
 
 pub(super) const CMD: &str = "ubfill";
-/// Existing boxes per run, MINSERT cells counted one by one (spec §6).
+/// Existing boxes near the slab per run, MINSERT cells counted one by one (spec §6).
 const MAX_EXISTING: u64 = 100_000;
 pub(super) const MAX_HOLES: usize = 10_000;
 /// Arc subdivision tolerance of the core; zones are checked with it so a rejected zone is named before the fill.
@@ -167,47 +169,71 @@ fn cells(ins: &Insert) -> u64 {
     u64::from(ins.cols.max(1)).saturating_mul(u64::from(ins.rows.max(1)))
 }
 
-/// Boxes already in model space for the core: tagged single boxes with their ids, everything else as obstacles
-/// (malformed tags, tagged MINSERT cells one by one, untagged mapped or generated box blocks).
-pub(super) fn existing(d: &Drawing, catalog: &Catalog) -> Result<Vec<ExistingInstance>> {
+/// Which boxes of a reference to build.
+#[derive(Clone, Copy)]
+enum Cells {
+    All,
+    /// The four corner cells of a MINSERT: every other cell's footprint lies within theirs.
+    Corners,
+}
+
+/// The reference's boxes: one for a tagged single box, MINSERT cells one by one for an obstacle.
+fn boxes_of(e: &Entity, ins: &Insert, role: &Role, which: Cells) -> Vec<ExistingInstance> {
+    let base = |instance_id, layout_id, product_id, at: Vec2| ExistingInstance {
+        handle: e.handle.hex(),
+        instance_id,
+        layout_id,
+        product_id,
+        block_name: ins.block.clone(),
+        insert: [at.x, at.y],
+        rotation_deg: ins.rotation.to_degrees(),
+        scale: ins.scale.x,
+        scale_y: (ins.scale.y != ins.scale.x).then_some(ins.scale.y),
+    };
+    let origin = Vec2::new(ins.insert.x, ins.insert.y);
+    let product_id = match role {
+        Role::Instance { instance_id, product_id, layout_id } => {
+            return vec![base(Some(instance_id.clone()), Some(layout_id.clone()), Some(product_id.clone()), origin)];
+        }
+        Role::Obstacle { product_id } => product_id,
+    };
+    let cell = |c: u32, r: u32| {
+        let offset = Vec2::new(f64::from(c) * ins.col_spacing, f64::from(r) * ins.row_spacing).rotate(ins.rotation);
+        base(None, None, product_id.clone(), origin + offset)
+    };
+    let (cols, rows) = (ins.cols.max(1), ins.rows.max(1));
+    match which {
+        Cells::Corners => {
+            let mut at = vec![(0, 0), (cols - 1, 0), (0, rows - 1), (cols - 1, rows - 1)];
+            at.dedup();
+            at.into_iter().map(|(c, r)| cell(c, r)).collect()
+        }
+        Cells::All => (0..rows).flat_map(|r| (0..cols).map(move |c| (c, r))).map(|(c, r)| cell(c, r)).collect(),
+    }
+}
+
+/// Boxes already in model space within `reach` of the slab for the core: tagged single boxes with their ids, everything
+/// else as obstacles (malformed tags, tagged MINSERT cells one by one, untagged mapped or generated box blocks). Boxes on
+/// other floors neither block nor belong to this slab, so the cap counts only these (spec §6: per run of a slab).
+pub(super) fn existing(d: &Drawing, catalog: &Catalog, main: &Product, unit_scale: f64, reach: &ExistingReach) -> Result<Vec<ExistingInstance>> {
     let generated = generated_blocks(catalog);
-    let refs: Vec<(&Entity, &Insert, Role)> = d
-        .model
-        .iter()
-        .filter_map(|e| match &e.kind {
-            EntityKind::Insert(ins) => role(e, ins, catalog, &generated).map(|r| (e.as_ref(), ins, r)),
-            _ => None,
-        })
-        .collect();
-    let total = refs.iter().fold(0u64, |n, (_, ins, _)| n.saturating_add(cells(ins)));
+    let mut near: Vec<(&Entity, &Insert, Role)> = Vec::new();
+    let mut total = 0u64;
+    for e in d.model.iter() {
+        let EntityKind::Insert(ins) = &e.kind else { continue };
+        let Some(role) = role(e, ins, catalog, &generated) else { continue };
+        let corners = boxes_of(e, ins, &role, Cells::Corners);
+        if reach.reaches(&corners, catalog, main, unit_scale).map_err(|err| bad(CMD, err.to_string()))? {
+            total = total.saturating_add(cells(ins));
+            near.push((e.as_ref(), ins, role));
+        }
+    }
     if total > MAX_EXISTING {
-        return Err(bad(CMD, format!("{total} existing boxes (MINSERT cells counted), the limit is {MAX_EXISTING}")));
+        return Err(bad(CMD, format!("{total} existing boxes near the slab (MINSERT cells counted), the limit is {MAX_EXISTING}")));
     }
     let mut out = Vec::with_capacity(usize::try_from(total).unwrap_or(0));
-    for (e, ins, role) in refs {
-        let base = |instance_id, layout_id, product_id, at: Vec2| ExistingInstance {
-            handle: e.handle.hex(),
-            instance_id,
-            layout_id,
-            product_id,
-            block_name: ins.block.clone(),
-            insert: [at.x, at.y],
-            rotation_deg: ins.rotation.to_degrees(),
-            scale: ins.scale.x,
-            scale_y: (ins.scale.y != ins.scale.x).then_some(ins.scale.y),
-        };
-        let origin = Vec2::new(ins.insert.x, ins.insert.y);
-        match role {
-            Role::Instance { instance_id, product_id, layout_id } => out.push(base(Some(instance_id), Some(layout_id), Some(product_id), origin)),
-            Role::Obstacle { product_id } => {
-                for r in 0..ins.rows.max(1) {
-                    for c in 0..ins.cols.max(1) {
-                        let offset = Vec2::new(f64::from(c) * ins.col_spacing, f64::from(r) * ins.row_spacing).rotate(ins.rotation);
-                        out.push(base(None, None, product_id.clone(), origin + offset));
-                    }
-                }
-            }
-        }
+    for (e, ins, role) in near {
+        out.extend(boxes_of(e, ins, &role, Cells::All));
     }
     Ok(out)
 }

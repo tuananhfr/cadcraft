@@ -1,7 +1,7 @@
 //! UBFILL / UBOT (spec §7): lays U-BOT boxes on a slab. `preview` returns the diff; `commit` writes it in one step.
 
 use cadcraft_doc::{Drawing, Handle};
-use cadcraft_ubot::{Catalog, FillRequest, FillResult, LayoutRecord, Product, ZoneReach, fill, geometry_hash};
+use cadcraft_ubot::{Catalog, ExistingReach, FillRequest, FillResult, LayoutRecord, Product, ZoneReach, fill, geometry_hash};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -308,7 +308,8 @@ pub(super) fn plan(s: &mut Session, p: &Params) -> Result<Plan> {
     let holes = hole_zones(d, p.boundary, &p.holes, unit_scale, edge_clearance(p, &catalog)?)?;
     let mut zones = checked_zones(d, unit_scale, &reach, &catalog, main)?;
     zones.extend(holes.iter().map(|(_, z)| z.clone()));
-    let existing = existing(d, &catalog)?;
+    let near = ExistingReach::new(unit_scale, &ring, main).map_err(boundary_error)?;
+    let existing = existing(d, &catalog, main, unit_scale, &near)?;
     let geometry = geometry_hash(unit_scale, &ring, &[], &zones).map_err(boundary_error)?;
     let (own, previous) = match stored {
         Stored::Own(r) => (Some(r), None),
@@ -363,7 +364,10 @@ pub(super) fn plan(s: &mut Session, p: &Params) -> Result<Plan> {
     let noop = no_box_change && tag_current && hole_tags.is_empty();
     let revision = match &own {
         Some(r) if noop => r.revision,
-        Some(r) => r.revision.saturating_add(1),
+        // xdata stores the revision as a 32-bit group; refused here, not on every commit.
+        Some(r) => r.revision.checked_add(1).filter(|v| i32::try_from(*v).is_ok()).ok_or_else(|| {
+            bad(CMD, format!("boundary {}: stored layout revision {} cannot be raised (the limit is {})", p.boundary.hex(), r.revision, i32::MAX))
+        })?,
         None => 1,
     };
     let record = LayoutRecord { revision, ..result.layout.clone() };

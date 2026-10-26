@@ -424,11 +424,12 @@ fn shifted_origin_updates_and_removes() {
     assert_eq!(removed, expect.iter().map(String::as_str).collect::<Vec<_>>());
 
     // Without reset the shifted boxes stay put (manually moved relative to the new grid) and block the cell they occupy.
+    // Box 0 is kept too although its old cell is now outside: a moved box is never removed without reset.
     r.reset = false;
     let res = run(&r);
-    assert_eq!((res.update.len(), res.remove.len(), res.add.len(), res.keep.len()), (0, 10, 0, 90));
+    assert_eq!((res.update.len(), res.remove.len(), res.add.len(), res.keep.len()), (0, 0, 0, 100));
     let moved = res.problems.iter().filter(|p| p.status == Status::Info && p.reasons == [Reason::ManualMoved]).count();
-    assert_eq!(moved, 90);
+    assert_eq!(moved, 100);
     let blocked: Vec<[i64; 2]> = res.problems.iter().filter(|p| p.reasons == [Reason::OverlapsExisting]).map(|p| p.cell).collect();
     assert_eq!(blocked, (0..10).map(|j| [10, j]).collect::<Vec<_>>());
     assert_eq!(res.summary.valid, 90);
@@ -968,4 +969,27 @@ fn non_finite_zone_is_an_error_wherever_it_is() {
     let err = fill(&r, &Catalog::builtin()).unwrap_err();
     assert!(matches!(&err, UbotError::BadInput(m) if m.contains("zone nan")), "{err}");
     assert!(geometry_hash(1.0, &square(), &[], &r.zones).is_err());
+}
+
+/// Final review CC-I3: the existing-box cap counts the boxes that can reach this slab, not every box in the drawing.
+#[test]
+fn existing_cap_counts_only_boxes_near_the_slab() {
+    let base = as_existing(&run(&req(square())))[0].clone();
+    // Reach: slab extent grown by MAX_CLEARANCE_MM and the box footprint; these sit on other floors, beyond it.
+    let far = |k: usize| ExistingInstance {
+        handle: format!("{:X}", 0x10_0000 + k),
+        instance_id: None,
+        layout_id: None,
+        insert: [6600.0 + MAX_CLEARANCE_MM + 2000.0 + (k % 1000) as f64 * 600.0, (k / 1000) as f64 * 600.0],
+        ..base.clone()
+    };
+    let mut r = req(square());
+    r.existing = (0..100_001).map(far).collect();
+    let res = run(&r);
+    assert_eq!((res.add.len(), res.update.len(), res.remove.len(), res.keep.len()), (100, 0, 0, 0));
+
+    // Boxes that can reach the slab still count: 100 001 of them hit the cap.
+    let near = |k: usize| ExistingInstance { handle: format!("{:X}", 0x10_0000 + k), instance_id: None, layout_id: None, ..base.clone() };
+    r.existing = (0..100_001).map(near).collect();
+    assert!(matches!(fill(&r, &Catalog::builtin()), Err(UbotError::Limit(_))));
 }

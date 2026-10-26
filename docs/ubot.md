@@ -75,7 +75,10 @@ Prompts: `Select closed polylines or circles`, `Zone type [Exclusion/Solid/Colum
 it the zone uses the rulepack's exclusion clearance. The zone id is 16 hex of SHA-256 over the
 handle and ring, so a copied or reshaped zone gets a new id. Zones must be closed LWPOLYLINEs or
 CIRCLEs in model space, off locked layers. A ring that would fail the core (self-intersecting,
-zero area) is refused when tagging.
+zero area) is refused when tagging. An object that already carries a U-BOT layout record (a slab
+boundary), a box record or unreadable U-BOT data is refused with its handle, so nothing is
+overwritten; an existing zone can be re-typed. Re-tagging with an identical record writes nothing
+and adds no undo step.
 
 Zone types: `exclusion`, `solid`, `column`, `wall` and `opening` keep boxes out (with the zone's
 clearance); `alt_product` changes valid cells inside it to the zone's product, for example low
@@ -111,8 +114,11 @@ problems, warnings, written?}`.
   ignored with the warning `ZONES_PARAM_IGNORED`.
 - **Existing boxes.** A tagged box belongs to the layout when its layout id is this layout's (or
   the copied boundary's earlier one) and its centre is inside the boundary. A box of the layout
-  moved by more than 1 mm or turned is kept and reported `MANUAL_MOVED` (info); `reset: true`
-  pulls it back. A deleted box's cell is filled again; draw an exclusion zone to keep it empty.
+  moved by more than 1 mm or turned is kept and reported `MANUAL_MOVED` (info), even when its old
+  cell is no longer valid; `reset: true` pulls it back, or removes it when its cell is no longer
+  valid. A deleted box's cell is filled again; draw an exclusion zone to keep it empty. Only boxes
+  within reach of the slab (its extent plus 10 000 mm plus the box diagonal) are read: boxes on
+  other floors cannot block a cell or belong to this layout, so they do not count towards the limit.
   Every other box — untagged `UB-1..UB-4` or `UBOT_<SKU>` references, boxes with malformed
   U-BOT data, other layouts' boxes, every cell of a tagged MINSERT — is only an obstacle and is
   never changed.
@@ -120,7 +126,10 @@ problems, warnings, written?}`.
   pitch only while product and rib stay the same). When the grid changes, the run resets and says
   `Grid changed: boxes will be re-laid on the new grid (manual moves are lost).` (warning
   `GRID_CHANGED`). An explicit `reset: false` keeps the old boxes where they are, and every one of
-  them then reads as moved by hand.
+  them then reads as moved by hand. The stored origin is in drawing coordinates, so moving a whole
+  filled floor (boundary and boxes) makes every box read `MANUAL_MOVED` until a run with
+  `reset: true`. A stored layout revision of 2 147 483 647 cannot be raised: the run is refused
+  with an error naming the boundary (a no-op run still passes).
 - **Copied floors.** A boundary whose stored handle is another object's is a copy: it gets a new
   layout id, and copied boxes inside it are moved to the new id. Boxes of the original floor
   outside the new boundary are not touched.
@@ -171,7 +180,8 @@ Prompts: `Drawing units` when needed, then `Insertion point`. JSON: `{at, textHe
 units?}` → `{handle, rows, total}`. Inserts a TABLE in the current space and table style: title
 `THỐNG KÊ HỘP UBOT`, header `Loại hộp | Số lượng (hộp)`, one row per counted box type and `Tổng`.
 These strings are drawing content in the LPC sheet convention and are not translated. Default
-text height is 250 mm in drawing units. With nothing to count it writes nothing.
+text height is 250 mm in drawing units. With nothing to count it fails with `no U-BOT boxes to
+count` and writes nothing.
 
 ### UBCHECK
 
@@ -190,7 +200,7 @@ then left to right; `handle` and `at` locate them. Each bad object is reported o
 | `IN_ZONE` | error | A box touches a keep-out zone |
 | `CLEARANCE` | error, or warning within 0.5 mm | A box is closer than the clearance to a slab edge, hole or zone |
 | `STALE_LAYOUT` | warning | Slab, holes or zones changed since the layout was filled |
-| `LEGACY_BLOCK` | warning | A legacy-mapped block without U-BOT data |
+| `LEGACY_BLOCK` | warning | A legacy-mapped block or a `UBOT_<SKU>` reference without U-BOT data |
 | `MANUAL_MOVED` | info | A layout's box was moved by hand from its grid cell |
 
 ## Units
@@ -277,8 +287,9 @@ Errors are explicit; nothing is cut silently.
 | Limit | Value |
 | --- | --- |
 | Grid cells tried per fill | 100 000 |
-| Boundary, hole and zone vertices after arc subdivision | 20 000 |
-| Existing boxes per fill (MINSERT cells counted) | 100 000 |
+| Boundary, hole and zone vertices after arc subdivision, per fill | 20 000 |
+| Same vertices in UBCHECK, over all layouts and the zones near them together | 20 000 |
+| Existing boxes within reach of the slab per fill (MINSERT cells counted) | 100 000 |
 | Boxes checked by UBCHECK | 100 000 |
 | Edge, exclusion or zone clearance | 0–10 000 mm |
 | Block nesting followed by counts | 32 levels |
@@ -349,7 +360,8 @@ blocks AutoCAD's interface until it answers, for at most 60 s.
   (default text height, or a boundary) require units. A plain UBCOUNT needs none.
 - **Interactive gaps.** UBCOUNT has no prompts: the boundary is JSON only. Interactive UBZONE does
   not ask for a clearance; `clearanceMm` is JSON only. Interactive UBFILL uses angle 0 and the
-  default origin unless the boundary has a stored grid. There is no four-step dialog.
+  default origin unless the boundary has a stored grid. Interactive UBFILL cannot reset manual
+  moves; use JSON `reset: true`. There is no four-step dialog.
 - **Shapes.** Slab boundaries are closed LWPOLYLINEs; zones are closed LWPOLYLINEs or CIRCLEs. HATCH,
   ELLIPSE, SPLINE and column blocks are not zones yet; trace them with BOUNDARY. A tilted OCS
   polyline is not a ring. A box reference with a flipped extrusion is read in WCS coordinates.

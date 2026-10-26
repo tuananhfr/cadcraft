@@ -393,6 +393,46 @@ fn ubzone_rejects_open_polyline() {
 }
 
 #[test]
+fn ubzone_refuses_layout_box_and_malformed_records() {
+    let mut d = Drawing::new_metric();
+    d.header.set_i64("INSUNITS", 4);
+    let (c, k) = tagged(square(0.0, 0.0, 6600.0), Some(&layout_tag()));
+    let boundary = d.add(&Space::Model, c, k).unwrap();
+    let (c, k) = tagged(square(8000.0, 0.0, 520.0), Some(&instance_tag()));
+    let boxed = d.add(&Space::Model, c, k).unwrap();
+    let broken = Common { xdata: vec![tag(1001, APP), tag(1000, "ubot/1"), tag(1000, "Q")], ..Common::default() };
+    let malformed = d.add(&Space::Model, broken.clone(), square(9000.0, 0.0, 400.0)).unwrap();
+    let plain = d.add(&Space::Model, Common::default(), square(10000.0, 0.0, 400.0)).unwrap();
+    let mut s = metric_session(d);
+    let doc = s.state().unwrap().doc.clone();
+    let before = undo_len(&s);
+
+    let err = s.execute("ubzone", &json!({ "handles": [plain.hex(), boundary.hex()], "type": "exclusion" })).unwrap_err().to_string();
+    assert!(err.contains(&boundary.hex()) && err.contains("layout"), "{err}");
+    let err = s.execute("ubzone", &json!({ "handles": [boxed.hex()], "type": "column" })).unwrap_err().to_string();
+    assert!(err.contains(&boxed.hex()) && err.contains("box"), "{err}");
+    let err = s.execute("ubzone", &json!({ "handles": [malformed.hex()], "type": "column" })).unwrap_err().to_string();
+    assert!(err.contains(&malformed.hex()) && err.contains("unreadable"), "{err}");
+    assert!(Arc::ptr_eq(&doc, &s.state().unwrap().doc), "nothing was written");
+    assert_eq!(undo_len(&s), before);
+    assert_eq!(read_tag(&s, boundary), Some(Ok(layout_tag())));
+    assert_eq!(s.doc().unwrap().entity(malformed).unwrap().common.xdata, broken.xdata);
+    assert_eq!(read_tag(&s, plain), None);
+
+    // An identical re-tag is a no-op: no undo step, same drawing; a changed one writes again.
+    let first = s.execute("ubzone", &json!({ "handles": [plain.hex()], "type": "column", "clearanceMm": 12.5 })).unwrap();
+    assert_eq!(undo_len(&s), before + 1);
+    let doc = s.state().unwrap().doc.clone();
+    let again = s.execute("ubzone", &json!({ "handles": [plain.hex()], "type": "column", "clearanceMm": 12.5 })).unwrap();
+    assert_eq!(again, first, "the same zones are reported");
+    assert!(Arc::ptr_eq(&doc, &s.state().unwrap().doc), "an identical re-tag writes nothing");
+    assert_eq!(undo_len(&s), before + 1);
+    s.execute("ubzone", &json!({ "handles": [plain.hex()], "type": "wall", "clearanceMm": 12.5 })).unwrap();
+    assert_eq!(undo_len(&s), before + 2);
+    assert!(matches!(read_tag(&s, plain), Some(Ok(UbotTag::Zone { zone_type: ZoneType::Wall, .. }))));
+}
+
+#[test]
 fn ubot_xdata_survives_dxf_round_trip() {
     set_io(IoHooks {
         read: |bytes, _| cadcraft_io::read_dxf(bytes).map_err(|e| e.to_string()),

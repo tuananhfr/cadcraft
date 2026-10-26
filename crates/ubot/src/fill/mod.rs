@@ -15,6 +15,7 @@ use crate::hash::input_hash;
 use crate::model::{ApprovalStatus, Product, RulePack};
 use classify::{Domain, Obstacles, Role};
 pub(crate) use classify::{NEAR_BAND_MM, footprints_overlap};
+pub use diff::ExistingReach;
 use diff::Placer;
 pub(crate) use diff::{MOVE_TOL_MM, TURN_TOL_DEG, angle_gap_deg, handle_key, parse_cell};
 pub(crate) use grid::cell_center_world;
@@ -513,7 +514,8 @@ pub fn fill(req: &FillRequest, catalog: &Catalog) -> Result<FillResult, UbotErro
         GridSpec { angle_deg: req.angle_deg, origin_mm, size_mm: Vec2::new(main.width_mm, main.length_mm), rib_mm: s.rib_mm, pitch_mm: s.pitch_mm };
     let grid = Grid::new(&boundary.points, &spec)?;
     let ids = [Some(req.layout_id.as_str()), req.previous_layout_id.as_deref()];
-    let (owned, others) = diff::split_existing(&req.existing, ids, catalog, main, req.unit_scale, boundary)?;
+    let near = ExistingReach::new(req.unit_scale, &req.boundary, main)?;
+    let (owned, others) = diff::split_existing(&req.existing, ids, catalog, main, (req.unit_scale, &near), boundary)?;
     let obstacles = Obstacles::new(&grid, others)?;
     let cells = classify::classify(&grid, &domain, &obstacles, main)?;
 

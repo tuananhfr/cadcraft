@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use super::read::zone_ring_of;
 use super::units::unit_scale;
 use super::write::{commit, set_tag};
-use super::xdata::{UbotTag, parse_zone_type, zone_type_name};
+use super::xdata::{self, UbotTag, parse_zone_type, zone_type_name};
 use crate::cmd::machines::{SelOutcome, SelectPhase};
 use crate::cmd::{CommandSpec, bad, str_param, targets};
 use crate::{Accept, Input, Interactive, Prompt, Result, Session, Step};
@@ -83,21 +83,39 @@ fn run(s: &mut Session, p: &Value) -> Result<Value> {
             if crate::cmd::curves::is_locked(s, h) {
                 return Err(bad(CMD, format!("{} is on a locked layer", h.hex())));
             }
+            let current = existing_zone(h, xdata::read(&e.common))?;
             let ring = zone_ring_of(e).ok_or_else(|| bad(CMD, not_a_zone(h, &e.kind)))?;
             ring_from_input(&ring, scale, CHECK_TOL_MM).map_err(|err| bad(CMD, format!("{}: {err}", h.hex())))?;
-            planned.push((h, zone_id(h, &ring)));
+            planned.push((h, zone_id(h, &ring), current));
         }
     }
     let tag_for = |id: &str| UbotTag::Zone { zone_id: id.to_string(), zone_type, clearance_mm, alt_product_id: alt_product_id.clone() };
-    let zones: Vec<Value> = planned.iter().map(|(h, id)| json!({"handle": h.hex(), "zoneId": id})).collect();
+    let zones: Vec<Value> = planned.iter().map(|(h, id, _)| json!({"handle": h.hex(), "zoneId": id})).collect();
+    if planned.iter().all(|(_, id, current)| current.as_ref() == Some(&tag_for(id))) {
+        s.echo(format!("{} zone(s) already tagged as {}; nothing to change.", planned.len(), zone_type_name(zone_type)));
+        return Ok(json!({ "zones": zones }));
+    }
     commit(s, |d| {
-        for (h, id) in &planned {
+        for (h, id, _) in &planned {
             set_tag(d, *h, &tag_for(id))?;
         }
         Ok(Value::Null)
     })?;
     s.echo(format!("{} zone(s) tagged as {}.", planned.len(), zone_type_name(zone_type)));
     Ok(json!({ "zones": zones }))
+}
+
+/// The object's zone record, if any. Any other U-BOT record, readable or not, is refused: overwriting it loses data.
+fn existing_zone(h: Handle, record: Option<std::result::Result<UbotTag, String>>) -> Result<Option<UbotTag>> {
+    match record {
+        None => Ok(None),
+        Some(Ok(zone @ UbotTag::Zone { .. })) => Ok(Some(zone)),
+        Some(Ok(UbotTag::Layout { .. })) => {
+            Err(bad(CMD, format!("{} carries a U-BOT layout record (a slab boundary); it cannot become a zone", h.hex())))
+        }
+        Some(Ok(UbotTag::Instance { .. })) => Err(bad(CMD, format!("{} carries a U-BOT box record; it cannot become a zone", h.hex()))),
+        Some(Err(why)) => Err(bad(CMD, format!("{} carries unreadable U-BOT data ({why}); it is not overwritten", h.hex()))),
+    }
 }
 
 fn not_a_zone(h: Handle, kind: &EntityKind) -> String {

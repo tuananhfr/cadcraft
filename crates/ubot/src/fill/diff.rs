@@ -3,14 +3,14 @@
 
 use std::collections::{HashMap, HashSet};
 
-use cadcraft_geom::Vec2;
+use cadcraft_geom::{Bounds2, Vec2};
 
 use super::classify::{Cell, Obstacles};
 use super::grid::{Budget, Grid, Scanline, inside};
-use super::{Candidate, ExistingInstance, Placement, Reason, Status, UpdatePlacement};
+use super::{Candidate, ExistingInstance, Placement, Reason, Status, UpdatePlacement, ZoneReach};
 use crate::catalog::Catalog;
 use crate::error::UbotError;
-use crate::geometry::{Footprint, Ring, footprint};
+use crate::geometry::{Footprint, Ring, RingInput, footprint};
 use crate::model::{BlockMapping, Product};
 use crate::placement::{center_from_insert_xy, insert_from_center, relative_scale};
 
@@ -78,45 +78,89 @@ fn bad_existing(e: &ExistingInstance, what: &str) -> UbotError {
     UbotError::BadInput(format!("existing box {}: {what}", e.handle))
 }
 
-/// Splits existing boxes into this layout's own (by layout id, centre inside the boundary and a cell id) and obstacles.
+/// Where the core places an existing box: footprint centre (mm), footprint angle and footprint.
+fn locate(e: &ExistingInstance, mapping: Option<&BlockMapping>, size: Vec2, unit_scale: f64) -> Result<(Vec2, f64, Footprint), UbotError> {
+    if !(e.insert.iter().all(|c| c.is_finite()) && e.rotation_deg.is_finite()) {
+        return Err(bad_existing(e, "insert and rotation must be finite"));
+    }
+    let scale_y = e.scale_y.unwrap_or(e.scale);
+    if !(e.scale.is_finite() && e.scale != 0.0 && scale_y.is_finite() && scale_y != 0.0) {
+        return Err(bad_existing(e, "scale must be finite and non-zero"));
+    }
+    let insert_mm = Vec2::new(e.insert[0], e.insert[1]) * unit_scale;
+    // Per-axis signed scales: a mirrored box flips its anchor offset with it.
+    let rel = [relative_scale(mapping, e.scale, unit_scale), relative_scale(mapping, scale_y, unit_scale)];
+    let center_mm = center_from_insert_xy(mapping, size.y, insert_mm, e.rotation_deg, rel);
+    let angle_deg = e.rotation_deg - mapping.map_or(0.0, |m| m.rotation_offset_deg);
+    if !(center_mm.is_finite() && angle_deg.is_finite()) {
+        return Err(bad_existing(e, "position overflows in mm"));
+    }
+    Ok((center_mm, angle_deg, footprint(center_mm, size.x, size.y, angle_deg)))
+}
+
+/// Legacy blocks carry no product; they are the size of the box being laid out.
+fn size_of(e: &ExistingInstance, catalog: &Catalog, main: &Product) -> Vec2 {
+    e.product_id.as_deref().and_then(|id| catalog.product(id)).map_or(main, |p| p).size()
+}
+
+/// Which existing boxes can touch a slab's cells: those whose footprint meets the [`ZoneReach`] of the boundary grown
+/// by the laid box's diagonal. Spec §6 caps existing boxes per run of a slab, so only these count and are used.
+#[derive(Debug, Clone, Copy)]
+pub struct ExistingReach {
+    reach: Bounds2,
+}
+
+impl ExistingReach {
+    pub fn new(unit_scale: f64, boundary: &RingInput, main: &Product) -> Result<Self, UbotError> {
+        let diagonal = main.width_mm.hypot(main.length_mm);
+        Ok(ExistingReach { reach: ZoneReach::new(unit_scale, boundary)?.bounds().expand(diagonal) })
+    }
+
+    /// Whether any of `boxes` can reach the slab. Pass one box, or the four corner cells of a MINSERT: every other
+    /// cell's footprint lies within theirs. A box the core cannot place is an error, as in [`crate::fill`].
+    pub fn reaches(&self, boxes: &[ExistingInstance], catalog: &Catalog, main: &Product, unit_scale: f64) -> Result<bool, UbotError> {
+        let mut hull = Bounds2::default();
+        for e in boxes {
+            let (_, _, fp) = locate(e, catalog.mapping_for_block(&e.block_name), size_of(e, catalog, main), unit_scale)?;
+            hull = hull.union(&Bounds2::from_points(fp.corners));
+        }
+        Ok(self.meets(&hull))
+    }
+
+    fn meets(&self, bounds: &Bounds2) -> bool {
+        !bounds.is_empty() && bounds.intersects(&self.reach)
+    }
+}
+
+/// Splits the existing boxes within `reach` into this layout's own (by layout id, centre inside the boundary and a cell
+/// id) and obstacles; boxes beyond it can neither block a cell nor be this layout's, so they are left out.
 pub(super) fn split_existing<'e>(
     existing: &'e [ExistingInstance],
     layout_ids: [Option<&str>; 2],
     catalog: &Catalog,
     main: &Product,
-    unit_scale: f64,
+    (unit_scale, reach): (f64, &ExistingReach),
     boundary: &Ring,
 ) -> Result<(Vec<Owned<'e>>, Vec<Footprint>), UbotError> {
-    if existing.len() > MAX_EXISTING {
-        return Err(UbotError::Limit(format!("{} existing boxes, the limit is {MAX_EXISTING}", existing.len())));
-    }
     let mut blocks: HashMap<String, Option<&BlockMapping>> = HashMap::new();
     let mut sizes: HashMap<&str, Vec2> = HashMap::new();
     let mut pending = Vec::new();
     let mut obstacles = Vec::new();
+    let mut counted = 0usize;
     for e in existing {
-        if !(e.insert.iter().all(|c| c.is_finite()) && e.rotation_deg.is_finite()) {
-            return Err(bad_existing(e, "insert and rotation must be finite"));
-        }
-        let scale_y = e.scale_y.unwrap_or(e.scale);
-        if !(e.scale.is_finite() && e.scale != 0.0 && scale_y.is_finite() && scale_y != 0.0) {
-            return Err(bad_existing(e, "scale must be finite and non-zero"));
-        }
         let mapping = *blocks.entry(e.block_name.to_ascii_lowercase()).or_insert_with(|| catalog.mapping_for_block(&e.block_name));
-        // Legacy blocks carry no product; they are the size of the box being laid out.
         let size = match e.product_id.as_deref() {
-            Some(id) => *sizes.entry(id).or_insert_with(|| catalog.product(id).map_or(main, |p| p).size()),
+            Some(id) => *sizes.entry(id).or_insert_with(|| size_of(e, catalog, main)),
             None => main.size(),
         };
-        let insert_mm = Vec2::new(e.insert[0], e.insert[1]) * unit_scale;
-        // Per-axis signed scales: a mirrored box flips its anchor offset with it.
-        let rel = [relative_scale(mapping, e.scale, unit_scale), relative_scale(mapping, scale_y, unit_scale)];
-        let center_mm = center_from_insert_xy(mapping, size.y, insert_mm, e.rotation_deg, rel);
-        let angle_deg = e.rotation_deg - mapping.map_or(0.0, |m| m.rotation_offset_deg);
-        if !(center_mm.is_finite() && angle_deg.is_finite()) {
-            return Err(bad_existing(e, "position overflows in mm"));
+        let (center_mm, angle_deg, fp) = locate(e, mapping, size, unit_scale)?;
+        if !reach.meets(&Bounds2::from_points(fp.corners)) {
+            continue;
         }
-        let fp = footprint(center_mm, size.x, size.y, angle_deg);
+        counted += 1;
+        if counted > MAX_EXISTING {
+            return Err(UbotError::Limit(format!("more than {MAX_EXISTING} existing boxes near the slab, the limit is {MAX_EXISTING}")));
+        }
         let ours = e.layout_id.as_deref().is_some_and(|l| layout_ids.contains(&Some(l)));
         match e.instance_id.as_deref().and_then(parse_cell) {
             Some(cell) if ours => pending.push(Owned { ex: e, cell, center_mm, angle_deg, fp }),
@@ -188,24 +232,36 @@ pub(super) fn diff(cells: &[Cell<'_>], mut owned: Vec<Owned<'_>>, reset: bool, p
             removed.push((o.cell, o.ex));
             continue;
         }
-        let Some(cell) = by_cell.get(&o.cell).filter(|c| matches!(c.status, Status::Valid | Status::Uncertain)) else {
-            removed.push((o.cell, o.ex));
+        let judged = by_cell.get(&o.cell).copied();
+        let spot_mm = judged.map_or_else(|| grid.to_world(grid.center(o.cell[0], o.cell[1])), |c| c.center_mm);
+        let moved = o.center_mm.dist(spot_mm) > MOVE_TOL_MM || angle_gap_deg(o.angle_deg, grid.angle_deg) >= TURN_TOL_DEG;
+        let usable = judged.filter(|c| matches!(c.status, Status::Valid | Status::Uncertain));
+        // Spec §14.1: a box moved by hand is kept even when its old cell is no longer valid; only `reset` lays it again.
+        let hand_placed = moved && !reset;
+        if hand_placed {
+            let product_id = judged.map(|c| c.product.id.clone()).or_else(|| o.ex.product_id.clone()).unwrap_or_default();
+            out.moved.push(Candidate {
+                cell: o.cell,
+                center: placer.drawing(spot_mm),
+                status: Status::Info,
+                reasons: vec![Reason::ManualMoved],
+                product_id,
+            });
+            left_in_place.push(o.fp);
+        }
+        let Some(cell) = usable else {
+            if hand_placed {
+                out.keep.push(o.ex.handle.clone());
+            } else {
+                removed.push((o.cell, o.ex));
+            }
             continue;
         };
         let target = placer.place(cell.cell, cell.center_mm, cell.product, grid.angle_deg);
-        let moved = o.center_mm.dist(cell.center_mm) > MOVE_TOL_MM || angle_gap_deg(o.angle_deg, grid.angle_deg) >= TURN_TOL_DEG;
         let same = o.ex.product_id.as_deref() == Some(cell.product.id.as_str()) && o.ex.block_name.eq_ignore_ascii_case(&target.block_name);
         let current = o.ex.instance_id.as_deref() == Some(target.instance_id.as_str());
         let handle = o.ex.handle.clone();
-        if moved && !reset {
-            out.moved.push(Candidate {
-                cell: cell.cell,
-                center: placer.drawing(cell.center_mm),
-                status: Status::Info,
-                reasons: vec![Reason::ManualMoved],
-                product_id: cell.product.id.clone(),
-            });
-            left_in_place.push(o.fp);
+        if hand_placed {
             if same && current {
                 out.keep.push(handle);
             } else {
