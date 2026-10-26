@@ -110,9 +110,54 @@
           ]
         },
         {
+          "id": "ubot",
+          "label": "U-BOT",
+          "order": 1,
+          "visible": true,
+          "contextual": null,
+          "groups": [
+            {
+              "id": "layout",
+              "label": "Box Layout",
+              "commands": [
+                "ubfill",
+                "ubzone"
+              ],
+              "large": 2
+            },
+            {
+              "id": "replace",
+              "label": "Replace Boxes",
+              "commands": [
+                "ubreplace",
+                "tubab"
+              ],
+              "large": 2
+            },
+            {
+              "id": "quantity",
+              "label": "Box Quantities",
+              "commands": [
+                "ubcount",
+                "ublegend"
+              ],
+              "large": 2
+            },
+            {
+              "id": "check",
+              "label": "Check",
+              "commands": [
+                "ubcheck",
+                "ublib"
+              ],
+              "large": 2
+            }
+          ]
+        },
+        {
           "id": "draw",
           "label": "Draw",
-          "order": 1,
+          "order": 2,
           "visible": true,
           "contextual": null,
           "groups": [
@@ -167,7 +212,7 @@
         {
           "id": "modify",
           "label": "Modify",
-          "order": 2,
+          "order": 3,
           "visible": true,
           "contextual": null,
           "groups": [
@@ -223,7 +268,7 @@
         {
           "id": "annotate",
           "label": "Annotate",
-          "order": 3,
+          "order": 4,
           "visible": true,
           "contextual": null,
           "groups": [
@@ -272,7 +317,7 @@
         {
           "id": "layers",
           "label": "Layers",
-          "order": 4,
+          "order": 5,
           "visible": true,
           "contextual": null,
           "groups": [
@@ -318,7 +363,7 @@
         {
           "id": "insert",
           "label": "Insert",
-          "order": 5,
+          "order": 6,
           "visible": true,
           "contextual": null,
           "groups": [
@@ -360,7 +405,7 @@
         {
           "id": "properties",
           "label": "Properties",
-          "order": 6,
+          "order": 7,
           "visible": true,
           "contextual": null,
           "groups": [
@@ -391,7 +436,7 @@
         {
           "id": "view",
           "label": "View",
-          "order": 7,
+          "order": 8,
           "visible": true,
           "contextual": null,
           "groups": [
@@ -434,7 +479,7 @@
         {
           "id": "layout",
           "label": "Layout",
-          "order": 8,
+          "order": 9,
           "visible": true,
           "contextual": null,
           "groups": [
@@ -478,7 +523,7 @@
         {
           "id": "output",
           "label": "Output",
-          "order": 9,
+          "order": 10,
           "visible": true,
           "contextual": null,
           "groups": [
@@ -500,7 +545,7 @@
         {
           "id": "tools",
           "label": "Utilities",
-          "order": 10,
+          "order": 11,
           "visible": true,
           "contextual": null,
           "groups": [

@@ -153,6 +153,14 @@ pub enum Icon {
     Compare,
     Layout,
     Library,
+    UbotFill,
+    UbotZone,
+    UbotReplace,
+    UbotSwap,
+    UbotCount,
+    UbotLegend,
+    UbotCheck,
+    UbotCatalog,
 }
 
 struct Pen<'a> {
@@ -962,6 +970,63 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, dim: bool) {
             pen.rect(3.0, 5.0, 5.0, 15.0, b);
             pen.rect(9.0, 5.0, 5.0, 15.0, b);
             pen.poly(&[(15.0, 6.0), (19.5, 5.0), (22.0, 19.0), (17.5, 20.0)], true, a);
+        }
+        // U-BOT boxes are filled squares so they read as boxes, not as the outlined copies of ArrayRect.
+        UbotFill => {
+            pen.poly(&[(3.0, 4.0), (21.0, 4.0), (21.0, 20.0), (9.0, 20.0), (9.0, 15.0), (3.0, 15.0)], true, b);
+            for (x, y) in [(4.5, 5.5), (10.0, 5.5), (15.5, 5.5), (4.5, 10.5), (10.0, 10.5), (15.5, 10.5), (10.0, 15.5), (15.5, 15.5)] {
+                pen.fill_rect(x, y, 3.5, 3.5, a);
+            }
+        }
+        UbotZone => {
+            pen.rect(3.0, 3.0, 18.0, 18.0, b);
+            pen.rect(8.0, 8.0, 8.0, 8.0, a);
+            pen.la(8.0, 12.0, 12.0, 16.0);
+            pen.la(8.0, 8.0, 16.0, 16.0);
+            pen.la(12.0, 8.0, 16.0, 12.0);
+        }
+        UbotReplace => {
+            pen.rect(3.0, 11.0, 8.0, 8.0, b);
+            pen.fill_rect(13.0, 5.0, 8.0, 8.0, a);
+            pen.poly(&[(7.0, 9.0), (7.0, 4.0), (10.0, 4.0)], false, a);
+            pen.arrow_tip(12.0, 4.0, 1.0, 0.0, a);
+        }
+        // The orange dot is the kept insertion point: TUBAB swaps the block, not its placement.
+        UbotSwap => {
+            pen.la(4.0, 4.0, 17.5, 4.0);
+            pen.arrow_tip(20.0, 4.0, 1.0, 0.0, a);
+            pen.la(6.5, 8.0, 20.0, 8.0);
+            pen.arrow_tip(4.0, 8.0, -1.0, 0.0, a);
+            pen.rect(6.0, 11.0, 12.0, 10.0, b);
+            pen.dot(12.0, 16.0);
+        }
+        UbotCount => {
+            for y in [4.0, 10.0, 16.0] {
+                pen.fill_rect(3.0, y, 4.0, 4.0, b);
+            }
+            pen.poly(&[(20.0, 5.0), (11.0, 5.0), (16.0, 12.0), (11.0, 19.0), (20.0, 19.0)], false, a);
+        }
+        UbotLegend => {
+            pen.rect(3.0, 4.0, 18.0, 16.0, b);
+            pen.l(3.0, 9.0, 21.0, 9.0);
+            pen.l(3.0, 14.5, 21.0, 14.5);
+            pen.l(10.0, 9.0, 10.0, 20.0);
+            pen.l(6.0, 6.5, 18.0, 6.5);
+            pen.fill_rect(5.0, 10.5, 3.0, 3.0, a);
+            pen.fill_rect(5.0, 16.0, 3.0, 3.0, a);
+            pen.la(12.5, 11.75, 18.5, 11.75);
+            pen.la(12.5, 17.25, 16.0, 17.25);
+        }
+        UbotCheck => {
+            pen.fill_rect(3.0, 4.0, 11.0, 11.0, b);
+            pen.poly(&[(9.0, 15.0), (13.0, 19.5), (21.0, 9.0)], false, a);
+        }
+        UbotCatalog => {
+            pen.rect(5.0, 3.0, 14.0, 18.0, b);
+            pen.l(8.0, 3.0, 8.0, 21.0);
+            pen.fill_rect(11.0, 6.5, 5.0, 5.0, a);
+            pen.l(11.0, 15.0, 16.0, 15.0);
+            pen.l(11.0, 17.5, 14.5, 17.5);
         }
     }
 }

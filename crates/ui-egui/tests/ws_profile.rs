@@ -301,7 +301,7 @@ fn ribbon_presets_carry_the_expected_tabs() {
         let expected: &[&str] = if *id == "CAD_MANAGER" {
             &["Home", "Standards", "Fonts", "Xref", "Plot"]
         } else if *id == "UBOTBUILD" {
-            &["Home", "Draw", "Modify", "Annotate", "Layers", "Insert", "Properties", "View", "Layout", "Output", "Utilities"]
+            &["Home", "U-BOT", "Draw", "Modify", "Annotate", "Layers", "Insert", "Properties", "View", "Layout", "Output", "Utilities"]
         } else {
             &["Home", "Insert", "Annotate", "Layers", "View", "Layout", "Tools", "Output"]
         };

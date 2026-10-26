@@ -4020,3 +4020,6 @@ echo	UBLEGEND: table of {rows} box types, {total} boxes.	UBLEGEND: таблиц�
 echo	{code} {handle} at {x},{y}: {message}	{code} {handle} у точці {x},{y}: {message}
 	UBCHECK: no issues.	UBCHECK: проблем немає.
 echo	UBCHECK: {count} issues: {errors} errors, {warnings} warnings, {info} info.	UBCHECK: проблем: {count}; помилок: {errors}, попереджень: {warnings}, відомостей: {info}.
+# U-BOT toolkit: ribbon tab groups (Replace Boxes, Check and U-BOT reuse the rows above)
+ribbon	Box Layout	Розкладка
+ribbon	Box Quantities	Обсяги

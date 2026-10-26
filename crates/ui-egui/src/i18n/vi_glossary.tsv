@@ -337,3 +337,5 @@ menu	Help	Trợ giúp
 	Changed in another tab	Đã thay đổi ở thẻ khác	
 ribbon	Standards	Tiêu chuẩn	CAD Manager tab and group
 ribbon	Fonts	Phông chữ	CAD Manager tab and group
+ribbon	Box Layout	Bố trí	UbotBuild U-BOT tab group (UBFILL, UBZONE); the Layout tab stays Bố cục in
+ribbon	Box Quantities	Thống kê	UbotBuild U-BOT tab group (UBCOUNT, UBLEGEND)

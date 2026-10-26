@@ -60,6 +60,30 @@ pub(crate) fn fallback(id: &str) -> Option<Icon> {
         "hatchedit" | "hatchpick" | "hatchtoback" => Hatch,
         "refedit" | "bedit" => BlockEdit,
         "attsync" | "battman" => AttDef,
+        "ubfill" => UbotFill,
+        "ubzone" => UbotZone,
+        "ubreplace" => UbotReplace,
+        "tubab" => UbotSwap,
+        "ubcount" => UbotCount,
+        "ublegend" => UbotLegend,
+        "ubcheck" => UbotCheck,
+        "ublib" => UbotCatalog,
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fallback;
+
+    #[test]
+    fn every_ubot_command_has_its_own_icon() {
+        let ids = ["ubfill", "ubzone", "ubreplace", "tubab", "ubcount", "ublegend", "ubcheck", "ublib"];
+        let icons: Vec<_> = ids.iter().map(|id| fallback(id)).collect();
+        assert!(icons.iter().all(Option::is_some), "{icons:?}");
+        let distinct: std::collections::BTreeSet<_> = icons.iter().map(|icon| format!("{icon:?}")).collect();
+        assert_eq!(distinct.len(), ids.len());
+        let shared = ["count", "countlist", "audit", "list", "dataextraction", "array", "hatchedit", "blockreplace", "insert"];
+        assert!(shared.iter().filter_map(|id| fallback(id)).all(|icon| !icons.contains(&Some(icon))));
+    }
 }

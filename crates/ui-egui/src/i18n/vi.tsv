@@ -4607,3 +4607,6 @@ echo	UBLEGEND: table of {rows} box types, {total} boxes.	UBLEGEND: bảng {rows}
 echo	{code} {handle} at {x},{y}: {message}	{code} {handle} tại {x},{y}: {message}
 	UBCHECK: no issues.	UBCHECK: không có vấn đề nào.
 echo	UBCHECK: {count} issues: {errors} errors, {warnings} warnings, {info} info.	UBCHECK: {count} vấn đề: {errors} lỗi, {warnings} cảnh báo, {info} thông tin.
+# U-BOT toolkit: ribbon tab groups (Replace Boxes, Check and U-BOT reuse the rows above)
+ribbon	Box Layout	Bố trí
+ribbon	Box Quantities	Thống kê
