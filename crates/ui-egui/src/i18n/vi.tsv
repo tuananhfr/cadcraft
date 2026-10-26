@@ -4453,3 +4453,10 @@ ribbon	Shapes	Hình
 	mode must be kcs	mode phải là kcs
 echo	KCS scan exceeds {MAX_SCAN_FRAMES} plot areas	kết quả quét KCS vượt quá {MAX_SCAN_FRAMES} vùng in
 echo	exclude_layers exceeds {MAX_EXCLUDED_LAYERS} layers	exclude_layers vượt quá {MAX_EXCLUDED_LAYERS} lớp
+
+# Xref files picked on the web.
+	Choose file…	Chọn file…
+	Xref not loaded: {names} — open the External References palette (XREF) and click Choose file…	Xref chưa nạp: {names} — mở bảng External References (XREF) và bấm Chọn file…
+	Choose file: the drawing with xref "{name}" is no longer open	Chọn file: bản vẽ chứa tham chiếu ngoài "{name}" không còn mở
+	only DWG and DXF files can be attached	chỉ có thể đính kèm tệp DWG và DXF
+echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are not loaded	chưa tải tham chiếu ngoài lồng "{name}": {saved}: không tải các tham chiếu ngoài của tệp đã chọn

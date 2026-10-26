@@ -358,6 +358,11 @@ mod web {
                             picker.pick_for(purpose);
                             None
                         }));
+                        // Saved xref paths name files this page can't read: the user picks each one.
+                        let picker = inbox.clone();
+                        app.services.pick_xref_file = Some(Box::new(move |doc, name| {
+                            picker.pick_for(crate::upload_route::Purpose::Xref { doc, name: name.to_string() });
+                        }));
                         let host = app_bridge.map(|bridge| {
                             bridge.listen(inbox.clone());
                             bridge.post_ready();
