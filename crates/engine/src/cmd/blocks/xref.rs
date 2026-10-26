@@ -8,6 +8,7 @@
 
 mod bind;
 pub(crate) mod load;
+mod picked;
 
 use std::sync::Arc;
 

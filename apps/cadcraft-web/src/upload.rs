@@ -53,7 +53,7 @@ impl Inbox {
             .dyn_into::<web_sys::HtmlInputElement>()
             .map_err(|_| "could not create a file input".to_string())?;
         input.set_type("file");
-        input.set_accept(upload_route::accept(purpose));
+        input.set_accept(upload_route::accept(&purpose));
         input.set_id(INPUT_ID);
         input.set_attribute("style", "display:none").map_err(js_error)?;
         let (inbox, chosen) = (self.clone(), input.clone());
@@ -86,7 +86,7 @@ impl Inbox {
         // `File.size` is a whole number of bytes; anything else counts as too large.
         let size = file.size();
         let len = if size.is_finite() && size >= 0.0 { size as u64 } else { u64::MAX };
-        if let Some(e) = upload_route::size_error(purpose, &name, len) {
+        if let Some(e) = upload_route::size_error(&purpose, &name, len) {
             return self.push(Err(e));
         }
         let inbox = self.clone();
@@ -125,7 +125,8 @@ impl Inbox {
         for upload in self.files.take() {
             match upload {
                 Ok((Purpose::Drawing, name, bytes)) => app.open_bytes(&name, &bytes),
-                Ok((Purpose::Workspace, name, bytes)) => match upload_route::route(Purpose::Workspace, &name, &bytes) {
+                Ok((Purpose::Xref { doc, name: xref }, name, bytes)) => app.attach_xref_file(doc, &xref, &name, &bytes),
+                Ok((Purpose::Workspace, name, bytes)) => match upload_route::route(&Purpose::Workspace, &name, &bytes) {
                     Ok((_, params)) => {
                         if let Some(text) = params.get("text").and_then(serde_json::Value::as_str) {
                             app.open_import_preview(text.to_string());

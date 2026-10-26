@@ -83,7 +83,8 @@ transforms and dynamic visibility. A block/window sheet uses its exact outline;
 a layout sheet also checks the model AABB visible through each enabled viewport.
 `NotFound`, `Unresolved`, and `NotLoaded` references intersecting a sheet add BLOCK
 `XREF_MISSING`, naming the reference and its path. On the web this also explains that
-external references are not loaded on the web. `Unloaded` adds WARN `XREF_UNLOADED`.
+external references are not loaded on the web; picking the file with **Choose file…** in the
+External References palette loads it for that visit. `Unloaded` adds WARN `XREF_UNLOADED`.
 Missing references outside all sheets add plan-level INFO `XREF_MISSING_OUTSIDE`.
 The AABB rule needs cached geometry: an empty definition or zero-area bound cannot
 establish an overlap, so it is reported at plan level rather than assigned to a sheet.

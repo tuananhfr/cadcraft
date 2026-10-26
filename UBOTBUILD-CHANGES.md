@@ -265,3 +265,9 @@ Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded 
   which were not supplied; project-sample checks do not replace that baseline audit.
 - Attribute text was observed in legacy TCVN3 (.VnTime), rather than Unicode. These checks
   pin the reviewed attributes; they do not establish legacy text conversion or font parity.
+
+## Xref files on the web
+
+- The browser can't follow an xref's saved path, so a drawing opened on the web lost its xrefs (the LPC title-block frames are one). Now, after such a drawing opens, the command line names the missing xrefs ("Xref chưa nạp: … — mở bảng External References (XREF) và bấm Chọn file…"), and the External References palette shows **Choose file…** (vi "Chọn file…") for an xref that is Not Found or Unresolved. The picked DWG or DXF is loaded into that xref as a Reload from disk would load it: same parsing and binding (`xref/load.rs`), status Loaded, one "External References" undo step. A file of another name is accepted and the echo names it. A file that can't be loaded (not DWG/DXF, unreadable, over the size limits) leaves the drawing unchanged with a message. The picked file's own xrefs are not looked for; they stay unloaded and are listed on the command line.
+- Engine: `Session::reload_xref_from_bytes` (`cmd/blocks/xref/picked.rs`) runs through `Session::execute_as`, the body of `execute` with the command's JSON form swapped for a call that takes bytes, so no base64 copy of the file is made. UI: `Services::pick_xref_file` (set only by the web app; the desktop palette is unchanged) and `CadApp::attach_xref_file`. Web: upload purpose `Purpose::Xref`.
+- Nothing is kept: after a reload the file has to be picked again (IndexedDB storage is future work). Two xrefs that name the same file each need their own pick.

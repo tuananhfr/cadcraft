@@ -4441,3 +4441,9 @@ ribbon	Shapes	Hình
 	Tool Rail	Thanh Công cụ
 	Hide Tool Rail	Ẩn thanh Công cụ
 	Create a new drawing or continue recent work.	Tạo bản vẽ mới hoặc tiếp tục công việc gần đây.
+# Xref files picked on the web.
+	Choose file…	Chọn file…
+	Xref not loaded: {names} — open the External References palette (XREF) and click Choose file…	Xref chưa nạp: {names} — mở bảng External References (XREF) và bấm Chọn file…
+	Choose file: the drawing with xref "{name}" is no longer open	Chọn file: bản vẽ chứa tham chiếu ngoài "{name}" không còn mở
+	only DWG and DXF files can be attached	chỉ có thể đính kèm tệp DWG và DXF
+echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are not loaded	chưa tải tham chiếu ngoài lồng "{name}": {saved}: không tải các tham chiếu ngoài của tệp đã chọn

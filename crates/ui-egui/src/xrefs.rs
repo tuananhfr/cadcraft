@@ -1,7 +1,8 @@
 //! The External References palette: the drawing's xrefs with their status, type and path, and
-//! Attach, Reload, Unload, Detach, Bind, Path and Open. A thin view over the engine's XREF
-//! commands (`xref`, `-xref`, `xattach`, `xopen`): it reads the drawing and acts through
-//! [`CadApp::run`] / [`CadApp::start`].
+//! Attach, Reload, Unload, Detach, Bind, Path and Open, plus Choose file… where the host picks
+//! xref files ([`crate::xref_pick`]). A thin view over the engine's XREF commands (`xref`,
+//! `-xref`, `xattach`, `xopen`): it reads the drawing and acts through [`CadApp::run`] /
+//! [`CadApp::start`].
 
 use egui::RichText;
 use serde_json::{Value, json};
@@ -117,6 +118,8 @@ fn rows(app: &CadApp, ui: &egui::Ui) -> Vec<Row> {
 enum Act {
     Start(&'static str),
     Run(&'static str, Value),
+    /// Ask the host for the file of this xref.
+    PickFile(String),
 }
 
 /// The palette body.
@@ -178,7 +181,7 @@ pub fn section(app: &mut CadApp, ui: &mut egui::Ui) {
     if let Some(r) = selected.as_ref().and_then(|s| rows.iter().find(|r| &r.name == s)) {
         ui.add_space(8.0);
         ui.separator();
-        details(ui, r, path_id, &mut act);
+        details(ui, r, path_id, app.services.pick_xref_file.is_some(), &mut act);
     }
     match act {
         Some(Act::Start(id)) => app.start(id),
@@ -187,17 +190,21 @@ pub fn section(app: &mut CadApp, ui: &mut egui::Ui) {
                 app.set_status(e);
             }
         }
+        Some(Act::PickFile(name)) => crate::xref_pick::pick(app, &name),
         None => {}
     }
 }
 
-/// The selected xref: its actions, type and path.
-fn details(ui: &mut egui::Ui, r: &Row, path_id: egui::Id, act: &mut Option<Act>) {
+/// The selected xref: its actions, type and path; `can_pick` is whether the host can pick its file.
+fn details(ui: &mut egui::Ui, r: &Row, path_id: egui::Id, can_pick: bool, act: &mut Option<Act>) {
     let name = r.name.clone();
     let loaded = r.status == "Loaded" || r.status == "Unreferenced";
     let op = |option: &str| json!({ "option": option, "names": name });
     ui.horizontal_wrapped(|ui| {
         ui.add_space(8.0);
+        if crate::xref_pick::offers_file(can_pick, &r.status) && ui.button(crate::tl!("Choose file…")).clicked() {
+            *act = Some(Act::PickFile(name.clone()));
+        }
         if ui.button(crate::tl!("Reload")).clicked() {
             *act = Some(Act::Run("-xref", op("reload")));
         }

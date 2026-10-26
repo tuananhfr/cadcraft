@@ -3903,3 +3903,9 @@ ribbon	Shapes	Фігури
 	Tool Rail	Панель інструментів
 	Hide Tool Rail	Сховати панель інструментів
 	Create a new drawing or continue recent work.	Створіть нове креслення або продовжте недавню роботу.
+# Xref files picked on the web.
+	Choose file…	Вибрати файл…
+	Xref not loaded: {names} — open the External References palette (XREF) and click Choose file…	Зовнішнє посилання не завантажено: {names} — відкрийте палітру External References (XREF) і натисніть Вибрати файл…
+	Choose file: the drawing with xref "{name}" is no longer open	Вибрати файл: креслення із зовнішнім посиланням "{name}" уже закрито
+	only DWG and DXF files can be attached	можна приєднати лише файли DWG і DXF
+echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are not loaded	вкладене зовнішнє посилання "{name}" не завантажено: {saved}: зовнішні посилання вибраного файлу не завантажуються

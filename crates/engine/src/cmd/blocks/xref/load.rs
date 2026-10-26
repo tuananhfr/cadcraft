@@ -22,7 +22,6 @@ pub(crate) const MAX_XREF_OBJECTS: usize = 4_000_000;
 /// Most referenced files read in one go (nested xrefs included).
 const MAX_XREF_FILES: usize = 1000;
 /// Largest referenced file read.
-#[cfg(not(target_arch = "wasm32"))]
 const MAX_XREF_BYTES: u64 = 512 << 20;
 /// Most bytes read from referenced files in one go (nested xrefs included).
 #[cfg(not(target_arch = "wasm32"))]
@@ -219,7 +218,7 @@ pub(crate) fn find(path: &str, host: Option<&Path>, chosen: bool) -> Result<Path
 
 /// Read a drawing file through the host's io hooks, counting its bytes against the load's total.
 fn read(file: &Path, cx: &mut Ctx) -> Result<Drawing, String> {
-    let hooks = super::super::super::file::io().ok_or("file formats are not available in this build")?;
+    super::super::super::file::io().ok_or("file formats are not available in this build")?;
     #[cfg(not(target_arch = "wasm32"))]
     {
         use std::io::Read;
@@ -243,14 +242,41 @@ fn read(file: &Path, cx: &mut Ctx) -> Result<Drawing, String> {
         if n > limit {
             return Err(too_big());
         }
-        cx.bytes = cx.bytes.saturating_add(n);
-        (hooks.read)(&bytes, &file.to_string_lossy())
+        parse(&bytes, &file.to_string_lossy(), cx)
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let _ = (hooks, file, cx);
+        let _ = (file, cx);
         Err("files are not available on the web".into())
     }
+}
+
+/// Parse a drawing file's bytes through the host's io hooks, counting them against the load's total.
+fn parse(bytes: &[u8], file: &str, cx: &mut Ctx) -> Result<Drawing, String> {
+    let hooks = super::super::super::file::io().ok_or("file formats are not available in this build")?;
+    cx.bytes = cx.bytes.saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
+    (hooks.read)(bytes, file)
+}
+
+/// Parse a file the user picked for an xref, within the limits of a file read from disk.
+fn parse_picked(name: &str, bytes: &[u8], cx: &mut Ctx) -> Result<Drawing, String> {
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
+    if ext != "dwg" && ext != "dxf" {
+        return Err("only DWG and DXF files can be attached".into());
+    }
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_XREF_BYTES {
+        return Err(format!("the file is larger than {} MB", MAX_XREF_BYTES >> 20));
+    }
+    parse(bytes, name, cx)
+}
+
+/// Where the drawing an xref refers to comes from.
+#[derive(Clone, Copy)]
+enum Source<'a> {
+    /// The path saved in the xref (or just `chosen` by the user), read from disk.
+    Disk { chosen: bool },
+    /// A file the user picked, already read: on the web there is no disk to follow paths on.
+    Picked { name: &'a str, bytes: &'a [u8] },
 }
 
 /// Load every xref of `d` that isn't unloaded from the paths saved in it; `host` is the drawing's
@@ -275,7 +301,15 @@ pub(crate) fn load(d: &mut Drawing, name: &str, host: Option<&str>, chosen: bool
 /// [`load`] the xrefs `names` within one set of limits.
 pub(crate) fn load_each(d: &mut Drawing, names: &[String], host: Option<&str>, chosen: bool) -> Vec<Outcome> {
     let mut cx = Ctx::new(host);
-    names.iter().flat_map(|n| load_with(d, n, host, chosen, &mut cx)).collect()
+    names.iter().flat_map(|n| load_with(d, n, host, Source::Disk { chosen }, &mut cx)).collect()
+}
+
+/// Load (or reload) xref `name` of `d` from `bytes`, the contents of file `file` the user picked
+/// for it (whatever its name). The picked file's own xrefs are left unloaded and listed in the
+/// notes that follow the outcome.
+pub(crate) fn load_picked(d: &mut Drawing, name: &str, file: &str, bytes: &[u8], host: Option<&str>) -> Vec<Outcome> {
+    let mut cx = Ctx::new(host);
+    load_with(d, name, host, Source::Picked { name: file, bytes }, &mut cx)
 }
 
 impl Ctx {
@@ -285,21 +319,21 @@ impl Ctx {
     }
 }
 
-fn load_with(d: &mut Drawing, name: &str, host: Option<&str>, chosen: bool, cx: &mut Ctx) -> Vec<Outcome> {
+fn load_with(d: &mut Drawing, name: &str, host: Option<&str>, source: Source, cx: &mut Ctx) -> Vec<Outcome> {
     let host = host.map(Path::new).filter(|p| p.file_name().is_some());
-    let (status, detail) = load_in(d, name, host, chosen, cx, 0);
+    let (status, detail) = load_in(d, name, host, source, cx, 0);
     let key = d.block(name).map(|b| b.name.clone()).unwrap_or_else(|| name.to_string());
     let mut out = vec![Outcome { name: key, status, detail }];
     out.extend(cx.notes.drain(..).map(|n| Outcome { name: String::new(), status: XrefStatus::Unresolved, detail: n }));
     out
 }
 
-fn load_in(d: &mut Drawing, name: &str, host: Option<&Path>, chosen: bool, cx: &mut Ctx, depth: usize) -> (XrefStatus, String) {
+fn load_in(d: &mut Drawing, name: &str, host: Option<&Path>, source: Source, cx: &mut Ctx, depth: usize) -> (XrefStatus, String) {
     let Some(b) = d.block(name) else { return (XrefStatus::NotFound, "no such xref".into()) };
     let key = b.name.clone();
     let Some(path) = b.xref_path.clone() else { return (XrefStatus::Unresolved, "not an xref".into()) };
     clear(d, &key);
-    let (status, detail) = match fetch(&path, host, chosen, cx, depth) {
+    let (status, detail) = match fetch(&path, host, source, cx, depth) {
         Ok((x, file)) => match import(d, &key, &x, cx) {
             Ok(()) => (XrefStatus::Loaded, file.to_string_lossy().into_owned()),
             Err(e) => (XrefStatus::Unresolved, e),
@@ -315,11 +349,25 @@ fn load_in(d: &mut Drawing, name: &str, host: Option<&Path>, chosen: bool, cx: &
 }
 
 /// Read the drawing referenced as `path` and load its own attached xrefs into it.
-fn fetch(path: &str, host: Option<&Path>, chosen: bool, cx: &mut Ctx, depth: usize) -> Result<(Drawing, PathBuf), (XrefStatus, String)> {
+fn fetch(path: &str, host: Option<&Path>, source: Source, cx: &mut Ctx, depth: usize) -> Result<(Drawing, PathBuf), (XrefStatus, String)> {
     let unresolved = |m: &str| (XrefStatus::Unresolved, m.to_string());
     if depth >= MAX_BLOCK_DEPTH {
         return Err(unresolved("xrefs are nested too deeply"));
     }
+    let chosen = match source {
+        Source::Disk { chosen } => chosen,
+        Source::Picked { name, bytes } => {
+            cx.files += 1;
+            let x = parse_picked(name, bytes, cx).map_err(|e| (XrefStatus::Unresolved, format!("{name}: {e}")))?;
+            // A picked file has no folder its own xrefs could be looked for in.
+            let nested = x.blocks.values().filter(|b| b.xref_path.is_some() && !b.xref_overlay && !b.name.contains('|'));
+            for b in nested {
+                let (n, saved) = (&b.name, b.xref_path.as_deref().unwrap_or_default());
+                cx.notes.push(format!("nested xref \"{n}\" not loaded: {saved}: the xrefs of a picked file are not loaded"));
+            }
+            return Ok((x, PathBuf::from(name)));
+        }
+    };
     let file = find(path, host, chosen).map_err(|m| m.outcome(path))?;
     let canon = canonical(&file);
     if cx.chain.contains(&canon) {
@@ -334,7 +382,7 @@ fn fetch(path: &str, host: Option<&Path>, chosen: bool, cx: &mut Ctx, depth: usi
     let nested: Vec<String> =
         x.blocks.values().filter(|b| b.xref_path.is_some() && !b.xref_overlay && !b.name.contains('|')).map(|b| b.name.clone()).collect();
     for n in nested {
-        let (status, detail) = load_in(&mut x, &n, Some(&file), false, cx, depth + 1);
+        let (status, detail) = load_in(&mut x, &n, Some(&file), Source::Disk { chosen: false }, cx, depth + 1);
         if status != XrefStatus::Loaded {
             cx.notes.push(format!("nested xref \"{n}\" not loaded: {detail}"));
         }
