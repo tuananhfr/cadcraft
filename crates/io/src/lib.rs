@@ -14,6 +14,7 @@ mod dxf_write;
 mod dxf_xref;
 pub mod pdf;
 pub mod pdf_merge;
+pub mod plot_style_file;
 pub mod plotter;
 pub mod svg;
 mod svg_read;

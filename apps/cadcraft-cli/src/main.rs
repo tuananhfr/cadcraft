@@ -199,6 +199,9 @@ fn install_io() {
     cadcraft_engine::cmd::file::set_merge_pdf(|parts, labels, title| {
         cadcraft_io::pdf_merge::merge_own(parts, labels, title).map_err(|error| error.to_string())
     });
+    cadcraft_engine::cmd::file::set_plot_style_reader(|name, bytes| {
+        cadcraft_io::plot_style_file::read_plot_style_file(name, bytes).map(|r| (r.table, r.unsupported_linetypes))
+    });
     cadcraft_engine::cmd::file::set_write_as(|d, name, o| {
         cadcraft_io::write_with(d, name, &cadcraft_io::SaveOptions { version: o.version, binary: o.binary }).map_err(|e| e.to_string())
     });

@@ -126,6 +126,12 @@ impl Inbox {
             match upload {
                 Ok((Purpose::Drawing, name, bytes)) => app.open_bytes(&name, &bytes),
                 Ok((Purpose::Xref { doc, name: xref }, name, bytes)) => app.attach_xref_file(doc, &xref, &name, &bytes),
+                Ok((Purpose::PlotStyle, name, bytes)) => match upload_route::route(&Purpose::PlotStyle, &name, &bytes) {
+                    Ok((_, params)) => {
+                        app.import_plot_styles(params);
+                    }
+                    Err(error) => app.open_failed(error),
+                },
                 Ok((Purpose::Workspace, name, bytes)) => match upload_route::route(&Purpose::Workspace, &name, &bytes) {
                     Ok((_, params)) => {
                         if let Some(text) = params.get("text").and_then(serde_json::Value::as_str) {

@@ -2,13 +2,18 @@
 //! styles in an editable grid, and the current layout's table and "Display plot styles".
 //!
 //! The dialog reads the drawing and changes it only through STYLESMANAGER and PAGESETUP
-//! (`app.run`), so every edit is undoable and scriptable.
+//! (`app.run`), so every edit is undoable and scriptable. Import .ctb/.stb… asks the host's file
+//! picker for an AutoCAD table; on the web the file arrives later through
+//! [`CadApp::import_plot_styles`].
 
 use egui::{RichText, vec2};
 use serde_json::{Value, json};
 
-use crate::CadApp;
 use crate::theme::Tokens;
+use crate::{CadApp, FileKind};
+
+/// AutoCAD plot style table files, for the host's file picker.
+pub const PLOT_STYLE_FILE: FileKind = FileKind { label: "Plot style tables (CTB, STB)", extensions: &["ctb", "stb"] };
 
 /// Open the dialog for a typed or menu-invoked STYLESMANAGER (no parameters).
 pub fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
@@ -34,22 +39,71 @@ const LINEWEIGHTS: [f64; 12] = [0.0, 0.09, 0.13, 0.18, 0.25, 0.3, 0.35, 0.5, 0.7
 type Action = Option<(&'static str, Value)>;
 
 pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
-    let action = window(app, ctx, open);
+    let (action, import) = window(app, ctx, open);
     if let Some((cmd, p)) = action {
         // Errors are echoed on the command line by `run`.
         let _ = app.run(cmd, p);
     }
+    // The web's picker answers `None` here and hands the file over later.
+    if import
+        && let Some(path) = app.services.open_file(&PLOT_STYLE_FILE)
+        && let Some(name) = app.import_plot_styles(json!({ "action": "load", "path": path }))
+    {
+        set_temp(ctx, "pstyle_sel", name);
+    }
 }
 
-fn window(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Action {
+/// Whether the host can pick a plot style table file.
+pub(crate) fn can_import(app: &CadApp) -> bool {
+    app.services.pick_open.is_some() || app.services.pick_open_kind.is_some()
+}
+
+impl CadApp {
+    /// Load a plot style table file with STYLESMANAGER load `params` and say what came in.
+    /// Returns the table's name; a failure goes to the command line and status bar.
+    pub fn import_plot_styles(&mut self, params: Value) -> Option<String> {
+        match self.run("stylesmanager", params) {
+            Ok(r) => {
+                let name = r.get("name").and_then(Value::as_str).unwrap_or_default().to_string();
+                let dropped = r.get("unsupportedLinetypes").and_then(Value::as_u64).unwrap_or(0);
+                // Kept in English like the engine's lines: the command line and status bar translate it.
+                let line = crate::i18n::with_language("en", || {
+                    if dropped == 0 {
+                        crate::tf!("Plot style table {name} imported", name = name)
+                    } else {
+                        crate::tf!(
+                            "Plot style table {name} imported; {count} styles print with the object linetype (plot style linetypes are not supported yet)",
+                            name = name,
+                            count = dropped
+                        )
+                    }
+                });
+                self.session.echo(line.clone());
+                self.set_status(line);
+                Some(name)
+            }
+            Err(e) => {
+                // `run` already put the reason on the status bar; the command line keeps it too.
+                if self.session.log.last() != Some(&e) {
+                    self.session.echo(e);
+                }
+                None
+            }
+        }
+    }
+}
+
+fn window(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> (Action, bool) {
     let t = Tokens::get();
     let title = crate::tl!("Plot Style Manager");
     let Ok(d) = app.session.doc() else {
         egui::Window::new(title).open(open).collapsible(false).resizable(false).show(ctx, |ui| {
             ui.label(crate::tl!("Open a drawing first."));
         });
-        return None;
+        return (None, false);
     };
+    let can_import = can_import(app);
+    let mut import = false;
     let names = cadcraft_doc::plot_style_table_names(d);
     let space = app.session.layout_space();
     let layout = space.layout().and_then(|n| d.layout(n).map(|l| (n.to_string(), l.page.plot_style_table.clone(), l.page.show_plot_styles)));
@@ -88,6 +142,14 @@ fn window(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Action {
             }
             if ui.add_enabled(in_drawing, egui::Button::new(crate::tl!("Delete"))).clicked() {
                 action = Some(("stylesmanager", json!({ "action": "delete", "name": sel })));
+            }
+            if can_import
+                && ui
+                    .button(crate::tl!("Import .ctb/.stb…"))
+                    .on_hover_text(crate::tl!("Load an AutoCAD plot style table (.ctb or .stb) into the drawing"))
+                    .clicked()
+            {
+                import = true;
             }
         });
         if let Some((name, current, show)) = &layout {
@@ -208,5 +270,5 @@ fn window(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Action {
     });
     set_temp(ctx, "pstyle_sel", sel);
     set_temp(ctx, "pstyle_new", new_style);
-    action
+    (action, import)
 }
