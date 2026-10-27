@@ -469,12 +469,58 @@ fn seg_shape(seg: &Seg, f: &Fmt, x: f64) -> Shaped {
             }
         }
     }
-    if f.under {
-        out.strokes.push(vec![Vec2::new(x, -h * 0.2), Vec2::new(x + w, -h * 0.2)]);
+    out
+}
+
+/// A laid-out piece's extent on its line, for [`line_rules`].
+pub(super) struct RuleItem {
+    pub x0: f64,
+    pub x1: f64,
+    pub h: f64,
+    pub under: bool,
+    pub over: bool,
+    pub color: Option<MTextColor>,
+    /// A space between two words: it never starts or ends a rule.
+    pub space: bool,
+}
+
+/// Underline and overline strokes of one line, in line order. Each `\L..\l` / `\O..\o` run is
+/// one stroke, spaces inside it included (a per-word rule would break at every space).
+pub(super) fn line_rules(items: &[RuleItem]) -> Vec<(Option<MTextColor>, Vec<Vec2>)> {
+    struct Run {
+        x0: f64,
+        x1: f64,
+        h: f64,
+        color: Option<MTextColor>,
     }
-    if f.over {
-        out.strokes.push(vec![Vec2::new(x, h * 1.2), Vec2::new(x + w, h * 1.2)]);
+    let mut out = Vec::new();
+    let mut under: Option<Run> = None;
+    let mut over: Option<Run> = None;
+    let flush = |run: &mut Option<Run>, y: f64, out: &mut Vec<(Option<MTextColor>, Vec<Vec2>)>| {
+        if let Some(r) = run.take() {
+            out.push((r.color, vec![Vec2::new(r.x0, y * r.h), Vec2::new(r.x1, y * r.h)]));
+        }
+    };
+    for it in items.iter().filter(|it| !it.space) {
+        for (on, run, y) in [(it.under, &mut under, -0.2), (it.over, &mut over, 1.2)] {
+            if !on {
+                flush(run, y, &mut out);
+            } else {
+                // AutoCAD rules each character in its own colour, so a colour change ends the stroke.
+                if run.as_ref().is_some_and(|r| r.color != it.color) {
+                    flush(run, y, &mut out);
+                }
+                if let Some(r) = run {
+                    r.x1 = it.x1;
+                    r.h = r.h.max(it.h);
+                } else {
+                    *run = Some(Run { x0: it.x0, x1: it.x1, h: it.h, color: it.color });
+                }
+            }
+        }
     }
+    flush(&mut under, -0.2, &mut out);
+    flush(&mut over, 1.2, &mut out);
     out
 }
 
@@ -649,16 +695,24 @@ pub fn layout_mtext_with(contents: &str, p: &MTextParams) -> MTextLayout {
             1 => -l.width / 2.0,
             _ => -l.width,
         };
-        for it in &l.items {
-            let Some(sg) = &it.seg else { continue };
-            let fm = fmt(it.fmt);
-            let mut sh = seg_shape(sg, fm, it.x);
-            let off = Vec2::new(x0, top + base_y);
+        let off = Vec2::new(x0, top + base_y);
+        let mut push = |color: Option<MTextColor>, mut sh: Shaped| {
             sh.map(|q| xf(q + off));
             match out.pieces.last_mut() {
-                Some(pc) if pc.color == fm.color => pc.shaped.extend(sh),
-                _ => out.pieces.push(MTextPiece { color: fm.color, shaped: sh }),
+                Some(pc) if pc.color == color => pc.shaped.extend(sh),
+                _ => out.pieces.push(MTextPiece { color, shaped: sh }),
             }
+        };
+        let mut rules = Vec::with_capacity(l.items.len());
+        for it in &l.items {
+            let fm = fmt(it.fmt);
+            rules.push(RuleItem { x0: it.x, x1: it.x + it.w, h: fm.height, under: fm.under, over: fm.over, color: fm.color, space: it.seg.is_none() });
+            if let Some(sg) = &it.seg {
+                push(fm.color, seg_shape(sg, fm, it.x));
+            }
+        }
+        for (color, pts) in line_rules(&rules) {
+            push(color, Shaped { strokes: vec![pts], ..Default::default() });
         }
     }
     for pc in &out.pieces {
@@ -752,12 +806,84 @@ mod tests {
     #[test]
     fn underline_and_overline() {
         let plain = lay("AB", 0.0).strokes.len();
-        let u = lay("\\LAB\\l", 0.0);
+        let u = lay(r"\LAB\l", 0.0);
         assert_eq!(u.strokes.len(), plain + 1);
         // Top-left attachment: the first baseline is one text height below the insert.
         assert!(u.strokes.iter().any(|s| s.len() == 2 && s.iter().all(|p| (p.y + 1.2).abs() < 1e-9)));
         let o = lay("\\OAB\\o", 0.0);
         assert!(o.strokes.iter().any(|s| s.len() == 2 && s.iter().all(|p| (p.y - 0.2).abs() < 1e-9)));
+    }
+
+    /// Horizontal two-point strokes at `y` (the rules, not glyph strokes).
+    fn rules_at(l: &MTextLayout, y: f64) -> Vec<(f64, f64)> {
+        l.strokes.iter().filter(|s| s.len() == 2 && s.iter().all(|p| (p.y - y).abs() < 1e-9)).map(|s| (s[0].x, s[1].x)).collect()
+    }
+
+    #[test]
+    fn underline_spans_spaces() {
+        let l = lay(r"\LAB CD EF\l", 0.0);
+        let r = rules_at(&l, -1.2);
+        assert_eq!(r.len(), 1, "{r:?}");
+        let w = crate::line_width("AB CD EF", 1.0, 1.0);
+        assert!(r[0].0.abs() < 1e-9 && (r[0].1 - w).abs() < 1e-9, "{r:?} vs {w}");
+    }
+
+    #[test]
+    fn underline_stops_at_toggle() {
+        let l = lay(r"\LAB\l CD", 0.0);
+        let r = rules_at(&l, -1.2);
+        assert_eq!(r.len(), 1, "{r:?}");
+        assert!((r[0].1 - crate::line_width("AB", 1.0, 1.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn underline_per_wrapped_line() {
+        let l = lay(r"\Lalpha beta gamma delta\l", 6.0);
+        assert!(l.lines.len() >= 2);
+        let lines = l.lines.len();
+        for i in 0..lines {
+            let y = -1.0 - i as f64 * 5.0 / 3.0 - 0.2;
+            let r = rules_at(&l, y);
+            assert_eq!(r.len(), 1, "line {i}: {r:?}");
+            let w = crate::line_width(&l.lines[i], 1.0, 1.0);
+            assert!(r[0].0.abs() < 1e-9 && (r[0].1 - w).abs() < 1e-9, "line {i}: {r:?} vs {w}");
+        }
+    }
+
+    #[test]
+    fn underline_with_width_factor() {
+        let l = lay(r"{\W0.75;\LAB CD}", 0.0);
+        let r = rules_at(&l, -1.2);
+        assert_eq!(r.len(), 1, "{r:?}");
+        let w = crate::line_width("AB CD", 1.0, 0.75);
+        assert!((r[0].1 - r[0].0 - w).abs() < 1e-6, "{r:?} vs {w}");
+    }
+
+    #[test]
+    fn underline_breaks_at_colour_change() {
+        let l = lay(r"\LA{\C1;B}C\l", 0.0);
+        let u: Vec<_> = l.pieces.iter().flat_map(|p| p.shaped.strokes.iter().map(move |s| (p.color, s))).filter(|(_, s)| s.len() == 2 && s.iter().all(|p| (p.y + 1.2).abs() < 1e-9)).collect();
+        assert_eq!(u.len(), 3, "{u:?}");
+        let mut u = u;
+        u.sort_by(|a, b| a.1[0].x.total_cmp(&b.1[0].x));
+        assert!((u[0].1[1].x - u[1].1[0].x).abs() < 1e-9 && (u[1].1[1].x - u[2].1[0].x).abs() < 1e-9, "{u:?}");
+        assert_eq!(u[1].0, Some(MTextColor::Aci(1)));
+        assert_ne!(u[0].0, Some(MTextColor::Aci(1)));
+    }
+
+    #[test]
+    fn overline_spans_spaces() {
+        let l = lay(r"\OAB CD\o", 0.0);
+        let r = rules_at(&l, 0.2);
+        assert_eq!(r.len(), 1, "{r:?}");
+        assert!((r[0].1 - r[0].0 - crate::line_width("AB CD", 1.0, 1.0)).abs() < 1e-6, "{r:?}");
+    }
+
+    #[test]
+    fn underline_mixed_height_uses_tallest() {
+        let l = lay(r"\LAB {\H2x;CD}\l", 0.0);
+        let r = rules_at(&l, -2.4);
+        assert_eq!(r.len(), 1, "{r:?}");
     }
 
     #[test]

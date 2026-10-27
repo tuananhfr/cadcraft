@@ -296,3 +296,6 @@ Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded 
 ### Wipeout frame setting from files
 
 - The wipeout frame mode (`WIPEOUTFRAME`: 0 hidden, 1 shown, 2 shown but not plotted) is read from the `WIPEOUTVARIABLES` object (group 70) of the `ACAD_WIPEOUT_VARS` entry of the named object dictionary, which DWG files carry too, instead of staying at the default 1. A drawing without the entry keeps 1. DXF save writes the entry and a `WIPEOUTVARIABLES` class when the drawing has a wipeout or an explicit frame mode, and no longer keeps a stale raw copy of the entry (`dxf_raw::MODELLED_KEYS`).
+### MTEXT underline and overline across spaces
+
+- `\L..\l` and `\O..\o` now draw one continuous stroke per line, spaces between words included, as AutoCAD does; before, each word got its own stroke and the line broke at every space. A wrapped run gets one stroke per line, and a space at a run's edge (or next to an unformatted word) is not ruled. Stroke height follows the tallest text in the run. The rules are built per line after layout (`line_rules` in `fonts/src/mtext.rs`, also used by the paragraph/column layout).

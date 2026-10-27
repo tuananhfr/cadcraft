@@ -8,6 +8,8 @@
 use cadcraft_geom::{Bounds2, Vec2};
 
 use super::{Atom, Fmt, MTextLayout, MTextParams, MTextPiece, Seg, arg, num, parse, seg_plain, seg_shape, seg_width};
+use super::{MTextColor, RuleItem, line_rules};
+use crate::Shaped;
 
 /// Columns an MTEXT's text flows through, each as wide as the MTEXT's width.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -604,15 +606,23 @@ pub(super) fn layout(contents: &str, p: &MTextParams, base: &Fmt) -> MTextLayout
             _ if spread => (0.0, free / l.gaps as f64),
             _ => (0.0, 0.0),
         };
-        for it in &l.items {
-            let fm = fmt(it.fmt);
-            let mut sh = seg_shape(&it.seg, fm, it.x);
-            let off = Vec2::new(col_x + shift + per_gap * it.gap as f64, top + base_y);
+        let mut push = |color: Option<MTextColor>, mut sh: Shaped, off: Vec2| {
             sh.map(|q| xf(q + off));
             match out.pieces.last_mut() {
-                Some(pc) if pc.color == fm.color => pc.shaped.extend(sh),
-                _ => out.pieces.push(MTextPiece { color: fm.color, shaped: sh }),
+                Some(pc) if pc.color == color => pc.shaped.extend(sh),
+                _ => out.pieces.push(MTextPiece { color, shaped: sh }),
             }
+        };
+        let mut rules = Vec::with_capacity(l.items.len());
+        for it in &l.items {
+            let fm = fmt(it.fmt);
+            let off = Vec2::new(col_x + shift + per_gap * it.gap as f64, top + base_y);
+            let x0 = it.x + shift + per_gap * it.gap as f64;
+            rules.push(RuleItem { x0, x1: x0 + seg_width(&it.seg, fm), h: fm.height, under: fm.under, over: fm.over, color: fm.color, space: false });
+            push(fm.color, seg_shape(&it.seg, fm, it.x), off);
+        }
+        for (color, pts) in line_rules(&rules) {
+            push(color, Shaped { strokes: vec![pts], ..Default::default() }, Vec2::new(col_x, top + base_y));
         }
     }
     for pc in &out.pieces {
