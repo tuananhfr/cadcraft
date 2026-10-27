@@ -176,7 +176,8 @@ fn panel_shows_review_state() {
     assert!(harness.query_by_label("Modified: 0").is_some());
     assert!(harness.query_by_label("Deleted: 0").is_some());
     assert_eq!(harness.query_all_by_label("reviewed.lsp").count(), 2);
-    assert!(harness.query_by_label(format!("Time (Unix ms): {}", record.at_ms).as_str()).is_some());
+    let time = format!("Time: {} UTC", cadcraft_ui_egui::autosave::utc(record.at_ms / 1000));
+    assert!(harness.query_by_label(time.as_str()).is_some(), "{time}");
     assert!(harness.query_by_label(format!("Undo: {}", record.undo_label).as_str()).is_some());
 
     harness.state_mut().run("lisptrust", json!({"action": "revoke", "sha256": reviewed_sha})).unwrap();

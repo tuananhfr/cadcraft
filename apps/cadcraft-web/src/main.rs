@@ -352,6 +352,8 @@ mod web {
                         app.services.pick_open_kind = Some(Box::new(move |kind| {
                             let purpose = if kind.extensions == cadcraft_ui_egui::wsprofile::WORKSPACE_FILE.extensions {
                                 crate::upload_route::Purpose::Workspace
+                            } else if kind.extensions == cadcraft_ui_egui::LISP_FILE.extensions {
+                                crate::upload_route::Purpose::Lisp
                             } else {
                                 crate::upload_route::Purpose::Drawing
                             };

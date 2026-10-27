@@ -324,7 +324,7 @@ pub fn keyboard(app: &mut CadApp, ctx: &egui::Context) {
             egui::Event::Text(t) => {
                 if t == "\t" {
                     tab(app);
-                } else if t == " " && !text_prompt {
+                } else if t == " " && !text_prompt && !lisp_unbalanced(&app.cmd.buffer) {
                     submit(app);
                 } else {
                     app.cmd.buffer.push_str(&t);
@@ -381,6 +381,37 @@ pub fn keyboard(app: &mut CadApp, ctx: &egui::Context) {
         }
         app.cmd.note_typing();
     }
+}
+
+/// A typed AutoLISP expression still has an open parenthesis or string: as in AutoCAD, Space is
+/// part of it rather than the end of the input.
+fn lisp_unbalanced(buffer: &str) -> bool {
+    if !buffer.trim_start().starts_with('(') {
+        return false;
+    }
+    let (mut depth, mut in_string, mut escaped, mut comment) = (0i32, false, false, false);
+    for c in buffer.chars() {
+        if comment {
+            comment = c != '\n';
+        } else if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+        } else {
+            match c {
+                '"' => in_string = true,
+                ';' => comment = true,
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                _ => {}
+            }
+        }
+    }
+    in_string || depth > 0
 }
 
 pub fn submit(app: &mut CadApp) {
@@ -905,7 +936,8 @@ fn history_rows(ui: &mut egui::Ui, app: &CadApp, replay: bool) -> Option<String>
     let mut repeat = None;
     ui.scope(|ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
-        egui::ScrollArea::vertical().id_salt("cmd_history").stick_to_bottom(true).auto_shrink([false, false]).show_rows(
+        // egui's 64 px minimum would push a short docked history window over the input row.
+        egui::ScrollArea::vertical().id_salt("cmd_history").stick_to_bottom(true).auto_shrink([false, false]).min_scrolled_height(0.0).show_rows(
             ui,
             LINE_H,
             log.len(),
@@ -983,6 +1015,43 @@ mod history_translation_tests {
             assert!(text.contains(prefix), "{language}: {text}");
             assert!(text.contains(" [Block/Window/Layout/Last/Kcs] <Block>:"), "{text}");
             assert_eq!(app.session.current_prompt().unwrap().display(), "Plot frames by [Block/Window/Layout/Last/Kcs] <Block>:");
+        }
+    }
+
+    #[test]
+    fn expanded_history_in_a_short_docked_row_stays_above_the_input() {
+        fn visible_log_text(shape: &egui::Shape, clip: Rect, out: &mut Vec<Rect>) {
+            match shape {
+                egui::Shape::Text(text) if text.galley.text().starts_with("line ") => {
+                    out.push(text.galley.rect.translate(text.pos.to_vec2()).intersect(clip));
+                }
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| visible_log_text(s, clip, out)),
+                _ => {}
+            }
+        }
+        let mut app = CadApp::new(cadcraft_engine::Session::empty(), crate::Services::default());
+        for i in 0..20 {
+            app.session.echo(format!("line {i}"));
+        }
+        app.cmd.expanded = true;
+        // The docked row of the UbotBuild workspace: three history lines and the input.
+        let area = Rect::from_min_size(pos2(0.0, 500.0), vec2(1200.0, 3.0 * LINE_H + INPUT_ROW_HEIGHT));
+        let bar = Rect::from_min_size(pos2(4.0, area.bottom() - INPUT_HEIGHT - 4.0), vec2(1192.0, INPUT_HEIGHT));
+        let ctx = egui::Context::default();
+        let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 600.0))), ..Default::default() };
+        let mut rows = Vec::new();
+        for _ in 0..3 {
+            let mut output = ctx.run_ui(input.clone(), |ui| show_at(&mut app, ui, area, bar));
+            output.textures_delta.clear();
+            rows.clear();
+            for clipped in &output.shapes {
+                visible_log_text(&clipped.shape, clipped.clip_rect, &mut rows);
+            }
+        }
+        let shown: Vec<&Rect> = rows.iter().filter(|r| r.is_positive()).collect();
+        assert!(!shown.is_empty(), "the history window shows the newest lines");
+        for row in shown {
+            assert!(row.bottom() <= bar.top(), "history text {row:?} overlaps the input {bar:?}");
         }
     }
 
@@ -1089,6 +1158,38 @@ mod tests {
 
     fn press(app: &mut CadApp, ctx: &egui::Context, at: Pos2, pressed: bool) {
         frame(app, ctx, vec![Event::PointerButton { pos: at, button: PointerButton::Primary, pressed, modifiers: egui::Modifiers::default() }]);
+    }
+
+    fn type_text(app: &mut CadApp, ctx: &egui::Context, text: &str) {
+        frame(app, ctx, text.chars().map(|c| Event::Text(c.to_string())).collect());
+    }
+
+    #[test]
+    fn open_lisp_expression_detection() {
+        for open in ["(setq", "(setq a (+ 1", " (princ \"a (b", "(princ \"a \\\" b", "(+ 1 ; 2)"] {
+            assert!(lisp_unbalanced(open), "{open:?} is still open");
+        }
+        for closed in ["", "LINE", "(ver)", "(princ \"a ) b\")", "(setq a \")\")", "x (", "!a"] {
+            assert!(!lisp_unbalanced(closed), "{closed:?} is not an open expression");
+        }
+    }
+
+    #[test]
+    fn space_inside_a_typed_lisp_expression_is_text() {
+        use cadcraft_engine::lisp::value::Value as LispValue;
+        let mut app = CadApp::new(Session::new(), crate::Services::default());
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, Vec::new());
+        type_text(&mut app, &ctx, "(setq ubq (+ 1 2))");
+        assert_eq!(app.cmd.buffer, "(setq ubq (+ 1 2))");
+        type_text(&mut app, &ctx, " ");
+        assert_eq!(app.cmd.history.last().map(String::as_str), Some("(setq ubq (+ 1 2))"), "Space submits once the expression is closed");
+        assert!(app.cmd.buffer.is_empty());
+        frame(&mut app, &ctx, Vec::new());
+        assert!(matches!(app.session.lisp_var("ubq"), LispValue::Int(3)));
+        // Outside an expression Space still ends the input, as Enter does.
+        type_text(&mut app, &ctx, "REGEN ");
+        assert_eq!(app.cmd.history.last().map(String::as_str), Some("REGEN"));
     }
 
     #[test]

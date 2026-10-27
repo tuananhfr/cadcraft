@@ -2103,7 +2103,7 @@ ribbon	Fonts	Phông chữ
 	No allowed folders	Không có thư mục được phép
 	Folder path	Đường dẫn thư mục
 	LISP cannot write files in the browser	LISP không thể ghi tệp trong trình duyệt
-	Time (Unix ms): {time}	Thời gian (Unix ms): {time}
+	Time: {date} UTC	Thời gian: {date} UTC
 	Created: {n}	Đã tạo: {n}
 	Modified: {n}	Đã sửa: {n}
 	Deleted: {n}	Đã xóa: {n}

@@ -125,6 +125,10 @@ impl Inbox {
         for upload in self.files.take() {
             match upload {
                 Ok((Purpose::Drawing, name, bytes)) => app.open_bytes(&name, &bytes),
+                Ok((Purpose::Lisp, name, bytes)) => match upload_route::route(&Purpose::Lisp, &name, &bytes) {
+                    Ok(_) => app.open_bytes(&name, &bytes),
+                    Err(error) => app.open_failed(error),
+                },
                 Ok((Purpose::Xref { doc, name: xref }, name, bytes)) => app.attach_xref_file(doc, &xref, &name, &bytes),
                 Ok((Purpose::Workspace, name, bytes)) => match upload_route::route(&Purpose::Workspace, &name, &bytes) {
                     Ok((_, params)) => {

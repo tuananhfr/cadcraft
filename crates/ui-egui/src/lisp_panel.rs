@@ -51,7 +51,7 @@ pub fn body(ui: &mut egui::Ui, app: &mut CadApp) {
         }
         for record in audit.iter().rev().take(20) {
             ui.group(|ui| {
-                ui.label(crate::tf!("Time (Unix ms): {time}", time = record.at_ms));
+                ui.label(crate::tf!("Time: {date} UTC", date = crate::autosave::utc(record.at_ms / 1000)));
                 ui.label(&record.source);
                 ui.horizontal_wrapped(|ui| {
                     ui.label(crate::tf!("Created: {n}", n = record.created));
@@ -63,9 +63,25 @@ pub fn body(ui: &mut egui::Ui, app: &mut CadApp) {
         }
     });
     if ui.button(crate::tl!("Load Application...")).clicked() {
-        app.start("appload");
+        load_application(app);
     }
     ui.ctx().data_mut(|data| data.insert_temp(id, state));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn load_application(app: &mut CadApp) {
+    app.start("appload");
+}
+
+#[cfg(target_arch = "wasm32")]
+fn load_application(app: &mut CadApp) {
+    // APPLOAD asks for a path the browser can't read; the picked file arrives through the host.
+    match &app.services.pick_open_kind {
+        Some(pick) => {
+            let _ = pick(&crate::LISP_FILE);
+        }
+        None => app.start("appload"),
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]

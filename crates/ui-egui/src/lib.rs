@@ -930,8 +930,11 @@ pub fn now_ms() -> f64 {
     }
 }
 
+/// AutoLISP source, picked by Load Application where files have no path (the browser).
+pub const LISP_FILE: FileKind = FileKind { label: "AutoLISP (LSP)", extensions: &["lsp"] };
+
 /// A LISP source file, by its name.
-fn is_lisp_file(name: &str) -> bool {
+pub fn is_lisp_file(name: &str) -> bool {
     std::path::Path::new(name).extension().is_some_and(|e| e.eq_ignore_ascii_case("lsp"))
 }
 

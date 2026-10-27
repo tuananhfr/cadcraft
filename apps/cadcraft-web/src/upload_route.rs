@@ -9,6 +9,8 @@ use serde_json::{Value, json};
 pub enum Purpose {
     Drawing,
     Workspace,
+    /// An AutoLISP file for Load Application; it still goes through the review prompt.
+    Lisp,
     /// The file for xref `name` of drawing `doc` (its uid), loaded into it rather than opened.
     Xref {
         doc: u64,
@@ -20,13 +22,14 @@ pub fn accept(purpose: &Purpose) -> &'static str {
     match purpose {
         Purpose::Drawing => ".dxf,.dwg",
         Purpose::Workspace => ".json",
+        Purpose::Lisp => ".lsp",
         Purpose::Xref { .. } => ".dwg,.dxf",
     }
 }
 
 pub fn size_error(purpose: &Purpose, name: &str, len: u64) -> Option<String> {
     match purpose {
-        Purpose::Drawing | Purpose::Xref { .. } => CadApp::open_size_error(name, len),
+        Purpose::Drawing | Purpose::Lisp | Purpose::Xref { .. } => CadApp::open_size_error(name, len),
         Purpose::Workspace => (len > MAX_SET_BYTES as u64)
             .then(|| cadcraft_ui_egui::tf!("Workspace import: {name} is larger than {limit} bytes", name = name, limit = MAX_SET_BYTES)),
     }
@@ -38,6 +41,11 @@ pub fn route(purpose: &Purpose, name: &str, bytes: &[u8]) -> Result<(String, Val
     }
     match purpose {
         Purpose::Drawing => Ok(("open".into(), json!({ "name": name, "data": base64_encode(bytes) }))),
+        // The picker's filter is only a hint: "All files" must not turn Load Application into OPEN.
+        Purpose::Lisp if !cadcraft_ui_egui::is_lisp_file(name) => {
+            Err(cadcraft_ui_egui::tf!("APPLOAD: {name} is not an AutoLISP (.lsp) file", name = name).to_string())
+        }
+        Purpose::Lisp => Ok(("appload".into(), json!({ "name": name }))),
         // The bytes go to `CadApp::attach_xref_file` as they are: no base64 copy of a large DWG.
         Purpose::Xref { doc, name: xref } => Ok(("xref.file".into(), json!({ "doc": doc, "xref": xref, "file": name }))),
         Purpose::Workspace => {
@@ -82,6 +90,18 @@ mod tests {
         assert!(route(&Purpose::Workspace, "workspace.json", &vec![b' '; MAX_SET_BYTES + 1]).is_err());
         assert!(route(&Purpose::Workspace, "workspace.json", &vec![b' '; MAX_SET_BYTES]).is_ok());
         assert!(size_error(&Purpose::Workspace, "workspace.json", u64::MAX).is_some());
+    }
+
+    #[test]
+    fn lisp_upload_loads_only_lsp_files() {
+        assert_eq!(accept(&Purpose::Lisp), ".lsp");
+        let (id, params) = route(&Purpose::Lisp, "UBB_PLOT.LSP", b"(princ)").unwrap();
+        assert_eq!(id, "appload");
+        assert_eq!(params, json!({ "name": "UBB_PLOT.LSP" }));
+        for name in ["plan.dxf", "plan.dwg", "notes.txt"] {
+            assert!(route(&Purpose::Lisp, name, b"(princ)").is_err(), "{name} is not loaded as LISP");
+        }
+        assert!(size_error(&Purpose::Lisp, "big.lsp", u64::MAX).is_some());
     }
 
     #[test]

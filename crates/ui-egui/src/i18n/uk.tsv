@@ -2101,7 +2101,7 @@ ribbon	Plot	Друк креслення
 	No allowed folders	Немає дозволених тек
 	Folder path	Шлях до теки
 	LISP cannot write files in the browser	LISP не може записувати файли в браузері
-	Time (Unix ms): {time}	Час (Unix мс): {time}
+	Time: {date} UTC	Час: {date} UTC
 	Created: {n}	Створено: {n}
 	Modified: {n}	Змінено: {n}
 	Deleted: {n}	Видалено: {n}
