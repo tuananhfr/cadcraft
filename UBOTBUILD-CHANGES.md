@@ -292,3 +292,7 @@ Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded 
 ### Quick Plot: why Publish is disabled
 
 - The reason now shows as a line next to Publish instead of only in a tooltip. Unapproved warnings read "Approve or exclude the warnings under Exceptions to publish" (vi "Chấp nhận hoặc loại trừ các cảnh báo ở mục Ngoại lệ để xuất bản"); the other reasons are "No sheets to publish" and "Fix or exclude blocked sheets before publishing a merged PDF".
+
+### MTEXT underline and overline across spaces
+
+- `\L..\l` and `\O..\o` now draw one continuous stroke per line, spaces between words included, as AutoCAD does; before, each word got its own stroke and the line broke at every space. A wrapped run gets one stroke per line, and a space at a run's edge (or next to an unformatted word) is not ruled. Stroke height follows the tallest text in the run. The rules are built per line after layout (`line_rules` in `fonts/src/mtext.rs`, also used by the paragraph/column layout).
