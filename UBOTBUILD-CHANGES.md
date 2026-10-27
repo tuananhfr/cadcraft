@@ -292,3 +292,7 @@ Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded 
 ### Quick Plot: why Publish is disabled
 
 - The reason now shows as a line next to Publish instead of only in a tooltip. Unapproved warnings read "Approve or exclude the warnings under Exceptions to publish" (vi "Chấp nhận hoặc loại trừ các cảnh báo ở mục Ngoại lệ để xuất bản"); the other reasons are "No sheets to publish" and "Fix or exclude blocked sheets before publishing a merged PDF".
+
+### Wipeout frame setting from files
+
+- The wipeout frame mode (`WIPEOUTFRAME`: 0 hidden, 1 shown, 2 shown but not plotted) is read from the `WIPEOUTVARIABLES` object (group 70) of the `ACAD_WIPEOUT_VARS` entry of the named object dictionary, which DWG files carry too, instead of staying at the default 1. A drawing without the entry keeps 1. DXF save writes the entry and a `WIPEOUTVARIABLES` class when the drawing has a wipeout or an explicit frame mode, and no longer keeps a stale raw copy of the entry (`dxf_raw::MODELLED_KEYS`).

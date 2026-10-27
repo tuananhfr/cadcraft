@@ -1025,6 +1025,28 @@ fn plot_style_names(secs: &[cadcraft_dxf::Section]) -> HashMap<String, String> {
     out
 }
 
+/// The wipeout frame mode (`WIPEOUTFRAME`) of the `ACAD_WIPEOUT_VARS` object, clamped to 0..=2.
+fn wipeout_frame(secs: &[cadcraft_dxf::Section]) -> Option<i64> {
+    let objects = secs.iter().find(|s| s.name == "OBJECTS")?;
+    let recs = records(&objects.tags);
+    let (_, root) = recs.iter().find(|(k, _)| k == "DICTIONARY")?;
+    let mut name: Option<String> = None;
+    let mut handle: Option<String> = None;
+    for t in root {
+        match t.code {
+            3 => name = Some(t.str()),
+            350 | 360 if name.take().is_some_and(|n| n.eq_ignore_ascii_case("ACAD_WIPEOUT_VARS")) => {
+                handle = Some(t.str().trim().to_ascii_uppercase());
+                break;
+            }
+            _ => {}
+        }
+    }
+    let handle = handle?;
+    let (_, tags) = recs.iter().find(|(k, tg)| k == "WIPEOUTVARIABLES" && T(tg).s(5).is_some_and(|h| h.trim().eq_ignore_ascii_case(&handle)))?;
+    T(tags).i(70).map(|v| v.clamp(0, 2))
+}
+
 /// The named plot style an entity record points at (group 390 among its AcDbEntity groups).
 fn entity_plot_style(tags: &[Tag], rx: &Rx) -> Option<String> {
     let mut in_entity = false;
@@ -1672,6 +1694,9 @@ pub fn read_tags(tags: Vec<Tag>) -> Result<Drawing> {
     let mut d = Drawing::new_imperial();
     d.layouts.clear();
     let mut rx = Rx { pstyles: plot_style_names(&secs), ..Rx::default() };
+    if let Some(v) = wipeout_frame(&secs) {
+        d.header.set_i64("WIPEOUTFRAME", v);
+    }
     let mut blocks: Vec<(String, Vec3, String, Vec<(Option<String>, bool, Entity)>, i64)> = Vec::new();
     let mut layout_objs: Vec<(String, u32, String, PageSetup)> = Vec::new();
     let mut entities = Vec::new();
