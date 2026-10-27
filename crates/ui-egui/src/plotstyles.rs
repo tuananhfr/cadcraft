@@ -83,7 +83,10 @@ impl CadApp {
                 Some(name)
             }
             Err(e) => {
-                self.set_status(e);
+                // `run` already put the reason on the status bar; the command line keeps it too.
+                if self.session.log.last() != Some(&e) {
+                    self.session.echo(e);
+                }
                 None
             }
         }

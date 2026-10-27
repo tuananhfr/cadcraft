@@ -4485,4 +4485,5 @@ echo	Plot style table {name} imported; {count} styles print with the object line
 	the plot style table file is damaged (checksum mismatch)	tệp bảng kiểu in bị hỏng (sai tổng kiểm tra)
 	the plot style table is damaged (unbalanced braces)	bảng kiểu in bị hỏng (ngoặc không cân)
 	the plot style table is damaged (nested too deeply)	bảng kiểu in bị hỏng (lồng quá sâu)
+	the plot style table is damaged (too many entries)	bảng kiểu in bị hỏng (quá nhiều mục)
 	the plot style table has no name	bảng kiểu in không có tên

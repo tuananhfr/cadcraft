@@ -27,11 +27,14 @@ const DATA: usize = HEADER + 12;
 const MAX_DEPTH: usize = 8;
 /// More entries than any table holds; bounds the work on a hostile file.
 const MAX_STYLES: usize = 4096;
+/// A table has about 255 × 20 entries; far more is a hostile file.
+const MAX_ENTRIES: usize = 100_000;
 
 const OBJECT_LINETYPE: i64 = 31;
 const OBJECT_LINEWEIGHT: i64 = 255;
-/// AcCmEntityColor colour methods (ObjectARX): true colour and index colour.
-const METHOD_RGB: u32 = 0xC2;
+/// AcCmEntityColor colour methods (ObjectARX). Stock tables write black as 0xFF000000, so
+/// 0xFF and 0x00 are read as true colour too.
+const METHOD_RGB: [u32; 3] = [0xC2, 0xFF, 0x00];
 const METHOD_ACI: u32 = 0xC3;
 const POLICY_GRAYSCALE: i64 = 2;
 
@@ -94,23 +97,21 @@ fn u32_at(bytes: &[u8], at: usize) -> Option<u32> {
 /// The table's text, decompressed with its size capped at [`MAX_TABLE_FILE`].
 fn decompress(bytes: &[u8]) -> Result<String, String> {
     let truncated = || "the plot style table file is cut short".to_string();
-    let checksum = u32_at(bytes, HEADER).ok_or_else(truncated)?;
+    // The header's Adler-32 (HEADER..HEADER + 4) isn't checked: descriptions disagree on what it
+    // covers, and the zlib stream carries its own, which inflating checks.
     let declared = u32_at(bytes, HEADER + 4).ok_or_else(truncated)?;
     let packed = u32_at(bytes, HEADER + 8).ok_or_else(truncated)?;
     if usize::try_from(declared).map_or(true, |n| n > MAX_TABLE_FILE) {
         return Err("the plot style table is too large".into());
     }
-    let end = usize::try_from(packed).ok().and_then(|n| DATA.checked_add(n)).ok_or_else(truncated)?;
+    // A packed size past the end of the file is read as "to the end"; a cut stream still fails.
+    let end = usize::try_from(packed).ok().and_then(|n| DATA.checked_add(n)).map_or(bytes.len(), |end| end.min(bytes.len()));
     let body = bytes.get(DATA..end).ok_or_else(truncated)?;
     let out = miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(body, MAX_TABLE_FILE).map_err(|e| match e.status {
         miniz_oxide::inflate::TINFLStatus::HasMoreOutput => "the plot style table is too large".to_string(),
+        miniz_oxide::inflate::TINFLStatus::Adler32Mismatch => "the plot style table file is damaged (checksum mismatch)".to_string(),
         _ => "the plot style table file is damaged (bad compressed data)".to_string(),
     })?;
-    // Public descriptions disagree on whether the checksum covers the packed or the unpacked
-    // bytes, so either is accepted.
-    if checksum != adler32(body) && checksum != adler32(&out) {
-        return Err("the plot style table file is damaged (checksum mismatch)".into());
-    }
     let end = out.iter().rposition(|b| *b != 0).map_or(0, |i| i + 1);
     let raw = out.get(..end).unwrap_or_default();
     // Older files are in the Windows code page, not UTF-8; Latin-1 keeps their ASCII intact.
@@ -118,21 +119,6 @@ fn decompress(bytes: &[u8]) -> Result<String, String> {
         Ok(s) => s.to_string(),
         Err(_) => raw.iter().map(|b| char::from(*b)).collect(),
     })
-}
-
-fn adler32(data: &[u8]) -> u32 {
-    const MOD: u32 = 65521;
-    let (mut a, mut b) = (1u32, 0u32);
-    // 5552 bytes is the most that can be summed before `b` could overflow a u32.
-    for chunk in data.chunks(5552) {
-        for x in chunk {
-            a += u32::from(*x);
-            b += a;
-        }
-        a %= MOD;
-        b %= MOD;
-    }
-    (b << 16) | a
 }
 
 #[derive(Clone, Debug)]
@@ -144,14 +130,17 @@ enum Node {
 fn parse(text: &str) -> Result<Vec<(String, Node)>, String> {
     let unbalanced = || "the plot style table is damaged (unbalanced braces)".to_string();
     let mut stack: Vec<(String, Vec<(String, Node)>)> = vec![(String::new(), Vec::new())];
+    let mut entries = 0usize;
     for line in text.lines().map(str::trim) {
         if line.is_empty() {
             continue;
         }
+        entries += 1;
+        if entries > MAX_ENTRIES {
+            return Err("the plot style table is damaged (too many entries)".into());
+        }
         if line == "}" {
-            if stack.len() < 2 {
-                return Err(unbalanced());
-            }
+            // Popping the root leaves nothing to add to: a stray `}` fails below.
             let (key, items) = stack.pop().ok_or_else(unbalanced)?;
             stack.last_mut().ok_or_else(unbalanced)?.1.push((key, Node::Block(items)));
         } else if let Some((key, value)) = line.split_once('=') {
@@ -207,22 +196,36 @@ fn dropped_linetype(fields: &[(String, Node)]) -> bool {
     int(fields, "linetype").is_some_and(|lt| lt != OBJECT_LINETYPE)
 }
 
-/// A style colour: `None` keeps the object's colour (also for methods CADCraft doesn't plot by,
-/// such as by layer or by pen).
+/// A style colour: `None` keeps the object's colour, for -1 and for the methods CADCraft
+/// doesn't plot by (by layer 0xC0, by block 0xC1, by pen 0xC4, foreground 0xC5, none 0xC8, …).
 fn color(v: i64) -> Option<Rgb> {
     let v = u32::try_from(v).ok().or_else(|| i32::try_from(v).ok().map(|x| x as u32))?;
-    let low = v & 0x00FF_FFFF;
-    match v >> 24 {
-        METHOD_RGB => Some(Rgb::from_u32(low)),
-        METHOD_ACI => u8::try_from(low).ok().filter(|i| *i >= 1).map(cadcraft_color::aci_rgb),
-        _ => None,
+    if v == u32::MAX {
+        return None;
     }
+    let (method, low) = (v >> 24, v & 0x00FF_FFFF);
+    if METHOD_RGB.contains(&method) {
+        Some(Rgb::from_u32(low))
+    } else if method == METHOD_ACI {
+        u8::try_from(low).ok().filter(|i| *i >= 1).map(cadcraft_color::aci_rgb)
+    } else {
+        None
+    }
+}
+
+/// `mode_color` is what plots; `color` is the object sentinel when the style keeps the object's.
+fn style_color(fields: &[(String, Node)]) -> Option<Rgb> {
+    let own = int(fields, "color");
+    if own.is_some_and(|c| color(c).is_none()) {
+        return None;
+    }
+    int(fields, "mode_color").and_then(color).or_else(|| own.and_then(color))
 }
 
 fn style(fields: &[(String, Node)], lineweights: &[Option<f64>], unsupported: &mut usize) -> PlotStyle {
     let mut s = PlotStyle::object(value(fields, "name").unwrap_or_default());
     s.description = value(fields, "description").unwrap_or_default().to_string();
-    s.color = int(fields, "color").or_else(|| int(fields, "mode_color")).and_then(color);
+    s.color = style_color(fields);
     s.grayscale = int(fields, "color_policy").is_some_and(|p| p & POLICY_GRAYSCALE != 0);
     s.screening = int(fields, "screen").map_or(100, |v| v.clamp(0, 100) as u8);
     if dropped_linetype(fields) {
@@ -277,6 +280,21 @@ fn table_name(name: &str, kind: PlotStyleKind) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn adler32(data: &[u8]) -> u32 {
+        const MOD: u32 = 65521;
+        let (mut a, mut b) = (1u32, 0u32);
+        // 5552 bytes is the most that can be summed before `b` could overflow a u32.
+        for chunk in data.chunks(5552) {
+            for x in chunk {
+                a += u32::from(*x);
+                b += a;
+            }
+            a %= MOD;
+            b %= MOD;
+        }
+        (b << 16) | a
+    }
 
     /// A file holding `text`, laid out as the format is publicly described.
     fn file(kind: &str, text: &str) -> Vec<u8> {
@@ -388,15 +406,15 @@ mod tests {
             ("JSON", b"{\"cadcraftPlotStyleTable\": 1}".to_vec()),
             ("printer config", good.iter().enumerate().map(|(i, b)| if (19..26).contains(&i) { b"PC3VER1"[i - 19] } else { *b }).collect()),
         ];
-        let mut bad_sum = good.clone();
-        bad_sum[HEADER] ^= 0xFF;
-        cases.push(("checksum", bad_sum));
+        // The zlib stream's own Adler-32 (its last four bytes) still guards the data.
+        let mut bad_zlib_sum = good.clone();
+        let last = bad_zlib_sum.len() - 1;
+        bad_zlib_sum[last] ^= 0xFF;
+        cases.push(("zlib checksum", bad_zlib_sum));
         let mut huge = good.clone();
         huge[HEADER + 4..HEADER + 8].copy_from_slice(&u32::MAX.to_le_bytes());
         cases.push(("declared size", huge));
-        let mut long = good.clone();
-        long[HEADER + 8..HEADER + 12].copy_from_slice(&u32::MAX.to_le_bytes());
-        cases.push(("compressed size past the end", long));
+        cases.push(("packed size past a cut file", good.get(..good.len() - 20).unwrap().to_vec()));
         let cut = good.len() - 20;
         let mut truncated = good.get(..cut).unwrap().to_vec();
         let packed = (cut - DATA) as u32;
@@ -413,6 +431,96 @@ mod tests {
         for (what, bytes) in cases {
             let name = if what == "no name" { " .ctb" } else { "t.ctb" };
             assert!(read_plot_style_file(name, &bytes).is_err(), "{what}");
+        }
+    }
+
+    #[test]
+    fn the_header_checksum_is_not_checked() {
+        let mut bytes = ctb("", |i| ctb_style(i, RGB_BLACK, 255, 31));
+        bytes[HEADER..HEADER + 4].copy_from_slice(&0xDEAD_BEEFu32.to_le_bytes());
+        assert!(read_plot_style_file("sum.ctb", &bytes).is_ok());
+    }
+
+    #[test]
+    fn a_packed_size_past_the_end_reads_to_the_end() {
+        let mut bytes = ctb("", |i| ctb_style(i, RGB_BLACK, 255, 31));
+        bytes[HEADER + 8..HEADER + 12].copy_from_slice(&u32::MAX.to_le_bytes());
+        let r = read_plot_style_file("long.ctb", &bytes).unwrap();
+        assert_eq!(r.table.by_color(1).unwrap().color, Some(Rgb(0, 0, 0)));
+        // A packed size short of the stream cuts it: refused.
+        bytes[HEADER + 8..HEADER + 12].copy_from_slice(&10u32.to_le_bytes());
+        assert!(read_plot_style_file("short.ctb", &bytes).is_err());
+    }
+
+    #[test]
+    fn too_many_entries_are_refused() {
+        let text = format!("plot_style{{\n{}}}\n", "a=1\n".repeat(MAX_ENTRIES + 1));
+        let e = read_plot_style_file("many.ctb", &file("CTBVER1", &text)).unwrap_err();
+        assert!(e.contains("too many entries"), "{e}");
+        let text = format!("plot_style{{\n{}}}\n", "a=1\n".repeat(MAX_ENTRIES - 10));
+        assert!(read_plot_style_file("ok.ctb", &file("CTBVER1", &text)).is_ok());
+    }
+
+    /// The colour a style with `color` and `mode_color` plots with.
+    fn decoded(color: Option<i64>, mode_color: Option<i64>) -> Option<Rgb> {
+        let fields: Vec<(String, Node)> = [("color", color), ("mode_color", mode_color)]
+            .into_iter()
+            .filter_map(|(key, v)| v.map(|v| (key.to_string(), Node::Value(v.to_string()))))
+            .collect();
+        style_color(&fields)
+    }
+
+    const fn signed(v: u32) -> i64 {
+        v as i32 as i64
+    }
+
+    #[test]
+    fn stock_monochrome_black_is_rgb_black() {
+        assert_eq!(color(-16_777_216), Some(Rgb(0, 0, 0)));
+        assert_eq!(decoded(Some(-16_777_216), Some(-16_777_216)), Some(Rgb(0, 0, 0)));
+        let bytes = ctb("Monochrome", |i| ctb_style(i, -16_777_216, 255, 31));
+        let t = read_plot_style_file("monochrome.ctb", &bytes).unwrap().table;
+        assert!((1..=255).all(|aci| t.by_color(aci).unwrap().color == Some(Rgb(0, 0, 0))));
+    }
+
+    #[test]
+    fn true_colour_methods() {
+        for method in [0xC2u32, 0xFF, 0x00] {
+            assert_eq!(color(signed(method << 24 | 0x00FF_8000)), Some(Rgb(255, 128, 0)), "{method:#x}");
+        }
+        assert_eq!(color(5), Some(Rgb(0, 0, 5)), "method 0x00");
+    }
+
+    #[test]
+    fn index_colour_method() {
+        assert_eq!(color(signed(0xC300_0001)), Some(cadcraft_color::aci_rgb(1)));
+        assert_eq!(color(signed(0xC300_00FF)), Some(cadcraft_color::aci_rgb(255)));
+        for low in [0u32, 0x100, 0xFF_FFFF] {
+            assert_eq!(color(signed(0xC300_0000 | low)), None, "ACI {low:#x} keeps the object colour");
+        }
+    }
+
+    #[test]
+    fn object_colour_sentinels() {
+        assert_eq!(color(-1), None);
+        for method in [0xC0u32, 0xC1, 0xC4, 0xC5, 0xC8] {
+            assert_eq!(color(signed(method << 24)), None, "{method:#x}");
+            assert_eq!(color(signed(method << 24 | 7)), None, "{method:#x} with low bits");
+        }
+        assert_eq!(color(-1_006_632_960), None, "0xC4000000");
+        assert_eq!(color(i64::MAX), None, "out of range");
+    }
+
+    #[test]
+    fn mode_color_plots_unless_color_keeps_the_object() {
+        let red = signed(0xC2FF_0000);
+        let blue = signed(0xC200_00FF);
+        assert_eq!(decoded(Some(red), Some(blue)), Some(Rgb(0, 0, 255)), "mode_color first");
+        assert_eq!(decoded(Some(red), None), Some(Rgb(255, 0, 0)), "color without a mode_color");
+        assert_eq!(decoded(Some(red), Some(-1)), Some(Rgb(255, 0, 0)), "color when mode_color keeps nothing");
+        assert_eq!(decoded(None, Some(blue)), Some(Rgb(0, 0, 255)));
+        for object in [-1, signed(0xC300_0000), signed(0xC100_0000)] {
+            assert_eq!(decoded(Some(object), Some(blue)), None, "color {object} keeps the object colour");
         }
     }
 

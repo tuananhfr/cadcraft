@@ -74,10 +74,17 @@ fn a_cancelled_or_failed_import_changes_nothing() {
     assert_eq!(asked.borrow().len(), 1);
     assert!(h.state().session.doc().unwrap().plot_style_tables.is_empty());
     // A web upload that isn't a table reports why.
+    cadcraft_engine::cmd::file::set_plot_style_reader(|name, bytes| {
+        cadcraft_io::plot_style_file::read_plot_style_file(name, bytes).map(|r| (r.table, r.unsupported_linetypes))
+    });
     let mut app = h.into_state();
     let r = app.import_plot_styles(json!({ "action": "load", "name": "bad.ctb", "data": "UElBRklMRVZFUlNJT05fMi4w" }));
     assert!(r.is_none());
     assert!(app.session.doc().unwrap().plot_style_tables.is_empty());
+    // On the command line once, and on the status bar.
+    let reason = "not an AutoCAD plot style table";
+    assert_eq!(app.session.log.iter().filter(|l| l.contains(reason)).count(), 1, "{:?}", app.session.log);
+    assert!(app.status.as_ref().is_some_and(|(s, _)| s.contains(reason)), "{:?}", app.status);
 }
 
 #[test]
