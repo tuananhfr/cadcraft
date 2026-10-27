@@ -335,13 +335,12 @@ impl Drop for FontSettings {
 }
 
 fn missing_style(s: &mut Session) {
+    missing_style_font(s, "zz-missing-font.ttf");
+}
+
+fn missing_style_font(s: &mut Session, font: &str) {
     let d = s.doc_mut().unwrap();
-    d.text_styles.push(cadcraft_doc::TextStyle {
-        name: "Missing".into(),
-        font: "zz-missing-font.ttf".into(),
-        family: String::new(),
-        ..Default::default()
-    });
+    d.text_styles.push(cadcraft_doc::TextStyle { name: "Missing".into(), font: font.into(), family: String::new(), ..Default::default() });
     let block = Arc::make_mut(d.blocks.get_mut("FRAME").unwrap());
     let handle = block.entities.iter().find(|entity| matches!(&entity.kind, EntityKind::Text(_))).unwrap().handle;
     assert!(block.entities.modify(handle, |entity| {
@@ -374,6 +373,19 @@ fn font_missing_warns_at_plan_level() {
     assert_eq!(entry.code, code);
     assert_eq!(entry.message, message);
     assert!(plan.sheets.iter().all(|sheet| !sheet.issues.iter().any(|entry| entry.code.starts_with("FONT_"))));
+}
+
+#[test]
+fn missing_shx_font_warns_with_the_stroke_font() {
+    // Missing SHX fonts never take an outline face, so this holds whatever is installed.
+    let _serial = cadcraft_engine::cmd::fonts::test_lock();
+    let _settings = FontSettings::isolated();
+    let (mut s, handles) = setup(1);
+    missing_style_font(&mut s, "zz-missing-font.shx");
+    let plan = typed(&scan(&mut s, &handles));
+    let entry = plan.issues.iter().find(|entry| entry.code.starts_with("FONT_")).unwrap();
+    assert_eq!((entry.code.as_str(), entry.severity, entry.sheet_id.as_deref()), (codes::FONT_MISSING, Severity::Warn, None));
+    assert_eq!(entry.message, "zz-missing-font.shx is drawn with the built-in stroke font");
 }
 
 #[test]

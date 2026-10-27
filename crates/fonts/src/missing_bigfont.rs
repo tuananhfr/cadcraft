@@ -73,20 +73,35 @@ impl MissingBigFont {
     /// takes the next one with it whether the code is known or not (`//g` is the code `//`, then
     /// `g`); a mark with no vowel before it that can take it is left as typed.
     pub fn decode(self, s: &str) -> Cow<'_, str> {
+        fn as_typed(s: &str) -> Cow<'_, str> {
+            Cow::Borrowed(s)
+        }
+        self.decode_with(s, as_typed)
+    }
+
+    /// [`decode`](Self::decode), with the text between codes shown through `plain` (the main
+    /// font's legacy encoding). Codes are looked up on the bytes as typed, like AutoCAD does,
+    /// so a font that draws capitals doesn't turn `/s` into the code `/S`.
+    pub fn decode_with<'a>(self, s: &'a str, plain: impl for<'r> Fn(&'r str) -> Cow<'r, str>) -> Cow<'a, str> {
         if !s.contains(self.lead) {
-            return Cow::Borrowed(s);
+            return match plain(s) {
+                Cow::Borrowed(_) => Cow::Borrowed(s),
+                Cow::Owned(o) => Cow::Owned(o),
+            };
         }
         let mut out: Vec<char> = Vec::with_capacity(s.len());
-        let mut chars = s.chars();
-        while let Some(c) = chars.next() {
-            if c != self.lead {
-                out.push(c);
-                continue;
-            }
+        let mut rest = s;
+        while !rest.is_empty() {
+            let run_end = rest.find(self.lead).unwrap_or(rest.len());
+            out.extend(plain(&rest[..run_end]).chars());
+            rest = &rest[run_end..];
+            let mut chars = rest.chars();
+            let Some(c) = chars.next() else { break };
             let Some(second) = chars.next() else {
                 out.push(c);
                 break;
             };
+            rest = chars.as_str();
             let drawn = match self.codes.iter().find(|(k, _)| *k == second).map(|(_, code)| *code) {
                 Some(Code::Char(d)) => {
                     out.push(d);

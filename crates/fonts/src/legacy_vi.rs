@@ -162,6 +162,18 @@ impl LegacyVi {
         (stem.starts_with("vn") || stem.starts_with("vh")).then_some(LegacyVi::Guess { upper: stem.starts_with("vh") })
     }
 
+    /// The encoding `s` is decoded with: a guess settled on the whole string, so the parts of
+    /// it decoded one by one agree. `None`: shown as typed.
+    pub(crate) fn settled(self, s: &str) -> Option<LegacyVi> {
+        match self {
+            LegacyVi::Guess { upper } => match guess(s)? {
+                LegacyVi::Vni => Some(LegacyVi::Vni),
+                _ => Some(LegacyVi::Tcvn3 { upper }),
+            },
+            l => Some(l),
+        }
+    }
+
     /// `s` as the font would show it, in Unicode.
     pub fn decode(self, s: &str) -> Cow<'_, str> {
         match self {
