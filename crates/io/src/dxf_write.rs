@@ -1766,6 +1766,8 @@ fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Tag> {
     let scales: Vec<(&cadcraft_doc::AnnoScale, String)> = d.scales.iter().filter(|s| s.is_valid()).map(|s| (s, w.h())).collect();
     // Plot style names used by layers and objects (Normal always), each a placeholder object.
     let pstyle_dict = w.h();
+    // Only when it matters, so a drawing without wipeouts is written as before.
+    let wipeout_vars = (every.iter().any(|e| matches!(e.kind, EntityKind::Wipeout(_))) || d.header.get("WIPEOUTFRAME").is_some()).then(|| w.h());
     let mut pstyle_names: Vec<String> = vec![cadcraft_doc::NORMAL_STYLE.to_string()];
     let named = d.layers.iter().map(|l| l.plot_style.as_str()).chain(every.iter().map(|e| e.common.plot_style.as_str()));
     for n in named {
@@ -1823,6 +1825,9 @@ fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Tag> {
     }
     if every.iter().any(|e| matches!(e.kind, EntityKind::Wipeout(_))) {
         classes.push(("WIPEOUT", "AcDbWipeout", 127, true));
+    }
+    if wipeout_vars.is_some() {
+        classes.push(("WIPEOUTVARIABLES", "AcDbWipeoutVariables", 0, false));
     }
     if !cx.images.is_empty() {
         classes.push(("IMAGE", "AcDbRasterImage", 127, true));
@@ -2233,6 +2238,10 @@ fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Tag> {
     }
     w.s(3, "ACAD_SCALELIST");
     w.s(350, scale_dict.clone());
+    if let Some(h) = &wipeout_vars {
+        w.s(3, "ACAD_WIPEOUT_VARS");
+        w.s(350, h);
+    }
     w.s(0, "DICTIONARY");
     w.s(5, group_dict);
     w.s(330, root_dict.clone());
@@ -2273,6 +2282,13 @@ fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Tag> {
     }
     for (s, (_, h)) in table_styles.iter().zip(&cx.table_styles) {
         table_style_obj(&mut w, d, s, h, &table_style_dict);
+    }
+    if let Some(h) = &wipeout_vars {
+        w.s(0, "WIPEOUTVARIABLES");
+        w.s(5, h);
+        w.s(330, root_dict.clone());
+        w.s(100, "AcDbWipeoutVariables");
+        w.i(70, d.header.i64("WIPEOUTFRAME", 1).clamp(0, 2));
     }
     // Plot style names: a dictionary with a default (Normal) of placeholder objects.
     w.s(0, "ACDBDICTIONARYWDFLT");

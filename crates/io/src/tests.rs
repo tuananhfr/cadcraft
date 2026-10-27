@@ -2482,3 +2482,48 @@ fn foreign_table_reads_cell_text_height_and_keeps_style_scale() {
     assert_eq!(t2.cells[0][0].text_height, Some(150.0));
     assert_eq!(t2.cells[0][1].text_height, None);
 }
+
+fn dxf_with_wipeout_vars(frame: i32) -> String {
+    let lines = [
+        "0", "SECTION", "2", "OBJECTS",
+        "0", "DICTIONARY", "5", "C", "100", "AcDbDictionary", "3", "ACAD_WIPEOUT_VARS", "350", "A1",
+        "0", "WIPEOUTVARIABLES", "5", "A1", "330", "C", "100", "AcDbWipeoutVariables", "70", &frame.to_string(),
+        "0", "ENDSEC", "0", "EOF",
+    ];
+    lines.join("\n") + "\n"
+}
+
+#[test]
+fn wipeout_vars_set_the_frame_mode() {
+    for frame in [0, 2] {
+        let d = read_dxf(dxf_with_wipeout_vars(frame).as_bytes()).unwrap();
+        assert_eq!(d.header.i64("WIPEOUTFRAME", 1), i64::from(frame));
+    }
+}
+
+#[test]
+fn hostile_wipeout_vars_value_is_clamped() {
+    let d = read_dxf(dxf_with_wipeout_vars(99).as_bytes()).unwrap();
+    assert_eq!(d.header.i64("WIPEOUTFRAME", 1), 2);
+}
+
+#[test]
+fn no_wipeout_vars_keeps_default() {
+    let text = "0\nSECTION\n2\nOBJECTS\n0\nDICTIONARY\n5\nC\n100\nAcDbDictionary\n0\nENDSEC\n0\nEOF\n";
+    let d = read_dxf(text.as_bytes()).unwrap();
+    assert_eq!(d.header.i64("WIPEOUTFRAME", 1), 1);
+    assert!(d.header.get("WIPEOUTFRAME").is_none());
+}
+
+#[test]
+fn wipeout_frame_round_trips() {
+    let mut d = Drawing::new_imperial();
+    d.header.set_i64("WIPEOUTFRAME", 0);
+    let text = write_dxf(&d).replace("\r\n", "\n");
+    assert_eq!(text.matches("ACAD_WIPEOUT_VARS").count(), 1);
+    let back = read_dxf(text.as_bytes()).unwrap();
+    assert_eq!(back.header.i64("WIPEOUTFRAME", 1), 0);
+    let again = write_dxf(&back).replace("\r\n", "\n");
+    assert_eq!(again.matches("ACAD_WIPEOUT_VARS").count(), 1);
+    assert_eq!(again.matches("\nWIPEOUTVARIABLES\n").count(), 2);
+}
