@@ -36,7 +36,12 @@ fn a_user_font_is_found_by_file_name_and_family_and_can_be_removed() {
     assert!(m.legacy.is_some());
     assert!(TextFont::for_style("missing-140.ttf", ".VnMissingH").is_outline());
     set_font_map([]);
-    assert!(!TextFont::for_style("missing-140.ttf", "").is_outline());
+    // Without one, a missing TrueType font takes a Latin outline font (the added Noto Sans at
+    // least); a missing SHX font keeps the stroke font.
+    let m = font_info("missing-140.ttf", "");
+    assert!(m.with.is_some() && !m.mapped);
+    assert!(TextFont::for_style("missing-140.ttf", "").is_outline());
+    assert!(!TextFont::for_style("missing-140.shx", "").is_outline());
 
     assert!(ttf::remove_user_font("vhblack-140"));
     assert_eq!(font_info("VHBLACK-140.TTF", ".VnBlackH").state, FontState::Missing);

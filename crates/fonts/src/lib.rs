@@ -311,7 +311,7 @@ impl TextFont {
     }
     /// Resolve a text style font name: an installed TTF/OTF/TTC or an SHX font the user added when found; else, for a font we
     /// can't find (an SHX file, a missing TTF), the FONTALT font ([`ttf::font_alt`]) when set;
-    /// else the stroke font.
+    /// else, for a missing TTF, an installed Latin outline font; else the stroke font.
     pub fn resolve(name: &str) -> TextFont {
         TextFont::for_style(name, "")
     }
@@ -350,14 +350,14 @@ impl TextFont {
     }
     /// `s` as the font shows it.
     fn text<'a>(&self, s: &'a str) -> Cow<'a, str> {
-        let s = match self.big_font {
-            Some(b) => b.decode(s),
-            None => Cow::Borrowed(s),
-        };
-        match (self.legacy, s) {
-            (Some(l), Cow::Borrowed(s)) => l.decode(s),
-            (Some(l), Cow::Owned(s)) => Cow::Owned(l.decode(&s).into_owned()),
-            (None, s) => s,
+        // Only the text between bigfont codes is legacy-decoded: the codes are read as typed,
+        // and the letters they draw (`Ê` of `E/M`) aren't read again as TCVN3 bytes.
+        let legacy = self.legacy.and_then(|l| l.settled(s));
+        match (self.big_font, legacy) {
+            (Some(b), Some(l)) => b.decode_with(s, |run| l.decode(run)),
+            (Some(b), None) => b.decode(s),
+            (None, Some(l)) => l.decode(s),
+            (None, None) => Cow::Borrowed(s),
         }
     }
 }
@@ -784,6 +784,20 @@ mod ttf_tests {
     }
 
     #[test]
+    fn vietnamese_fallback_prefers_noto_sans_over_cjk_faces() {
+        let latin = crate::ttf::script_fallback('ệ');
+        assert!(!latin.is_empty());
+        assert_eq!(crate::ttf::script_fallback('Đ'), latin);
+        assert!(crate::ttf::script_fallback('\u{4E2D}').is_empty());
+        let stems = ["bizudpgothic-regular", "notosansarabic-regular", "notosanscjksc-regular", "notosans-bold", "notosans-regular", "arial"]
+            .map(String::from)
+            .to_vec();
+        let r = crate::ttf::rank_script_fallback(latin, &stems);
+        assert_eq!(r.first().map(String::as_str), Some("notosans-regular"));
+        assert!(!r.iter().any(|s| s == "bizudpgothic-regular"), "{r:?}");
+    }
+
+    #[test]
     fn missing_glyph_without_fallback_draws_a_box() {
         // Private-use code points never take a fallback font: the stroke font's box, no panic.
         let sh = crate::shape_stroke("A\u{E000}", 1.0, 1.0, 0.0);
@@ -881,6 +895,43 @@ mod legacy_tests {
         // Names that say nothing about an encoding leave the text as stored.
         assert!(TextFont::for_style("no-such-font-131.ttf", "").legacy.is_none());
         assert!(TextFont::resolve("").legacy.is_none());
+    }
+
+    #[test]
+    fn missing_shx_still_stroke() {
+        let _serial = crate::ttf::test_lock();
+        crate::set_font_map([]);
+        crate::ttf::set_font_alt("");
+        let f = TextFont::for_style("chhbg.shx", "").with_big_font("vns.shx");
+        if f.is_shx() {
+            return; // A user added the font here: it draws the bytes itself.
+        }
+        assert!(!f.is_outline(), "an SHX font keeps the stroke font");
+        assert_eq!(f.text(&bytes(b"m\xb8c 350#")), "MÁC 350#");
+        // The bigfont's codes sit between the main font's TCVN3 bytes: the `Ê` of `E/M` is not
+        // read again as the TCVN3 byte 0xCA.
+        assert_eq!(f.text(&bytes(b"- BE/M TO/MNG b25, /DA/S 1x2, \xae\xe9 s\xf4t")), "- BÊ TÔNG B25, ĐÁ 1X2, ĐỘ SỤT");
+        // Codes are read as typed: the capitals font doesn't make `/s` the code `/S`, and the
+        // pair itself is left alone while the text around it is drawn in capitals.
+        assert_eq!(f.text("x/s"), "X/s");
+        assert_eq!(f.text("the/sp"), "THE/sP");
+        assert_eq!(f.text(&bytes(b"/d \xb8")), "/d Á");
+        assert_eq!(f.text("x/g12"), "X⌀12");
+    }
+
+    #[test]
+    fn a_guessed_encoding_is_settled_on_the_whole_string() {
+        let _serial = crate::ttf::test_lock();
+        crate::set_font_map([]);
+        // `vhtime.shx` guesses per string: the TCVN3 byte after the code makes the run before
+        // it, which has none of its own, capitals too.
+        let f = TextFont::for_style("vhtime.shx", "").with_big_font("vns.shx");
+        if f.is_shx() {
+            return;
+        }
+        assert_eq!(f.text(&bytes(b"abc/g m\xb8c")), "ABC⌀ MÁC");
+        // No legacy byte anywhere: shown as typed, codes and all.
+        assert_eq!(f.text("the/sp"), "the/sp");
     }
 
     #[test]

@@ -298,10 +298,15 @@ fn truetype_text_is_filled_or_outlined() {
 }
 
 #[test]
-fn missing_font_falls_back_to_stroke() {
+fn missing_font_falls_back_to_a_latin_outline_or_stroke() {
+    // A missing TrueType font takes an installed Latin outline font; without one, the stroke font.
     let d = text_doc("NoSuchFontAnywhere.ttf", "OH");
     let l = build(&d, &Space::Model, &Options::default());
-    assert!(!l.prims.is_empty() && l.prims.iter().all(|p| p.kind == Kind::Polyline));
+    let outline = cadcraft_fonts::font_info("NoSuchFontAnywhere.ttf", "").with.is_some();
+    assert!(!l.prims.is_empty());
+    assert_eq!(l.prims.iter().any(|p| p.kind == Kind::Tris), outline);
+    let shx = build(&text_doc("NoSuchFontAnywhere.shx", "OH"), &Space::Model, &Options::default());
+    assert!(!shx.prims.is_empty() && shx.prims.iter().all(|p| p.kind == Kind::Polyline));
 }
 
 #[test]
