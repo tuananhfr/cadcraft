@@ -505,11 +505,17 @@ pub(super) fn line_rules(items: &[RuleItem]) -> Vec<(Option<MTextColor>, Vec<Vec
         for (on, run, y) in [(it.under, &mut under, -0.2), (it.over, &mut over, 1.2)] {
             if !on {
                 flush(run, y, &mut out);
-            } else if let Some(r) = run {
-                r.x1 = it.x1;
-                r.h = r.h.max(it.h);
             } else {
-                *run = Some(Run { x0: it.x0, x1: it.x1, h: it.h, color: it.color });
+                // AutoCAD rules each character in its own colour, so a colour change ends the stroke.
+                if run.as_ref().is_some_and(|r| r.color != it.color) {
+                    flush(run, y, &mut out);
+                }
+                if let Some(r) = run {
+                    r.x1 = it.x1;
+                    r.h = r.h.max(it.h);
+                } else {
+                    *run = Some(Run { x0: it.x0, x1: it.x1, h: it.h, color: it.color });
+                }
             }
         }
     }
@@ -851,6 +857,33 @@ mod tests {
         assert_eq!(r.len(), 1, "{r:?}");
         let w = crate::line_width("AB CD", 1.0, 0.75);
         assert!((r[0].1 - r[0].0 - w).abs() < 1e-6, "{r:?} vs {w}");
+    }
+
+    #[test]
+    fn underline_breaks_at_colour_change() {
+        let l = lay(r"\LA{\C1;B}C\l", 0.0);
+        let u: Vec<_> = l.pieces.iter().flat_map(|p| p.shaped.strokes.iter().map(move |s| (p.color, s))).filter(|(_, s)| s.len() == 2 && s.iter().all(|p| (p.y + 1.2).abs() < 1e-9)).collect();
+        assert_eq!(u.len(), 3, "{u:?}");
+        let mut u = u;
+        u.sort_by(|a, b| a.1[0].x.total_cmp(&b.1[0].x));
+        assert!((u[0].1[1].x - u[1].1[0].x).abs() < 1e-9 && (u[1].1[1].x - u[2].1[0].x).abs() < 1e-9, "{u:?}");
+        assert_eq!(u[1].0, Some(MTextColor::Aci(1)));
+        assert_ne!(u[0].0, Some(MTextColor::Aci(1)));
+    }
+
+    #[test]
+    fn overline_spans_spaces() {
+        let l = lay(r"\OAB CD\o", 0.0);
+        let r = rules_at(&l, 0.2);
+        assert_eq!(r.len(), 1, "{r:?}");
+        assert!((r[0].1 - r[0].0 - crate::line_width("AB CD", 1.0, 1.0)).abs() < 1e-6, "{r:?}");
+    }
+
+    #[test]
+    fn underline_mixed_height_uses_tallest() {
+        let l = lay(r"\LAB {\H2x;CD}\l", 0.0);
+        let r = rules_at(&l, -2.4);
+        assert_eq!(r.len(), 1, "{r:?}");
     }
 
     #[test]
