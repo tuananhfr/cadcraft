@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
 use cadcraft_doc::{Handle, MONOCHROME_CTB, no_plot_style_table};
-use cadcraft_engine::sheetplan::profile::{EffectiveProfile, check_change};
+use cadcraft_engine::sheetplan::profile::{EffectiveProfile, ProfileLevel, check_change};
 use cadcraft_engine::sheetplan::{ScanMode, ScanRequest, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, ids::sheet_key, verdict};
 use egui::{TextureHandle, vec2};
 use serde_json::{Value, json};
@@ -17,6 +17,8 @@ struct State {
     textures: BTreeMap<(String, u32), Result<TextureHandle, String>>,
     failed: Vec<String>,
     error: Option<String>,
+    /// Read again only on Profile…, Rescan, Publish or a new plan, not every frame.
+    effective: Option<EffectiveProfile>,
     plot_style: Option<PlotStyle>,
 }
 
@@ -32,37 +34,54 @@ enum PlotMode {
 struct PlotStyle {
     profile_version: String,
     mode: PlotMode,
-    table: String,
+    /// `None` is "As page setup": no table is sent, so each page keeps its own.
+    table: Option<String>,
+    /// False when a profile level above Platform names a table, which an unsent table would mean instead.
+    follows_page_setup: bool,
+    /// The profile's own spelling when it names monochrome, so the request matches it exactly.
+    monochrome: String,
     lineweights: bool,
+    /// Sent only once changed here or set above Platform, so each page otherwise keeps its own.
+    send_lineweights: bool,
 }
 
 impl PlotStyle {
     fn from_profile(effective: &EffectiveProfile, names: &[String]) -> Self {
+        let set = |pointer: &str| effective.origin.get(pointer).is_some_and(|level| *level != ProfileLevel::Platform);
         let profile_table = &effective.settings.plot_style_table;
-        let mode = if no_plot_style_table(profile_table) {
-            PlotMode::Original
+        let first = || names.first().cloned();
+        let (mode, table) = if !set("/plot_style_table") {
+            (PlotMode::ByTable, None)
+        } else if no_plot_style_table(profile_table) {
+            (PlotMode::Original, first())
         } else if profile_table.trim().eq_ignore_ascii_case(MONOCHROME_CTB) {
-            PlotMode::BlackAndWhite
+            (PlotMode::BlackAndWhite, first())
         } else {
-            PlotMode::ByTable
+            (PlotMode::ByTable, Some(profile_table.clone()))
         };
-        let table = if mode == PlotMode::ByTable { profile_table.clone() } else { names.first().cloned().unwrap_or_default() };
-        Self { profile_version: effective.version.clone(), mode, table, lineweights: effective.settings.lineweights }
+        Self {
+            profile_version: effective.version.clone(),
+            mode,
+            table,
+            follows_page_setup: !set("/plot_style_table"),
+            monochrome: if mode == PlotMode::BlackAndWhite { profile_table.trim().to_owned() } else { MONOCHROME_CTB.to_owned() },
+            lineweights: effective.settings.lineweights,
+            send_lineweights: set("/lineweights"),
+        }
     }
 
     /// The table name sent to `ubplot.publish`; "None" also overrides a layout page setup's own table.
-    fn table_param(&self) -> &str {
+    fn table_param(&self) -> Option<&str> {
         match self.mode {
-            PlotMode::Original => "None",
-            PlotMode::BlackAndWhite => MONOCHROME_CTB,
-            PlotMode::ByTable => &self.table,
+            PlotMode::Original => Some("None"),
+            PlotMode::BlackAndWhite => Some(&self.monochrome),
+            PlotMode::ByTable => self.table.as_deref(),
         }
     }
 
     /// A chosen table that is neither the drawing's nor built in, which `ubplot.publish` refuses.
     fn table_missing(&self, d: Option<&cadcraft_doc::Drawing>) -> bool {
-        let table = self.table_param();
-        !no_plot_style_table(table) && d.is_none_or(|d| cadcraft_doc::plot_style_table(d, table).is_none())
+        self.table_param().is_some_and(|table| !no_plot_style_table(table) && d.is_none_or(|d| cadcraft_doc::plot_style_table(d, table).is_none()))
     }
 }
 
@@ -90,8 +109,9 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         state.exceptions = super::exceptions::State::default();
         state.failed.clear();
         state.error = None;
+        state.effective = None;
     }
-    let effective = app.session.effective_print_profile();
+    let effective = state.effective.take().unwrap_or_else(|| app.session.effective_print_profile());
     if state.plot_style.as_ref().is_none_or(|style| style.profile_version != effective.version) {
         let names = app.session.doc().map(cadcraft_doc::plot_style_table_names).unwrap_or_default();
         state.plot_style = Some(PlotStyle::from_profile(&effective, &names));
@@ -182,6 +202,7 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
             });
         });
     super::exceptions::confirmation(ctx, &plan, &mut state.exceptions, &mut action);
+    let refresh_profile = matches!(action, Some(Action::Profile | Action::Rescan | Action::Publish));
     match action {
         Some(Action::Rescan) => match super::rescan(app) {
             Ok(_) => {
@@ -205,6 +226,9 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         },
         Some(Action::Publish) => publish(app, &mut state, open),
         None => {}
+    }
+    if !refresh_profile {
+        state.effective = Some(effective);
     }
     if *open {
         ctx.data_mut(|data| data.insert_temp(id, state));
@@ -230,9 +254,13 @@ fn plot_style(ui: &mut egui::Ui, style: &mut PlotStyle, effective: &EffectivePro
             }
         }
         let combo = ui.add_enabled_ui(!table_locked && style.mode == PlotMode::ByTable, |ui| {
-            egui::ComboBox::from_id_salt("ubplot_plot_style_table").selected_text(style.table.as_str()).show_ui(ui, |ui| {
+            let selected = style.table.as_deref().unwrap_or(crate::tl!("As page setup"));
+            egui::ComboBox::from_id_salt("ubplot_plot_style_table").selected_text(selected).show_ui(ui, |ui| {
+                if style.follows_page_setup {
+                    ui.selectable_value(&mut style.table, None, crate::tl!("As page setup"));
+                }
                 for name in names {
-                    ui.selectable_value(&mut style.table, name.clone(), name.as_str());
+                    ui.selectable_value(&mut style.table, Some(name.clone()), name.as_str());
                 }
             })
         });
@@ -243,6 +271,9 @@ fn plot_style(ui: &mut egui::Ui, style: &mut PlotStyle, effective: &EffectivePro
             combo.on_hover_text(crate::tl!("Plot style table")).on_disabled_hover_text(crate::tl!("Plot style table"));
         }
         let checkbox = ui.add_enabled(!lineweights_locked, egui::Checkbox::new(&mut style.lineweights, crate::tl!("Plot lineweights")));
+        if checkbox.changed() {
+            style.send_lineweights = true;
+        }
         if lineweights_locked {
             checkbox.on_disabled_hover_text(crate::tl!("Locked by company policy"));
         }
@@ -385,9 +416,14 @@ fn publish(app: &mut CadApp, state: &mut State, open: &mut bool) {
     state.error = None;
     let background = cfg!(not(target_arch = "wasm32")) || app.job_pump.available();
     let mut params = json!({"output": output, "path": path, "background": background});
+    // Left out, each page keeps its own page setup: a layout's table and lineweights, colours for Model.
     if let (Some(style), Some(fields)) = (&state.plot_style, params.as_object_mut()) {
-        fields.insert("plotStyleTable".into(), json!(style.table_param()));
-        fields.insert("lineweights".into(), json!(style.lineweights));
+        if let Some(table) = style.table_param() {
+            fields.insert("plotStyleTable".into(), json!(table));
+        }
+        if style.send_lineweights {
+            fields.insert("lineweights".into(), json!(style.lineweights));
+        }
     }
     match app.run("ubplot.publish", params) {
         Ok(result) => {

@@ -736,6 +736,7 @@ dependencies = [
  "egui_kittest",
  "image",
  "log",
+ "miniz_oxide 0.8.9",
  "naga",
  "serde",
  "serde_json",

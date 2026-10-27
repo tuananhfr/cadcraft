@@ -27,6 +27,8 @@ image = { workspace = true }
 
 [dev-dependencies]
 unicode-normalization = "0.1"
+# Inflates published PDF content streams to check their colours.
+miniz_oxide = "0.8"
 cadcraft-io = { workspace = true }
 egui_kittest = { workspace = true, features = ["wgpu", "snapshot"] }
 # Validates the canvas WGSL and its GLSL ES 3.0 (WebGL2) translation in tests (same naga wgpu uses).

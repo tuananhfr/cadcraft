@@ -180,6 +180,29 @@ fn background_publish_refuses_an_unknown_table() {
 }
 
 #[test]
+fn background_publish_clears_a_stale_missing_table_warning() {
+    use cadcraft_engine::sheetplan::codes::PLOT_PROFILE_MISSING;
+    use cadcraft_engine::sheetplan::profile::{PRINT_PROFILE_SCHEMA, ProfileDoc, ProfileLevel};
+    let mut s = session(frames_drawing(1));
+    let user = ProfileDoc {
+        schema_version: PRINT_PROFILE_SCHEMA,
+        level: ProfileLevel::User,
+        id: "default".into(),
+        project_id: None,
+        revision: 1,
+        settings: json!({"plot_style_table": "lpc.ctb"}),
+        locks: Vec::new(),
+        updated_ms: 1,
+    };
+    s.write_print_profile(&user).unwrap();
+    scan(&mut s);
+    let warned = |s: &Session| s.ubplot.last.as_ref().unwrap().plan.issues.iter().any(|issue| issue.code == PLOT_PROFILE_MISSING);
+    assert!(warned(&s));
+    s.execute("ubplot.publish", &json!({"background": true, "plotStyleTable": "None"})).unwrap();
+    assert!(!warned(&s), "Exceptions no longer lists the missing profile table");
+}
+
+#[test]
 fn background_publish_queues_and_host_takes_it() {
     let mut s = session(frames_drawing(3));
     scan(&mut s);

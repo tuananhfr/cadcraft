@@ -3929,3 +3929,4 @@ echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are no
 	Plot lineweights	Друкувати товщини ліній
 	PLOT_PROFILE_MISSING	Таблицю стилів друку не знайдено
 	The plot style table is not in this drawing or built in: choose another table	Цієї таблиці стилів друку немає ні в кресленні, ні серед вбудованих: виберіть іншу таблицю
+	As page setup	Як у параметрах сторінки
