@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
-use cadcraft_doc::Handle;
+use cadcraft_doc::{Handle, MONOCHROME_CTB, no_plot_style_table};
+use cadcraft_engine::sheetplan::profile::{EffectiveProfile, check_change};
 use cadcraft_engine::sheetplan::{ScanMode, ScanRequest, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, ids::sheet_key, verdict};
 use egui::{TextureHandle, vec2};
 use serde_json::{Value, json};
@@ -16,6 +17,51 @@ struct State {
     textures: BTreeMap<(String, u32), Result<TextureHandle, String>>,
     failed: Vec<String>,
     error: Option<String>,
+    plot_style: Option<PlotStyle>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PlotMode {
+    Original,
+    BlackAndWhite,
+    ByTable,
+}
+
+/// The Publish section's print colours, seeded from the effective print profile.
+#[derive(Clone)]
+struct PlotStyle {
+    profile_version: String,
+    profile_table: String,
+    mode: PlotMode,
+    table: String,
+    lineweights: bool,
+}
+
+impl PlotStyle {
+    fn from_profile(effective: &EffectiveProfile, names: &[String]) -> Self {
+        let profile_table = effective.settings.plot_style_table.clone();
+        let mode = if no_plot_style_table(&profile_table) {
+            PlotMode::Original
+        } else if profile_table.trim().eq_ignore_ascii_case(MONOCHROME_CTB) {
+            PlotMode::BlackAndWhite
+        } else {
+            PlotMode::ByTable
+        };
+        let table = if mode == PlotMode::ByTable { profile_table.clone() } else { names.first().cloned().unwrap_or_default() };
+        Self { profile_version: effective.version.clone(), profile_table, mode, table, lineweights: effective.settings.lineweights }
+    }
+
+    /// The table name sent to `ubplot.publish`; the profile's own spelling is kept so a locked table is not refused.
+    fn table_param(&self) -> String {
+        let profile = &self.profile_table;
+        match self.mode {
+            PlotMode::Original if no_plot_style_table(profile) => profile.clone(),
+            PlotMode::Original => "None".into(),
+            PlotMode::BlackAndWhite if profile.trim().eq_ignore_ascii_case(MONOCHROME_CTB) => profile.clone(),
+            PlotMode::BlackAndWhite => MONOCHROME_CTB.into(),
+            PlotMode::ByTable => self.table.clone(),
+        }
+    }
 }
 
 pub(super) enum Action {
@@ -43,6 +89,11 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         state.failed.clear();
         state.error = None;
     }
+    let effective = app.session.effective_print_profile();
+    if state.plot_style.as_ref().is_none_or(|style| style.profile_version != effective.version) {
+        let names = app.session.doc().map(cadcraft_doc::plot_style_table_names).unwrap_or_default();
+        state.plot_style = Some(PlotStyle::from_profile(&effective, &names));
+    }
     let mut action = None;
     let available = ctx.content_rect().size() - vec2(32.0, 48.0);
     let compact = ctx.content_rect().height() < 480.0;
@@ -56,7 +107,7 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         .max_height(available.y.max(180.0))
         .show(ctx, |ui| {
             // Reserve the footer before scrolling so publishing stays reachable at high zoom.
-            let body_height = (ui.available_height() - 76.0).max(40.0);
+            let body_height = (ui.available_height() - 104.0).max(40.0);
             let body = egui::ScrollArea::vertical().id_salt("ubplot_body").max_height(body_height).auto_shrink([false, false]);
             let body = if compact { body.scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible) } else { body };
             body.show(ui, |ui| {
@@ -96,6 +147,10 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
             });
             ui.separator();
             ui.heading(crate::tl!("Publish"));
+            if let Some(style) = &mut state.plot_style {
+                let names = app.session.doc().map(cadcraft_doc::plot_style_table_names).unwrap_or_default();
+                plot_style(ui, style, &effective, &names);
+            }
             ui.horizontal_wrapped(|ui| {
                 if ui.button(crate::tl!("Profile…")).clicked() {
                     action = Some(Action::Profile);
@@ -151,6 +206,44 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     if *open {
         ctx.data_mut(|data| data.insert_temp(id, state));
     }
+}
+
+fn plot_style(ui: &mut egui::Ui, style: &mut PlotStyle, effective: &EffectiveProfile, names: &[String]) {
+    let table_locked = check_change(effective, "/plot_style_table").is_err();
+    let lineweights_locked = check_change(effective, "/lineweights").is_err();
+    ui.horizontal_wrapped(|ui| {
+        ui.label(crate::tl!("Plot style"));
+        for (mode, label) in [
+            (PlotMode::Original, crate::tl!("Original colors")),
+            (PlotMode::BlackAndWhite, crate::tl!("Black and white")),
+            (PlotMode::ByTable, crate::tl!("By plot style table")),
+        ] {
+            let radio = ui.add_enabled(!table_locked, egui::RadioButton::new(style.mode == mode, label));
+            if radio.clicked() {
+                style.mode = mode;
+            }
+            if table_locked {
+                radio.on_disabled_hover_text(crate::tl!("Locked by company policy"));
+            }
+        }
+        let combo = ui.add_enabled_ui(!table_locked && style.mode == PlotMode::ByTable, |ui| {
+            egui::ComboBox::from_id_salt("ubplot_plot_style_table").selected_text(style.table.as_str()).show_ui(ui, |ui| {
+                for name in names {
+                    ui.selectable_value(&mut style.table, name.clone(), name.as_str());
+                }
+            })
+        });
+        let combo = combo.inner.response;
+        if table_locked {
+            combo.on_disabled_hover_text(crate::tl!("Locked by company policy"));
+        } else {
+            combo.on_hover_text(crate::tl!("Plot style table")).on_disabled_hover_text(crate::tl!("Plot style table"));
+        }
+        let checkbox = ui.add_enabled(!lineweights_locked, egui::Checkbox::new(&mut style.lineweights, crate::tl!("Plot lineweights")));
+        if lineweights_locked {
+            checkbox.on_disabled_hover_text(crate::tl!("Locked by company policy"));
+        }
+    });
 }
 
 fn source(ui: &mut egui::Ui, request: &ScanRequest, action: &mut Option<Action>) {
@@ -286,7 +379,11 @@ fn publish(app: &mut CadApp, state: &mut State, open: &mut bool) {
     state.failed.clear();
     state.error = None;
     let background = cfg!(not(target_arch = "wasm32")) || app.job_pump.available();
-    let params = json!({"output": output, "path": path, "background": background});
+    let mut params = json!({"output": output, "path": path, "background": background});
+    if let (Some(style), Some(fields)) = (&state.plot_style, params.as_object_mut()) {
+        fields.insert("plotStyleTable".into(), json!(style.table_param()));
+        fields.insert("lineweights".into(), json!(style.lineweights));
+    }
     match app.run("ubplot.publish", params) {
         Ok(result) => {
             if let Some(id) = result.get("jobId").and_then(Value::as_str) {

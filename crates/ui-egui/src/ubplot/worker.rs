@@ -87,7 +87,7 @@ mod desktop {
 
     impl JobWorker {
         pub fn spawn(job: PrintJob, loader: Box<dyn SourceLoader + Send>, store: Box<dyn JobStore + Send>, budget: SheetBudget) -> Self {
-            Self::spawn_with_renderer(job, loader, store, budget, Arc::new(PdfSheetRenderer))
+            Self::spawn_with_renderer(job, loader, store, budget, Arc::new(PdfSheetRenderer::default()))
         }
 
         pub fn spawn_with_renderer(
@@ -184,7 +184,7 @@ mod desktop {
         fn default() -> Self {
             Self {
                 root: None,
-                renderer: Arc::new(PdfSheetRenderer),
+                renderer: Arc::new(PdfSheetRenderer::default()),
                 budget: SheetBudget::desktop(),
                 pending: VecDeque::new(),
                 active: None,
@@ -201,7 +201,7 @@ mod desktop {
 
     impl JobPump {
         pub fn new(root: PathBuf) -> Self {
-            Self::with_renderer(root, Arc::new(PdfSheetRenderer), SheetBudget::desktop())
+            Self::with_renderer(root, Arc::new(PdfSheetRenderer::default()), SheetBudget::desktop())
         }
 
         pub fn with_renderer(root: PathBuf, renderer: Arc<dyn SheetRenderer + Send + Sync>, budget: SheetBudget) -> Self {
@@ -490,7 +490,7 @@ mod frame {
         fn default() -> Self {
             Self {
                 available: false,
-                renderer: Rc::new(PdfSheetRenderer),
+                renderer: Rc::new(PdfSheetRenderer::default()),
                 budget: SheetBudget::web(),
                 clock: || 0,
                 last_frame: None,
@@ -509,7 +509,7 @@ mod frame {
 
     impl FrameJobPump {
         pub fn with_clock(session: &mut Session, clock: fn() -> u64) -> Self {
-            Self::with_renderer(session, Rc::new(PdfSheetRenderer), SheetBudget::web(), clock)
+            Self::with_renderer(session, Rc::new(PdfSheetRenderer::default()), SheetBudget::web(), clock)
         }
 
         pub fn with_renderer(session: &mut Session, renderer: Rc<dyn SheetRenderer>, budget: SheetBudget, clock: fn() -> u64) -> Self {

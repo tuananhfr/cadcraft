@@ -1,7 +1,8 @@
 #[allow(dead_code)]
 mod support;
 
-use cadcraft_doc::{Common, EntityKind, Layer, Space};
+use cadcraft_color::Color;
+use cadcraft_doc::{Common, EntityKind, Layer, Lineweight, Space};
 use cadcraft_engine::cmd::file::{IoHooks, base64_decode, set_io};
 use cadcraft_engine::cmd::resolve_alias;
 use cadcraft_engine::sheetplan::kcs::{KCS_LAYER, NO_PLOT_AREAS};
@@ -9,7 +10,7 @@ use cadcraft_engine::sheetplan::{ScanMode, Severity, SheetPlan, SheetSource, cod
 use cadcraft_engine::{Input, Session};
 use cadcraft_geom::{Vec2, Vec3};
 use serde_json::{Value, json};
-use support::pdf_probe::pages;
+use support::pdf_probe::{colour_ops, line_widths, pages, streams_text};
 
 fn session() -> Session {
     set_io(IoHooks {
@@ -150,6 +151,10 @@ fn kcs_handles_restrict_the_scan_to_selected_markers() {
 }
 
 fn publish_bytes(s: &mut Session) -> Vec<u8> {
+    publish_with(s, json!({})).unwrap()
+}
+
+fn publish_with(s: &mut Session, params: Value) -> Result<Vec<u8>, String> {
     let plan = &s.ubplot.last.as_ref().unwrap().plan;
     let approvals: Vec<_> = plan
         .issues
@@ -167,10 +172,10 @@ fn publish_bytes(s: &mut Session) -> Vec<u8> {
     if !approvals.is_empty() {
         s.execute("ubplot.approve", &json!({"approvals": approvals, "by": "user"})).unwrap();
     }
-    let result = s.execute("ubplot.publish", &json!({})).unwrap();
+    let result = s.execute("ubplot.publish", &params).map_err(|error| error.to_string())?;
     let files = result["files"].as_array().unwrap();
     assert_eq!(files.len(), 1, "KCS output is one merged PDF");
-    base64_decode(files[0]["data"].as_str().unwrap()).unwrap()
+    Ok(base64_decode(files[0]["data"].as_str().unwrap()).unwrap())
 }
 
 fn contains(haystack: &[u8], needle: &str) -> bool {
@@ -200,6 +205,109 @@ fn kcs_publishes_one_merged_pdf_without_the_marker_layer() {
     let windows: Vec<_> = [0.0, 50000.0, 100000.0].iter().map(|x| json!([[x, -29700.0], [x + 42000.0, 0.0]])).collect();
     scan(&mut s, json!({"mode": "window", "windows": windows, "paper": "A3"}));
     assert!(contains(&publish_bytes(&mut s), KCS_LAYER));
+}
+
+/// One KCS area holding red, green and blue lines 0.5 mm wide.
+fn coloured_kcs_sheet(s: &mut Session) {
+    marker(s, 0.0, 0.0, 42000.0, 29700.0);
+    for (row, colour) in [1_u8, 3, 5].into_iter().enumerate() {
+        let y = -5000.0 - 5000.0 * row as f64;
+        let common = Common { color: Color::Index(colour), lineweight: Lineweight::Mm100(50), ..Common::default() };
+        let kind = EntityKind::Line(cadcraft_doc::Line { a: Vec3::new(1000.0, y, 0.0), b: Vec3::new(30000.0, y, 0.0) });
+        s.doc_mut().unwrap().add(&Space::Model, common, kind).unwrap();
+    }
+    scan(s, json!({"mode": "kcs"}));
+}
+
+#[test]
+fn kcs_publish_monochrome_has_no_colour() {
+    let mut s = session();
+    coloured_kcs_sheet(&mut s);
+    let content = streams_text(&publish_with(&mut s, json!({"plotStyleTable": "monochrome.ctb"})).unwrap());
+    assert!(colour_ops(&content).is_empty(), "{:?}", colour_ops(&content));
+    assert!(content.contains("0 0 0 RG"), "the lines print black");
+}
+
+#[test]
+fn publish_without_table_keeps_colours() {
+    let mut s = session();
+    coloured_kcs_sheet(&mut s);
+    for params in [json!({}), json!({"plotStyleTable": "None"})] {
+        let colours = colour_ops(&streams_text(&publish_with(&mut s, params).unwrap()));
+        for expected in ["1 0 0 RG", "0 1 0 RG", "0 0 1 RG"] {
+            assert!(colours.iter().any(|op| op == expected), "{expected} in {colours:?}");
+        }
+    }
+}
+
+#[test]
+fn publish_lineweights_off() {
+    let mut s = session();
+    coloured_kcs_sheet(&mut s);
+    let on = line_widths(&streams_text(&publish_with(&mut s, json!({})).unwrap()));
+    assert!(on.iter().any(|width| (width - 0.5 * 72.0 / 25.4).abs() < 0.01), "0.5 mm pens: {on:?}");
+    let off = line_widths(&streams_text(&publish_with(&mut s, json!({"lineweights": false})).unwrap()));
+    assert!(!off.is_empty() && off.iter().all(|width| *width == 0.0), "thinnest pens only: {off:?}");
+}
+
+#[test]
+fn locked_plot_style_refused() {
+    use cadcraft_engine::sheetplan::profile::{PRINT_PROFILE_SCHEMA, ProfileDoc, ProfileLevel};
+    let mut s = session();
+    let company = ProfileDoc {
+        schema_version: PRINT_PROFILE_SCHEMA,
+        level: ProfileLevel::Company,
+        id: "default".into(),
+        project_id: None,
+        revision: 1,
+        settings: json!({"plot_style_table": "monochrome.ctb"}),
+        locks: vec!["/plot_style_table".into()],
+        updated_ms: 1,
+    };
+    s.write_print_profile(&company).unwrap();
+    coloured_kcs_sheet(&mut s);
+    for params in [json!({"plotStyleTable": "None"}), json!({"plot_style_table": "grayscale.ctb"})] {
+        let error = publish_with(&mut s, params).unwrap_err();
+        assert!(error.contains("LOCKED_BY_POLICY: /plot_style_table (company)"), "{error}");
+    }
+    // The locked table itself is what publishing uses, sent or not.
+    for params in [json!({}), json!({"plotStyleTable": "monochrome.ctb"})] {
+        assert!(colour_ops(&streams_text(&publish_with(&mut s, params).unwrap())).is_empty());
+    }
+}
+
+#[test]
+fn unknown_table_blocks() {
+    let mut s = session();
+    coloured_kcs_sheet(&mut s);
+    let error = publish_with(&mut s, json!({"plotStyleTable": "lpc.ctb"})).unwrap_err();
+    assert!(error.contains("BLOCKED"), "{error}");
+    let plan = &s.ubplot.last.as_ref().unwrap().plan;
+    let missing: Vec<_> = plan.issues.iter().filter(|issue| issue.code == codes::PLOT_PROFILE_MISSING).collect();
+    assert_eq!(missing.len(), 1, "{:?}", plan.issues);
+    assert_eq!(missing[0].severity, Severity::Block);
+    assert!(missing[0].message.contains("lpc.ctb"), "{}", missing[0].message);
+    let approval = json!({"approvals": [{"sheetKey": "*", "code": codes::PLOT_PROFILE_MISSING}], "by": "user"});
+    assert!(s.execute("ubplot.approve", &approval).is_err(), "a missing table is never approvable");
+    // A known table publishes again.
+    assert!(publish_with(&mut s, json!({"plotStyleTable": "grayscale.ctb"})).is_ok());
+
+    // A profile naming a table the drawing lacks blocks the scan itself.
+    use cadcraft_engine::sheetplan::profile::{PRINT_PROFILE_SCHEMA, ProfileDoc, ProfileLevel};
+    let user = ProfileDoc {
+        schema_version: PRINT_PROFILE_SCHEMA,
+        level: ProfileLevel::User,
+        id: "default".into(),
+        project_id: None,
+        revision: 1,
+        settings: json!({"plot_style_table": "lpc.ctb"}),
+        locks: Vec::new(),
+        updated_ms: 1,
+    };
+    s.write_print_profile(&user).unwrap();
+    let plan = scan(&mut s, json!({"mode": "kcs"}));
+    assert!(plan.issues.iter().any(|issue| issue.code == codes::PLOT_PROFILE_MISSING && issue.severity == Severity::Block));
+    assert!(plan.sheets.iter().all(|sheet| sheet.status == cadcraft_engine::sheetplan::SheetStatus::Blocked));
 }
 
 #[test]

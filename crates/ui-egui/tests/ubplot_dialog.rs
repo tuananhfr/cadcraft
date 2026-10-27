@@ -895,3 +895,79 @@ fn an_empty_plan_says_there_is_nothing_to_publish() {
     assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
     assert!(h.query_by_label("No sheets to publish").is_some());
 }
+
+fn queued_job(h: &mut Harness<'static, CadApp>) -> serde_json::Value {
+    let line = h.state().session.log.iter().rev().find(|line| line.starts_with("Print job ") && line.ends_with(" queued")).cloned().unwrap();
+    let id = line.trim_start_matches("Print job ").trim_end_matches(" queued").to_string();
+    let store = h.state_mut().session.job_store_mut().unwrap();
+    serde_json::from_slice(&store.read_artifact(&id, "job.json").unwrap().unwrap()).unwrap()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn plot_style_modes_and_lineweights_reach_the_publish_params() {
+    let _guard = test_lock();
+    for (mode, lineweights_off, table) in
+        [("Black and white", false, Some("monochrome.ctb")), ("Original colors", true, None), ("By plot style table", false, Some("default.ctb"))]
+    {
+        let (mut app, frames) = app(&[false]);
+        review(&mut app, &frames);
+        approve_warnings(&mut app);
+        app.session.set_job_store(Box::new(cadcraft_engine::sheetplan::queue::MemoryJobStore::default()));
+        let path = temporary_pdf();
+        app.services.pick_save = Some(Box::new(move |_| Some(path.to_string_lossy().into_owned())));
+        let mut h = harness(app);
+        for label in ["Original colors", "Black and white", "By plot style table"] {
+            let radio = h.get_by_role_and_label(egui::accesskit::Role::RadioButton, label);
+            assert!(!radio.accesskit_node().is_disabled());
+        }
+        assert!(!h.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Plot lineweights").accesskit_node().is_disabled());
+        h.get_by_role_and_label(egui::accesskit::Role::RadioButton, mode).click();
+        if lineweights_off {
+            h.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Plot lineweights").click();
+        }
+        h.run_steps(2);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").click();
+        h.run_steps(3);
+        let job = queued_job(&mut h);
+        assert_eq!(job["plot_style_table"].as_str(), table, "{mode}: {job}");
+        assert_eq!(job.get("lineweights").and_then(serde_json::Value::as_bool), lineweights_off.then_some(false), "{mode}: {job}");
+    }
+}
+
+#[test]
+fn locked_plot_style_disables_the_modes() {
+    use cadcraft_engine::sheetplan::profile::{PRINT_PROFILE_SCHEMA, ProfileDoc, ProfileLevel};
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false]);
+    let company = ProfileDoc {
+        schema_version: PRINT_PROFILE_SCHEMA,
+        level: ProfileLevel::Company,
+        id: "default".into(),
+        project_id: None,
+        revision: 1,
+        settings: json!({"plot_style_table": "monochrome.ctb"}),
+        locks: vec!["/plot_style_table".into()],
+        updated_ms: 1,
+    };
+    app.session.write_print_profile(&company).unwrap();
+    review(&mut app, &frames);
+    let h = harness(app);
+    for label in ["Original colors", "Black and white", "By plot style table"] {
+        assert!(h.get_by_role_and_label(egui::accesskit::Role::RadioButton, label).accesskit_node().is_disabled(), "{label}");
+    }
+    assert!(!h.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Plot lineweights").accesskit_node().is_disabled());
+}
+
+#[test]
+fn plot_style_labels_read_in_vietnamese() {
+    for (english, vietnamese) in [
+        ("Original colors", "Màu gốc"),
+        ("Black and white", "Đen trắng"),
+        ("By plot style table", "Theo nét in"),
+        ("Plot lineweights", "In độ dày nét"),
+    ] {
+        assert_eq!(cadcraft_ui_egui::i18n::tr("vi", english), vietnamese);
+        assert_ne!(cadcraft_ui_egui::i18n::tr("uk", english), english);
+    }
+}

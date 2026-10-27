@@ -273,6 +273,8 @@ pub(super) fn resolve_params(s: &mut Session, params: &Value, command: &str) -> 
         ("device", &["device"][..]),
         ("paper", &["paper"][..]),
         ("plot_scale", &["scale", "plot_scale"][..]),
+        ("plot_style_table", &["plotStyleTable", "plot_style_table"][..]),
+        ("lineweights", &["lineweights"][..]),
     ] {
         let default = settings.get(field).ok_or_else(|| bad(command, "missing profile setting"))?;
         for alias in aliases {
@@ -312,7 +314,24 @@ pub(super) fn resolve_params(s: &mut Session, params: &Value, command: &str) -> 
         let naming = value.as_str().ok_or_else(|| bad(command, "naming must be a string"))?;
         profile::naming_tokens(naming).map_err(|error| bad(command, error))?;
     }
+    plot_style(&result, command)?;
     Ok((result, eff))
+}
+
+/// The resolved plot style table (`None` for object colours) and whether lineweights plot.
+pub(super) fn plot_style(params: &Value, command: &str) -> Result<(Option<String>, bool)> {
+    let table = match params.get("plotStyleTable") {
+        None | Some(Value::Null) => None,
+        Some(value) => {
+            let table = value.as_str().filter(|table| table.chars().count() <= 260);
+            Some(table.ok_or_else(|| bad(command, "plotStyleTable must be a string of at most 260 characters"))?)
+        }
+    };
+    let lineweights = match params.get("lineweights") {
+        None | Some(Value::Null) => true,
+        Some(value) => value.as_bool().ok_or_else(|| bad(command, "lineweights must be a boolean"))?,
+    };
+    Ok((table.filter(|table| !cadcraft_doc::no_plot_style_table(table)).map(str::to_owned), lineweights))
 }
 
 pub(super) fn profile_id(s: &mut Session) -> Result<String> {

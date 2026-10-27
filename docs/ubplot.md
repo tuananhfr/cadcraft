@@ -136,6 +136,9 @@ zeroes. An older or missing revision adds WARN `REVISION_OLD`; a newer revision 
 INFO `REVISION_NEWER`. A template's optional `superseded_by` adds WARN
 `TEMPLATE_SUPERSEDED` naming its successor. Plan-level INFO `PLOT_STYLE` names each
 selected layout plot-style table, or `colors as displayed` for pages without a table.
+A plot style table chosen for publishing (`plotStyleTable`, defaulting to the print
+profile's `plot_style_table`) that is neither the drawing's nor built in adds plan-level
+BLOCK `PLOT_PROFILE_MISSING`.
 
 Templates take `action: "list" | "import" | "reset"`, and `text` for JSON import.
 
@@ -281,7 +284,7 @@ Issue codes:
 | Severity | Codes |
 | --- | --- |
 | PASS | No issues. |
-| BLOCK | `FRAME_AMBIGUOUS`, `FRAME_NOT_FOUND`, `FRAME_MINSERT`, `PAPER_TOO_SMALL`, `PAPER_TOO_LARGE`, `SCALE_PAPER_MISMATCH`, `RENDER_FAILED`, `XREF_MISSING`, `XREF_SCAN_LIMIT`, `DEVICE_LIMIT_EXCEEDED` |
+| BLOCK | `FRAME_AMBIGUOUS`, `FRAME_NOT_FOUND`, `FRAME_MINSERT`, `PAPER_TOO_SMALL`, `PAPER_TOO_LARGE`, `SCALE_PAPER_MISMATCH`, `RENDER_FAILED`, `XREF_MISSING`, `XREF_SCAN_LIMIT`, `DEVICE_LIMIT_EXCEEDED`, `PLOT_PROFILE_MISSING` |
 | WARN | `FRAME_DUPLICATE`, `FRAME_OVERLAP`, `FRAME_NESTED`, `FRAME_MIRRORED`, `FRAME_NONUNIFORM`, `XREF_UNLOADED`, `FONT_FALLBACK`, `FONT_MISSING`, `SHEET_ID_DUPLICATE`, `REVISION_OLD`, `TEMPLATE_SUPERSEDED`, `DEVICE_LIMIT_NEAR`, `DEVICE_UNAVAILABLE` |
 | INFO | `PAPER_CUSTOM`, `SCALE_NOT_SET`, `UNITS_ASSUMED`, `HANDLE_DUPLICATE`, `SHEET_EXCLUDED`, `SOURCE_HASH_WEAK`, `XREF_MISSING_OUTSIDE`, `FONT_MAPPED`, `REVISION_NEWER`, `PLOT_STYLE`, `FILE_RENAMED` |
 

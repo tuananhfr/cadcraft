@@ -110,7 +110,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .noundo()
             .enabled(always),
         CommandSpec::new("ubplot.publish", "Publish Plot Frames", jobs::run_publish)
-            .params("{plan?: SheetPlan (default: the last plan), output?: merged|split (merged), path?: file (merged) or file whose stem names split files, title?, background?: false} → {plan, files: [{path?|name, sheets: [sheet_key], bytes, sha256, data?}], failed: [{sheetKey, issues}]}; background:true accepts mode?, pagesPerFile?, retryLimit? and returns {jobId, status: QUEUED}")
+            .params("{plan?: SheetPlan (default: the last plan), output?: merged|split (merged), path?: file (merged) or file whose stem names split files, title?, plotStyleTable?: table name or \"None\" (profile plot_style_table), lineweights?: bool (profile lineweights), background?: false} → {plan, files: [{path?|name, sheets: [sheet_key], bytes, sha256, data?}], failed: [{sheetKey, issues}]}; background:true accepts mode?, pagesPerFile?, retryLimit? and returns {jobId, status: QUEUED}")
             .noundo()
             .enabled(has_doc),
         CommandSpec::new("ubplot.report", "Plot Sheet Report", templates::run_report)
@@ -213,6 +213,8 @@ pub(crate) fn run_scan(s: &mut Session, params: &Value) -> Result<Value> {
         None => s.ubplot.last.as_ref().filter(|last| last.doc_uid == uid).map(|last| &last.plan).unwrap_or(&plan).clone(),
     };
     preflight(s.doc()?, &mut plan, &ctx);
+    let (plot_style_table, _) = profile::plot_style(params, "ubplot.scan")?;
+    crate::sheetplan::preflight::check_plot_style_table(s.doc()?, &mut plan, plot_style_table.as_deref());
     carry_over(&previous, &mut plan);
     let result = plan_result(&plan, rescanned)?;
     s.ubplot.last = Some(LastPlan { doc_uid: uid, revision, request, plan });

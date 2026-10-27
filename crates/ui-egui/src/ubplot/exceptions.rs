@@ -246,6 +246,7 @@ pub(super) fn issue_label(code: &str) -> &str {
         "TEMPLATE_SUPERSEDED" => crate::tl!("TEMPLATE_SUPERSEDED"),
         "KCS_LINE_DEGENERATE" => crate::tl!("KCS_LINE_DEGENERATE"),
         "KCS_NOT_MARKER" => crate::tl!("KCS_NOT_MARKER"),
+        "PLOT_PROFILE_MISSING" => crate::tl!("PLOT_PROFILE_MISSING"),
         other => other,
     }
 }

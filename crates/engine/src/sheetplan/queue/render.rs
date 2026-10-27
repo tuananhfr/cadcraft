@@ -4,8 +4,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use cadcraft_doc::{Drawing, Space};
-use serde_json::json;
+use serde_json::{Value, json};
 
+use super::PrintJob;
 use crate::cmd::file::{budget_plot, merge_pdf};
 use crate::cmd::ubplot::publish::sheet_pages_for_drawing;
 use crate::sheetplan::Sheet;
@@ -67,7 +68,36 @@ pub trait SheetRenderer {
     fn merge(&self, parts: &[&[u8]], labels: &[String], title: &str) -> Result<Vec<u8>, RenderFailure>;
 }
 
-pub struct PdfSheetRenderer;
+/// Renders sheets to PDF with a job's plot style table and lineweight setting.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PdfSheetRenderer {
+    pub plot_style_table: Option<String>,
+    pub lineweights: bool,
+}
+
+impl Default for PdfSheetRenderer {
+    fn default() -> Self {
+        Self { plot_style_table: None, lineweights: true }
+    }
+}
+
+impl PdfSheetRenderer {
+    pub fn for_job(job: &PrintJob) -> Self {
+        Self { plot_style_table: job.plot_style_table.clone(), lineweights: job.lineweights }
+    }
+}
+
+/// Adds the plot style options to a PDF plot's options.
+pub(crate) fn plot_style_options(options: &mut Value, table: Option<&str>, lineweights: bool) {
+    let Some(object) = options.as_object_mut() else { return };
+    if let Some(table) = table.filter(|table| !cadcraft_doc::no_plot_style_table(table)) {
+        object.insert("plotStyleTable".into(), json!(table));
+    }
+    // On is each page's own default (a layout's page setup, always for Model), so only off is sent.
+    if !lineweights {
+        object.insert("lineweights".into(), json!(false));
+    }
+}
 
 impl SheetRenderer for PdfSheetRenderer {
     fn render(&self, d: &Drawing, sheet: &Sheet, budget: &SheetBudget) -> Result<Vec<u8>, RenderFailure> {
@@ -76,7 +106,8 @@ impl SheetRenderer for PdfSheetRenderer {
         }
         let pages = sheet_pages_for_drawing(d, sheet).map_err(RenderFailure::Error)?;
         let plot = budget_plot().ok_or_else(|| RenderFailure::Error("budgeted PDF plotting is not available in this build".into()))?;
-        let options = json!({"pages": pages, "output": "pdf"});
+        let mut options = json!({"pages": pages, "output": "pdf"});
+        plot_style_options(&mut options, self.plot_style_table.as_deref(), self.lineweights);
         let drawing = crate::sheetplan::exclude::plot_drawing(d, std::slice::from_ref(sheet));
         let result = plot(&drawing, &Space::Model, &options, budget.cancel.clone(), budget.max_prims)
             .map_err(|error| if error.contains("SHEET_TOO_LARGE") { RenderFailure::TooLarge(error) } else { RenderFailure::Error(error) });

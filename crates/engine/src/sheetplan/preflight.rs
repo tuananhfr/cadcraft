@@ -58,6 +58,7 @@ fn owned(code: &str) -> bool {
             | codes::REVISION_NEWER
             | codes::TEMPLATE_SUPERSEDED
             | codes::PLOT_STYLE
+            | codes::PLOT_PROFILE_MISSING
             | codes::FILE_RENAMED
             | codes::DEVICE_LIMIT_NEAR
             | codes::DEVICE_LIMIT_EXCEEDED
@@ -310,6 +311,28 @@ fn check_metadata(d: &Drawing, plan: &mut SheetPlan, ctx: &PreflightContext<'_>)
     }
     for table in plot_styles {
         plan.issues.push(issue(Severity::Info, codes::PLOT_STYLE, table, None));
+    }
+}
+
+/// Blocks the plan when the chosen plot style table is neither the drawing's nor a built-in one.
+pub(crate) fn check_plot_style_table(d: &Drawing, plan: &mut SheetPlan, table: Option<&str>) {
+    let before = plan.issues.len();
+    plan.issues.retain(|entry| entry.code != codes::PLOT_PROFILE_MISSING);
+    let mut changed = plan.issues.len() != before;
+    if let Some(table) = table.filter(|table| !cadcraft_doc::no_plot_style_table(table))
+        && cadcraft_doc::plot_style_table(d, table).is_none()
+    {
+        plan.issues.push(issue(
+            Severity::Block,
+            codes::PLOT_PROFILE_MISSING,
+            format!("Plot style table `{table}` is not in this drawing or built in; choose another table."),
+            None,
+        ));
+        changed = true;
+    }
+    // Statuses such as Done from an earlier publish stay unless the verdict actually changed.
+    if changed {
+        refresh_status(plan);
     }
 }
 

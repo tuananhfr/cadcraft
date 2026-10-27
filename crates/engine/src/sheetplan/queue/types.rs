@@ -69,6 +69,19 @@ pub struct PrintJob {
     pub profile_version: Option<String>,
     #[serde(default)]
     pub naming: Option<String>,
+    // Omitted at their defaults so earlier job definitions and job ids stay byte-identical.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plot_style_table: Option<String>,
+    #[serde(default = "lineweights_on", skip_serializing_if = "is_on")]
+    pub lineweights: bool,
+}
+
+fn lineweights_on() -> bool {
+    true
+}
+
+fn is_on(value: &bool) -> bool {
+    *value
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -190,6 +203,8 @@ impl PrintJob {
             profile_id: None,
             profile_version: None,
             naming: None,
+            plot_style_table: None,
+            lineweights: true,
         })
     }
 }

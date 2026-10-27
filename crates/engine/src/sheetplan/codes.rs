@@ -17,6 +17,7 @@ pub const REVISION_OLD: &str = "REVISION_OLD";
 pub const REVISION_NEWER: &str = "REVISION_NEWER";
 pub const TEMPLATE_SUPERSEDED: &str = "TEMPLATE_SUPERSEDED";
 pub const PLOT_STYLE: &str = "PLOT_STYLE";
+pub const PLOT_PROFILE_MISSING: &str = "PLOT_PROFILE_MISSING";
 pub const FILE_RENAMED: &str = "FILE_RENAMED";
 pub const FRAME_AMBIGUOUS: &str = "FRAME_AMBIGUOUS";
 pub const FRAME_NOT_FOUND: &str = "FRAME_NOT_FOUND";

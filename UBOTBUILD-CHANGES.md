@@ -292,3 +292,10 @@ Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded 
 ### Quick Plot: why Publish is disabled
 
 - The reason now shows as a line next to Publish instead of only in a tooltip. Unapproved warnings read "Approve or exclude the warnings under Exceptions to publish" (vi "Chấp nhận hoặc loại trừ các cảnh báo ở mục Ngoại lệ để xuất bản"); the other reasons are "No sheets to publish" and "Fix or exclude blocked sheets before publishing a merged PDF".
+
+## Quick Plot: plot style modes and lineweights
+
+- `ubplot.publish` (Quick Plot, KCS) and background jobs plot with a plot style table and the lineweight setting: `plotStyleTable` and `lineweights`, defaulting to the print profile's `plot_style_table` and `lineweights`. Both go through the profile lock check like paper and device (`LOCKED_BY_POLICY`). "None" sends no table, so a layout keeps its page setup's table; lineweights on leaves each page's default (the layout's page setup; always on for Model), off plots every pen at the thinnest width.
+- Background jobs keep the table and lineweights in their definition (`plot_style_table`, `lineweights`; left out at their defaults, so earlier job definitions and job ids are unchanged), and `ubplot.jobs resume` and Folder runs render with them (`PdfSheetRenderer::for_job`).
+- A chosen table that is neither the drawing's nor built in blocks the plan with plan-level BLOCK `PLOT_PROFILE_MISSING` (vi "Thiếu bảng nét in"), at scan (the profile's table) and at publish. Like every BLOCK it cannot be approved.
+- The Quick Plot Publish section has "Màu gốc" (no table), "Đen trắng" (`monochrome.ctb`) and "Theo nét in" with a list of the drawing's and the built-in tables, and "In độ dày nét". They start from the print profile; a locked field is disabled with "Locked by company policy".

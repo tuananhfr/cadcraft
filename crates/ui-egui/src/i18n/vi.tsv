@@ -4466,3 +4466,12 @@ echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are no
 	Path is not available on the web: use Choose file… in the External References palette (XREF)	Không thể sửa đường dẫn trên web: dùng Chọn file… trong bảng External References (XREF)
 	Attaching xrefs is not available on the web	Không thể đính kèm tham chiếu ngoài trên web
 	On the web, use Choose file… to load	Trên web, dùng Chọn file… để nạp
+
+# Quick Plot print colours and lineweights.
+	Original colors	Màu gốc
+	Black and white	Đen trắng
+	By plot style table	Theo nét in
+	Plot lineweights	In độ dày nét
+	PLOT_PROFILE_MISSING	Thiếu bảng nét in
+	plotStyleTable must be a string of at most 260 characters	plotStyleTable phải là chuỗi tối đa 260 ký tự
+	lineweights must be a boolean	lineweights phải là giá trị boolean

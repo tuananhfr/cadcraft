@@ -29,3 +29,5 @@ rstar = { version = "0.12", default-features = false }
 # Real DXF files for the external reference tests (io is a lower layer).
 cadcraft-io = { workspace = true }
 tiny-skia = { workspace = true }
+# Inflates published PDF content streams to check their colours and pen widths.
+miniz_oxide = "0.8"

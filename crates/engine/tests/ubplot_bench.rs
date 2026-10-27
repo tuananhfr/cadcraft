@@ -102,14 +102,14 @@ impl SheetRenderer for TimedRenderer {
     fn render(&self, drawing: &Drawing, sheet: &Sheet, budget: &SheetBudget) -> Result<Vec<u8>, RenderFailure> {
         *self.counts.borrow_mut().entry(sheet_key(sheet)).or_default() += 1;
         let started = Instant::now();
-        let result = PdfSheetRenderer.render(drawing, sheet, budget);
+        let result = PdfSheetRenderer::default().render(drawing, sheet, budget);
         self.render_times.borrow_mut().push(started.elapsed());
         result
     }
 
     fn merge(&self, parts: &[&[u8]], labels: &[String], title: &str) -> Result<Vec<u8>, RenderFailure> {
         let started = Instant::now();
-        let result = PdfSheetRenderer.merge(parts, labels, title);
+        let result = PdfSheetRenderer::default().merge(parts, labels, title);
         self.merge_times.borrow_mut().push(started.elapsed());
         result
     }

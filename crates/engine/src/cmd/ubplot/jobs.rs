@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use super::{CLOCK, bad, publish, source_hash};
 use crate::cmd::file::{budget_plot, merge_pdf};
 use crate::sheetplan::approval::{carry_over, issues, merge_audit, validate_approvals, validate_issue_approvals};
-use crate::sheetplan::codes::issue;
+use crate::sheetplan::codes::{self, issue};
 use crate::sheetplan::queue::store::{validate_name, validate_output_file_name};
 use crate::sheetplan::queue::*;
 use crate::sheetplan::{PreflightIssue, Severity, SheetPlan, SheetStatus, parse_plan};
@@ -83,6 +83,13 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     }
     let mut plan = queue_plan(s, params)?;
     super::profile::apply_plan(s.doc()?, &mut plan, params, &effective, PUBLISH)?;
+    let (plot_style_table, lineweights) = super::profile::plot_style(params, PUBLISH)?;
+    crate::sheetplan::preflight::check_plot_style_table(s.doc()?, &mut plan, plot_style_table.as_deref());
+    if let Some(missing) = plan.issues.iter().find(|entry| entry.code == codes::PLOT_PROFILE_MISSING) {
+        let message = format!("{}: {}", missing.code, missing.message);
+        publish::remember(s, &plan, params.get("plan"))?;
+        return Err(bad(PUBLISH, message));
+    }
     let source = JobSource { path: s.state()?.path.clone(), source_hash: plan.source_hash.clone(), plan };
     let mut job = PrintJob::new(vec![source], output, retry_limit).map_err(job_error)?;
     let source = job.sources.first_mut().ok_or_else(|| bad(PUBLISH, "job source is missing"))?;
@@ -92,8 +99,19 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     job.profile_id = Some(super::profile::profile_id(s)?);
     job.profile_version = Some(effective.version.clone());
     job.naming = params.get("naming").and_then(Value::as_str).filter(|naming| *naming != "{stem}").map(str::to_owned);
+    job.plot_style_table = plot_style_table;
+    job.lineweights = lineweights;
     let mut identity = json!({"output": job.output, "retry_limit": job.retry_limit, "naming": job.naming,
         "profile_version": job.profile_version, "device": params.get("device"), "paper": params.get("paper"), "scale": params.get("scale")});
+    // Default plot styles leave the identity, and so earlier job ids, unchanged.
+    if let Some(fields) = identity.as_object_mut() {
+        if let Some(table) = &job.plot_style_table {
+            fields.insert("plot_style_table".into(), json!(table));
+        }
+        if !job.lineweights {
+            fields.insert("lineweights".into(), json!(false));
+        }
+    }
     if let Some(printer) = &job.printer
         && let Some(fields) = identity.as_object_mut()
     {
@@ -239,7 +257,8 @@ pub(super) fn run_folder(s: &mut Session, params: &Value) -> Result<Value> {
         return Ok(result);
     }
     let id = job.job_id.clone();
-    let manifest = run_to_end(job, s.ensure_job_store(), &mut FolderLoader::default(), &PdfSheetRenderer, &SheetBudget::desktop(), &now)
+    let renderer = PdfSheetRenderer::for_job(&job);
+    let manifest = run_to_end(job, s.ensure_job_store(), &mut FolderLoader::default(), &renderer, &SheetBudget::desktop(), &now)
         .map_err(|error| bad(FOLDER, error))?;
     s.plot_jobs.queued.retain(|job| job.job_id != id);
     s.plot_jobs.cancel_requests.retain(|request| request != &id);
@@ -381,8 +400,9 @@ pub(super) fn run_jobs(s: &mut Session, params: &Value) -> Result<Value> {
             let budget = SheetBudget::desktop();
             #[cfg(target_arch = "wasm32")]
             let budget = SheetBudget::web();
+            let renderer = PdfSheetRenderer::for_job(&job);
             let store = s.ensure_job_store();
-            let manifest = run_to_end(job, store, loader.as_mut(), &PdfSheetRenderer, &budget, &now).map_err(|error| bad(JOBS, error))?;
+            let manifest = run_to_end(job, store, loader.as_mut(), &renderer, &budget, &now).map_err(|error| bad(JOBS, error))?;
             s.plot_jobs.queued.retain(|job| job.job_id != id);
             s.plot_jobs.cancel_requests.retain(|request| request != id);
             Ok(json!({"manifest": manifest}))
