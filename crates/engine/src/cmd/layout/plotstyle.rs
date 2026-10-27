@@ -1,5 +1,6 @@
 //! Plot styles: PLOTSTYLE (an object's or the current named plot style) and STYLESMANAGER (the
-//! plot style tables: list, view, create, edit, delete, load and save in our own file format).
+//! plot style tables: list, view, create, edit, delete, load (our own file format or AutoCAD .ctb/.stb)
+//! and save in our own file format).
 //!
 //! Tables the drawing keeps live in `Drawing::plot_style_tables` and are saved with it; they
 //! shadow built-in tables of the same name. Editing a built-in table stores an edited copy in
@@ -20,7 +21,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("stylesmanager", "Plot Style Manager...", run_stylesmanager)
             .menu(&["File", "Plot Styles..."])
             .params(
-                "{action?: list (default)|get|new|set|delete|load|save, name?: table (\"x.ctb\"/\"x.stb\"), kind?: colorDependent|named (new), from?: table to copy (new), description?, style?: {name, color?: \"#rrggbb\"|null, grayscale?, screening?: 0-100, linetype?: name|null, lineweight?: mm|null, end?, join?, fill?, description?} (set), removeStyle?: name (set, named tables), path? (load/save; save without one returns `text`), text? (load)}",
+                "{action?: list (default)|get|new|set|delete|load|save, name?: table (\"x.ctb\"/\"x.stb\"), kind?: colorDependent|named (new), from?: table to copy (new), description?, style?: {name, color?: \"#rrggbb\"|null, grayscale?, screening?: 0-100, linetype?: name|null, lineweight?: mm|null, end?, join?, fill?, description?} (set), removeStyle?: name (set, named tables), path? (load/save; save without one returns `text`), text? (load: our JSON), data? (load: base64 of an AutoCAD .ctb/.stb or our file; load returns `unsupportedLinetypes`)}",
             ),
     ]
 }
@@ -186,6 +187,41 @@ fn edit_style(cmd: &str, st: &mut PlotStyle, v: &Value) -> Result<()> {
     Ok(())
 }
 
+/// The bytes STYLESMANAGER load reads (`text`, base64 `data` or a `path`), and the file name
+/// when they came from a path.
+fn load_source(cmd: &str, p: &Value) -> Result<(Vec<u8>, Option<String>)> {
+    let max = cadcraft_doc::MAX_TABLE_FILE;
+    if let Some(t) = str_param(p, "text") {
+        return Ok((t.as_bytes().to_vec(), None));
+    }
+    if let Some(data) = str_param(p, "data") {
+        // Refused before decoding: base64 is a third larger than the file.
+        if data.len() / 4 > max / 3 + 1 {
+            return Err(bad(cmd, "the plot style table file is too large"));
+        }
+        let bytes = crate::cmd::file::base64_decode(data).ok_or_else(|| bad(cmd, "invalid base64"))?;
+        if bytes.len() > max {
+            return Err(bad(cmd, "the plot style table file is too large"));
+        }
+        return Ok((bytes, None));
+    }
+    let Some(_path) = str_param(p, "path") else {
+        return Err(bad(cmd, "`path`, `data` or `text` is required"));
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let meta = std::fs::metadata(_path).map_err(|e| bad(cmd, format!("{_path}: {e}")))?;
+        if meta.len() > max as u64 {
+            return Err(bad(cmd, format!("{_path}: the plot style table file is too large")));
+        }
+        let bytes = std::fs::read(_path).map_err(|e| bad(cmd, format!("{_path}: {e}")))?;
+        let file = std::path::Path::new(_path).file_name().map(|f| f.to_string_lossy().into_owned());
+        Ok((bytes, file))
+    }
+    #[cfg(target_arch = "wasm32")]
+    Err(bad(cmd, "files can't be read here: pass `data` or `text`"))
+}
+
 fn run_stylesmanager(s: &mut Session, p: &Value) -> Result<Value> {
     let cmd = "stylesmanager";
     let action = str_param(p, "action").unwrap_or("list").to_ascii_lowercase();
@@ -297,31 +333,28 @@ fn run_stylesmanager(s: &mut Session, p: &Value) -> Result<Value> {
             Ok(json!({ "deleted": name }))
         }
         "load" => {
-            let text = match (str_param(p, "text"), str_param(p, "path")) {
-                (Some(t), _) => t.to_string(),
-                (None, Some(_path)) => {
-                    #[cfg(not(target_arch = "wasm32"))]
-                    {
-                        let meta = std::fs::metadata(_path).map_err(|e| bad(cmd, format!("{_path}: {e}")))?;
-                        if meta.len() > cadcraft_doc::MAX_TABLE_FILE as u64 {
-                            return Err(bad(cmd, format!("{_path}: the plot style table file is too large")));
-                        }
-                        std::fs::read_to_string(_path).map_err(|e| bad(cmd, format!("{_path}: {e}")))?
-                    }
-                    #[cfg(target_arch = "wasm32")]
-                    return Err(bad(cmd, "files can't be read here: pass `text`"));
+            let (bytes, file) = load_source(cmd, p)?;
+            let name = str_param(p, "name").map(str::trim).filter(|n| !n.is_empty()).map(|n| n.chars().take(255).collect::<String>());
+            let (t, unsupported) = if bytes.starts_with(b"PIAFILEVERSION") {
+                let name = name.or(file).ok_or_else(|| bad(cmd, "the table has no name: pass `name`"))?;
+                let read = crate::cmd::file::plot_style_reader().ok_or_else(|| bad(cmd, "AutoCAD plot style tables can't be read in this build"))?;
+                read(&name, &bytes).map_err(|e| bad(cmd, e))?
+            } else {
+                let text = String::from_utf8(bytes).map_err(|_| bad(cmd, "not a plot style table: neither a .ctb/.stb file nor CADCraft's own"))?;
+                let mut t = PlotStyleTable::from_file_text(&text).map_err(|e| bad(cmd, e))?;
+                if let Some(n) = name {
+                    t.name = n;
                 }
-                (None, None) => return Err(bad(cmd, "`path` or `text` is required")),
+                (t, 0)
             };
-            let mut t = PlotStyleTable::from_file_text(&text).map_err(|e| bad(cmd, e))?;
-            if let Some(n) = str_param(p, "name").map(str::trim).filter(|n| !n.is_empty()) {
-                t.name = n.chars().take(255).collect();
-            }
             if t.name.is_empty() {
                 return Err(bad(cmd, "the table has no name: pass `name`"));
             }
-            let out = table_summary(s.doc()?, &t);
-            store(s.doc_mut()?, t);
+            store(s.doc_mut()?, t.clone());
+            let mut out = table_summary(s.doc()?, &t);
+            if let Some(o) = out.as_object_mut() {
+                o.insert("unsupportedLinetypes".into(), json!(unsupported));
+            }
             Ok(out)
         }
         "save" => {

@@ -53,6 +53,20 @@ pub(crate) fn merge_pdf() -> Option<MergePdfHook> {
     MERGE_PDF.get().copied()
 }
 
+/// Reads an AutoCAD `.ctb`/`.stb` file named `name` into a table and the number of styles whose
+/// linetype was dropped (installed by the app with the file formats layer).
+pub type PlotStyleReader = fn(&str, &[u8]) -> std::result::Result<(cadcraft_doc::PlotStyleTable, usize), String>;
+
+static PLOT_STYLE_READER: OnceLock<PlotStyleReader> = OnceLock::new();
+
+pub fn set_plot_style_reader(h: PlotStyleReader) {
+    let _ = PLOT_STYLE_READER.set(h);
+}
+
+pub(crate) fn plot_style_reader() -> Option<PlotStyleReader> {
+    PLOT_STYLE_READER.get().copied()
+}
+
 static IO: OnceLock<IoHooks> = OnceLock::new();
 
 pub fn set_io(h: IoHooks) {

@@ -3522,8 +3522,8 @@ echo	`{name}` has no style `{rm}`	`{name}` không có kiểu `{rm}`
 echo	`{name}` has no style `{sname}` (colour-dependent styles are Color_1 to Color_255)	`{name}` không có kiểu `{sname}` (kiểu phụ thuộc màu là Color_1 đến Color_255)
 echo	the drawing keeps no plot style table `{name}` (built-in tables can't be deleted)	bản vẽ không chứa bảng kiểu in `{name}` (không thể xóa các bảng tích hợp sẵn)
 echo	{_path}: the plot style table file is too large	{_path}: tệp bảng kiểu in quá lớn
-	files can't be read here: pass `text`	không thể đọc tệp tại đây: hãy truyền `text`
-	`path` or `text` is required	cần có `path` hoặc `text`
+	files can't be read here: pass `data` or `text`	không thể đọc tệp tại đây: hãy truyền `data` hoặc `text`
+	`path`, `data` or `text` is required	cần có `path`, `data` hoặc `text`
 	the table has no name: pass `name`	bảng không có tên: hãy truyền `name`
 	files can't be written here: leave out `path` to get `text`	không thể ghi tệp tại đây: hãy bỏ `path` để nhận `text`
 echo	unknown action `{other}` (list, get, new, set, delete, load, save)	không nhận diện được thao tác `{other}` (list, get, new, set, delete, load, save)
@@ -4466,3 +4466,23 @@ echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are no
 	Path is not available on the web: use Choose file… in the External References palette (XREF)	Không thể sửa đường dẫn trên web: dùng Chọn file… trong bảng External References (XREF)
 	Attaching xrefs is not available on the web	Không thể đính kèm tham chiếu ngoài trên web
 	On the web, use Choose file… to load	Trên web, dùng Chọn file… để nạp
+# AutoCAD .ctb/.stb import (STYLESMANAGER).
+	Import .ctb/.stb…	Nhập .ctb/.stb…
+	Load an AutoCAD plot style table (.ctb or .stb) into the drawing	Nạp bảng kiểu in AutoCAD (.ctb hoặc .stb) vào bản vẽ
+	Plot style tables (CTB, STB)	Bảng kiểu in (CTB, STB)
+	Plot style import: {name} is larger than {limit} bytes	Nhập kiểu in: {name} lớn hơn {limit} byte
+echo	Plot style table {name} imported	Đã nhập bảng kiểu in {name}
+echo	Plot style table {name} imported; {count} styles print with the object linetype (plot style linetypes are not supported yet)	Đã nhập bảng kiểu in {name}; {count} kiểu in theo dạng đường của đối tượng (chưa hỗ trợ dạng đường trong kiểu in)
+	the plot style table file is too large	tệp bảng kiểu in quá lớn
+	AutoCAD plot style tables can't be read in this build	bản dựng này không đọc được bảng kiểu in AutoCAD
+	not a plot style table: neither a .ctb/.stb file nor CADCraft's own	không phải bảng kiểu in: không phải tệp .ctb/.stb cũng không phải tệp của CADCraft
+	not an AutoCAD plot style table (.ctb/.stb)	không phải bảng kiểu in AutoCAD (.ctb/.stb)
+	not a .ctb or .stb plot style table (another PIA file)	không phải bảng kiểu in .ctb hoặc .stb (tệp PIA loại khác)
+	the plot style table is not zlib-compressed as expected	bảng kiểu in không được nén zlib như mong đợi
+	the plot style table file is cut short	tệp bảng kiểu in bị cắt cụt
+	the plot style table is too large	bảng kiểu in quá lớn
+	the plot style table file is damaged (bad compressed data)	tệp bảng kiểu in bị hỏng (dữ liệu nén sai)
+	the plot style table file is damaged (checksum mismatch)	tệp bảng kiểu in bị hỏng (sai tổng kiểm tra)
+	the plot style table is damaged (unbalanced braces)	bảng kiểu in bị hỏng (ngoặc không cân)
+	the plot style table is damaged (nested too deeply)	bảng kiểu in bị hỏng (lồng quá sâu)
+	the plot style table has no name	bảng kiểu in không có tên

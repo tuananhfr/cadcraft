@@ -292,3 +292,13 @@ Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded 
 ### Quick Plot: why Publish is disabled
 
 - The reason now shows as a line next to Publish instead of only in a tooltip. Unapproved warnings read "Approve or exclude the warnings under Exceptions to publish" (vi "Chấp nhận hoặc loại trừ các cảnh báo ở mục Ngoại lệ để xuất bản"); the other reasons are "No sheets to publish" and "Fix or exclude blocked sheets before publishing a merged PDF".
+
+## AutoCAD plot style tables (.ctb / .stb)
+
+2026-10-27 · Import AutoCAD plot style table files into the drawing (spec V4.3 PLOT-01).
+
+- `cadcraft_io::plot_style_file::read_plot_style_file` reads a `.ctb`/`.stb`: the `PIAFILEVERSION_2.0,CTBVER1|STBVER1,compress` + `pmzlibcodec` header, three little-endian u32 (Adler-32, unpacked size, packed size) and a zlib stream of `key=value` / `key{ }` text. Unpacking is capped at `MAX_TABLE_FILE` (4 MB): a larger declared size, a zlib bomb, a cut-short or damaged stream or a checksum mismatch is an error, never a panic. The Adler-32 is accepted over either the packed or the unpacked bytes, since public descriptions differ.
+- Mapping: `color` (else `mode_color`) 0xC2RRGGBB is an RGB colour and 0xC30000nn index colour nn; every other value (-1, 0xC3000000, 0xC3FFFFFF, 0xC4000000 = -1006632960, by layer/block/pen) keeps the object's colour. `color_policy` bit 2 is grayscale (dithering is ignored), `screen` is screening, `lineweight` indexes `custom_lineweight_table` (mm) with 255 = object, `end_style`/`join_style`/`fill_style` map to ours (4/5/73 = object). Plot style linetypes (anything but 31) aren't supported: dropped to the object linetype and counted.
+- STYLESMANAGER `load` also takes base64 `data` and reads `path` as bytes; content starting with `PIAFILEVERSION` goes to the reader (installed by each app through `cmd::file::set_plot_style_reader`, since the engine doesn't depend on `cadcraft-io`), anything else is our JSON as before. A binary table is named after its file (or `name`) with the extension of its kind; the result carries `unsupportedLinetypes`.
+- Plot Style Manager: **Import .ctb/.stb…** where the host has a file picker. The desktop opens its file dialog (filter "Plot style tables (CTB, STB)"); the web picks through `Purpose::PlotStyle` (accept `.ctb,.stb`, at most 4 MB) and loads the bytes as `data`. The command line and status bar say what was imported and how many linetypes were dropped.
+- **Untested with a real customer `.ctb`/`.stb`**: the fixtures are built in the tests from the public description of the format. Check with LPC's own tables (e.g. a monochrome one) before relying on it.

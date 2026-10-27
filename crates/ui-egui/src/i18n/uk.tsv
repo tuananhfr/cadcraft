@@ -2983,8 +2983,8 @@ echo	`{name}` has no style `{rm}`	`{name}` не має стиль `{rm}`
 echo	`{name}` has no style `{sname}` (colour-dependent styles are Color_1 to Color_255)	`{name}` не має стиль `{sname}` (залежні від кольору стилі є Color_1 до Color_255)
 echo	the drawing keeps no plot style table `{name}` (built-in tables can't be deleted)	креслення не містить таблиці стилів друку `{name}` (вбудовані таблиці неможливо видалити)
 echo	{_path}: the plot style table file is too large	{_path}: файл таблиці стилів друку надто великий
-	files can't be read here: pass `text`	неможливо прочитати файли тут: передайте `text`
-	`path` or `text` is required	потрібно `path` або `text`
+	files can't be read here: pass `data` or `text`	неможливо прочитати файли тут: передайте `data` або `text`
+	`path`, `data` or `text` is required	потрібно `path`, `data` або `text`
 	the table has no name: pass `name`	таблиця не має назви: передайте `name`
 	files can't be written here: leave out `path` to get `text`	неможливо записати файли тут: пропустіть `path`, щоб отримати `text`
 echo	unknown action `{other}` (list, get, new, set, delete, load, save)	невідома дія `{other}` (list, get, new, set, delete, load, save)
@@ -3921,3 +3921,10 @@ echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are no
 	Path is not available on the web: use Choose file… in the External References palette (XREF)	Зміна шляху недоступна у вебверсії: скористайтеся «Вибрати файл…» у палітрі External References (XREF)
 	Attaching xrefs is not available on the web	Приєднання зовнішніх посилань недоступне у вебверсії
 	On the web, use Choose file… to load	У вебверсії скористайтеся «Вибрати файл…», щоб завантажити
+# AutoCAD .ctb/.stb import (STYLESMANAGER).
+	Import .ctb/.stb…	Імпортувати .ctb/.stb…
+	Load an AutoCAD plot style table (.ctb or .stb) into the drawing	Завантажити таблицю стилів друку AutoCAD (.ctb або .stb) у креслення
+	Plot style tables (CTB, STB)	Таблиці стилів друку (CTB, STB)
+	Plot style import: {name} is larger than {limit} bytes	Імпорт стилів друку: {name} перевищує {limit} байтів
+echo	Plot style table {name} imported	Таблицю стилів друку {name} імпортовано
+echo	Plot style table {name} imported; {count} styles print with the object linetype (plot style linetypes are not supported yet)	Таблицю стилів друку {name} імпортовано; стилів, що друкуються типом лінії об'єкта: {count} (типи ліній стилів друку ще не підтримуються)
