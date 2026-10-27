@@ -351,6 +351,15 @@ fn missing_style(s: &mut Session) {
     }));
 }
 
+/// The code and message the missing style's font gets: a missing TrueType font is drawn with a
+/// Latin outline font when one is installed, else with the stroke font.
+fn missing_font_issue() -> (&'static str, String) {
+    match cadcraft_fonts::font_info("zz-missing-font.ttf", "").with {
+        Some(face) => (codes::FONT_FALLBACK, format!("zz-missing-font.ttf is drawn with {face}")),
+        None => (codes::FONT_MISSING, "zz-missing-font.ttf is drawn with the built-in stroke font".into()),
+    }
+}
+
 #[test]
 fn font_missing_warns_at_plan_level() {
     let _serial = cadcraft_engine::cmd::fonts::test_lock();
@@ -361,8 +370,9 @@ fn font_missing_warns_at_plan_level() {
     let entry = plan.issues.iter().find(|entry| matches!(entry.code.as_str(), codes::FONT_FALLBACK | codes::FONT_MISSING)).unwrap();
     assert_eq!(entry.severity, Severity::Warn);
     assert_eq!(entry.sheet_id, None);
-    assert_eq!(entry.code, codes::FONT_MISSING);
-    assert_eq!(entry.message, "zz-missing-font.ttf is drawn with the built-in stroke font");
+    let (code, message) = missing_font_issue();
+    assert_eq!(entry.code, code);
+    assert_eq!(entry.message, message);
     assert!(plan.sheets.iter().all(|sheet| !sheet.issues.iter().any(|entry| entry.code.starts_with("FONT_"))));
 }
 
@@ -382,7 +392,7 @@ fn mapped_font_is_info() {
     cadcraft_fonts::set_font_map([]);
     let refreshed = typed(&s.execute("ubplot.scan", &json!({"mode": "last"})).unwrap());
     assert!(!refreshed.issues.iter().any(|entry| entry.code == codes::FONT_MAPPED));
-    assert!(refreshed.issues.iter().any(|entry| entry.code == codes::FONT_MISSING));
+    assert!(refreshed.issues.iter().any(|entry| entry.code == missing_font_issue().0));
 }
 
 #[test]
@@ -636,7 +646,7 @@ fn font_usage_follows_nested_transforms_and_layout_viewports() {
     nest(s.doc_mut().unwrap(), "OUTER", "FRAME", [20.0, 30.0], 0.0);
     let handle = place(&mut s, "OUTER", [1000.0, 2000.0], 2.0, 30.0, false, &[]);
     let plan = typed(&scan(&mut s, &[handle.hex()]));
-    assert!(plan.issues.iter().any(|entry| entry.code == codes::FONT_MISSING));
+    assert!(plan.issues.iter().any(|entry| entry.code == missing_font_issue().0));
     let mut layout = Layout::new("Seen", 1);
     layout.entities.push(cadcraft_doc::Entity::new(
         s.doc_mut().unwrap().new_handle(),
@@ -651,7 +661,7 @@ fn font_usage_follows_nested_transforms_and_layout_viewports() {
     ));
     s.doc_mut().unwrap().layouts.push(layout);
     let plan = typed(&s.execute("ubplot.scan", &json!({"mode": "layout", "layouts": ["Seen"]})).unwrap());
-    assert!(plan.issues.iter().any(|entry| entry.code == codes::FONT_MISSING));
+    assert!(plan.issues.iter().any(|entry| entry.code == missing_font_issue().0));
     let plan = typed(&s.execute("ubplot.scan", &json!({"mode": "layout", "layouts": ["Layout1"]})).unwrap());
     assert!(!plan.issues.iter().any(|entry| entry.code.starts_with("FONT_")));
 }

@@ -311,7 +311,7 @@ impl TextFont {
     }
     /// Resolve a text style font name: an installed TTF/OTF/TTC or an SHX font the user added when found; else, for a font we
     /// can't find (an SHX file, a missing TTF), the FONTALT font ([`ttf::font_alt`]) when set;
-    /// else the stroke font.
+    /// else, for a missing TTF, an installed Latin outline font; else the stroke font.
     pub fn resolve(name: &str) -> TextFont {
         TextFont::for_style(name, "")
     }
@@ -350,13 +350,15 @@ impl TextFont {
     }
     /// `s` as the font shows it.
     fn text<'a>(&self, s: &'a str) -> Cow<'a, str> {
-        let s = match self.big_font {
-            Some(b) => b.decode(s),
+        // The legacy encoding first: bigfont codes are ASCII, but the letters they draw (`Ê` of
+        // `E/M`) are Latin-1 characters a TCVN3 decode would read again as other letters.
+        let s = match self.legacy {
+            Some(l) => l.decode(s),
             None => Cow::Borrowed(s),
         };
-        match (self.legacy, s) {
-            (Some(l), Cow::Borrowed(s)) => l.decode(s),
-            (Some(l), Cow::Owned(s)) => Cow::Owned(l.decode(&s).into_owned()),
+        match (self.big_font, s) {
+            (Some(b), Cow::Borrowed(s)) => b.decode(s),
+            (Some(b), Cow::Owned(s)) => Cow::Owned(b.decode(&s).into_owned()),
             (None, s) => s,
         }
     }
@@ -784,6 +786,20 @@ mod ttf_tests {
     }
 
     #[test]
+    fn vietnamese_fallback_prefers_noto_sans_over_cjk_faces() {
+        let latin = crate::ttf::script_fallback('ệ');
+        assert!(!latin.is_empty());
+        assert_eq!(crate::ttf::script_fallback('Đ'), latin);
+        assert!(crate::ttf::script_fallback('\u{4E2D}').is_empty());
+        let stems = ["bizudpgothic-regular", "notosansarabic-regular", "notosanscjksc-regular", "notosans-bold", "notosans-regular", "arial"]
+            .map(String::from)
+            .to_vec();
+        let r = crate::ttf::rank_script_fallback(latin, &stems);
+        assert_eq!(r.first().map(String::as_str), Some("notosans-regular"));
+        assert!(!r.iter().any(|s| s == "bizudpgothic-regular"), "{r:?}");
+    }
+
+    #[test]
     fn missing_glyph_without_fallback_draws_a_box() {
         // Private-use code points never take a fallback font: the stroke font's box, no panic.
         let sh = crate::shape_stroke("A\u{E000}", 1.0, 1.0, 0.0);
@@ -881,6 +897,22 @@ mod legacy_tests {
         // Names that say nothing about an encoding leave the text as stored.
         assert!(TextFont::for_style("no-such-font-131.ttf", "").legacy.is_none());
         assert!(TextFont::resolve("").legacy.is_none());
+    }
+
+    #[test]
+    fn missing_shx_still_stroke() {
+        let _serial = crate::ttf::test_lock();
+        crate::set_font_map([]);
+        crate::ttf::set_font_alt("");
+        let f = TextFont::for_style("chhbg.shx", "").with_big_font("vns.shx");
+        if f.is_shx() {
+            return; // A user added the font here: it draws the bytes itself.
+        }
+        assert!(!f.is_outline(), "an SHX font keeps the stroke font");
+        assert_eq!(f.text(&bytes(b"m\xb8c 350#")), "MÁC 350#");
+        // The bigfont's codes sit between the main font's TCVN3 bytes: the `Ê` of `E/M` is not
+        // read again as the TCVN3 byte 0xCA.
+        assert_eq!(f.text(&bytes(b"- BE/M TO/MNG b25, /DA/S 1x2, \xae\xe9 s\xf4t")), "- BÊ TÔNG B25, ĐÁ 1X2, ĐỘ SỤT");
     }
 
     #[test]

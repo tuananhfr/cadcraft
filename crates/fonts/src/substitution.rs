@@ -1,6 +1,6 @@
 //! What a text style's font becomes when it isn't there: the user's replacement table, then
-//! FONTALT, then the stroke font. The table is process-wide, like FONTALT, and never changes a
-//! drawing: it only decides what is drawn.
+//! FONTALT, then a Latin outline font for a TrueType font, then the stroke font. The table is
+//! process-wide, like FONTALT, and never changes a drawing: it only decides what is drawn.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
@@ -58,7 +58,7 @@ pub struct FontInfo {
     pub state: FontState,
     /// The font drawn instead (`None`: the stroke font); only for a font that isn't `Found`.
     pub with: Option<String>,
-    /// `with` is the user's choice, not FONTALT.
+    /// `with` is the user's choice, not FONTALT or the Latin outline font.
     pub mapped: bool,
     /// Text typed for a legacy Vietnamese font is shown decoded.
     pub legacy: Option<LegacyVi>,
@@ -97,7 +97,26 @@ pub(crate) fn resolve(font: &str, family: &str) -> Resolved {
         },
         None => alternative(font),
     };
+    let (face, with) = if face.is_none() && with.is_none() && !mapped && is_truetype(font, family) { latin_outline() } else { (face, with) };
     Resolved { face, shx: None, info: FontInfo { state, with, mapped, legacy } }
+}
+
+/// Faces drawn for a missing TrueType font, first installed wins (the web embeds Noto Sans).
+/// Its text was laid out in proportional outlines, which the wider stroke font overruns.
+const LATIN_OUTLINE: &[&str] = &["Arial", "Helvetica", "Noto Sans", "DejaVuSans", "LiberationSans-Regular"];
+
+/// A style font that names a TrueType file, or a font with its TrueType family; never a stroke font.
+fn is_truetype(font: &str, family: &str) -> bool {
+    let k = ttf::key(font);
+    if ttf::is_stroke_name(&k) {
+        return false;
+    }
+    let lower = font.trim().to_ascii_lowercase();
+    [".ttf", ".ttc", ".otf", ".otc"].iter().any(|e| lower.ends_with(e)) || !family.is_empty()
+}
+
+fn latin_outline() -> (Option<ttf::Face>, Option<String>) {
+    LATIN_OUTLINE.iter().find_map(|n| ttf::find(n).map(|f| (Some(f), Some((*n).to_string())))).unwrap_or((None, None))
 }
 
 /// FONTALT, for a font that isn't the built-in one.
@@ -126,17 +145,54 @@ mod tests {
     fn a_font_missing_here_is_reported_with_its_legacy_encoding() {
         let _serial = ttf::test_lock();
         set_font_map([]);
+        ttf::set_font_alt("");
         let missing = font_info("no-such-font-140.ttf", ".VnNoSuchH");
-        assert_eq!((missing.state, missing.with.clone(), missing.mapped), (FontState::Missing, None, false));
+        assert_eq!((missing.state, missing.with.clone(), missing.mapped), (FontState::Missing, latin(), false));
         assert_eq!(missing.legacy, Some(LegacyVi::Tcvn3 { upper: true }));
         assert_eq!(font_info("romans.shx", "").state, FontState::Stroke);
         assert_eq!(font_info("", "").state, FontState::Stroke);
-        // A replacement that is the stroke font draws none; one that is missing counts as none.
+        // A replacement that is the stroke font draws none; one that is missing counts as none,
+        // so a missing TrueType font takes the Latin outline face.
         set_font_map([("shx-140.shx".to_string(), BUILTIN_FONT.to_string()), ("gone-140.ttf".to_string(), "no-such-font-141".to_string())]);
         let shx = resolve("shx-140.shx", "");
         assert!(shx.face.is_none() && shx.info.mapped && shx.info.with.is_none());
         let gone = font_info("gone-140.ttf", "");
-        assert_eq!((gone.with, gone.mapped), (None, false));
+        assert_eq!((gone.with, gone.mapped), (latin(), false));
+        set_font_map([]);
+    }
+
+    /// The Latin outline face a missing TrueType font is drawn with here, if any.
+    fn latin() -> Option<String> {
+        LATIN_OUTLINE.iter().find(|n| ttf::find(n).is_some()).map(|n| n.to_string())
+    }
+
+    #[test]
+    fn missing_ttf_uses_latin_outline() {
+        let _serial = ttf::test_lock();
+        set_font_map([]);
+        ttf::set_font_alt("");
+        if ttf::find("VHARIAL.TTF").is_some() {
+            return; // Installed here: nothing is missing.
+        }
+        let latin = latin();
+        let r = resolve("VHARIAL.TTF", "");
+        assert_eq!(r.face.is_some(), latin.is_some());
+        assert_eq!((r.info.state, r.info.with.clone(), r.info.mapped), (FontState::Missing, latin.clone(), false));
+        assert_eq!(r.info.legacy, Some(LegacyVi::Guess { upper: true }));
+        assert_eq!(crate::TextFont::for_style("VHARIAL.TTF", "").is_outline(), latin.is_some());
+        // A font file without an extension is TrueType when the style names its family.
+        assert_eq!(font_info("vharial", "VH Arial").with, latin);
+        assert_eq!(font_info("vharial", "").with, None);
+        // Missing SHX fonts keep the stroke font.
+        for shx in ["chhbg.shx", "vhtime.shx", "romans.shx", "", "CADCraft Stroke"] {
+            assert!(resolve(shx, "").face.is_none(), "{shx}");
+            assert_eq!(font_info(shx, "").with, None, "{shx}");
+        }
+        // The user's choice of the stroke font stands. (An installed FONTALT winning is in
+        // `tests/missing_truetype.rs`: setting it here would change unlocked tests' fonts.)
+        set_font_map([("vharial.ttf".to_string(), BUILTIN_FONT.to_string())]);
+        let stroke = resolve("VHARIAL.TTF", "");
+        assert!(stroke.face.is_none() && stroke.info.with.is_none() && stroke.info.mapped);
         set_font_map([]);
     }
 

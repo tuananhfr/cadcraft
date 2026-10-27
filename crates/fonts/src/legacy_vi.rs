@@ -130,6 +130,10 @@ const VNI_MARKS: &[(u8, Option<usize>, Shape)] = &[
     (0xEB, Some(4), Shape::Breve),
 ];
 
+/// SHX fonts, by lower-case file stem, that draw TCVN3 bytes as capitals though their names
+/// don't say so.
+const TCVN3_UPPER_SHX: &[&str] = &["chhbg"];
+
 /// VNI letters that are one byte (lower case; a capital is the byte − 0x20).
 const VNI_SINGLE: &[(u8, char)] = &[(0xF1, 'đ'), (0xF4, 'ơ'), (0xF6, 'ư'), (0xEC, 'ì'), (0xED, 'í'), (0xE6, 'ỉ'), (0xF3, 'ĩ'), (0xF2, 'ị')];
 
@@ -150,6 +154,10 @@ impl LegacyVi {
         // "VNI Cambodia", "VNI Russia"…: VNI's fonts for other scripts.
         if stem.starts_with("vni ") {
             return None;
+        }
+        // AutoCAD plots `m¸c` in `chhbg.shx` as `MÁC` and `b25` as `B25`.
+        if TCVN3_UPPER_SHX.contains(&stem) && (file == stem || file.ends_with(".shx")) {
+            return Some(LegacyVi::Tcvn3 { upper: true });
         }
         (stem.starts_with("vn") || stem.starts_with("vh")).then_some(LegacyVi::Guess { upper: stem.starts_with("vh") })
     }
@@ -291,6 +299,18 @@ mod tests {
         assert_eq!(LegacyVi::from_name("VNI Cambodia"), None);
         assert_eq!(LegacyVi::from_name("arial.ttf"), None);
         assert_eq!(LegacyVi::from_name(""), None);
+    }
+
+    #[test]
+    fn chhbg_is_tcvn3_upper() {
+        let upper = Some(LegacyVi::Tcvn3 { upper: true });
+        for name in ["chhbg.shx", "CHHBG.SHX", "C:\\Fonts\\chhbg.shx", "chhbg"] {
+            assert_eq!(LegacyVi::from_name(name), upper, "{name}");
+        }
+        assert_eq!(LegacyVi::from_name("chhbgx.shx"), None);
+        let Some(l) = LegacyVi::from_name("chhbg.shx") else { panic!("chhbg.shx is known") };
+        assert_eq!(l.decode(&bytes(b"m\xb8c b25")), "MÁC B25");
+        assert_eq!(l.decode(&bytes(b"\xae\xe9 s\xf4t")), "ĐỘ SỤT");
     }
 
     #[test]

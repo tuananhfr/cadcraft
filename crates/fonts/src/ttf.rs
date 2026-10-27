@@ -161,12 +161,16 @@ const ARABIC_FALLBACK: &[&str] = &[
     "dejavusans",
 ];
 const HEBREW_FALLBACK: &[&str] = &["notosanshebrew", "notoserifhebrew", "arial", "tahoma", "segoeui", "dejavusans"];
+/// Latin faces for accented Latin and Vietnamese letters: the general search puts CJK fonts
+/// first (BIZ UDPGothic on the web), whose Latin letters are made for Japanese text.
+const LATIN_FALLBACK: &[&str] = &["notosansregular", "arial", "helvetica", "segoeui", "dejavusans", "liberationsans"];
 /// Script-specific fallback files loaded per character, at most.
 const MAX_SCRIPT_FILES: usize = 4;
 
 /// Script-specific fallback font names for `c`, if any.
-fn script_fallback(c: char) -> &'static [&'static str] {
+pub(crate) fn script_fallback(c: char) -> &'static [&'static str] {
     match c {
+        '\u{00C0}'..='\u{024F}' | '\u{0300}'..='\u{036F}' | '\u{1E00}'..='\u{1EFF}' => LATIN_FALLBACK,
         '\u{0600}'..='\u{08FF}' | '\u{FB50}'..='\u{FDFF}' | '\u{FE70}'..='\u{FEFF}' => ARABIC_FALLBACK,
         '\u{0590}'..='\u{05FF}' | '\u{FB1D}'..='\u{FB4F}' => HEBREW_FALLBACK,
         _ => &[],
@@ -398,18 +402,8 @@ impl Db {
         if names.is_empty() {
             return None;
         }
-        let mut stems: Vec<(usize, usize, String)> = self
-            .paths
-            .keys()
-            .chain(self.files.keys())
-            .filter_map(|s| {
-                let n = norm(s);
-                names.iter().position(|p| n.contains(p)).map(|pref| (weight_penalty(s, ""), pref, s.clone()))
-            })
-            .collect();
-        stems.sort();
-        stems.dedup_by(|a, b| a.2 == b.2);
-        for (_, _, stem) in stems.into_iter().take(MAX_SCRIPT_FILES) {
+        let stems: Vec<String> = self.paths.keys().chain(self.files.keys()).cloned().collect();
+        for stem in rank_script_fallback(names, &stems).into_iter().take(MAX_SCRIPT_FILES) {
             let Some(bytes) = self.file(&stem) else { continue };
             let Some(face) = faces(&bytes).into_iter().find(|f| f.has_glyph(c)) else { continue };
             if let Some(i) = self.fallback.faces.iter().position(|f| f.same(&face)) {
@@ -481,6 +475,21 @@ fn common_prefix(a: &str, b: &str) -> usize {
 fn weight_penalty(stem: &str, want: &str) -> usize {
     let n = norm(stem);
     WEIGHT_WORDS.iter().filter(|w| n.contains(*w) && !want.contains(*w)).count()
+}
+
+/// The font file stems that match a script's fallback `names`: regular weights first, then in
+/// the order of `names`, then by name.
+pub(crate) fn rank_script_fallback(names: &[&str], stems: &[String]) -> Vec<String> {
+    let mut v: Vec<(usize, usize, String)> = stems
+        .iter()
+        .filter_map(|s| {
+            let n = norm(s);
+            names.iter().position(|p| n.contains(p)).map(|pref| (weight_penalty(s, ""), pref, s.clone()))
+        })
+        .collect();
+    v.sort();
+    v.dedup_by(|a, b| a.2 == b.2);
+    v.into_iter().map(|(_, _, s)| s).collect()
 }
 
 /// Order font file stems for the missing-glyph search: known wide-coverage (CJK) fonts first,

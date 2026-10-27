@@ -292,3 +292,10 @@ Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded 
 ### Quick Plot: why Publish is disabled
 
 - The reason now shows as a line next to Publish instead of only in a tooltip. Unapproved warnings read "Approve or exclude the warnings under Exceptions to publish" (vi "Chấp nhận hoặc loại trừ các cảnh báo ở mục Ngoại lệ để xuất bản"); the other reasons are "No sheets to publish" and "Fix or exclude blocked sheets before publishing a merged PDF".
+
+## Vietnamese notes: vns.shx, chhbg.shx and missing TrueType fonts (FONT-01)
+
+- `vns.shx` bigfont codes (`cadcraft_fonts::MissingBigFont`, display only): `/D` Đ, `/}` Ư, `/{` Ơ, `/g` and `/G` the diameter sign, `//` a slash; marks typed after their vowel, `/M` circumflex, `/W` breve (A) or horn (O, U), tones `/F` `/S` `/R` `/X` `/J`, put on the nearest vowel of the word before them (`CHIE/M/FU` is CHIỀU, `L/}/{/JNG` LƯỢNG). Any other code, and a mark with no vowel that can take it, is drawn as typed. **The table is inferred from one customer drawing and the PDF AutoCAD plotted from it, not from the vns.shx file**, which we don't have and may not read.
+- `chhbg.shx` is read as TCVN3 drawn in capitals, like an `.Vn…H` font (AutoCAD plots `m¸c` as MÁC and `b25` as B25). The legacy encoding is now decoded before the bigfont codes, so a letter a code draws (`Ê` of `E/M`) isn't read again as a TCVN3 byte.
+- A missing TrueType font (a `.ttf/.ttc/.otf/.otc` file, or a style with its TrueType family) with no replacement and no FONTALT is drawn with the first installed of Arial, Helvetica, Noto Sans, DejaVu Sans, Liberation Sans instead of the wider stroke font; the font report names it (`FontInfo::with`), so the plot preflight shows `FONT_FALLBACK` instead of `FONT_MISSING`. Missing SHX fonts still use the stroke font.
+- Accented Latin and Vietnamese letters missing from a text's font take a Latin face first (Noto Sans, then Arial, Helvetica, Segoe UI, DejaVu Sans, Liberation Sans) instead of the first wide-coverage CJK face, which on the web was BIZ UDPGothic.
