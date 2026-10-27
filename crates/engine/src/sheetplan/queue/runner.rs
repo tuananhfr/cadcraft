@@ -478,6 +478,9 @@ impl JobRunner {
         // A timed-out attempt poisons its own flag; retries must still be able to render.
         let budget = SheetBudget { cancel: Arc::new(AtomicBool::new(false)), ..budget.clone() };
         let started = self.frame_clock.map(|clock| clock());
+        // Hosts share one renderer across jobs; each job's plot style still decides how its sheets print.
+        let configured = renderer.job_renderer(&self.job);
+        let renderer = configured.as_ref().map_or(renderer, |configured| configured as &dyn SheetRenderer);
         let result = budget.render(renderer, drawing, sheet);
         let elapsed = started.zip(self.frame_clock).map(|(started, clock)| clock().saturating_sub(started));
         let Some(artifact) = manifest.sheets.get_mut(index) else {

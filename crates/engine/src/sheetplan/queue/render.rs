@@ -66,19 +66,19 @@ pub enum RenderFailure {
 pub trait SheetRenderer {
     fn render(&self, d: &Drawing, sheet: &Sheet, budget: &SheetBudget) -> Result<Vec<u8>, RenderFailure>;
     fn merge(&self, parts: &[&[u8]], labels: &[String], title: &str) -> Result<Vec<u8>, RenderFailure>;
-}
 
-/// Renders sheets to PDF with a job's plot style table and lineweight setting.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PdfSheetRenderer {
-    pub plot_style_table: Option<String>,
-    pub lineweights: bool,
-}
-
-impl Default for PdfSheetRenderer {
-    fn default() -> Self {
-        Self { plot_style_table: None, lineweights: true }
+    /// A renderer carrying `job`'s plot style, used instead of `self`; `None` renders with `self` as is.
+    fn job_renderer(&self, _job: &PrintJob) -> Option<PdfSheetRenderer> {
+        None
     }
+}
+
+/// Renders sheets to PDF with a job's plot style table and lineweight setting; `None` keeps each page's own.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PdfSheetRenderer {
+    /// A table name, or "None" for colours as displayed.
+    pub plot_style_table: Option<String>,
+    pub lineweights: Option<bool>,
 }
 
 impl PdfSheetRenderer {
@@ -87,15 +87,14 @@ impl PdfSheetRenderer {
     }
 }
 
-/// Adds the plot style options to a PDF plot's options.
-pub(crate) fn plot_style_options(options: &mut Value, table: Option<&str>, lineweights: bool) {
+/// Adds the plot style options to a PDF plot's options; an explicit "None" overrides a layout's own table.
+pub(crate) fn plot_style_options(options: &mut Value, table: Option<&str>, lineweights: Option<bool>) {
     let Some(object) = options.as_object_mut() else { return };
-    if let Some(table) = table.filter(|table| !cadcraft_doc::no_plot_style_table(table)) {
+    if let Some(table) = table {
         object.insert("plotStyleTable".into(), json!(table));
     }
-    // On is each page's own default (a layout's page setup, always for Model), so only off is sent.
-    if !lineweights {
-        object.insert("lineweights".into(), json!(false));
+    if let Some(lineweights) = lineweights {
+        object.insert("lineweights".into(), json!(lineweights));
     }
 }
 
@@ -117,6 +116,10 @@ impl SheetRenderer for PdfSheetRenderer {
     fn merge(&self, parts: &[&[u8]], labels: &[String], title: &str) -> Result<Vec<u8>, RenderFailure> {
         let merge = merge_pdf().ok_or_else(|| RenderFailure::Error("PDF merging is not available in this build".into()))?;
         merge(parts, labels, title).map_err(RenderFailure::Error)
+    }
+
+    fn job_renderer(&self, job: &PrintJob) -> Option<PdfSheetRenderer> {
+        Some(Self::for_job(job))
     }
 }
 

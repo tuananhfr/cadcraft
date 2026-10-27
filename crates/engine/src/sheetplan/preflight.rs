@@ -8,7 +8,7 @@ use super::approval::{approved, refresh_status};
 use super::codes::{self, issue};
 use super::ids::sheet_key;
 use super::outline::{Relation, relation};
-use super::{AuditEntry, FrameRegistry, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, TemplateStatus};
+use super::{AuditEntry, FrameRegistry, PreflightIssue, Severity, Sheet, SheetPlan, SheetSource, SheetStatus, TemplateStatus};
 
 pub struct FontStatus {
     pub style: String,
@@ -314,20 +314,26 @@ fn check_metadata(d: &Drawing, plan: &mut SheetPlan, ctx: &PreflightContext<'_>)
     }
 }
 
-/// Blocks the plan when the chosen plot style table is neither the drawing's nor a built-in one.
+/// The issue for a plot style table that is neither the drawing's nor built in.
+pub(crate) fn missing_plot_style_table(d: &Drawing, table: Option<&str>) -> Option<PreflightIssue> {
+    let table = table.filter(|table| !cadcraft_doc::no_plot_style_table(table))?;
+    cadcraft_doc::plot_style_table(d, table).is_none().then(|| {
+        issue(
+            Severity::Warn,
+            codes::PLOT_PROFILE_MISSING,
+            format!("Plot style table `{table}` is not in this drawing or built in; choose another table."),
+            None,
+        )
+    })
+}
+
+/// Warns when the plot style table publishing would use is unknown; publishing refuses that table.
 pub(crate) fn check_plot_style_table(d: &Drawing, plan: &mut SheetPlan, table: Option<&str>) {
     let before = plan.issues.len();
     plan.issues.retain(|entry| entry.code != codes::PLOT_PROFILE_MISSING);
     let mut changed = plan.issues.len() != before;
-    if let Some(table) = table.filter(|table| !cadcraft_doc::no_plot_style_table(table))
-        && cadcraft_doc::plot_style_table(d, table).is_none()
-    {
-        plan.issues.push(issue(
-            Severity::Block,
-            codes::PLOT_PROFILE_MISSING,
-            format!("Plot style table `{table}` is not in this drawing or built in; choose another table."),
-            None,
-        ));
+    if let Some(missing) = missing_plot_style_table(d, table) {
+        plan.issues.push(missing);
         changed = true;
     }
     // Statuses such as Done from an earlier publish stay unless the verdict actually changed.

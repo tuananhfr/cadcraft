@@ -279,7 +279,7 @@ pub(super) fn resolve_params(s: &mut Session, params: &Value, command: &str) -> 
         let default = settings.get(field).ok_or_else(|| bad(command, "missing profile setting"))?;
         for alias in aliases {
             if let Some(value) = fields.get(*alias)
-                && value != default
+                && !same_setting(field, value, default)
             {
                 refuse_change(&eff, &format!("/{field}"), command)?;
             }
@@ -287,8 +287,9 @@ pub(super) fn resolve_params(s: &mut Session, params: &Value, command: &str) -> 
         // A `last` rescan keeps its stored request and a plan scan keeps the plan's device; Platform paper/scale defaults
         // would override what the scan detects, so only a level above Platform seeds them.
         let keeps_request = matches!(field, "device" | "paper" | "plot_scale") && rescan || field == "device" && plan_scan;
-        let detected =
-            matches!(field, "paper" | "plot_scale") && eff.origin.get(&format!("/{field}")).is_none_or(|level| *level == ProfileLevel::Platform);
+        // Unset plot styles send nothing, so a layout keeps its own page setup's table and lineweights.
+        let detected = matches!(field, "paper" | "plot_scale" | "plot_style_table" | "lineweights")
+            && eff.origin.get(&format!("/{field}")).is_none_or(|level| *level == ProfileLevel::Platform);
         let seeded = !keeps_request && !detected;
         let Some(value) = aliases.iter().find_map(|alias| fields.get(*alias)).cloned().or_else(|| seeded.then(|| default.clone())) else {
             continue;
@@ -318,20 +319,53 @@ pub(super) fn resolve_params(s: &mut Session, params: &Value, command: &str) -> 
     Ok((result, eff))
 }
 
-/// The resolved plot style table (`None` for object colours) and whether lineweights plot.
-pub(super) fn plot_style(params: &Value, command: &str) -> Result<(Option<String>, bool)> {
+/// Plot style table names are file names, so letter case and "None" versus "" do not make a different table.
+fn same_setting(field: &str, value: &Value, default: &Value) -> bool {
+    match (field, value.as_str(), default.as_str()) {
+        ("plot_style_table", Some(value), Some(default)) => {
+            let none = cadcraft_doc::no_plot_style_table;
+            (none(value) && none(default)) || value.trim().eq_ignore_ascii_case(default.trim())
+        }
+        _ => value == default,
+    }
+}
+
+/// The plot style a publish asks for; `None` fields leave each page's own setting.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct PlotStyleChoice {
+    /// A table name, or "None" for colours as displayed.
+    pub table: Option<String>,
+    pub lineweights: Option<bool>,
+}
+
+impl PlotStyleChoice {
+    /// The table that will print, if any.
+    pub fn used_table(&self) -> Option<&str> {
+        self.table.as_deref().filter(|table| !cadcraft_doc::no_plot_style_table(table))
+    }
+}
+
+pub(super) fn plot_style(params: &Value, command: &str) -> Result<PlotStyleChoice> {
     let table = match params.get("plotStyleTable") {
         None | Some(Value::Null) => None,
         Some(value) => {
             let table = value.as_str().filter(|table| table.chars().count() <= 260);
-            Some(table.ok_or_else(|| bad(command, "plotStyleTable must be a string of at most 260 characters"))?)
+            Some(table.ok_or_else(|| bad(command, "plotStyleTable must be a string of at most 260 characters"))?.to_owned())
         }
     };
     let lineweights = match params.get("lineweights") {
-        None | Some(Value::Null) => true,
-        Some(value) => value.as_bool().ok_or_else(|| bad(command, "lineweights must be a boolean"))?,
+        None | Some(Value::Null) => None,
+        Some(value) => Some(value.as_bool().ok_or_else(|| bad(command, "lineweights must be a boolean"))?),
     };
-    Ok((table.filter(|table| !cadcraft_doc::no_plot_style_table(table)).map(str::to_owned), lineweights))
+    Ok(PlotStyleChoice { table, lineweights })
+}
+
+/// Refuses a publish whose plot style table is neither the drawing's nor built in.
+pub(super) fn check_plot_style(d: &cadcraft_doc::Drawing, choice: &PlotStyleChoice, command: &str) -> Result<()> {
+    match crate::sheetplan::preflight::missing_plot_style_table(d, choice.used_table()) {
+        Some(missing) => Err(bad(command, format!("{}: {}", missing.code, missing.message))),
+        None => Ok(()),
+    }
 }
 
 pub(super) fn profile_id(s: &mut Session) -> Result<String> {

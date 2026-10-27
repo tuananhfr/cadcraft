@@ -39,7 +39,8 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
         return Err(bad(COMMAND, "path must contain 1 to 4096 bytes"));
     }
     let title = text(params, "title")?.unwrap_or("");
-    let (plot_style_table, lineweights) = super::profile::plot_style(params, COMMAND)?;
+    let plot_style = super::profile::plot_style(params, COMMAND)?;
+    super::profile::check_plot_style(s.doc()?, &plot_style, COMMAND)?;
     let supplied = params.get("plan");
     let mut plan = match supplied {
         Some(value) => parse_plan(value).map_err(|error| bad(COMMAND, error))?,
@@ -58,7 +59,7 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     let device = plan.device.as_deref().and_then(crate::cmd::plotters::find_device);
     let missing = plan.device.is_some() && device.is_none();
     crate::sheetplan::preflight::check_devices(&mut plan, device.as_ref(), missing, cfg!(target_arch = "wasm32"));
-    crate::sheetplan::preflight::check_plot_style_table(s.doc()?, &mut plan, plot_style_table.as_deref());
+    crate::sheetplan::preflight::check_plot_style_table(s.doc()?, &mut plan, plot_style.used_table());
     carry_over(&previous, &mut plan);
     validate_approvals(&plan).map_err(|error| bad(COMMAND, error))?;
     let warnings: BTreeSet<_> = issues(&plan)
@@ -174,7 +175,7 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
             let sheets = plan.sheets.get(group.clone()).ok_or_else(|| bad(COMMAND, "missing output group"))?;
             let rendered = sheets.iter().map(|sheet| sheet_pages(s, sheet)).collect::<std::result::Result<Vec<_>, _>>().and_then(|pages| {
                 let drawing = plot_drawing(s.doc().map_err(|error| error.to_string())?, sheets);
-                plot(&drawing, &Space::Model, &options(pages.into_iter().flatten().collect(), title, plot_style_table.as_deref(), lineweights))
+                plot(&drawing, &Space::Model, &options(pages.into_iter().flatten().collect(), title, &plot_style))
             });
             let result = rendered.and_then(|bytes| finish(&destinations, index, path.is_some(), &plan.job_id, sheets, &bytes));
             match result {
@@ -203,7 +204,7 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
             let result = sheet_pages(s, sheet)
                 .and_then(|pages| {
                     let drawing = plot_drawing(s.doc().map_err(|error| error.to_string())?, std::slice::from_ref(sheet));
-                    plot(&drawing, &Space::Model, &options(pages, title, plot_style_table.as_deref(), lineweights))
+                    plot(&drawing, &Space::Model, &options(pages, title, &plot_style))
                 })
                 .and_then(|bytes| finish(&destinations, index, path.is_some(), &plan.job_id, std::slice::from_ref(sheet), &bytes));
             match result {
@@ -359,9 +360,9 @@ pub(crate) fn page_for_drawing(d: &Drawing, sheet: &Sheet) -> std::result::Resul
     Ok(page)
 }
 
-fn options(pages: Vec<Value>, title: &str, plot_style_table: Option<&str>, lineweights: bool) -> Value {
+fn options(pages: Vec<Value>, title: &str, plot_style: &super::profile::PlotStyleChoice) -> Value {
     let mut options = json!({"pages": pages, "title": title, "output": "pdf"});
-    crate::sheetplan::queue::render::plot_style_options(&mut options, plot_style_table, lineweights);
+    crate::sheetplan::queue::render::plot_style_options(&mut options, plot_style.table.as_deref(), plot_style.lineweights);
     options
 }
 

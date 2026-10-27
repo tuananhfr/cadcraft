@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use super::{CLOCK, bad, publish, source_hash};
 use crate::cmd::file::{budget_plot, merge_pdf};
 use crate::sheetplan::approval::{carry_over, issues, merge_audit, validate_approvals, validate_issue_approvals};
-use crate::sheetplan::codes::{self, issue};
+use crate::sheetplan::codes::issue;
 use crate::sheetplan::queue::store::{validate_name, validate_output_file_name};
 use crate::sheetplan::queue::*;
 use crate::sheetplan::{PreflightIssue, Severity, SheetPlan, SheetStatus, parse_plan};
@@ -83,13 +83,9 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     }
     let mut plan = queue_plan(s, params)?;
     super::profile::apply_plan(s.doc()?, &mut plan, params, &effective, PUBLISH)?;
-    let (plot_style_table, lineweights) = super::profile::plot_style(params, PUBLISH)?;
-    crate::sheetplan::preflight::check_plot_style_table(s.doc()?, &mut plan, plot_style_table.as_deref());
-    if let Some(missing) = plan.issues.iter().find(|entry| entry.code == codes::PLOT_PROFILE_MISSING) {
-        let message = format!("{}: {}", missing.code, missing.message);
-        publish::remember(s, &plan, params.get("plan"))?;
-        return Err(bad(PUBLISH, message));
-    }
+    let plot_style = super::profile::plot_style(params, PUBLISH)?;
+    super::profile::check_plot_style(s.doc()?, &plot_style, PUBLISH)?;
+    crate::sheetplan::preflight::check_plot_style_table(s.doc()?, &mut plan, plot_style.used_table());
     let source = JobSource { path: s.state()?.path.clone(), source_hash: plan.source_hash.clone(), plan };
     let mut job = PrintJob::new(vec![source], output, retry_limit).map_err(job_error)?;
     let source = job.sources.first_mut().ok_or_else(|| bad(PUBLISH, "job source is missing"))?;
@@ -99,17 +95,17 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     job.profile_id = Some(super::profile::profile_id(s)?);
     job.profile_version = Some(effective.version.clone());
     job.naming = params.get("naming").and_then(Value::as_str).filter(|naming| *naming != "{stem}").map(str::to_owned);
-    job.plot_style_table = plot_style_table;
-    job.lineweights = lineweights;
+    job.plot_style_table = plot_style.table;
+    job.lineweights = plot_style.lineweights;
     let mut identity = json!({"output": job.output, "retry_limit": job.retry_limit, "naming": job.naming,
         "profile_version": job.profile_version, "device": params.get("device"), "paper": params.get("paper"), "scale": params.get("scale")});
-    // Default plot styles leave the identity, and so earlier job ids, unchanged.
+    // Unset plot styles leave the identity, and so earlier job ids, unchanged.
     if let Some(fields) = identity.as_object_mut() {
         if let Some(table) = &job.plot_style_table {
             fields.insert("plot_style_table".into(), json!(table));
         }
-        if !job.lineweights {
-            fields.insert("lineweights".into(), json!(false));
+        if let Some(lineweights) = job.lineweights {
+            fields.insert("lineweights".into(), json!(lineweights));
         }
     }
     if let Some(printer) = &job.printer

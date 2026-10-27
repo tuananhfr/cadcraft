@@ -386,7 +386,7 @@ fn pdf_sheet_renderer_uses_its_plot_style_table_and_lineweights() {
     let content = |renderer: &PdfSheetRenderer| streams_text(&budget.render(renderer, &drawing, sheet).unwrap());
     let colours = content(&PdfSheetRenderer::default());
     assert!(colour_ops(&colours).iter().any(|op| op == "1 0 0 RG"), "the default keeps colours");
-    let mono = PdfSheetRenderer { plot_style_table: Some("monochrome.ctb".into()), lineweights: false };
+    let mono = PdfSheetRenderer { plot_style_table: Some("monochrome.ctb".into()), lineweights: Some(false) };
     let mono = content(&mono);
     assert!(colour_ops(&mono).is_empty(), "{:?}", colour_ops(&mono));
     assert!(line_widths(&mono).iter().all(|width| *width == 0.0), "{:?}", line_widths(&mono));

@@ -123,8 +123,8 @@ fn jobs_renderer_uses_profile_table() {
     let queued = s.execute("ubplot.publish", &json!({"background": true})).unwrap();
     let job = s.take_queued_job().unwrap();
     assert_eq!(job.plot_style_table.as_deref(), Some("monochrome.ctb"));
-    assert!(!job.lineweights);
-    assert_eq!(PdfSheetRenderer::for_job(&job), PdfSheetRenderer { plot_style_table: Some("monochrome.ctb".into()), lineweights: false });
+    assert_eq!(job.lineweights, Some(false));
+    assert_eq!(PdfSheetRenderer::for_job(&job), PdfSheetRenderer { plot_style_table: Some("monochrome.ctb".into()), lineweights: Some(false) });
     let result = s.execute("ubplot.jobs", &json!({"action": "resume", "jobId": queued["jobId"]})).unwrap();
     assert_eq!(result["manifest"]["status"], "DONE");
     let content = streams_text(&delivered.borrow()[0]);
@@ -139,6 +139,44 @@ fn jobs_renderer_uses_profile_table() {
     assert_eq!(PdfSheetRenderer::for_job(&job), PdfSheetRenderer::default());
     let definition = serde_json::to_value(&job).unwrap();
     assert!(definition.get("plot_style_table").is_none() && definition.get("lineweights").is_none(), "{definition}");
+}
+
+#[test]
+fn ui_runner_renders_with_the_job_plot_style() {
+    use support::pdf_probe::{colour_ops, streams_text};
+    let mut drawing = frames_drawing(1);
+    let frames: Vec<_> = drawing.model.iter().map(|entity| entity.handle.hex()).collect();
+    let common = cadcraft_doc::Common { color: cadcraft_color::Color::Index(1), ..Default::default() };
+    let line = cadcraft_doc::Line { a: cadcraft_geom::Vec3::new(20.0, 20.0, 0.0), b: cadcraft_geom::Vec3::new(400.0, 200.0, 0.0) };
+    drawing.add(&cadcraft_doc::Space::Model, common, cadcraft_doc::EntityKind::Line(line)).unwrap();
+    for (table, coloured) in [("monochrome.ctb", false), ("None", true)] {
+        let mut s = session(drawing.clone());
+        let store = CapturedStore::default();
+        let delivered = store.delivered.clone();
+        s.set_job_store(Box::new(store));
+        s.execute("ubplot.scan", &json!({"mode": "block", "handles": frames})).unwrap();
+        s.execute("ubplot.publish", &json!({"background": true, "plotStyleTable": table, "lineweights": true})).unwrap();
+        let job = s.take_queued_job().unwrap();
+        // The UI pumps share one default renderer across jobs, as here.
+        let mut loader = SnapshotLoader(std::sync::Arc::new(s.doc().unwrap().clone()), job.sources[0].source_hash.clone());
+        let manifest =
+            run_to_end(job, s.job_store_mut().unwrap(), &mut loader, &PdfSheetRenderer::default(), &SheetBudget::desktop(), &|| 1).unwrap();
+        assert_eq!(manifest.status, JobStatus::Done);
+        let colours = colour_ops(&streams_text(&delivered.borrow()[0]));
+        assert_eq!(colours.iter().any(|op| op == "1 0 0 RG"), coloured, "{table}: {colours:?}");
+        assert_eq!(colours.is_empty(), !coloured, "{table}: {colours:?}");
+    }
+}
+
+#[test]
+fn background_publish_refuses_an_unknown_table() {
+    let mut s = session(frames_drawing(1));
+    scan(&mut s);
+    let error = s.execute("ubplot.publish", &json!({"background": true, "plotStyleTable": "lpc.ctb"})).unwrap_err().to_string();
+    assert!(error.contains("PLOT_PROFILE_MISSING") && error.contains("lpc.ctb"), "{error}");
+    assert!(s.take_queued_job().is_none());
+    s.execute("ubplot.publish", &json!({"background": true, "plotStyleTable": "None"})).unwrap();
+    assert_eq!(s.take_queued_job().unwrap().plot_style_table.as_deref(), Some("None"));
 }
 
 #[test]

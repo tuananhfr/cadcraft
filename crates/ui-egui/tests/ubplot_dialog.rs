@@ -812,7 +812,9 @@ fn republishing_interrupted_plan_reports_resume_or_discard_without_queuing() {
         let path = temporary_pdf();
         let root = path.with_extension("jobs");
         app.session.set_job_store(Box::new(DirJobStore::new(root.clone())));
-        let result = app.run("ubplot.publish", json!({"output": "merged", "path": path, "background": true})).unwrap();
+        // The same plot style the dialog sends by default, so its Publish names this job.
+        let params = json!({"output": "merged", "path": path, "background": true, "plotStyleTable": "None", "lineweights": true});
+        let result = app.run("ubplot.publish", params).unwrap();
         let id = result["jobId"].as_str().unwrap().to_string();
         assert_eq!(app.session.take_queued_job().unwrap().job_id, id);
         let store = app.session.job_store_mut().unwrap();
@@ -908,7 +910,7 @@ fn queued_job(h: &mut Harness<'static, CadApp>) -> serde_json::Value {
 fn plot_style_modes_and_lineweights_reach_the_publish_params() {
     let _guard = test_lock();
     for (mode, lineweights_off, table) in
-        [("Black and white", false, Some("monochrome.ctb")), ("Original colors", true, None), ("By plot style table", false, Some("default.ctb"))]
+        [("Black and white", false, "monochrome.ctb"), ("Original colors", true, "None"), ("By plot style table", false, "default.ctb")]
     {
         let (mut app, frames) = app(&[false]);
         review(&mut app, &frames);
@@ -930,8 +932,9 @@ fn plot_style_modes_and_lineweights_reach_the_publish_params() {
         h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").click();
         h.run_steps(3);
         let job = queued_job(&mut h);
-        assert_eq!(job["plot_style_table"].as_str(), table, "{mode}: {job}");
-        assert_eq!(job.get("lineweights").and_then(serde_json::Value::as_bool), lineweights_off.then_some(false), "{mode}: {job}");
+        // The dialog always sends both, so "None" and lineweights on also override a layout's page setup.
+        assert_eq!(job["plot_style_table"].as_str(), Some(table), "{mode}: {job}");
+        assert_eq!(job["lineweights"].as_bool(), Some(!lineweights_off), "{mode}: {job}");
     }
 }
 
@@ -970,4 +973,51 @@ fn plot_style_labels_read_in_vietnamese() {
         assert_eq!(cadcraft_ui_egui::i18n::tr("vi", english), vietnamese);
         assert_ne!(cadcraft_ui_egui::i18n::tr("uk", english), english);
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn missing_profile_table_blocks_only_by_plot_style_table() {
+    use cadcraft_engine::sheetplan::profile::{PRINT_PROFILE_SCHEMA, ProfileDoc, ProfileLevel};
+    const MISSING_REASON: &str = "The plot style table is not in this drawing or built in: choose another table";
+    let _guard = test_lock();
+    let (mut app, frames) = app(&[false]);
+    let user = ProfileDoc {
+        schema_version: PRINT_PROFILE_SCHEMA,
+        level: ProfileLevel::User,
+        id: "default".into(),
+        project_id: None,
+        revision: 1,
+        settings: json!({"plot_style_table": "lpc.ctb"}),
+        locks: Vec::new(),
+        updated_ms: 1,
+    };
+    app.session.write_print_profile(&user).unwrap();
+    review(&mut app, &frames);
+    let plan = &app.session.ubplot.last.as_ref().unwrap().plan;
+    assert!(plan.issues.iter().any(|issue| issue.code == codes::PLOT_PROFILE_MISSING && issue.severity == Severity::Warn));
+    approve_warnings(&mut app);
+    // Approving the warning does not make the missing table usable.
+    app.session.set_job_store(Box::new(cadcraft_engine::sheetplan::queue::MemoryJobStore::default()));
+    let path = temporary_pdf();
+    app.services.pick_save = Some(Box::new(move |_| Some(path.to_string_lossy().into_owned())));
+    let mut h = harness(app);
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled());
+    assert!(h.query_by_label(MISSING_REASON).is_some(), "the reason shows next to Publish");
+    for mode in ["Black and white", "Original colors"] {
+        h.get_by_role_and_label(egui::accesskit::Role::RadioButton, mode).click();
+        h.run_steps(2);
+        assert!(!h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").accesskit_node().is_disabled(), "{mode}");
+        assert!(h.query_by_label(MISSING_REASON).is_none(), "{mode}");
+    }
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Publish").click();
+    h.run_steps(3);
+    assert_eq!(queued_job(&mut h)["plot_style_table"], "None");
+}
+
+#[test]
+fn missing_table_reason_reads_in_vietnamese() {
+    let reason = "The plot style table is not in this drawing or built in: choose another table";
+    assert_eq!(cadcraft_ui_egui::i18n::tr("vi", reason), "Không có bảng nét in này trong bản vẽ hay trong các bảng có sẵn: chọn bảng khác");
+    assert_ne!(cadcraft_ui_egui::i18n::tr("uk", reason), reason);
 }

@@ -31,7 +31,6 @@ enum PlotMode {
 #[derive(Clone)]
 struct PlotStyle {
     profile_version: String,
-    profile_table: String,
     mode: PlotMode,
     table: String,
     lineweights: bool,
@@ -39,8 +38,8 @@ struct PlotStyle {
 
 impl PlotStyle {
     fn from_profile(effective: &EffectiveProfile, names: &[String]) -> Self {
-        let profile_table = effective.settings.plot_style_table.clone();
-        let mode = if no_plot_style_table(&profile_table) {
+        let profile_table = &effective.settings.plot_style_table;
+        let mode = if no_plot_style_table(profile_table) {
             PlotMode::Original
         } else if profile_table.trim().eq_ignore_ascii_case(MONOCHROME_CTB) {
             PlotMode::BlackAndWhite
@@ -48,19 +47,22 @@ impl PlotStyle {
             PlotMode::ByTable
         };
         let table = if mode == PlotMode::ByTable { profile_table.clone() } else { names.first().cloned().unwrap_or_default() };
-        Self { profile_version: effective.version.clone(), profile_table, mode, table, lineweights: effective.settings.lineweights }
+        Self { profile_version: effective.version.clone(), mode, table, lineweights: effective.settings.lineweights }
     }
 
-    /// The table name sent to `ubplot.publish`; the profile's own spelling is kept so a locked table is not refused.
-    fn table_param(&self) -> String {
-        let profile = &self.profile_table;
+    /// The table name sent to `ubplot.publish`; "None" also overrides a layout page setup's own table.
+    fn table_param(&self) -> &str {
         match self.mode {
-            PlotMode::Original if no_plot_style_table(profile) => profile.clone(),
-            PlotMode::Original => "None".into(),
-            PlotMode::BlackAndWhite if profile.trim().eq_ignore_ascii_case(MONOCHROME_CTB) => profile.clone(),
-            PlotMode::BlackAndWhite => MONOCHROME_CTB.into(),
-            PlotMode::ByTable => self.table.clone(),
+            PlotMode::Original => "None",
+            PlotMode::BlackAndWhite => MONOCHROME_CTB,
+            PlotMode::ByTable => &self.table,
         }
+    }
+
+    /// A chosen table that is neither the drawing's nor built in, which `ubplot.publish` refuses.
+    fn table_missing(&self, d: Option<&cadcraft_doc::Drawing>) -> bool {
+        let table = self.table_param();
+        !no_plot_style_table(table) && d.is_none_or(|d| cadcraft_doc::plot_style_table(d, table).is_none())
     }
 }
 
@@ -157,7 +159,8 @@ pub(crate) fn show(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                 }
                 ui.radio_value(&mut state.split, false, crate::tl!("Merged PDF"));
                 ui.radio_value(&mut state.split, true, crate::tl!("One PDF per sheet"));
-                let reason = publish_reason(&plan, state.split);
+                let table_missing = state.plot_style.as_ref().is_some_and(|style| style.table_missing(app.session.doc().ok()));
+                let reason = publish_reason(&plan, state.split, table_missing);
                 let button = ui.add_enabled(reason.is_none(), egui::Button::new(crate::tl!("Publish")));
                 if button.clicked() {
                     action = Some(Action::Publish);
@@ -349,9 +352,11 @@ fn thumbnail(app: &mut CadApp, ctx: &egui::Context, sheet: &Sheet) -> Result<Tex
     Ok(ctx.load_texture("ubplot_thumbnail", egui::ColorImage::from_rgba_unmultiplied(size, image.as_raw()), egui::TextureOptions::LINEAR))
 }
 
-fn publish_reason(plan: &SheetPlan, split: bool) -> Option<&'static str> {
+fn publish_reason(plan: &SheetPlan, split: bool, table_missing: bool) -> Option<&'static str> {
     if plan.sheets.is_empty() {
         Some(crate::tl!("No sheets to publish"))
+    } else if table_missing {
+        Some(crate::tl!("The plot style table is not in this drawing or built in: choose another table"))
     } else if !split
         && (plan.issues.iter().any(|issue| issue.severity == Severity::Block)
             || plan.sheets.iter().any(|sheet| verdict(sheet) == Severity::Block || sheet.status == SheetStatus::Blocked))

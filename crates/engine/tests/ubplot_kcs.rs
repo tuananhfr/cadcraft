@@ -270,44 +270,65 @@ fn locked_plot_style_refused() {
         let error = publish_with(&mut s, params).unwrap_err();
         assert!(error.contains("LOCKED_BY_POLICY: /plot_style_table (company)"), "{error}");
     }
-    // The locked table itself is what publishing uses, sent or not.
-    for params in [json!({}), json!({"plotStyleTable": "monochrome.ctb"})] {
+    // The locked table itself is what publishing uses, sent or not, in any letter case.
+    for params in [json!({}), json!({"plotStyleTable": "monochrome.ctb"}), json!({"plotStyleTable": "MONOCHROME.CTB"})] {
         assert!(colour_ops(&streams_text(&publish_with(&mut s, params).unwrap())).is_empty());
     }
 }
 
-#[test]
-fn unknown_table_blocks() {
-    let mut s = session();
-    coloured_kcs_sheet(&mut s);
-    let error = publish_with(&mut s, json!({"plotStyleTable": "lpc.ctb"})).unwrap_err();
-    assert!(error.contains("BLOCKED"), "{error}");
-    let plan = &s.ubplot.last.as_ref().unwrap().plan;
-    let missing: Vec<_> = plan.issues.iter().filter(|issue| issue.code == codes::PLOT_PROFILE_MISSING).collect();
-    assert_eq!(missing.len(), 1, "{:?}", plan.issues);
-    assert_eq!(missing[0].severity, Severity::Block);
-    assert!(missing[0].message.contains("lpc.ctb"), "{}", missing[0].message);
-    let approval = json!({"approvals": [{"sheetKey": "*", "code": codes::PLOT_PROFILE_MISSING}], "by": "user"});
-    assert!(s.execute("ubplot.approve", &approval).is_err(), "a missing table is never approvable");
-    // A known table publishes again.
-    assert!(publish_with(&mut s, json!({"plotStyleTable": "grayscale.ctb"})).is_ok());
-
-    // A profile naming a table the drawing lacks blocks the scan itself.
+fn user_profile(settings: Value) -> cadcraft_engine::sheetplan::profile::ProfileDoc {
     use cadcraft_engine::sheetplan::profile::{PRINT_PROFILE_SCHEMA, ProfileDoc, ProfileLevel};
-    let user = ProfileDoc {
+    ProfileDoc {
         schema_version: PRINT_PROFILE_SCHEMA,
         level: ProfileLevel::User,
         id: "default".into(),
         project_id: None,
         revision: 1,
-        settings: json!({"plot_style_table": "lpc.ctb"}),
+        settings,
         locks: Vec::new(),
         updated_ms: 1,
-    };
-    s.write_print_profile(&user).unwrap();
+    }
+}
+
+#[test]
+fn unknown_table_refused_only_when_used() {
+    let mut s = session();
+    coloured_kcs_sheet(&mut s);
+    let error = publish_with(&mut s, json!({"plotStyleTable": "lpc.ctb"})).unwrap_err();
+    assert!(error.contains("PLOT_PROFILE_MISSING") && error.contains("lpc.ctb"), "{error}");
+    assert!(publish_with(&mut s, json!({"plotStyleTable": "grayscale.ctb"})).is_ok());
+
+    // A profile naming a table the drawing lacks only warns at scan.
+    s.write_print_profile(&user_profile(json!({"plot_style_table": "lpc.ctb"}))).unwrap();
     let plan = scan(&mut s, json!({"mode": "kcs"}));
-    assert!(plan.issues.iter().any(|issue| issue.code == codes::PLOT_PROFILE_MISSING && issue.severity == Severity::Block));
-    assert!(plan.sheets.iter().all(|sheet| sheet.status == cadcraft_engine::sheetplan::SheetStatus::Blocked));
+    let missing: Vec<_> = plan.issues.iter().filter(|issue| issue.code == codes::PLOT_PROFILE_MISSING).collect();
+    assert_eq!(missing.len(), 1, "{:?}", plan.issues);
+    assert_eq!(missing[0].severity, Severity::Warn);
+    assert!(missing[0].message.contains("lpc.ctb"), "{}", missing[0].message);
+    assert!(plan.sheets.iter().all(|sheet| sheet.status != cadcraft_engine::sheetplan::SheetStatus::Blocked));
+    // Publishing with the profile's table is refused; another choice publishes and drops the warning.
+    let error = publish_with(&mut s, json!({})).unwrap_err();
+    assert!(error.contains("PLOT_PROFILE_MISSING"), "{error}");
+    for table in ["None", "monochrome.ctb"] {
+        assert!(publish_with(&mut s, json!({"plotStyleTable": table})).is_ok(), "{table}");
+        let plan = &s.ubplot.last.as_ref().unwrap().plan;
+        assert!(!plan.issues.iter().any(|issue| issue.code == codes::PLOT_PROFILE_MISSING), "{:?}", plan.issues);
+    }
+}
+
+#[test]
+fn explicit_none_overrides_a_layout_page_setup_table() {
+    let mut s = session();
+    let mut layout = cadcraft_doc::Layout::new("Styled", 1);
+    layout.page.plot_style_table = "monochrome.ctb".into();
+    s.doc_mut().unwrap().layouts.push(layout);
+    let common = Common { color: Color::Index(1), ..Common::default() };
+    let kind = EntityKind::Line(cadcraft_doc::Line { a: Vec3::new(10.0, 10.0, 0.0), b: Vec3::new(200.0, 150.0, 0.0) });
+    s.doc_mut().unwrap().add(&Space::Paper("Styled".into()), common, kind).unwrap();
+    scan(&mut s, json!({"mode": "layout", "layouts": ["Styled"]}));
+    let red = |s: &mut Session, params| colour_ops(&streams_text(&publish_with(s, params).unwrap())).iter().any(|op| op == "1 0 0 RG");
+    assert!(!red(&mut s, json!({})), "without a choice the page setup's monochrome table prints");
+    assert!(red(&mut s, json!({"plotStyleTable": "None"})), "an explicit None prints colours as displayed");
 }
 
 #[test]
