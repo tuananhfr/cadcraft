@@ -100,5 +100,5 @@ fn the_import_button_reads_in_vietnamese() {
     app.run("ui.language", json!({ "lang": "vi" })).unwrap();
     let h = harness(app);
     h.get_by_label("Nhập .ctb/.stb…");
-    assert_eq!(cadcraft_ui_egui::i18n::tr("vi", PLOT_STYLE_FILE.label), "Bảng kiểu in (CTB, STB)");
+    assert_eq!(cadcraft_ui_egui::i18n::tr("vi", PLOT_STYLE_FILE.label), "Bảng nét in (CTB, STB)");
 }

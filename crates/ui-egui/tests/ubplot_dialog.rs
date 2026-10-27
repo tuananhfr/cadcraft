@@ -986,7 +986,7 @@ fn plot_style_labels_read_in_vietnamese() {
     for (english, vietnamese) in [
         ("Original colors", "Màu gốc"),
         ("Black and white", "Đen trắng"),
-        ("By plot style table", "Theo nét in"),
+        ("By plot style table", "Theo bảng nét in"),
         ("Plot lineweights", "In độ dày nét"),
     ] {
         assert_eq!(cadcraft_ui_egui::i18n::tr("vi", english), vietnamese);
