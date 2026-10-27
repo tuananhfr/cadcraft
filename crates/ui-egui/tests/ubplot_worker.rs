@@ -68,11 +68,11 @@ impl SheetRenderer for TestRenderer {
             return Err(RenderFailure::Cancelled);
         }
         thread::sleep(Duration::from_millis(20));
-        PdfSheetRenderer.render(drawing, sheet, budget)
+        PdfSheetRenderer::default().render(drawing, sheet, budget)
     }
 
     fn merge(&self, parts: &[&[u8]], labels: &[String], title: &str) -> Result<Vec<u8>, RenderFailure> {
-        PdfSheetRenderer.merge(parts, labels, title)
+        PdfSheetRenderer::default().merge(parts, labels, title)
     }
 }
 

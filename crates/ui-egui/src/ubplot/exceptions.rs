@@ -39,7 +39,9 @@ fn approved(issue: &PreflightIssue, key: &str, audit: &Audit<'_>) -> bool {
 
 pub(super) fn has_unapproved_warnings(plan: &SheetPlan) -> bool {
     let audit = audit(plan);
-    plan.issues.iter().any(|issue| issue.severity == Severity::Warn && !approved(issue, "*", &audit))
+    // A missing profile table matters only if the chosen plot style uses it, which Publish checks itself.
+    let plan_warning = |issue: &PreflightIssue| issue.severity == Severity::Warn && issue.code != codes::PLOT_PROFILE_MISSING;
+    plan.issues.iter().any(|issue| plan_warning(issue) && !approved(issue, "*", &audit))
         || plan.sheets.iter().any(|sheet| {
             let key = sheet_key(sheet);
             sheet.issues.iter().any(|issue| issue.severity == Severity::Warn && !approved(issue, &key, &audit))
@@ -246,6 +248,7 @@ pub(super) fn issue_label(code: &str) -> &str {
         "TEMPLATE_SUPERSEDED" => crate::tl!("TEMPLATE_SUPERSEDED"),
         "KCS_LINE_DEGENERATE" => crate::tl!("KCS_LINE_DEGENERATE"),
         "KCS_NOT_MARKER" => crate::tl!("KCS_NOT_MARKER"),
+        "PLOT_PROFILE_MISSING" => crate::tl!("PLOT_PROFILE_MISSING"),
         other => other,
     }
 }

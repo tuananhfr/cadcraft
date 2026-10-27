@@ -96,6 +96,113 @@ fn queued_job_resumes_to_done_with_manifest() {
 }
 
 #[test]
+fn jobs_renderer_uses_profile_table() {
+    use cadcraft_engine::sheetplan::profile::{PRINT_PROFILE_SCHEMA, ProfileDoc, ProfileLevel};
+    use support::pdf_probe::{colour_ops, streams_text};
+    let mut drawing = frames_drawing(2);
+    let frames: Vec<_> = drawing.model.iter().map(|entity| entity.handle.hex()).collect();
+    let common = cadcraft_doc::Common { color: cadcraft_color::Color::Index(1), ..Default::default() };
+    let line = cadcraft_doc::Line { a: cadcraft_geom::Vec3::new(20.0, 20.0, 0.0), b: cadcraft_geom::Vec3::new(400.0, 200.0, 0.0) };
+    drawing.add(&cadcraft_doc::Space::Model, common, cadcraft_doc::EntityKind::Line(line)).unwrap();
+    let mut s = session(drawing);
+    let store = CapturedStore::default();
+    let delivered = store.delivered.clone();
+    s.set_job_store(Box::new(store));
+    let user = ProfileDoc {
+        schema_version: PRINT_PROFILE_SCHEMA,
+        level: ProfileLevel::User,
+        id: "default".into(),
+        project_id: None,
+        revision: 1,
+        settings: json!({"plot_style_table": "monochrome.ctb", "lineweights": false}),
+        locks: Vec::new(),
+        updated_ms: 1,
+    };
+    s.write_print_profile(&user).unwrap();
+    s.execute("ubplot.scan", &json!({"mode": "block", "handles": frames})).unwrap();
+    let queued = s.execute("ubplot.publish", &json!({"background": true})).unwrap();
+    let job = s.take_queued_job().unwrap();
+    assert_eq!(job.plot_style_table.as_deref(), Some("monochrome.ctb"));
+    assert_eq!(job.lineweights, Some(false));
+    assert_eq!(PdfSheetRenderer::for_job(&job), PdfSheetRenderer { plot_style_table: Some("monochrome.ctb".into()), lineweights: Some(false) });
+    let result = s.execute("ubplot.jobs", &json!({"action": "resume", "jobId": queued["jobId"]})).unwrap();
+    assert_eq!(result["manifest"]["status"], "DONE");
+    let content = streams_text(&delivered.borrow()[0]);
+    assert!(colour_ops(&content).is_empty(), "{:?}", colour_ops(&content));
+    assert!(content.contains("0 0 0 RG"));
+
+    // Without a table a job keeps its colours and its definition omits the default fields.
+    s.write_print_profile(&ProfileDoc { settings: json!({}), revision: 2, ..user }).unwrap();
+    s.execute("ubplot.scan", &json!({"mode": "block", "handles": frames})).unwrap();
+    s.execute("ubplot.publish", &json!({"background": true})).unwrap();
+    let job = s.take_queued_job().unwrap();
+    assert_eq!(PdfSheetRenderer::for_job(&job), PdfSheetRenderer::default());
+    let definition = serde_json::to_value(&job).unwrap();
+    assert!(definition.get("plot_style_table").is_none() && definition.get("lineweights").is_none(), "{definition}");
+}
+
+#[test]
+fn ui_runner_renders_with_the_job_plot_style() {
+    use support::pdf_probe::{colour_ops, streams_text};
+    let mut drawing = frames_drawing(1);
+    let frames: Vec<_> = drawing.model.iter().map(|entity| entity.handle.hex()).collect();
+    let common = cadcraft_doc::Common { color: cadcraft_color::Color::Index(1), ..Default::default() };
+    let line = cadcraft_doc::Line { a: cadcraft_geom::Vec3::new(20.0, 20.0, 0.0), b: cadcraft_geom::Vec3::new(400.0, 200.0, 0.0) };
+    drawing.add(&cadcraft_doc::Space::Model, common, cadcraft_doc::EntityKind::Line(line)).unwrap();
+    for (table, coloured) in [("monochrome.ctb", false), ("None", true)] {
+        let mut s = session(drawing.clone());
+        let store = CapturedStore::default();
+        let delivered = store.delivered.clone();
+        s.set_job_store(Box::new(store));
+        s.execute("ubplot.scan", &json!({"mode": "block", "handles": frames})).unwrap();
+        s.execute("ubplot.publish", &json!({"background": true, "plotStyleTable": table, "lineweights": true})).unwrap();
+        let job = s.take_queued_job().unwrap();
+        // The UI pumps share one default renderer across jobs, as here.
+        let mut loader = SnapshotLoader(std::sync::Arc::new(s.doc().unwrap().clone()), job.sources[0].source_hash.clone());
+        let manifest =
+            run_to_end(job, s.job_store_mut().unwrap(), &mut loader, &PdfSheetRenderer::default(), &SheetBudget::desktop(), &|| 1).unwrap();
+        assert_eq!(manifest.status, JobStatus::Done);
+        let colours = colour_ops(&streams_text(&delivered.borrow()[0]));
+        assert_eq!(colours.iter().any(|op| op == "1 0 0 RG"), coloured, "{table}: {colours:?}");
+        assert_eq!(colours.is_empty(), !coloured, "{table}: {colours:?}");
+    }
+}
+
+#[test]
+fn background_publish_refuses_an_unknown_table() {
+    let mut s = session(frames_drawing(1));
+    scan(&mut s);
+    let error = s.execute("ubplot.publish", &json!({"background": true, "plotStyleTable": "lpc.ctb"})).unwrap_err().to_string();
+    assert!(error.contains("PLOT_PROFILE_MISSING") && error.contains("lpc.ctb"), "{error}");
+    assert!(s.take_queued_job().is_none());
+    s.execute("ubplot.publish", &json!({"background": true, "plotStyleTable": "None"})).unwrap();
+    assert_eq!(s.take_queued_job().unwrap().plot_style_table.as_deref(), Some("None"));
+}
+
+#[test]
+fn background_publish_clears_a_stale_missing_table_warning() {
+    use cadcraft_engine::sheetplan::codes::PLOT_PROFILE_MISSING;
+    use cadcraft_engine::sheetplan::profile::{PRINT_PROFILE_SCHEMA, ProfileDoc, ProfileLevel};
+    let mut s = session(frames_drawing(1));
+    let user = ProfileDoc {
+        schema_version: PRINT_PROFILE_SCHEMA,
+        level: ProfileLevel::User,
+        id: "default".into(),
+        project_id: None,
+        revision: 1,
+        settings: json!({"plot_style_table": "lpc.ctb"}),
+        locks: Vec::new(),
+        updated_ms: 1,
+    };
+    s.write_print_profile(&user).unwrap();
+    scan(&mut s);
+    let warned = |s: &Session| s.ubplot.last.as_ref().unwrap().plan.issues.iter().any(|issue| issue.code == PLOT_PROFILE_MISSING);
+    assert!(warned(&s));
+    s.execute("ubplot.publish", &json!({"background": true, "plotStyleTable": "None"})).unwrap();
+    assert!(!warned(&s), "Exceptions no longer lists the missing profile table");
+}
+
+#[test]
 fn background_publish_queues_and_host_takes_it() {
     let mut s = session(frames_drawing(3));
     scan(&mut s);
@@ -490,7 +597,8 @@ mod printers {
         job.printer = Some(printer.into());
         let profile = s.execute("ubplot.profile", &json!({"action": "effective"})).unwrap();
         let mut loader = SnapshotLoader(std::sync::Arc::new(s.doc().unwrap().clone()), job.sources[0].source_hash.clone());
-        let manifest = run_to_end(job.clone(), s.job_store_mut().unwrap(), &mut loader, &PdfSheetRenderer, &SheetBudget::desktop(), &|| 1).unwrap();
+        let manifest =
+            run_to_end(job.clone(), s.job_store_mut().unwrap(), &mut loader, &PdfSheetRenderer::default(), &SheetBudget::desktop(), &|| 1).unwrap();
         assert_eq!(s.execute("ubplot.profile", &json!({"action": "effective"})).unwrap(), profile);
         assert_eq!(manifest.status, JobStatus::Done);
         assert!(temp.0.join("printed.pdf").is_file());
@@ -546,7 +654,7 @@ mod printers {
         scan(&mut s);
         let mut store = DirJobStore::new(temp.0.join("jobs"));
         let mut loader = SnapshotLoader(std::sync::Arc::new(s.doc().unwrap().clone()), manifest.source_hash.clone());
-        let resumed = run_to_end(job, &mut store, &mut loader, &PdfSheetRenderer, &SheetBudget::desktop(), &|| 2).unwrap();
+        let resumed = run_to_end(job, &mut store, &mut loader, &PdfSheetRenderer::default(), &SheetBudget::desktop(), &|| 2).unwrap();
         assert_eq!(resumed, manifest);
         assert_eq!(SPOOLED.load(Ordering::Relaxed), 1);
     }

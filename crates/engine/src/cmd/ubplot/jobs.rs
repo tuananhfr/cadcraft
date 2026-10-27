@@ -83,6 +83,10 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     }
     let mut plan = queue_plan(s, params)?;
     super::profile::apply_plan(s.doc()?, &mut plan, params, &effective, PUBLISH)?;
+    let plot_style = super::profile::plot_style(params, PUBLISH)?;
+    super::profile::check_plot_style(s.doc()?, &plot_style, PUBLISH)?;
+    crate::sheetplan::preflight::check_plot_style_table(s.doc()?, &mut plan, plot_style.used_table());
+    let cleaned = (plan.job_id.clone(), plan.issues.clone());
     let source = JobSource { path: s.state()?.path.clone(), source_hash: plan.source_hash.clone(), plan };
     let mut job = PrintJob::new(vec![source], output, retry_limit).map_err(job_error)?;
     let source = job.sources.first_mut().ok_or_else(|| bad(PUBLISH, "job source is missing"))?;
@@ -92,8 +96,19 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     job.profile_id = Some(super::profile::profile_id(s)?);
     job.profile_version = Some(effective.version.clone());
     job.naming = params.get("naming").and_then(Value::as_str).filter(|naming| *naming != "{stem}").map(str::to_owned);
+    job.plot_style_table = plot_style.table;
+    job.lineweights = plot_style.lineweights;
     let mut identity = json!({"output": job.output, "retry_limit": job.retry_limit, "naming": job.naming,
         "profile_version": job.profile_version, "device": params.get("device"), "paper": params.get("paper"), "scale": params.get("scale")});
+    // Unset plot styles leave the identity, and so earlier job ids, unchanged.
+    if let Some(fields) = identity.as_object_mut() {
+        if let Some(table) = &job.plot_style_table {
+            fields.insert("plot_style_table".into(), json!(table));
+        }
+        if let Some(lineweights) = job.lineweights {
+            fields.insert("lineweights".into(), json!(lineweights));
+        }
+    }
     if let Some(printer) = &job.printer
         && let Some(fields) = identity.as_object_mut()
     {
@@ -115,6 +130,7 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
         if existing.job_id != job.job_id || saved.as_deref() != Some(definition.as_slice()) {
             return Err(bad(PUBLISH, "jobId already exists with a different plan or settings; remove it before publishing again"));
         }
+        keep_plan_issues(s, cleaned)?;
         return Ok(json!({"jobId": job.job_id, "status": existing.status}));
     }
     if store.list_jobs().len() >= MAX_JOB_SHEETS || s.plot_jobs.queued.len() >= MAX_JOB_SHEETS {
@@ -123,7 +139,20 @@ pub(super) fn run_publish(s: &mut Session, params: &Value) -> Result<Value> {
     s.ensure_job_store().commit(&job.job_id, &[(JOB_DEFINITION.into(), definition)], &manifest.to_json()).map_err(|error| bad(PUBLISH, error))?;
     let result = json!({"jobId": job.job_id, "status": "QUEUED"});
     s.plot_jobs.queued.push_back(job);
+    keep_plan_issues(s, cleaned)?;
     Ok(result)
+}
+
+/// Gives the remembered plan the plan-level issues this publish checked, so a stale warning leaves Exceptions.
+fn keep_plan_issues(s: &mut Session, (job_id, issues): (String, Vec<PreflightIssue>)) -> Result<()> {
+    let uid = s.state()?.uid;
+    if let Some(last) = s.ubplot.last.as_mut().filter(|last| last.doc_uid == uid && last.plan.job_id == job_id)
+        && last.plan.issues != issues
+    {
+        last.plan.issues = issues;
+        crate::sheetplan::approval::refresh_status(&mut last.plan);
+    }
+    Ok(())
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -239,7 +268,8 @@ pub(super) fn run_folder(s: &mut Session, params: &Value) -> Result<Value> {
         return Ok(result);
     }
     let id = job.job_id.clone();
-    let manifest = run_to_end(job, s.ensure_job_store(), &mut FolderLoader::default(), &PdfSheetRenderer, &SheetBudget::desktop(), &now)
+    let renderer = PdfSheetRenderer::for_job(&job);
+    let manifest = run_to_end(job, s.ensure_job_store(), &mut FolderLoader::default(), &renderer, &SheetBudget::desktop(), &now)
         .map_err(|error| bad(FOLDER, error))?;
     s.plot_jobs.queued.retain(|job| job.job_id != id);
     s.plot_jobs.cancel_requests.retain(|request| request != &id);
@@ -381,8 +411,9 @@ pub(super) fn run_jobs(s: &mut Session, params: &Value) -> Result<Value> {
             let budget = SheetBudget::desktop();
             #[cfg(target_arch = "wasm32")]
             let budget = SheetBudget::web();
+            let renderer = PdfSheetRenderer::for_job(&job);
             let store = s.ensure_job_store();
-            let manifest = run_to_end(job, store, loader.as_mut(), &PdfSheetRenderer, &budget, &now).map_err(|error| bad(JOBS, error))?;
+            let manifest = run_to_end(job, store, loader.as_mut(), &renderer, &budget, &now).map_err(|error| bad(JOBS, error))?;
             s.plot_jobs.queued.retain(|job| job.job_id != id);
             s.plot_jobs.cancel_requests.retain(|request| request != id);
             Ok(json!({"manifest": manifest}))

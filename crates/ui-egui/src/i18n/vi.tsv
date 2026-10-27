@@ -4487,3 +4487,14 @@ echo	Plot style table {name} imported; {count} styles print with the object line
 	the plot style table is damaged (nested too deeply)	bảng kiểu in bị hỏng (lồng quá sâu)
 	the plot style table is damaged (too many entries)	bảng kiểu in bị hỏng (quá nhiều mục)
 	the plot style table has no name	bảng kiểu in không có tên
+
+# Quick Plot print colours and lineweights.
+	Original colors	Màu gốc
+	Black and white	Đen trắng
+	By plot style table	Theo nét in
+	Plot lineweights	In độ dày nét
+	PLOT_PROFILE_MISSING	Thiếu bảng nét in
+	plotStyleTable must be a string of at most 260 characters	plotStyleTable phải là chuỗi tối đa 260 ký tự
+	lineweights must be a boolean	lineweights phải là giá trị boolean
+	The plot style table is not in this drawing or built in: choose another table	Không có bảng nét in này trong bản vẽ hay trong các bảng có sẵn: chọn bảng khác
+	As page setup	Theo thiết lập trang

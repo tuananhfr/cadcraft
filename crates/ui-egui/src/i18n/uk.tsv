@@ -3928,3 +3928,12 @@ echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are no
 	Plot style import: {name} is larger than {limit} bytes	Імпорт стилів друку: {name} перевищує {limit} байтів
 echo	Plot style table {name} imported	Таблицю стилів друку {name} імпортовано
 echo	Plot style table {name} imported; {count} styles print with the object linetype (plot style linetypes are not supported yet)	Таблицю стилів друку {name} імпортовано; стилів, що друкуються типом лінії об'єкта: {count} (типи ліній стилів друку ще не підтримуються)
+
+# Quick Plot print colours and lineweights.
+	Original colors	Оригінальні кольори
+	Black and white	Чорно-білий
+	By plot style table	За таблицею стилів друку
+	Plot lineweights	Друкувати товщини ліній
+	PLOT_PROFILE_MISSING	Таблицю стилів друку не знайдено
+	The plot style table is not in this drawing or built in: choose another table	Цієї таблиці стилів друку немає ні в кресленні, ні серед вбудованих: виберіть іншу таблицю
+	As page setup	Як у параметрах сторінки

@@ -252,3 +252,55 @@ pub fn path_bbox(pdf: &[u8], layer: usize) -> [f64; 4] {
     assert!(vertices >= 4, "rectangle path required on layer {layer}");
     [min[0], min[1], max[0], max[1]]
 }
+
+/// Every stream of the PDF as text, Flate-compressed ones inflated.
+pub fn streams_text(pdf: &[u8]) -> String {
+    const START: &[u8] = b">>\nstream\n";
+    let mut text = String::new();
+    let mut at = 0;
+    while let Some(offset) = pdf[at..].windows(START.len()).position(|window| window == START) {
+        let head_end = at + offset;
+        let head = String::from_utf8_lossy(&pdf[head_end.saturating_sub(400)..head_end]).into_owned();
+        let length: usize = head.rsplit("/Length ").next().and_then(|rest| rest.split_whitespace().next()).unwrap().parse().unwrap();
+        let start = head_end + START.len();
+        let data = &pdf[start..start + length];
+        let data = if head.rsplit("/Length ").next().unwrap().contains("/FlateDecode") {
+            miniz_oxide::inflate::decompress_to_vec_zlib(data).unwrap()
+        } else {
+            data.to_vec()
+        };
+        text.push_str(&String::from_utf8_lossy(&data));
+        text.push('\n');
+        at = start + length;
+    }
+    text
+}
+
+/// The stroke and fill colour operators (`r g b RG` / `r g b rg`) that are not a grey.
+pub fn colour_ops(content: &str) -> Vec<String> {
+    content
+        .lines()
+        .filter(|line| {
+            let fields: Vec<_> = line.split_whitespace().collect();
+            match fields.as_slice() {
+                [r, g, b, "RG" | "rg"] => {
+                    let [r, g, b] = [r, g, b].map(|value| value.parse::<f64>().unwrap());
+                    r != g || g != b
+                }
+                _ => false,
+            }
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The pen widths set by `w` operators, in points.
+pub fn line_widths(content: &str) -> Vec<f64> {
+    content
+        .lines()
+        .filter_map(|line| match line.split_whitespace().collect::<Vec<_>>().as_slice() {
+            [width, "w"] => width.parse().ok(),
+            _ => None,
+        })
+        .collect()
+}

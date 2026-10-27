@@ -351,7 +351,7 @@ fn cancelled_budget_discards_renderer_output() {
     let budget = SheetBudget::desktop();
     assert_eq!(budget.render(&support::frames::CancellingSheetRenderer, &drawing, sheet), Err(RenderFailure::Cancelled));
     assert_eq!(budget.render(&support::frames::FixedSheetRenderer(1024), &drawing, sheet), Err(RenderFailure::Cancelled));
-    assert_eq!(PdfSheetRenderer.render(&drawing, sheet, &budget), Err(RenderFailure::Cancelled));
+    assert_eq!(PdfSheetRenderer::default().render(&drawing, sheet, &budget), Err(RenderFailure::Cancelled));
 }
 
 #[test]
@@ -361,14 +361,35 @@ fn pdf_sheet_renderer_passes_primitive_budget_and_writes_one_page() {
     let source = source(1);
     let sheet = source.plan.sheets.first().unwrap();
     let budget = SheetBudget::desktop();
-    let bytes = budget.render(&PdfSheetRenderer, &drawing, sheet).unwrap();
+    let bytes = budget.render(&PdfSheetRenderer::default(), &drawing, sheet).unwrap();
     let pages = support::pdf_probe::pages(&bytes);
     assert_eq!(pages.len(), 1);
     assert_eq!(pages[0].label.as_deref(), Some(sheet.sheet_id.as_str()));
     let tiny = SheetBudget { max_prims: 0, ..SheetBudget::desktop() };
-    assert!(matches!(tiny.render(&PdfSheetRenderer, &drawing, sheet), Err(RenderFailure::TooLarge(_))));
+    assert!(matches!(tiny.render(&PdfSheetRenderer::default(), &drawing, sheet), Err(RenderFailure::TooLarge(_))));
     let tiny = SheetBudget { max_bytes: 1, ..SheetBudget::desktop() };
-    assert!(matches!(PdfSheetRenderer.render(&drawing, sheet, &tiny), Err(RenderFailure::TooLarge(_))));
+    assert!(matches!(PdfSheetRenderer::default().render(&drawing, sheet, &tiny), Err(RenderFailure::TooLarge(_))));
+}
+
+#[test]
+fn pdf_sheet_renderer_uses_its_plot_style_table_and_lineweights() {
+    use support::pdf_probe::{colour_ops, line_widths, streams_text};
+    support::frames::install_budget_plot();
+    let mut drawing = frames_drawing(1);
+    let common =
+        cadcraft_doc::Common { color: cadcraft_color::Color::Index(1), lineweight: cadcraft_doc::Lineweight::Mm100(50), ..Default::default() };
+    let line = cadcraft_doc::Line { a: cadcraft_geom::Vec3::new(20.0, 20.0, 0.0), b: cadcraft_geom::Vec3::new(400.0, 200.0, 0.0) };
+    drawing.add(&cadcraft_doc::Space::Model, common, cadcraft_doc::EntityKind::Line(line)).unwrap();
+    let source = source(1);
+    let sheet = source.plan.sheets.first().unwrap();
+    let budget = SheetBudget::desktop();
+    let content = |renderer: &PdfSheetRenderer| streams_text(&budget.render(renderer, &drawing, sheet).unwrap());
+    let colours = content(&PdfSheetRenderer::default());
+    assert!(colour_ops(&colours).iter().any(|op| op == "1 0 0 RG"), "the default keeps colours");
+    let mono = PdfSheetRenderer { plot_style_table: Some("monochrome.ctb".into()), lineweights: Some(false) };
+    let mono = content(&mono);
+    assert!(colour_ops(&mono).is_empty(), "{:?}", colour_ops(&mono));
+    assert!(line_widths(&mono).iter().all(|width| *width == 0.0), "{:?}", line_widths(&mono));
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -389,7 +410,7 @@ fn pdf_sheet_renderer_keeps_all_approved_split_pages() {
     let source = source(1);
     let mut sheet = source.plan.sheets.first().unwrap().clone();
     support::frames::two_piece_split(&mut sheet);
-    let bytes = SheetBudget::desktop().render(&PdfSheetRenderer, &drawing, &sheet).unwrap();
+    let bytes = SheetBudget::desktop().render(&PdfSheetRenderer::default(), &drawing, &sheet).unwrap();
     let pages = support::pdf_probe::pages(&bytes);
     assert_eq!(pages.len(), 2);
     assert_eq!(pages[0].label.as_deref(), Some(format!("{} (1/2)", sheet.sheet_id).as_str()));
@@ -777,8 +798,8 @@ fn pdf_sheet_renderer_merges_via_host_hook() {
     let drawing = frames_drawing(1);
     let source = source(1);
     let budget = SheetBudget::desktop();
-    let bytes = budget.render(&PdfSheetRenderer, &drawing, &source.plan.sheets[0]).unwrap();
-    let merged = PdfSheetRenderer.merge(&[&bytes, &bytes], &["First".into(), "Second".into()], "Queue").unwrap();
+    let bytes = budget.render(&PdfSheetRenderer::default(), &drawing, &source.plan.sheets[0]).unwrap();
+    let merged = PdfSheetRenderer::default().merge(&[&bytes, &bytes], &["First".into(), "Second".into()], "Queue").unwrap();
     let pages = support::pdf_probe::pages(&merged);
     assert_eq!(pages.len(), 2);
     assert_eq!(pages[0].label.as_deref(), Some("First"));

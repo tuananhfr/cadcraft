@@ -30,4 +30,5 @@ rstar = { version = "0.12", default-features = false }
 cadcraft-io = { workspace = true }
 tiny-skia = { workspace = true }
 # Builds AutoCAD .ctb fixtures (zlib) in the plot style tests.
+# Inflates published PDF content streams to check their colours and pen widths.
 miniz_oxide = "0.8"

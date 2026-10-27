@@ -1,7 +1,8 @@
 #[allow(dead_code)]
 mod support;
 
-use cadcraft_doc::{Common, EntityKind, Layer, Space};
+use cadcraft_color::Color;
+use cadcraft_doc::{Common, EntityKind, Layer, Lineweight, Space};
 use cadcraft_engine::cmd::file::{IoHooks, base64_decode, set_io};
 use cadcraft_engine::cmd::resolve_alias;
 use cadcraft_engine::sheetplan::kcs::{KCS_LAYER, NO_PLOT_AREAS};
@@ -9,7 +10,7 @@ use cadcraft_engine::sheetplan::{ScanMode, Severity, SheetPlan, SheetSource, cod
 use cadcraft_engine::{Input, Session};
 use cadcraft_geom::{Vec2, Vec3};
 use serde_json::{Value, json};
-use support::pdf_probe::pages;
+use support::pdf_probe::{colour_ops, line_widths, pages, streams_text};
 
 fn session() -> Session {
     set_io(IoHooks {
@@ -150,6 +151,10 @@ fn kcs_handles_restrict_the_scan_to_selected_markers() {
 }
 
 fn publish_bytes(s: &mut Session) -> Vec<u8> {
+    publish_with(s, json!({})).unwrap()
+}
+
+fn publish_with(s: &mut Session, params: Value) -> Result<Vec<u8>, String> {
     let plan = &s.ubplot.last.as_ref().unwrap().plan;
     let approvals: Vec<_> = plan
         .issues
@@ -167,10 +172,10 @@ fn publish_bytes(s: &mut Session) -> Vec<u8> {
     if !approvals.is_empty() {
         s.execute("ubplot.approve", &json!({"approvals": approvals, "by": "user"})).unwrap();
     }
-    let result = s.execute("ubplot.publish", &json!({})).unwrap();
+    let result = s.execute("ubplot.publish", &params).map_err(|error| error.to_string())?;
     let files = result["files"].as_array().unwrap();
     assert_eq!(files.len(), 1, "KCS output is one merged PDF");
-    base64_decode(files[0]["data"].as_str().unwrap()).unwrap()
+    Ok(base64_decode(files[0]["data"].as_str().unwrap()).unwrap())
 }
 
 fn contains(haystack: &[u8], needle: &str) -> bool {
@@ -200,6 +205,130 @@ fn kcs_publishes_one_merged_pdf_without_the_marker_layer() {
     let windows: Vec<_> = [0.0, 50000.0, 100000.0].iter().map(|x| json!([[x, -29700.0], [x + 42000.0, 0.0]])).collect();
     scan(&mut s, json!({"mode": "window", "windows": windows, "paper": "A3"}));
     assert!(contains(&publish_bytes(&mut s), KCS_LAYER));
+}
+
+/// One KCS area holding red, green and blue lines 0.5 mm wide.
+fn coloured_kcs_sheet(s: &mut Session) {
+    marker(s, 0.0, 0.0, 42000.0, 29700.0);
+    for (row, colour) in [1_u8, 3, 5].into_iter().enumerate() {
+        let y = -5000.0 - 5000.0 * row as f64;
+        let common = Common { color: Color::Index(colour), lineweight: Lineweight::Mm100(50), ..Common::default() };
+        let kind = EntityKind::Line(cadcraft_doc::Line { a: Vec3::new(1000.0, y, 0.0), b: Vec3::new(30000.0, y, 0.0) });
+        s.doc_mut().unwrap().add(&Space::Model, common, kind).unwrap();
+    }
+    scan(s, json!({"mode": "kcs"}));
+}
+
+#[test]
+fn kcs_publish_monochrome_has_no_colour() {
+    let mut s = session();
+    coloured_kcs_sheet(&mut s);
+    let content = streams_text(&publish_with(&mut s, json!({"plotStyleTable": "monochrome.ctb"})).unwrap());
+    assert!(colour_ops(&content).is_empty(), "{:?}", colour_ops(&content));
+    assert!(content.contains("0 0 0 RG"), "the lines print black");
+}
+
+#[test]
+fn publish_without_table_keeps_colours() {
+    let mut s = session();
+    coloured_kcs_sheet(&mut s);
+    for params in [json!({}), json!({"plotStyleTable": "None"})] {
+        let colours = colour_ops(&streams_text(&publish_with(&mut s, params).unwrap()));
+        for expected in ["1 0 0 RG", "0 1 0 RG", "0 0 1 RG"] {
+            assert!(colours.iter().any(|op| op == expected), "{expected} in {colours:?}");
+        }
+    }
+}
+
+#[test]
+fn publish_lineweights_off() {
+    let mut s = session();
+    coloured_kcs_sheet(&mut s);
+    let on = line_widths(&streams_text(&publish_with(&mut s, json!({})).unwrap()));
+    assert!(on.iter().any(|width| (width - 0.5 * 72.0 / 25.4).abs() < 0.01), "0.5 mm pens: {on:?}");
+    let off = line_widths(&streams_text(&publish_with(&mut s, json!({"lineweights": false})).unwrap()));
+    assert!(!off.is_empty() && off.iter().all(|width| *width == 0.0), "thinnest pens only: {off:?}");
+}
+
+#[test]
+fn locked_plot_style_refused() {
+    use cadcraft_engine::sheetplan::profile::{PRINT_PROFILE_SCHEMA, ProfileDoc, ProfileLevel};
+    let mut s = session();
+    let company = ProfileDoc {
+        schema_version: PRINT_PROFILE_SCHEMA,
+        level: ProfileLevel::Company,
+        id: "default".into(),
+        project_id: None,
+        revision: 1,
+        settings: json!({"plot_style_table": "monochrome.ctb"}),
+        locks: vec!["/plot_style_table".into()],
+        updated_ms: 1,
+    };
+    s.write_print_profile(&company).unwrap();
+    coloured_kcs_sheet(&mut s);
+    for params in [json!({"plotStyleTable": "None"}), json!({"plot_style_table": "grayscale.ctb"})] {
+        let error = publish_with(&mut s, params).unwrap_err();
+        assert!(error.contains("LOCKED_BY_POLICY: /plot_style_table (company)"), "{error}");
+    }
+    // The locked table itself is what publishing uses, sent or not, in any letter case.
+    for params in [json!({}), json!({"plotStyleTable": "monochrome.ctb"}), json!({"plotStyleTable": "MONOCHROME.CTB"})] {
+        assert!(colour_ops(&streams_text(&publish_with(&mut s, params).unwrap())).is_empty());
+    }
+}
+
+fn user_profile(settings: Value) -> cadcraft_engine::sheetplan::profile::ProfileDoc {
+    use cadcraft_engine::sheetplan::profile::{PRINT_PROFILE_SCHEMA, ProfileDoc, ProfileLevel};
+    ProfileDoc {
+        schema_version: PRINT_PROFILE_SCHEMA,
+        level: ProfileLevel::User,
+        id: "default".into(),
+        project_id: None,
+        revision: 1,
+        settings,
+        locks: Vec::new(),
+        updated_ms: 1,
+    }
+}
+
+#[test]
+fn unknown_table_refused_only_when_used() {
+    let mut s = session();
+    coloured_kcs_sheet(&mut s);
+    let error = publish_with(&mut s, json!({"plotStyleTable": "lpc.ctb"})).unwrap_err();
+    assert!(error.contains("PLOT_PROFILE_MISSING") && error.contains("lpc.ctb"), "{error}");
+    assert!(publish_with(&mut s, json!({"plotStyleTable": "grayscale.ctb"})).is_ok());
+
+    // A profile naming a table the drawing lacks only warns at scan.
+    s.write_print_profile(&user_profile(json!({"plot_style_table": "lpc.ctb"}))).unwrap();
+    let plan = scan(&mut s, json!({"mode": "kcs"}));
+    let missing: Vec<_> = plan.issues.iter().filter(|issue| issue.code == codes::PLOT_PROFILE_MISSING).collect();
+    assert_eq!(missing.len(), 1, "{:?}", plan.issues);
+    assert_eq!(missing[0].severity, Severity::Warn);
+    assert!(missing[0].message.contains("lpc.ctb"), "{}", missing[0].message);
+    assert!(plan.sheets.iter().all(|sheet| sheet.status != cadcraft_engine::sheetplan::SheetStatus::Blocked));
+    // Publishing with the profile's table is refused; another choice publishes and drops the warning.
+    let error = publish_with(&mut s, json!({})).unwrap_err();
+    assert!(error.contains("PLOT_PROFILE_MISSING"), "{error}");
+    for table in ["None", "monochrome.ctb"] {
+        assert!(publish_with(&mut s, json!({"plotStyleTable": table})).is_ok(), "{table}");
+        let plan = &s.ubplot.last.as_ref().unwrap().plan;
+        assert!(!plan.issues.iter().any(|issue| issue.code == codes::PLOT_PROFILE_MISSING), "{:?}", plan.issues);
+    }
+}
+
+#[test]
+fn explicit_none_overrides_a_layout_page_setup_table() {
+    let mut s = session();
+    let mut layout = cadcraft_doc::Layout::new("Styled", 1);
+    layout.page.plot_style_table = "monochrome.ctb".into();
+    s.doc_mut().unwrap().layouts.push(layout);
+    let common = Common { color: Color::Index(1), ..Common::default() };
+    let kind = EntityKind::Line(cadcraft_doc::Line { a: Vec3::new(10.0, 10.0, 0.0), b: Vec3::new(200.0, 150.0, 0.0) });
+    s.doc_mut().unwrap().add(&Space::Paper("Styled".into()), common, kind).unwrap();
+    scan(&mut s, json!({"mode": "layout", "layouts": ["Styled"]}));
+    let red = |s: &mut Session, params| colour_ops(&streams_text(&publish_with(s, params).unwrap())).iter().any(|op| op == "1 0 0 RG");
+    assert!(!red(&mut s, json!({})), "without a choice the page setup's monochrome table prints");
+    assert!(red(&mut s, json!({"plotStyleTable": "None"})), "an explicit None prints colours as displayed");
 }
 
 #[test]
