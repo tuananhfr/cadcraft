@@ -3937,3 +3937,4 @@ echo	Plot style table {name} imported; {count} styles print with the object line
 	PLOT_PROFILE_MISSING	Таблицю стилів друку не знайдено
 	The plot style table is not in this drawing or built in: choose another table	Цієї таблиці стилів друку немає ні в кресленні, ні серед вбудованих: виберіть іншу таблицю
 	As page setup	Як у параметрах сторінки
+	Includes acadrust (DWG reading and writing), used unmodified under the Mozilla Public License 2.0. Its source code:	Містить acadrust (читання та запис DWG), використану без змін за ліцензією Mozilla Public License 2.0. Її вихідний код:

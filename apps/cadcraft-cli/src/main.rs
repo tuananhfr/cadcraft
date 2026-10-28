@@ -205,6 +205,11 @@ fn install_io() {
     cadcraft_engine::cmd::file::set_write_as(|d, name, o| {
         cadcraft_io::write_with(d, name, &cadcraft_io::SaveOptions { version: o.version, binary: o.binary }).map_err(|e| e.to_string())
     });
+    cadcraft_engine::cmd::file::set_write_reported(|d, name, o| {
+        cadcraft_io::write_reported(d, name, &cadcraft_io::SaveOptions { version: o.version, binary: o.binary })
+            .map(|(bytes, dropped)| (bytes, cadcraft_engine::cmd::file::WriterLosses { entities: dropped.entities, objects: dropped.objects }))
+            .map_err(|e| e.to_string())
+    });
     // AutoLISP's entget, entmake and entmod see entities as DXF groups.
     cadcraft_engine::cmd::file::set_entity_codec(cadcraft_engine::cmd::file::EntityCodec {
         groups: cadcraft_io::entity_groups,
@@ -562,16 +567,28 @@ fn export(s: &Session, out: &str) -> Result<(), String> {
     export_framed(s, out, None)
 }
 
+/// Write the drawing to `out` and say what the file leaves out. Writing over the file the drawing
+/// was opened from is refused when the new file would leave out something that file holds.
 fn export_framed(s: &Session, out: &str, window: Option<Bounds2>) -> Result<(), String> {
+    use cadcraft_engine::cmd::file::{drops_unknown, not_saved_message, objects_not_saved_message, same_file};
     let d = s.doc().map_err(|e| e.to_string())?;
-    let bytes = cadcraft_io::write_framed(d, out, window).map_err(|e| e.to_string())?;
+    let (bytes, dropped) = if drops_unknown(out) {
+        cadcraft_io::write_reported(d, out, &cadcraft_io::SaveOptions::default()).map_err(|e| e.to_string())?
+    } else {
+        (cadcraft_io::write_framed(d, out, window).map_err(|e| e.to_string())?, cadcraft_io::Dropped::default())
+    };
+    let unreadable = !d.read_notes.is_empty() || !d.skipped_records.is_empty();
+    let source = s.state().ok().and_then(|st| st.source_path.clone());
+    if (!dropped.is_empty() || unreadable) && source.is_some_and(|src| same_file(&src, out)) {
+        let name = std::path::Path::new(out).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| out.to_string());
+        return Err(format!(
+            "Not saved over {name}: the new file would leave out data the original holds. Write it to another file; the original stays as it was."
+        ));
+    }
     std::fs::write(out, &bytes).map_err(|e| format!("{out}: {e}"))?;
     eprintln!("wrote {out} ({} bytes)", bytes.len());
-    if cadcraft_engine::cmd::file::drops_unknown(out) {
-        let lost = cadcraft_engine::cmd::file::not_saved(d);
-        if let Some(m) = cadcraft_engine::cmd::file::not_saved_message(&lost) {
-            eprintln!("{m}");
-        }
+    for m in [not_saved_message(&dropped.entities), objects_not_saved_message(&dropped.objects)].into_iter().flatten() {
+        eprintln!("{m}");
     }
     Ok(())
 }

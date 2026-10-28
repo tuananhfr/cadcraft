@@ -103,7 +103,10 @@ fn run_recover(s: &mut Session, p: &Value) -> Result<Value> {
     let copy = bool_or(p, "copy", false);
     let result = recover_bytes(s, &bytes, &name, str_param(p, "title"), copy)?;
     if !copy {
-        s.state_mut()?.path = path;
+        let st = s.state_mut()?;
+        // Saving over the damaged file must be refused like over any opened file that would lose records.
+        st.source_path = path.clone();
+        st.path = path;
     }
     Ok(result)
 }

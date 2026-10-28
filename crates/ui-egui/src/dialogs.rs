@@ -340,6 +340,17 @@ fn about(ctx: &egui::Context, open: &mut bool) {
                     ui.hyperlink_to("ubotbuild.com", "https://ubotbuild.com/");
                     ui.add_space(6.0);
                     ui.label(RichText::new(crate::tl!("MIT OR Apache-2.0. Not affiliated with Autodesk, Inc.")).small().color(t.text_faint));
+                    // MPL-2.0 §3.2(a): every executable copy must say where acadrust's source is.
+                    ui.add_space(6.0);
+                    ui.label(
+                        RichText::new(crate::tl!(
+                            "Includes acadrust (DWG reading and writing), used unmodified under the Mozilla Public License 2.0. Its source code:"
+                        ))
+                        .small()
+                        .color(t.text_faint),
+                    );
+                    ui.hyperlink("https://github.com/hakanaktt/acadrust");
+                    ui.hyperlink("https://mozilla.org/MPL/2.0/");
                 }
             }
         });

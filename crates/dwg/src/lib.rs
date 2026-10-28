@@ -41,6 +41,21 @@ impl Limits {
     pub const WEB: Limits = Limits { max_dwg_bytes: 90 << 20, max_dxf_bytes: 640 << 20 };
 }
 
+/// What a DXF→DWG conversion left out because the DWG writer can't write it: other programs'
+/// custom entities and objects, counted by DXF type name.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Dropped {
+    pub entities: std::collections::BTreeMap<String, usize>,
+    pub objects: std::collections::BTreeMap<String, usize>,
+}
+
+impl Dropped {
+    /// The DWG keeps everything the DXF had.
+    pub fn is_empty(&self) -> bool {
+        self.entities.is_empty() && self.objects.is_empty()
+    }
+}
+
 /// A byte count in megabytes for messages ("9.9 MB", "1024 MB").
 fn mb(n: u64) -> String {
     let m = n as f64 / f64::from(1u32 << 20);
@@ -54,7 +69,7 @@ mod native {
     use std::panic::AssertUnwindSafe;
 
     use super::hatch_edges::{Units, convert_ellipse_edges};
-    use super::{Limits, mb};
+    use super::{Dropped, Limits, mb};
 
     /// Read DWG bytes and return an ASCII DXF rendition, within [`Limits::DEFAULT`].
     pub fn dwg_to_dxf(bytes: &[u8]) -> Result<Vec<u8>, String> {
@@ -276,15 +291,18 @@ mod native {
     /// Leave out what acadrust can't write as this DWG version: other programs' custom entities
     /// and objects without raw DWG data of that version. acadrust 0.6.4 refuses the whole file
     /// for one of them (0.6.3 left them out); CADCraft already tells the user which entity types
-    /// a DWG doesn't keep (`not_saved`), so the rest of the drawing is written. Returns how many.
-    fn drop_unwritable(doc: &mut acadrust::CadDocument) -> usize {
+    /// a DWG doesn't keep (`not_saved`), so the rest of the drawing is written. Returns what was
+    /// left out, so the caller can tell the user.
+    fn drop_unwritable(doc: &mut acadrust::CadDocument) -> Dropped {
         let version = doc.version;
+        let mut dropped = Dropped::default();
         let unwritable: Vec<acadrust::Handle> = doc
             .entities()
             .filter_map(|e| match e {
                 acadrust::entities::EntityType::Unknown(u)
                     if u.raw_dwg_data.is_none() || u.dwg_source_version.is_some_and(|v| v != version) || version == acadrust::DxfVersion::AC1009 =>
                 {
+                    *dropped.entities.entry(u.dxf_name.clone()).or_default() += 1;
                     Some(u.common.handle)
                 }
                 _ => None,
@@ -297,9 +315,10 @@ mod native {
             .objects
             .iter()
             .filter_map(|(h, o)| match o {
-                acadrust::objects::ObjectType::Unknown { raw_dwg_data, raw_dwg_version, .. }
+                acadrust::objects::ObjectType::Unknown { type_name, raw_dwg_data, raw_dwg_version, .. }
                     if raw_dwg_data.is_none() || raw_dwg_version.is_some_and(|v| v != version) || version == acadrust::DxfVersion::AC1009 =>
                 {
+                    *dropped.objects.entry(type_name.clone()).or_default() += 1;
                     Some(*h)
                 }
                 _ => None,
@@ -308,7 +327,7 @@ mod native {
         for h in &objects {
             doc.objects.remove(h);
         }
-        unwritable.len() + objects.len()
+        dropped
     }
 
     /// Header variables the DWG reader fills in but acadrust's DXF writer (0.6.3) leaves out of
@@ -406,13 +425,23 @@ mod native {
     /// Convert DXF bytes into a DWG file of the DXF's version, and at least AutoCAD 2004
     /// (AC1018).
     pub fn dxf_to_dwg(dxf: &[u8]) -> Result<Vec<u8>, String> {
-        convert(dxf, None)
+        convert(dxf, None).map(|(dwg, _)| dwg)
     }
 
     /// Convert DXF bytes into a DWG file of `version`, a code from [`super::VERSIONS`] ("AC1032"),
     /// whatever version the DXF declares.
     pub fn dxf_to_dwg_as(dxf: &[u8], version: &str) -> Result<Vec<u8>, String> {
-        let v = match version.trim().to_ascii_uppercase().as_str() {
+        convert(dxf, Some(write_version(version)?)).map(|(dwg, _)| dwg)
+    }
+
+    /// [`dxf_to_dwg_as`] (or [`dxf_to_dwg`] without a version), also returning what the DWG
+    /// leaves out.
+    pub fn dxf_to_dwg_reported(dxf: &[u8], version: Option<&str>) -> Result<(Vec<u8>, Dropped), String> {
+        convert(dxf, version.map(write_version).transpose()?)
+    }
+
+    fn write_version(version: &str) -> Result<acadrust::DxfVersion, String> {
+        Ok(match version.trim().to_ascii_uppercase().as_str() {
             "AC1015" => acadrust::DxfVersion::AC1015,
             "AC1018" => acadrust::DxfVersion::AC1018,
             "AC1021" => acadrust::DxfVersion::AC1021,
@@ -420,11 +449,10 @@ mod native {
             "AC1027" => acadrust::DxfVersion::AC1027,
             "AC1032" => acadrust::DxfVersion::AC1032,
             _ => return Err(super::unsupported(version)),
-        };
-        convert(dxf, Some(v))
+        })
     }
 
-    fn convert(dxf: &[u8], version: Option<acadrust::DxfVersion>) -> Result<Vec<u8>, String> {
+    fn convert(dxf: &[u8], version: Option<acadrust::DxfVersion>) -> Result<(Vec<u8>, Dropped), String> {
         let data = dxf.to_vec();
         let mut doc = std::panic::catch_unwind(move || acadrust::DxfReader::from_reader(Cursor::new(data)).and_then(|r| r.read()))
             .map_err(|_| "the DXF→DWG conversion failed".to_string())?
@@ -439,14 +467,15 @@ mod native {
         }
         table_style_rows(&mut doc, true);
         convert_ellipse_edges(&mut doc, Units::ToRadians);
-        drop_unwritable(&mut doc);
-        std::panic::catch_unwind(AssertUnwindSafe(|| acadrust::DwgWriter::write_to_vec(&doc)))
+        let dropped = drop_unwritable(&mut doc);
+        let dwg = std::panic::catch_unwind(AssertUnwindSafe(|| acadrust::DwgWriter::write_to_vec(&doc)))
             .map_err(|_| "the DWG writer failed on this drawing".to_string())?
-            .map_err(|e| format!("DWG write: {e}"))
+            .map_err(|e| format!("DWG write: {e}"))?;
+        Ok((dwg, dropped))
     }
 }
 
-pub use native::{dwg_to_dxf, dwg_to_dxf_noted, dwg_to_dxf_with, dxf_to_dwg, dxf_to_dwg_as};
+pub use native::{dwg_to_dxf, dwg_to_dxf_noted, dwg_to_dxf_with, dxf_to_dwg, dxf_to_dwg_as, dxf_to_dwg_reported};
 
 /// The error for a DWG version CADCraft can't write.
 fn unsupported(version: &str) -> String {

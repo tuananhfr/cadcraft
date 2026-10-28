@@ -130,6 +130,9 @@ pub struct DocState {
     pub selection: Vec<Handle>,
     pub previous_selection: Vec<Handle>,
     pub path: Option<String>,
+    /// The file the drawing was opened from: unlike `path`, SAVEAS doesn't change it. A save over
+    /// it must not leave out what that file holds.
+    pub source_path: Option<String>,
     pub title: String,
     pub saved: Arc<Drawing>,
     pub revision: u64,
@@ -161,6 +164,7 @@ impl DocState {
             undo_ctl: undoctl::UndoCtl::default(),
             selection: Vec::new(),
             previous_selection: Vec::new(),
+            source_path: path.clone(),
             path,
             title: title.into(),
             revision: 1,

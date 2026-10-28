@@ -785,6 +785,8 @@ const UNTRANSLATED_UI_TEXT: &[(&str, &str)] = &[
     ("CADCraft", "product name"),
     ("ArtCraft", "brand name"),
     ("ubotbuild.com", "public website address"),
+    ("https://github.com/hakanaktt/acadrust", "MPL-2.0 source address shown verbatim"),
+    ("https://mozilla.org/MPL/2.0/", "MPL-2.0 licence address shown verbatim"),
     ("ByLayer", "CAD property token"),
     ("ByBlock", "CAD property token"),
     ("WCS", "coordinate system identifier"),
@@ -2555,4 +2557,28 @@ fn unknown_raw_prompt_keeps_routine_text_and_formatting() {
     for language in ["vi", "en", "qps"] {
         with_language(language, || assert_eq!(prompt_message(&prompt), expected));
     }
+}
+
+#[test]
+fn dwg_save_losses_and_overwrite_refusal_are_vietnamese() {
+    with_language("vi", || {
+        assert_eq!(
+            echo("Not saved in the DWG file (other programs' custom objects its writer can't write; DXF keeps them): 2 ACME_WIDGET"),
+            "Chưa lưu vào tệp DWG (đối tượng tuỳ biến của chương trình khác mà bộ ghi DWG chưa ghi được; DXF giữ được chúng): 2 ACME_WIDGET"
+        );
+        let refused = echo(
+            "invalid parameters for `save`: Not saved over plan.dwg: the new file would leave out data the original holds \
+             (2 ACME_WIDGET). Use SAVEAS to save under another name, or as DXF, which keeps them; the original stays as it was.",
+        );
+        assert!(refused.contains("Không ghi đè plan.dwg") && refused.contains("(2 ACME_WIDGET)") && refused.contains("DXF"), "{refused}");
+        let notes_only = echo(
+            "invalid parameters for `qsave`: Not saved over plan.dwg: the new file would leave out data the original holds \
+             (records that couldn't be read when it was opened). Use SAVEAS to save under another name; the original stays as it was.",
+        );
+        assert!(notes_only.starts_with("tham số không hợp lệ cho `qsave`: Không ghi đè plan.dwg"), "{notes_only}");
+        assert_eq!(
+            echo("Not saved (records that couldn't be read when the drawing was opened): ENTITIES: 1, (no section): 1"),
+            "Chưa lưu (các bản ghi không đọc được khi mở bản vẽ): ENTITIES: 1, (no section): 1"
+        );
+    });
 }

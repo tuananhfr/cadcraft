@@ -166,6 +166,26 @@ pub fn write_as() -> Option<WriteAsHook> {
     WRITE_AS.get().copied()
 }
 
+/// What the file writer itself left out (the DWG writer: other programs' custom entities and
+/// objects it has no DWG data for), by DXF type. The entity types CADCraft doesn't write at all
+/// are counted by [`not_saved_as`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WriterLosses {
+    pub entities: std::collections::BTreeMap<String, usize>,
+    pub objects: std::collections::BTreeMap<String, usize>,
+}
+
+/// Write a drawing file (DWG, DXF) and say what the writer left out.
+pub type WriteReportedHook = fn(&Drawing, &str, &SaveAs) -> std::result::Result<(Vec<u8>, WriterLosses), String>;
+
+static WRITE_REPORTED: OnceLock<WriteReportedHook> = OnceLock::new();
+
+/// Install the host's reporting writer for drawing files; without one, saves use [`IoHooks::write`]
+/// and [`write_as`] and only the entities [`not_saved_as`] counts are reported.
+pub fn set_write_reported(h: WriteReportedHook) {
+    let _ = WRITE_REPORTED.set(h);
+}
+
 /// The versions a drawing can be saved in, for messages ("2000, 2004, …, 2018").
 fn version_list() -> String {
     Version::ALL.iter().map(|v| v.year()).collect::<Vec<_>>().join(", ")
@@ -200,20 +220,23 @@ fn is_dxf(path: &str) -> bool {
     matches!(ext.as_str(), "dxf" | "")
 }
 
-/// The drawing written to `path` with `opts`: through [`IoHooks::write`] when no option is set,
-/// else through the [`write_as`] hook.
-fn write_bytes(s: &Session, cmd: &str, path: &str, opts: &SaveAs) -> Result<Vec<u8>> {
+/// The drawing written to `path` with `opts`, and what the writer left out (`None` when the writer
+/// doesn't report): a drawing file through the [`set_write_reported`] hook when there is one, else
+/// through [`IoHooks::write`] when no option is set, else through the [`write_as`] hook.
+fn write_bytes(s: &Session, cmd: &str, path: &str, opts: &SaveAs) -> Result<(Vec<u8>, Option<WriterLosses>)> {
     let hooks = io().ok_or_else(|| bad(cmd, "file formats are not available in this build"))?;
     if opts.binary && !is_dxf(path) {
         return Err(bad(cmd, "binary applies to DXF files only"));
     }
     // A drawing file is the drawing outside the Block Editor; an image is what is shown.
     let d: &cadcraft_doc::Drawing = if is_drawing_file(path) { s.state()?.drawing() } else { s.doc()? };
-    let r = if *opts == SaveAs::default() {
-        (hooks.write)(d, path)
+    let r = if let Some(w) = WRITE_REPORTED.get().filter(|_| is_drawing_file(path)) {
+        w(d, path, opts).map(|(bytes, losses)| (bytes, Some(losses)))
+    } else if *opts == SaveAs::default() {
+        (hooks.write)(d, path).map(|bytes| (bytes, None))
     } else {
         let w = write_as().ok_or_else(|| bad(cmd, "saving at a chosen version or as binary DXF is not available in this build"))?;
-        w(d, path, opts)
+        w(d, path, opts).map(|bytes| (bytes, None))
     };
     r.map_err(|e| bad(cmd, e))
 }
@@ -235,8 +258,8 @@ pub fn specs() -> Vec<CommandSpec> {
             .noundo(),
         CommandSpec::new("close", "Close", run_close).menu(&["File", "Close"]).key("Cmd+W").params("{index?}").noundo(),
         CommandSpec::new("closeall", "Close All", run_closeall).menu(&["File", "Close All"]).enabled(always).noundo(),
-        CommandSpec::new("qsave", "Save", run_qsave_reporting).menu(&["File", "Save"]).key("Cmd+S").alias(&["save"]).params("{path?}").noundo(),
-        CommandSpec::new("saveas", "Save As...", run_saveas_reporting)
+        CommandSpec::new("qsave", "Save", run_save).menu(&["File", "Save"]).key("Cmd+S").alias(&["save"]).params("{path?}").noundo(),
+        CommandSpec::new("saveas", "Save As...", run_saveas)
             .menu(&["File", "Save As..."])
             .key("Cmd+Shift+S")
             .params("{path, version?: 2000|2004|2007|2010|2013|2018, binary?: bool}")
@@ -451,18 +474,89 @@ fn run_closeall(s: &mut Session, _p: &Value) -> Result<Value> {
     ok()
 }
 
-pub(crate) fn save_to(s: &mut Session, path: &str) -> Result<usize> {
+pub(crate) fn save_to(s: &mut Session, path: &str) -> Result<(usize, FileLosses)> {
     let opts = SaveAs { version: None, binary: s.state()?.binary_dxf && is_dxf(path) };
     save_as(s, "save", path, &opts)
 }
 
+/// Everything a saved drawing file leaves out: entities by DXF type (types CADCraft doesn't write,
+/// and ones the writer can't), the writer's objects by type, and the records reading the drawing's
+/// file skipped (noted, or not placed: by section).
+#[derive(Debug, Default)]
+pub(crate) struct FileLosses {
+    entities: std::collections::BTreeMap<String, usize>,
+    objects: std::collections::BTreeMap<String, usize>,
+    read_notes: Vec<String>,
+    skipped: std::collections::BTreeMap<String, usize>,
+}
+
+impl FileLosses {
+    /// `writer`: what a reporting writer left out. Without one, a DWG's entity losses are estimated
+    /// from the drawing; a reporting writer's list is exact (it sees the Unknown entities the bridge
+    /// DXF carries, and keeps the types it can write).
+    fn of(d: &Drawing, path: &str, version: Version, writer: Option<WriterLosses>) -> Self {
+        let (entities, objects) = match writer {
+            Some(w) => (w.entities, w.objects),
+            None if drops_unknown(path) => (not_saved_as(d, version), Default::default()),
+            None => Default::default(),
+        };
+        FileLosses { entities, objects, read_notes: d.read_notes.clone(), skipped: d.skipped_records.clone() }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entities.is_empty() && self.objects.is_empty() && self.read_notes.is_empty() && self.skipped.is_empty()
+    }
+
+    /// Why saving over the opened file is refused, and how to save instead.
+    fn overwrite_refusal(&self, path: &str) -> String {
+        let mut by_type: Vec<(&String, &usize)> = self.entities.iter().chain(&self.objects).collect();
+        by_type.sort();
+        let mut list = Vec::new();
+        if !by_type.is_empty() {
+            list.push(loss_list(by_type));
+        }
+        if !self.read_notes.is_empty() || !self.skipped.is_empty() {
+            list.push("records that couldn't be read when it was opened".into());
+        }
+        let dxf = if self.entities.is_empty() && self.objects.is_empty() { "" } else { ", or as DXF, which keeps them" };
+        format!(
+            "Not saved over {}: the new file would leave out data the original holds ({}). \
+             Use SAVEAS to save under another name{dxf}; the original stays as it was.",
+            file_name(path),
+            list.join(", ")
+        )
+    }
+}
+
+/// Whether two paths name the same file: the same text, or (natively) the same canonical path.
+pub fn same_file(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if let (Ok(x), Ok(y)) = (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+            return x == y;
+        }
+    }
+    false
+}
+
 /// Save to `path` with `opts`. A drawing file then keeps the version and binary choice: the
-/// version goes into the drawing's `$ACADVER`, so later saves (QSAVE) write it again.
-fn save_as(s: &mut Session, cmd: &str, path: &str, opts: &SaveAs) -> Result<usize> {
+/// version goes into the drawing's `$ACADVER`, so later saves (QSAVE) write it again. Saving over
+/// the file the drawing was opened from is refused when the new file would leave out data it holds
+/// (nothing is lost silently); any other save goes ahead and returns what it left out.
+fn save_as(s: &mut Session, cmd: &str, path: &str, opts: &SaveAs) -> Result<(usize, FileLosses)> {
     if s.doc()?.refedit.is_some() {
         return Err(bad(cmd, "A block reference is being edited in place: finish with REFCLOSE (Save or Discard) before saving."));
     }
-    let bytes = write_bytes(s, cmd, path, opts)?;
+    // What the file holds depends on the version it is saved as (the data store from 2013).
+    let version = opts.version.unwrap_or_else(|| drawing_version(s, path));
+    let (bytes, writer) = write_bytes(s, cmd, path, opts)?;
+    let losses = if is_drawing_file(path) { FileLosses::of(s.state()?.drawing(), path, version, writer) } else { FileLosses::default() };
+    if !losses.is_empty() && s.state()?.source_path.as_deref().is_some_and(|source| same_file(source, path)) {
+        return Err(bad(cmd, losses.overwrite_refusal(path)));
+    }
     let n = commit_save(s, path, &bytes, store)?;
     if is_drawing_file(path) {
         let st = s.state_mut()?;
@@ -474,7 +568,7 @@ fn save_as(s: &mut Session, cmd: &str, path: &str, opts: &SaveAs) -> Result<usiz
             st.saved = st.drawing().clone();
         }
     }
-    Ok(n)
+    Ok((n, losses))
 }
 
 /// Put saved bytes where the user gets them: natively the file at `path` (written atomically); on
@@ -529,15 +623,18 @@ fn run_save(s: &mut Session, p: &Value) -> Result<Value> {
         Some(p) => p.to_string(),
         None => s.state()?.path.clone().ok_or_else(|| bad("qsave", "drawing has no file name yet; use saveas {path}"))?,
     };
-    let n = save_to(s, &path)?;
-    Ok(saved(&path, n))
+    let (n, losses) = save_to(s, &path)?;
+    let mut r = saved(&path, n);
+    report_losses(s, &mut r, &losses);
+    Ok(r)
 }
 
 fn run_saveas(s: &mut Session, p: &Value) -> Result<Value> {
     let path = str_param(p, "path").ok_or_else(|| bad("saveas", "`path` is required"))?.to_string();
     let opts = save_options("saveas", p)?;
-    let n = save_as(s, "saveas", &path, &opts)?;
+    let (n, losses) = save_as(s, "saveas", &path, &opts)?;
     let mut r = saved(&path, n);
+    report_losses(s, &mut r, &losses);
     if is_drawing_file(&path) {
         r["version"] = json!(opts.version.unwrap_or_else(|| drawing_version(s, &path)).year());
         r["binary"] = json!(opts.binary);
@@ -566,12 +663,14 @@ fn run_switch(s: &mut Session, p: &Value) -> Result<Value> {
 fn run_bytes(s: &mut Session, p: &Value) -> Result<Value> {
     let fmt = str_param(p, "format").unwrap_or("dxf");
     let opts = save_options("document.bytes", p)?;
-    let version = opts.version.unwrap_or_else(|| drawing_version(s, &format!("drawing.{fmt}")));
-    let lost = not_saved_as(s.doc()?, version);
-    let bytes = write_bytes(s, "document.bytes", &format!("drawing.{fmt}"), &opts)?;
+    let path = format!("drawing.{fmt}");
+    let version = opts.version.unwrap_or_else(|| drawing_version(s, &path));
+    let (bytes, writer) = write_bytes(s, "document.bytes", &path, &opts)?;
     let mut r = json!({ "data": base64_encode(&bytes), "bytes": bytes.len() });
-    if drops_unknown(&format!("drawing.{fmt}")) {
-        report_not_saved(s, &mut r, &lost);
+    if is_drawing_file(&path) {
+        // The bytes replace no file, and OPEN already said what reading skipped.
+        let losses = FileLosses { read_notes: Vec::new(), ..FileLosses::of(s.state()?.drawing(), &path, version, writer) };
+        report_losses(s, &mut r, &losses);
     }
     Ok(r)
 }
@@ -594,7 +693,10 @@ const MODELER_TYPES: [&str; 3] = ["3DSOLID", "REGION", "BODY"];
 pub fn not_saved_as(d: &Drawing, version: Version) -> std::collections::BTreeMap<String, usize> {
     let mut out: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     let stored = if version >= Version::R2013 { d.foreign.data_store_entities() } else { Default::default() };
-    let stores = std::iter::once(&d.model).chain(d.layouts.iter().map(|l| &l.entities)).chain(d.blocks.values().map(|b| &b.entities));
+    // An xref's objects (and the `xref|name` blocks that came with it) are loaded from its own
+    // file and never written with the host.
+    let own_blocks = d.blocks.values().filter(|b| b.xref_path.is_none() && !b.name.contains('|'));
+    let stores = std::iter::once(&d.model).chain(d.layouts.iter().map(|l| &l.entities)).chain(own_blocks.map(|b| &b.entities));
     for e in stores.flat_map(|s| s.iter()) {
         if let cadcraft_doc::EntityKind::Unknown(u) = &e.kind {
             if MODELER_TYPES.iter().any(|t| u.dxf_type.eq_ignore_ascii_case(t)) && stored.contains(&e.handle) {
@@ -612,8 +714,21 @@ pub fn not_saved_message(lost: &std::collections::BTreeMap<String, usize>) -> Op
     if lost.is_empty() {
         return None;
     }
-    let list: Vec<String> = lost.iter().map(|(t, n)| format!("{n} {t}")).collect();
-    Some(format!("Not saved in the DWG file (its writer can't write these object types yet; DXF keeps them): {}", list.join(", ")))
+    Some(format!("Not saved in the DWG file (its writer can't write these object types yet; DXF keeps them): {}", loss_list(lost.iter())))
+}
+
+/// Types named in a loss message before the rest are only counted: a drawing from another
+/// program can carry dozens, and the message has to stay readable.
+const LISTED_TYPES: usize = 6;
+
+/// "2 ACME_WIDGET, 1 MLINE", naming the first [`LISTED_TYPES`] types and counting the rest.
+fn loss_list<'a>(lost: impl IntoIterator<Item = (&'a String, &'a usize)>) -> String {
+    let all: Vec<(&String, &usize)> = lost.into_iter().collect();
+    let mut list: Vec<String> = all.iter().take(LISTED_TYPES).map(|(t, n)| format!("{n} {t}")).collect();
+    if all.len() > LISTED_TYPES {
+        list.push(format!("{} more types", all.len() - LISTED_TYPES));
+    }
+    list.join(", ")
 }
 
 /// Whether saving to `path` leaves out the entities [`not_saved`] counts: DWG does (the DWG
@@ -629,34 +744,48 @@ fn is_drawing_file(path: &str) -> bool {
     matches!(ext.as_str(), "dxf" | "dwg" | "dwt" | "")
 }
 
-/// Say on the command line what the file couldn't keep, and list it in the result's `notSaved`.
-fn report_not_saved(s: &mut Session, r: &mut Value, lost: &std::collections::BTreeMap<String, usize>) {
-    let Some(msg) = not_saved_message(lost) else { return };
-    s.echo(msg);
-    if let Some(o) = r.as_object_mut() {
-        o.insert("notSaved".into(), json!(lost));
+/// The command-line warning for objects the file writer left out, or `None` when there are none.
+pub fn objects_not_saved_message(lost: &std::collections::BTreeMap<String, usize>) -> Option<String> {
+    if lost.is_empty() {
+        return None;
     }
+    Some(format!("Not saved in the DWG file (other programs' custom objects its writer can't write; DXF keeps them): {}", loss_list(lost.iter())))
 }
 
-/// Save, then report the entities the file couldn't keep (nothing is dropped silently).
-fn save_reporting(s: &mut Session, p: &Value, run: fn(&mut Session, &Value) -> Result<Value>) -> Result<Value> {
-    // What the file will hold depends on the version it is saved as (the data store from 2013).
-    let path = str_param(p, "path").map(str::to_string).or_else(|| s.state().ok().and_then(|st| st.path.clone())).unwrap_or_default();
-    let version = save_options("save", p).ok().and_then(|o| o.version).unwrap_or_else(|| drawing_version(s, &path));
-    let lost = s.doc().map(|d| not_saved_as(d, version)).unwrap_or_default();
-    let mut r = run(s, p)?;
-    if r.get("path").and_then(Value::as_str).is_some_and(drops_unknown) {
-        report_not_saved(s, &mut r, &lost);
+/// The command-line warning for records the reader couldn't place, by section, or `None`.
+fn skipped_not_saved_message(skipped: &std::collections::BTreeMap<String, usize>) -> Option<String> {
+    if skipped.is_empty() {
+        return None;
     }
-    Ok(r)
+    let list: Vec<String> = skipped.iter().map(|(section, n)| format!("{section}: {n}")).collect();
+    Some(format!("Not saved (records that couldn't be read when the drawing was opened): {}", list.join(", ")))
 }
 
-fn run_qsave_reporting(s: &mut Session, p: &Value) -> Result<Value> {
-    save_reporting(s, p, run_save)
-}
-
-fn run_saveas_reporting(s: &mut Session, p: &Value) -> Result<Value> {
-    save_reporting(s, p, run_saveas)
+/// Say on the command line what the file couldn't keep, and list it in the result: entities in
+/// `notSaved`, objects in `objectsNotSaved`, records reading skipped in `readNotes` and, those it
+/// couldn't place, by section in `skippedRecords`.
+fn report_losses(s: &mut Session, r: &mut Value, losses: &FileLosses) {
+    let Some(o) = r.as_object_mut() else { return };
+    let mut lines = Vec::new();
+    if let Some(msg) = not_saved_message(&losses.entities) {
+        o.insert("notSaved".into(), json!(losses.entities));
+        lines.push(msg);
+    }
+    if let Some(msg) = objects_not_saved_message(&losses.objects) {
+        o.insert("objectsNotSaved".into(), json!(losses.objects));
+        lines.push(msg);
+    }
+    if !losses.read_notes.is_empty() {
+        o.insert("readNotes".into(), json!(losses.read_notes));
+        lines.extend(losses.read_notes.iter().cloned());
+    }
+    if let Some(msg) = skipped_not_saved_message(&losses.skipped) {
+        o.insert("skippedRecords".into(), json!(losses.skipped));
+        lines.push(msg);
+    }
+    for line in lines {
+        s.echo(line);
+    }
 }
 
 const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

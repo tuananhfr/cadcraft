@@ -25,6 +25,7 @@ mod dxf_mline;
 use cadcraft_doc::{Drawing, Space};
 use cadcraft_geom::Bounds2;
 
+pub use cadcraft_dwg::Dropped;
 pub use cadcraft_dxf::Version;
 pub use dxf_read::entity_from_groups;
 pub use dxf_write::entity_groups;
@@ -110,13 +111,26 @@ pub fn write_with(d: &Drawing, name: &str, opts: &SaveOptions) -> Result<Vec<u8>
         // The DWG bridge reads our R2000 DXF and writes the DWG at the version asked for. Without
         // one, at least 2004: R2000 DWG has no true colours, transparency, table styles or
         // gradients, so a drawing from an R2000 DXF doesn't lose them by default.
-        "dwg" if !opts.binary => {
-            let version = opts.version.unwrap_or_else(|| version.max(Version::R2004));
-            cadcraft_dwg::dxf_to_dwg_as(dxf_write::dwg_bridge(d, version).as_bytes(), version.code()).map_err(IoError::Format)
-        }
+        "dwg" if !opts.binary => dwg_reported(d, opts).map(|(dwg, _)| dwg),
         e if opts.binary => Err(IoError::Format(format!("binary output is for DXF files, not `{e}`"))),
         _ => write_framed(d, name, None),
     }
+}
+
+/// Like [`write_with`], also returning what a DWG (or DWT) file leaves out. Other formats keep
+/// everything they write and report nothing.
+pub fn write_reported(d: &Drawing, name: &str, opts: &SaveOptions) -> Result<(Vec<u8>, Dropped)> {
+    match ext(name).as_str() {
+        "dwg" if !opts.binary => dwg_reported(d, opts),
+        // As in `write_with`, a template is written as a DWG of the drawing's own version.
+        "dwt" if !opts.binary => dwg_reported(d, &SaveOptions::default()),
+        _ => Ok((write_with(d, name, opts)?, Dropped::default())),
+    }
+}
+
+fn dwg_reported(d: &Drawing, opts: &SaveOptions) -> Result<(Vec<u8>, Dropped)> {
+    let version = opts.version.unwrap_or_else(|| save_version(d).max(Version::R2004));
+    cadcraft_dwg::dxf_to_dwg_reported(dxf_write::dwg_bridge(d, version).as_bytes(), Some(version.code())).map_err(IoError::Format)
 }
 
 /// Like [`write`], but image formats (PNG, SVG, PDF) show `window` (a model-space rectangle in

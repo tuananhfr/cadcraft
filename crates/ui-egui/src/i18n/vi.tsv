@@ -4498,3 +4498,8 @@ echo	Plot style table {name} imported; {count} styles print with the object line
 	lineweights must be a boolean	lineweights phải là giá trị boolean
 	The plot style table is not in this drawing or built in: choose another table	Không có bảng nét in này trong bản vẽ hay trong các bảng có sẵn: chọn bảng khác
 	As page setup	Theo thiết lập trang
+echo	Not saved in the DWG file (other programs' custom objects its writer can't write; DXF keeps them): {value1}	Chưa lưu vào tệp DWG (đối tượng tuỳ biến của chương trình khác mà bộ ghi DWG chưa ghi được; DXF giữ được chúng): {value1}
+echo	Not saved over {file}: the new file would leave out data the original holds ({lost}). Use SAVEAS to save under another name, or as DXF, which keeps them; the original stays as it was.	Không ghi đè {file}: tệp mới sẽ thiếu dữ liệu mà tệp gốc đang có ({lost}). Dùng SAVEAS (Lưu thành) để lưu với tên khác, hoặc lưu thành DXF để giữ dữ liệu đó; tệp gốc giữ nguyên.
+echo	Not saved over {file}: the new file would leave out data the original holds ({lost}). Use SAVEAS to save under another name; the original stays as it was.	Không ghi đè {file}: tệp mới sẽ thiếu dữ liệu mà tệp gốc đang có ({lost}). Dùng SAVEAS (Lưu thành) để lưu với tên khác; tệp gốc giữ nguyên.
+	Includes acadrust (DWG reading and writing), used unmodified under the Mozilla Public License 2.0. Its source code:	Bao gồm acadrust (đọc và ghi DWG), dùng nguyên bản theo Giấy phép Công cộng Mozilla 2.0 (Mozilla Public License 2.0). Mã nguồn của thư viện:
+echo	Not saved (records that couldn't be read when the drawing was opened): {value1}	Chưa lưu (các bản ghi không đọc được khi mở bản vẽ): {value1}
