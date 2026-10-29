@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use erpcons_account::{Account, Status};
+use erpcons_account::{Account, Error, Status};
 
 use super::{Notice, Opener, Shared};
 
@@ -57,7 +57,8 @@ impl Worker {
                 // A second click queued behind a sign-in that has since finished.
                 if !matches!(self.account.status(), Status::SignedIn(_)) {
                     self.set_notice(None);
-                    attempt("sign-in", self.account.sign_in(|url| (self.open_browser)(url)));
+                    let result = self.account.sign_in(|url| (self.open_browser)(url));
+                    self.report_browser_flow("sign-in", result);
                 }
             }
             Request::SignOut => {
@@ -65,7 +66,9 @@ impl Worker {
                 attempt("sign-out", self.account.sign_out());
             }
             Request::ChooseOrg(org_id) => {
-                attempt("organisation switch", self.account.select_org(Some(&org_id), |url| (self.open_browser)(url)));
+                self.set_notice(None);
+                let result = self.account.select_org(Some(&org_id), |url| (self.open_browser)(url));
+                self.report_browser_flow("organisation switch", result);
                 attempt("refresh", self.account.refresh());
             }
         }
@@ -82,6 +85,19 @@ impl Worker {
         (self.wake)();
     }
 
+    /// The user started this flow and waits on it, so a failure is shown, not only logged.
+    fn report_browser_flow(&self, what: &str, result: Result<(), Error>) {
+        let notice = match &result {
+            Ok(()) | Err(Error::Cancelled) => None,
+            Err(Error::Browser(_)) => Some(Notice::BrowserFailed),
+            Err(_) => Some(Notice::SignInFailed),
+        };
+        attempt(what, result);
+        if notice.is_some() {
+            self.set_notice(notice);
+        }
+    }
+
     fn set_notice(&self, notice: Option<Notice>) {
         *self.shared.notice.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = notice;
     }
@@ -93,7 +109,7 @@ fn later(now: Instant) -> Instant {
 
 /// Failures are logged only: the library backs off and keeps the last lease, and the edit gate
 /// reports what the user can do.
-fn attempt(what: &str, result: Result<(), erpcons_account::Error>) {
+fn attempt(what: &str, result: Result<(), Error>) {
     if let Err(error) = result {
         log::warn!("licence {what}: {error}");
     }

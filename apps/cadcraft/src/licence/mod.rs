@@ -31,6 +31,8 @@ struct Shared {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Notice {
     Expiry { days: u32 },
+    SignInFailed,
+    BrowserFailed,
 }
 
 pub struct LicenceService {
@@ -67,12 +69,13 @@ impl LicenceService {
     }
 }
 
-/// Refuses every edit when the account could not be opened at all.
+/// Refuses every edit when the account could not be opened at all; there is no dialog to sign
+/// in from, so the reason does not offer one.
 struct Unavailable;
 
 impl EditPolicy for Unavailable {
     fn check(&self) -> Result<(), String> {
-        Err(policy::SIGN_IN.to_owned())
+        Err(policy::UNAVAILABLE.to_owned())
     }
 }
 

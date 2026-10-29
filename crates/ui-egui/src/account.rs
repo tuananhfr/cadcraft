@@ -19,6 +19,8 @@ pub struct AccountSummary {
     pub notice: Option<String>,
     /// Active organisation's display name; `None` is the personal context.
     pub org: Option<String>,
+    /// Active organisation's id, to mark it among `orgs` (names need not be unique).
+    pub active_org_id: Option<String>,
     /// Organisations the user may choose; PI licenses through an organisation only.
     pub orgs: Vec<OrgChoice>,
 }
@@ -92,7 +94,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         if summary.signed_in && !summary.orgs.is_empty() {
             ui.label(crate::tl!("Choose organisation"));
             for choice in &summary.orgs {
-                let active = summary.org.as_deref() == Some(choice.name.as_str());
+                let active = summary.active_org_id.as_deref() == Some(choice.id.as_str());
                 if ui.selectable_label(active, choice.name.as_str()).clicked() && !active {
                     choose_org(&host, &choice.id);
                 }

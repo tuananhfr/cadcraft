@@ -76,16 +76,21 @@ fn summary(status: Status, notice: Option<Notice>) -> AccountSummary {
         offline_until: pro_until.and_then(utc_date),
         notice: notice.map(Notice::text).or_else(|| no_org.then(|| i18n::t(NO_ORG).to_owned())),
         org,
+        active_org_id: signed_in.active_org,
         orgs,
     }
 }
 
 const NO_ORG: &str = "This PI ID account does not belong to any organisation";
+pub(super) const SIGN_IN_FAILED: &str = "Could not complete PI ID sign-in. Try again";
+pub(super) const BROWSER_FAILED: &str = "Could not open the web browser";
 
 impl Notice {
     fn text(self) -> String {
         match self {
             Notice::Expiry { days } => i18n::format("Your UbotCAD licence expires in {days} days", &[("days", days.to_string())]),
+            Notice::SignInFailed => i18n::t(SIGN_IN_FAILED).to_owned(),
+            Notice::BrowserFailed => i18n::t(BROWSER_FAILED).to_owned(),
         }
     }
 }
@@ -134,6 +139,7 @@ mod tests {
         let s = summary(signed_in(orgs, Some("b")), None);
         assert_eq!(s.orgs.iter().map(|o| o.id.as_str()).collect::<Vec<_>>(), ["a"]);
         assert_eq!(s.org.as_deref(), Some("Org b"));
+        assert_eq!(s.active_org_id.as_deref(), Some("b"));
         assert_eq!(s.notice, None);
         let s = summary(signed_in(vec![member("b", MembershipStatus::Suspended)], None), None);
         assert!(s.orgs.is_empty());

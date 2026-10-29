@@ -4485,3 +4485,9 @@ echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are no
 	This PI ID account does not belong to any organisation	Tài khoản PI ID chưa thuộc tổ chức nào
 	View only	Chỉ xem
 	Your UbotCAD licence expires in {days} days	Giấy phép UbotCAD hết hạn sau {days} ngày
+	This device was removed from your PI ID account. Sign in again to use the Pro edition	Máy này đã bị gỡ khỏi tài khoản PI ID. Đăng nhập lại để dùng bản Pro
+	Device limit reached for your PI ID plan. Remove another device in PI ID, then retry	Đã đạt số máy tối đa của gói PI ID. Gỡ một máy khác trong PI ID rồi thử lại
+	This device is not activated for the Pro edition yet	Máy này chưa được kích hoạt bản Pro
+	PI ID licensing is unavailable on this machine; edits are disabled	Không dùng được giấy phép PI ID trên máy này; tạm khoá chỉnh sửa
+	Could not complete PI ID sign-in. Try again	Không hoàn tất được đăng nhập PI ID. Thử lại
+	Could not open the web browser	Không mở được trình duyệt

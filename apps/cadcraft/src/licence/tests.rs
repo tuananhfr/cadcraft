@@ -6,7 +6,8 @@ use erpcons_account::{Account, Clock, Config, LicenceState, MemorySecretStore, P
 use pi_mock::{DEFAULT_USER, Entitlement, Fault, ORG_A, ORG_B, Scenario, Server};
 
 use super::LicenceService;
-use super::policy::{CHOOSE_ORG, NO_PLAN, SIGN_IN};
+use super::host::{BROWSER_FAILED, SIGN_IN_FAILED};
+use super::policy::{CHOOSE_ORG, DEVICE_CAP, NO_PLAN, NOT_ACTIVATED, REVOKED, SIGN_IN};
 
 const T0: i64 = 1_792_828_800;
 const USE: &str = "ubotbuild.cad.use";
@@ -60,8 +61,12 @@ impl Env {
 
     /// A service as `main` starts it, but with the test browser and an in-memory credential store.
     fn service(&self) -> (LicenceService, Arc<Account>) {
+        self.service_with(Arc::new(browser))
+    }
+
+    fn service_with(&self, open_browser: super::Opener) -> (LicenceService, Arc<Account>) {
         let account = self.account();
-        (LicenceService::start_with(account.clone(), Arc::new(browser), || {}), account)
+        (LicenceService::start_with(account.clone(), open_browser, || {}), account)
     }
 
     /// Moves client wall clock, client monotonic clock and platform time together.
@@ -87,6 +92,13 @@ fn wait_for(what: &str, done: impl Fn() -> bool) {
     while !done() {
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
         std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn licence(account: &Account) -> Option<LicenceState> {
+    match account.status() {
+        Status::SignedIn(s) => Some(s.licence),
+        _ => None,
     }
 }
 
@@ -118,9 +130,8 @@ fn guest_is_denied_with_sign_in_reason() {
 fn entitled_user_can_edit() {
     let env = Env::new(org_scenario());
     prepare_org_session(&env);
-    let (service, account) = env.service();
-    account.refresh().unwrap();
-    assert_eq!(service.policy().check(), Ok(()));
+    let (service, _) = env.service();
+    wait_for("the worker to grant edits", || service.policy().check().is_ok());
 }
 
 #[test]
@@ -145,8 +156,7 @@ fn choose_org_then_entitled_user_can_edit() {
     wait_for("sign-in", || matches!(account.status(), Status::SignedIn(_)));
     host.choose_org(ORG_A);
     wait_for("organisation A", || in_org(&account, ORG_A));
-    account.refresh().unwrap();
-    assert_eq!(service.policy().check(), Ok(()));
+    wait_for("the worker to grant edits", || service.policy().check().is_ok());
     assert_eq!(host.summary().org.as_deref(), Some("Công ty Xây dựng Ví dụ"));
 }
 
@@ -162,10 +172,49 @@ fn revoked_device_denies_after_refresh() {
     env.advance(13 * 3600);
     // In an organisation context the library records the revocation without returning an error.
     let _ = account.refresh();
-    assert!(matches!(account.status(), Status::SignedIn(s) if s.licence == LicenceState::DeviceRevoked));
-    // Online entitlements stay fresh for 600 s after the last refresh.
+    assert_eq!(licence(&account), Some(LicenceState::DeviceRevoked));
+    // A later refresh, as the worker runs one, makes online entitlements fresh again.
     env.advance(11 * 60);
-    assert_eq!(service.policy().check(), Err(NO_PLAN.to_string()));
+    let _ = account.refresh();
+    assert!(account.allowed(USE), "online entitlements alone would still grant");
+    assert_eq!(service.policy().check(), Err(REVOKED.to_string()));
+}
+
+#[test]
+fn device_cap_denies_even_with_online_entitlements() {
+    let env = Env::new(Scenario { max_devices: 0, ..org_scenario() });
+    prepare_org_session(&env);
+    let (service, account) = env.service();
+    let _ = account.refresh();
+    assert_eq!(licence(&account), Some(LicenceState::DeviceCapReached));
+    assert!(account.allowed(USE), "online entitlements alone would still grant");
+    assert_eq!(service.policy().check(), Err(DEVICE_CAP.to_string()));
+}
+
+#[test]
+fn no_lease_denies_even_with_online_entitlements() {
+    let env = Env::new(Scenario { faults: vec![Fault::problem("POST", "/v1/devices/activate", 422, "")], ..org_scenario() });
+    prepare_org_session(&env);
+    let (service, account) = env.service();
+    let _ = account.refresh();
+    assert_eq!(licence(&account), Some(LicenceState::NotActivated));
+    assert!(account.allowed(USE), "online entitlements alone would still grant");
+    assert_eq!(service.policy().check(), Err(NOT_ACTIVATED.to_string()));
+}
+
+#[test]
+fn failed_sign_in_shows_a_notice() {
+    let env = Env::new(org_scenario());
+    let (service, _) = env.service_with(Arc::new(|_: &str| Err("no browser".to_owned())));
+    let host = service.host();
+    host.sign_in();
+    wait_for("the browser notice", || host.summary().notice.as_deref() == Some(BROWSER_FAILED));
+
+    env.server.add_fault(Fault::oauth("/id/token", 400, "invalid_grant"));
+    let (service, _) = env.service();
+    let host = service.host();
+    host.sign_in();
+    wait_for("the sign-in notice", || host.summary().notice.as_deref() == Some(SIGN_IN_FAILED));
 }
 
 #[test]
@@ -213,6 +262,12 @@ fn reasons_have_vietnamese_translations() {
         (CHOOSE_ORG, "Chọn tổ chức khi đăng nhập PI ID"),
         (RENEW_ONLINE, "Kết nối mạng để gia hạn"),
         (NO_PLAN, "Tài khoản chưa có gói dùng UbotCAD desktop"),
+        (REVOKED, "Máy này đã bị gỡ khỏi tài khoản PI ID. Đăng nhập lại để dùng bản Pro"),
+        (DEVICE_CAP, "Đã đạt số máy tối đa của gói PI ID. Gỡ một máy khác trong PI ID rồi thử lại"),
+        (NOT_ACTIVATED, "Máy này chưa được kích hoạt bản Pro"),
+        (super::policy::UNAVAILABLE, "Không dùng được giấy phép PI ID trên máy này; tạm khoá chỉnh sửa"),
+        (SIGN_IN_FAILED, "Không hoàn tất được đăng nhập PI ID. Thử lại"),
+        (BROWSER_FAILED, "Không mở được trình duyệt"),
     ] {
         assert_eq!(tr("vi", reason), vi);
     }
