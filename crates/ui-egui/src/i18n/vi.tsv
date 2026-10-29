@@ -4466,3 +4466,14 @@ echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are no
 	Path is not available on the web: use Choose file… in the External References palette (XREF)	Không thể sửa đường dẫn trên web: dùng Chọn file… trong bảng External References (XREF)
 	Attaching xrefs is not available on the web	Không thể đính kèm tham chiếu ngoài trên web
 	On the web, use Choose file… to load	Trên web, dùng Chọn file… để nạp
+# Account dialog.
+	Account...	Tài khoản...
+	Account	Tài khoản
+	Not signed in	Chưa đăng nhập
+	Signed in as {user}	Đã đăng nhập: {user}
+	Organisation: {org}	Tổ chức: {org}
+	Switch to personal account	Chuyển sang tài khoản cá nhân
+	Plan: {plan}	Gói: {plan}
+	Offline until {date}	Dùng ngoại tuyến đến {date}
+	Sign out	Đăng xuất
+	Sign in to PI ID	Đăng nhập PI ID

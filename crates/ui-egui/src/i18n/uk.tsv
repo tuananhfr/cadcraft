@@ -3921,3 +3921,14 @@ echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are no
 	Path is not available on the web: use Choose file… in the External References palette (XREF)	Зміна шляху недоступна у вебверсії: скористайтеся «Вибрати файл…» у палітрі External References (XREF)
 	Attaching xrefs is not available on the web	Приєднання зовнішніх посилань недоступне у вебверсії
 	On the web, use Choose file… to load	У вебверсії скористайтеся «Вибрати файл…», щоб завантажити
+# Account dialog.
+	Account...	Обліковий запис...
+	Account	Обліковий запис
+	Not signed in	Вхід не виконано
+	Signed in as {user}	Ви увійшли як {user}
+	Organisation: {org}	Організація: {org}
+	Switch to personal account	Перейти на особистий обліковий запис
+	Plan: {plan}	План: {plan}
+	Offline until {date}	Офлайн до {date}
+	Sign out	Вийти
+	Sign in to PI ID	Увійти в PI ID
