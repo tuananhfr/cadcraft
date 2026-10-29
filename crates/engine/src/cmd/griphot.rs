@@ -474,6 +474,7 @@ impl Session {
     /// several first). `hot` lists (object, grip index); the first is the base grip. The grip
     /// modes and their options then run at the command line like any prompt.
     pub fn start_grip_edit(&mut self, hot: &[(Handle, usize)]) -> Result<()> {
+        self.check_edit()?;
         if self.running.is_some() {
             self.cancel();
         }

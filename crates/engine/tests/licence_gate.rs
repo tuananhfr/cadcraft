@@ -5,8 +5,10 @@ use std::fs;
 use std::path::PathBuf;
 
 use cadcraft_engine::cmd::command_specs;
-use cadcraft_engine::cmd::file::{IoHooks, set_io};
-use cadcraft_engine::doc::{EntityKind, Space};
+use cadcraft_engine::cmd::file::{EntityCodec, IoHooks, set_entity_codec, set_io};
+use cadcraft_engine::doc::{EntityKind, Handle, Space};
+use cadcraft_engine::geom::Vec2;
+use cadcraft_engine::grips::GripMode;
 use cadcraft_engine::{EditPolicy, EngineError, Session, find_command, is_view_only};
 use serde_json::{Value, json};
 
@@ -202,4 +204,83 @@ fn is_view_only_parameter_rules() {
     let xref = find_command("-xref").unwrap();
     assert!(!is_view_only(xref, &json!({})));
     assert!(!is_view_only(xref, &Value::Null));
+}
+
+fn lisp_session() -> Session {
+    set_entity_codec(EntityCodec { groups: cadcraft_io::entity_groups, entity: cadcraft_io::entity_from_groups });
+    Session::new()
+}
+
+fn circle_radius(s: &Session, h: Handle) -> Option<f64> {
+    match &s.doc().unwrap().entity(h)?.kind {
+        EntityKind::Circle(c) => Some(c.radius),
+        _ => None,
+    }
+}
+
+#[test]
+fn deny_blocks_lisp_entmake() {
+    let mut s = lisp_session();
+    s.set_edit_policy(Box::new(Deny));
+    s.cmdline("(entmake '((0 . \"CIRCLE\") (10 0.0 0.0 0.0) (40 . 1.0)))").unwrap();
+    assert_eq!(s.doc().unwrap().model.len(), 0);
+    assert!(s.log.iter().any(|l| l.contains("no licence")), "{:?}", s.log);
+}
+
+#[test]
+fn deny_blocks_lisp_entmod_and_entdel() {
+    let mut s = lisp_session();
+    s.execute("circle", &json!({"center": [0, 0], "radius": 1})).unwrap();
+    let h = s.doc().unwrap().model.iter().next().unwrap().handle;
+    s.set_edit_policy(Box::new(Deny));
+    s.cmdline("(entmod (subst (cons 40 5.0) (assoc 40 (entget (entlast))) (entget (entlast))))").unwrap();
+    assert_eq!(circle_radius(&s, h), Some(1.0));
+    s.cmdline("(entdel (entlast))").unwrap();
+    assert_eq!(circle_radius(&s, h), Some(1.0));
+    assert!(s.log.iter().any(|l| l.contains("no licence")), "{:?}", s.log);
+}
+
+#[test]
+fn deny_blocks_lisp_command() {
+    let mut s = lisp_session();
+    s.set_edit_policy(Box::new(Deny));
+    s.cmdline("(command \"circle\" \"0,0\" \"1\")").unwrap();
+    assert_eq!(s.doc().unwrap().model.len(), 0);
+}
+
+#[test]
+fn deny_blocks_grip_edit() {
+    let mut s = Session::new();
+    s.execute("line", &json!({"points": [[0, 0], [10, 0]]})).unwrap();
+    let h = s.doc().unwrap().model.iter().next().unwrap().handle;
+    s.set_edit_policy(Box::new(Deny));
+    let r = s.start_grip_edit(&[(h, 0)]);
+    assert!(matches!(r, Err(EngineError::Unlicensed(_))), "{r:?}");
+    assert!(s.running.is_none());
+    let r = s.grip_edit(h, 0, Vec2::new(5.0, 5.0), GripMode::Stretch);
+    assert!(matches!(r, Err(EngineError::Unlicensed(_))), "{r:?}");
+}
+
+#[test]
+fn denied_grip_start_keeps_running_command() {
+    let mut s = Session::new();
+    s.execute("line", &json!({"points": [[0, 0], [10, 0]]})).unwrap();
+    let h = s.doc().unwrap().model.iter().next().unwrap().handle;
+    s.cmdline("LINE").unwrap();
+    s.set_edit_policy(Box::new(Deny));
+    let r = s.start_grip_edit(&[(h, 0)]);
+    assert!(matches!(r, Err(EngineError::Unlicensed(_))), "{r:?}");
+    assert!(s.running.is_some(), "the refused grip edit must not cancel LINE");
+}
+
+#[test]
+fn deny_blocks_dyn_grip() {
+    let mut s = Session::new();
+    s.execute("line", &json!({"points": [[0, 0], [10, 0]]})).unwrap();
+    s.cmdline("LINE").unwrap();
+    s.set_edit_policy(Box::new(Deny));
+    // The gate runs before the grip lookup and before cancelling LINE.
+    let r = s.start_dyn_grip(Handle::parse_hex("FFFFF").unwrap(), 1, cadcraft_engine::doc::dynblock::GripPart::End);
+    assert!(matches!(r, Err(EngineError::Unlicensed(_))), "{r:?}");
+    assert!(s.running.is_some());
 }

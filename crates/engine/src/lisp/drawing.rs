@@ -307,8 +307,14 @@ fn entity_from_list(ctx: &Ctx<'_>, list: &Value) -> Result<(String, cadcraft_doc
     }
 }
 
+/// Entity writes made from LISP are content edits, so the edit policy applies to them as to commands.
+fn gate(ctx: &Ctx<'_>) -> Result<(), LispError> {
+    ctx.s.check_edit().map_err(|e| LispError::new(e.to_string()))
+}
+
 pub fn entmake(ctx: &mut Ctx<'_>, a: Vec<Value>) -> Result<Flow, LispError> {
     arity(&a, 0, 1)?;
+    gate(ctx)?;
     let Some(list) = a.first().filter(|v| !v.is_nil()) else { return Ok(Flow::Value(Value::Nil)) };
     let (_, common, kind) = match entity_from_list(ctx, list) {
         Ok(x) => x,
@@ -329,6 +335,7 @@ pub fn entmake(ctx: &mut Ctx<'_>, a: Vec<Value>) -> Result<Flow, LispError> {
 
 pub fn entmod(ctx: &mut Ctx<'_>, a: Vec<Value>) -> Result<Flow, LispError> {
     arity(&a, 1, 1)?;
+    gate(ctx)?;
     let list = &a[0];
     let Some(Value::Ename(h)) = list.iter().find(|v| v.car().as_number() == Some(-1.0)).map(|v| v.cdr()) else {
         return Err(LispError::bad_arg("lentityp", &Value::Nil));
@@ -367,6 +374,7 @@ pub fn entupd(ctx: &mut Ctx<'_>, a: Vec<Value>) -> Result<Flow, LispError> {
 /// `(entdel ename)`: delete an entity, or bring back one this routine's drawing deleted.
 pub fn entdel(ctx: &mut Ctx<'_>, a: Vec<Value>) -> Result<Flow, LispError> {
     arity(&a, 1, 1)?;
+    gate(ctx)?;
     let h = ename(&a[0])?;
     let Ok(d) = ctx.s.doc_mut() else { return Ok(Flow::Value(Value::Nil)) };
     if let Some(space) = d.space_of(h) {
