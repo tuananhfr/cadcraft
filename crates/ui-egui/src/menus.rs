@@ -137,6 +137,7 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.dialog.parameters", "Parameters Manager", &["Window", "Parameters Manager"], None),
     ("ui.dialog.dsettings", "Drafting Settings...", &[], None),
     ("ui.dialog.about", "About UbotCAD", &["Help", "About UbotCAD"], None),
+    ("ui.account", "Account...", &["Help", "Account..."], None),
     ("ui.palette", "Command Palette...", &["Help", "Command Palette..."], None),
     ("ui.dialog.commands", "Command Reference", &["Help", "UbotCAD Help"], Some("F1")),
     ("ui.toggle.history", "Command History", &["Window", "Command History"], Some("F2")),
@@ -221,6 +222,9 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
         return Some(result);
     }
     if let Some(result) = crate::toolbars::route(app, id, params) {
+        return Some(result);
+    }
+    if let Some(result) = crate::account::route(app, id, params) {
         return Some(result);
     }
     if let Some(result) = crate::spacemouse::route(app, id, params) {
@@ -697,7 +701,7 @@ pub fn tree(app: &CadApp) -> Vec<(String, Vec<Entry>)> {
     }
     for (id, label, menu, sc) in UI_COMMANDS {
         if !menu.is_empty() {
-            add(menu, label, id, *sc, true);
+            add(menu, label, id, *sc, *id != crate::account::COMMAND || crate::account::enabled(app));
         }
     }
     if let Some((_, window)) = out.iter_mut().find(|(m, _)| m == "Window") {

@@ -18,6 +18,7 @@ pub fn show(app: &mut CadApp, ctx: &egui::Context) {
         crate::customize::DIALOG => crate::customize::dialog(app, ctx, &mut open),
         crate::ubplot::profile_dialog::DIALOG => crate::ubplot::profile_dialog::show(app, ctx, &mut open),
         crate::ubplot::DIALOG => crate::ubplot::dialog(app, ctx, &mut open),
+        crate::account::DIALOG => crate::account::dialog(app, ctx, &mut open),
         "spacemouse" => crate::spacemouse::dialog(app, ctx, &mut open),
         "language" => language(app, ctx, &mut open),
         "layers" => crate::layers::dialog(app, ctx, &mut open),

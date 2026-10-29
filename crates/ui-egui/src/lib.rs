@@ -8,6 +8,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
+pub mod account;
 pub mod animation;
 pub mod autohide;
 pub mod autosave;
@@ -228,6 +229,8 @@ pub struct Services {
     /// Pick the file for xref `name` of drawing `doc` (its uid) where saved paths can't be
     /// followed (the web); the host hands it back through [`CadApp::attach_xref_file`].
     pub pick_xref_file: Option<Box<dyn Fn(u64, &str)>>,
+    /// Sign-in and licence status of a host that gates the app; `None` on the web and in tests.
+    pub account: Option<std::rc::Rc<dyn account::AccountHost>>,
 }
 
 impl Services {
@@ -270,6 +273,7 @@ pub struct CadApp {
     pub fontmgr: fontmgr::State,
     pub autohide: autohide::State,
     pub spacemouse: spacemouse::State,
+    pub account: account::State,
     pub cmd: cmdline::CmdLine,
     pub status: Option<(String, f64)>,
     /// Drawings being read on worker threads ([`opening`]).
@@ -342,6 +346,7 @@ impl CadApp {
             fontmgr: fontmgr::State::default(),
             autohide: autohide::State::default(),
             spacemouse: spacemouse::State::default(),
+            account: account::State::default(),
             cmd: cmdline::CmdLine::default(),
             status: None,
             opening: opening::Opening::default(),
@@ -674,6 +679,7 @@ impl CadApp {
         }
         self.command_context = ctx.clone();
         fullscreen::sync(self, ctx);
+        account::poll(self);
         // A long LISP routine runs a slice per frame, so the window stays live (and Esc stops it).
         self.session.lisp_tick();
         if self.session.lisp_busy() {
