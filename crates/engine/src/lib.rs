@@ -19,6 +19,7 @@ pub mod grip_dims;
 pub mod grips;
 mod guard;
 pub mod hash;
+pub mod licence;
 pub mod lisp;
 pub mod mtext_edit;
 pub mod pointmod;
@@ -46,6 +47,7 @@ pub use cadcraft_render as render;
 pub use cmd::hatch::{HatchPicks, PatternChoice, PickMode, pattern_choices};
 pub use cmd::outcome::Outcome;
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
+pub use licence::{EditPolicy, is_view_only};
 pub use prompt::{Accept, Drag, Input, Interactive, Picker, Prompt, Step};
 
 #[derive(Debug, thiserror::Error)]
@@ -56,6 +58,9 @@ pub enum EngineError {
     Disabled(String, String),
     #[error("invalid parameters for `{cmd}`: {msg}")]
     BadParams { cmd: String, msg: String },
+    /// The installed [`EditPolicy`] refused a content-changing command.
+    #[error("{0}")]
+    Unlicensed(String),
     #[error("no active document")]
     NoDocument,
     #[error("{0}")]
@@ -679,6 +684,7 @@ pub struct Session {
     lisp_last: Option<std::result::Result<lisp::value::Value, String>>,
     /// What the last HATCHPICK kept (the Hatch and Gradient dialog's picks).
     pub hatch_picks: Option<cmd::hatch::HatchPicks>,
+    pub(crate) edit_policy: Option<Box<dyn EditPolicy>>,
 }
 
 impl Default for Session {
@@ -731,6 +737,7 @@ impl Session {
             lisp: lisp::LispState::default(),
             lisp_last: None,
             hatch_picks: None,
+            edit_policy: None,
         }
     }
     pub fn new_drawing(&mut self, metric: bool) -> usize {
@@ -889,6 +896,7 @@ impl Session {
     ) -> Result<Value> {
         lisp::trust::check_command(self, spec.id, params)?;
         (spec.enabled)(self).map_err(|m| EngineError::Disabled(spec.id.into(), m))?;
+        self.gate(spec, params)?;
         if let Some(why) = cmd::blocks::bedit::refused_in_editor(self, spec.id) {
             return Err(EngineError::Disabled(spec.id.into(), why));
         }
@@ -1006,6 +1014,7 @@ impl Session {
             self.cancel();
         }
         (spec.enabled)(self).map_err(|m| EngineError::Disabled(spec.id.into(), m))?;
+        self.gate(spec, &Value::Null)?;
         if let Some(why) = cmd::blocks::bedit::refused_in_editor(self, spec.id) {
             return Err(EngineError::Disabled(spec.id.into(), why));
         }

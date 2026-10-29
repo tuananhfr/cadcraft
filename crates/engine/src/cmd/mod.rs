@@ -76,6 +76,8 @@ pub struct CommandSpec {
     pub interactive: Option<Factory>,
     /// Can run inside another command with a leading apostrophe.
     pub transparent: bool,
+    /// Never changes drawing content, so the edit policy does not gate it.
+    pub view_only: bool,
 }
 
 impl CommandSpec {
@@ -92,6 +94,7 @@ impl CommandSpec {
             undoable: true,
             interactive: None,
             transparent: false,
+            view_only: false,
         }
     }
     pub const fn menu(mut self, m: &'static [&'static str]) -> Self {
@@ -120,6 +123,10 @@ impl CommandSpec {
     }
     pub const fn interactive(mut self, f: Factory) -> Self {
         self.interactive = Some(f);
+        self
+    }
+    pub const fn viewonly(mut self) -> Self {
+        self.view_only = true;
         self
     }
     pub const fn transparent(mut self) -> Self {
@@ -208,7 +215,8 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(tolerance::specs());
         v.extend(constraints::specs());
         v.extend(lisp::specs());
-        v
+        // One audited list instead of a marker on ~200 spec definitions.
+        v.into_iter().map(|s| if crate::licence::is_view_only_id(s.id) { s.viewonly() } else { s }).collect()
     })
 }
 
