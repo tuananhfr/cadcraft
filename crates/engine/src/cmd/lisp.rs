@@ -230,6 +230,10 @@ impl Interactive for ApploadM {
 impl Session {
     /// Dropped/browser files use the same review prompt as typed APPLOAD.
     pub fn lisp_load_interactive(&mut self, name: &str, text: &str) -> Result<()> {
+        // Gated like APPLOAD even for an approved file, and before cancel() like `start`.
+        if let Some(spec) = crate::find_command("appload") {
+            self.gate(spec, &Value::Null)?;
+        }
         self.cancel();
         let sha = crate::lisp::trust::source_sha(text);
         if crate::lisp::trust::is_approved(&sha) {

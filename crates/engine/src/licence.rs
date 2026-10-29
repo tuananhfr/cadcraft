@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use crate::cmd::CommandSpec;
+use crate::cmd::{CommandSpec, str_param};
 use crate::{EngineError, Result, Session};
 
 /// Decides whether content-changing commands may run; installed by the host with [`Session::set_edit_policy`].
@@ -27,6 +27,14 @@ const VIEW_ONLY_IDS: &[&str] = &[
     "options", "aliasedit", "reinit", "fonts",
     "dist", "id", "list", "area", "time", "status", "drawing.inspect", "entities", "texts", "countlist", "count", "copyclip", "copybase",
     "select", "selectall", "ai_deselect", "qselect", "qselect.info", "compare", "lispaudit", "u", "undo", "redo", "mredo",
+    "compare.next", "compare.previous", "compareclose", "kcsplotter", "tableexport", "wblock",
+    "measuregeom", "radius.measure", "angle.measure", "massprop", "cal", "quickcalc.pick", "properties",
+    "blocks.list", "blocks.dynamic", "blocks.reference", "blocks.reference.grips", "groups.list", "style.list", "dimstyle.list",
+    "hatch.patterns", "constraints.inspect", "constraints.dof", "selectsimilar",
+    "isolateobjects", "hideobjects", "unisolateobjects", "annovisible.current", "annovisible.all", "annovisible.toggle", "attdisp",
+    "constraintbar", "constraintbar.showall", "constraintbar.hideall", "dcdisplay", "dcdisplay.showall", "dcdisplay.hideall",
+    "constraintsettings", "constraintinfer", "pickstyle", "color", "lweight", "style.current", "dimstyle.current",
+    "lisptrust", "lispsandbox",
 ];
 
 /// Families whose every member is view-only: `zoom.*`, `pan.*`, `ubplot*`.
@@ -49,6 +57,12 @@ pub fn is_view_only(spec: &CommandSpec, params: &Value) -> bool {
             .get("option")
             .and_then(Value::as_str)
             .is_some_and(|o| matches!(o.trim().to_ascii_lowercase().as_str(), "reload" | "r" | "unload" | "u")),
+        // Without `replace` FIND only selects the matches.
+        "find" => str_param(params, "replace").is_none(),
+        // With `at` the extraction inserts a table; typed (no params) it may ask to.
+        "dataextraction" | "eattext" => params.as_object().is_some_and(|o| o.get("at").is_none_or(Value::is_null)),
+        // Without `name` or `delete` PARAMETERS only lists.
+        "parameters" => str_param(params, "name").is_none() && str_param(params, "delete").is_none(),
         _ => spec.view_only,
     }
 }

@@ -58,7 +58,9 @@ fn deny_allows_view_file_and_plot() {
         write: |_, _| Ok(b"drawing".to_vec()),
         plot: Some(|_, _, _| Ok(b"plot".to_vec())),
     });
-    let mut s = denied();
+    let mut s = Session::new();
+    s.execute("kcsarea", &json!({"from": [0, 0], "to": [420, 297]})).unwrap();
+    s.set_edit_policy(Box::new(Deny));
     s.execute("line", &json!({"points": [[0, 0], [1, 0]]})).unwrap_err();
     for (id, params) in [
         ("zoom.extents", json!({})),
@@ -67,6 +69,9 @@ fn deny_allows_view_file_and_plot() {
         ("export", json!({"path": temp_path("e.dxf")})),
         ("plot", json!({})),
         ("setvar", json!({"name": "ORTHOMODE", "value": 1})),
+        ("compareclose", json!({})),
+        ("kcsplotter", json!({})),
+        ("cal", json!({"expr": "(3+4)*2"})),
     ] {
         let r = s.execute(id, &params);
         assert!(!unlicensed(&r), "{id}: {r:?}");
@@ -283,4 +288,106 @@ fn deny_blocks_dyn_grip() {
     let r = s.start_dyn_grip(Handle::parse_hex("FFFFF").unwrap(), 1, cadcraft_engine::doc::dynblock::GripPart::End);
     assert!(matches!(r, Err(EngineError::Unlicensed(_))), "{r:?}");
     assert!(s.running.is_some());
+}
+
+/// Inquiry, display-state and export commands a view-only user still needs.
+#[test]
+fn deny_allows_inquiry_display_and_export() {
+    let mut s = Session::new();
+    s.execute("circle", &json!({"center": [0, 0], "radius": 2})).unwrap();
+    s.execute("text", &json!({"at": [0, 0], "height": 1, "text": "ROOM A"})).unwrap();
+    let h = s.doc().unwrap().model.iter().next().unwrap().handle.hex();
+    let model = s.doc().unwrap().model.len();
+    s.set_edit_policy(Box::new(Deny));
+    for (id, params) in [
+        ("compare.next", json!({})),
+        ("compare.previous", json!({})),
+        ("measuregeom", json!({"mode": "radius", "handle": h})),
+        ("radius.measure", json!({"handle": h})),
+        ("angle.measure", json!({"vertex": [0, 0], "p1": [1, 0], "p2": [0, 1]})),
+        ("massprop", json!({"handles": [h]})),
+        ("quickcalc.pick", json!({"mode": "distance", "points": [[0, 0], [3, 4]]})),
+        ("properties", json!({"handles": [h]})),
+        ("blocks.list", json!({})),
+        ("groups.list", json!({})),
+        ("style.list", json!({})),
+        ("dimstyle.list", json!({})),
+        ("hatch.patterns", json!({})),
+        ("constraints.inspect", json!({})),
+        ("constraints.dof", json!({"handles": []})),
+        ("selectsimilar", json!({"handles": [h]})),
+        ("find", json!({"find": "ROOM"})),
+        ("parameters", json!({})),
+        ("dataextraction", json!({})),
+        ("tableexport", json!({"handle": h})),
+        ("wblock", json!({"path": temp_path("w.dxf"), "handles": [h]})),
+        ("pickstyle", json!({"value": 0})),
+        ("attdisp", json!({"mode": "on"})),
+        ("annovisible.toggle", json!({})),
+        ("constraintbar.hideall", json!({})),
+        ("dcdisplay.showall", json!({})),
+        ("constraintsettings", json!({"barsVisible": false})),
+        ("constraintinfer", json!({"value": 1})),
+        ("color", json!({"color": "red"})),
+        ("lweight", json!({"lineweight": 0.5})),
+        ("style.current", json!({"name": "Standard"})),
+        ("dimstyle.current", json!({"name": "Standard"})),
+        ("hideobjects", json!({"handles": [h]})),
+        ("unisolateobjects", json!({})),
+        ("isolateobjects", json!({"handles": [h]})),
+        ("unisolateobjects", json!({})),
+    ] {
+        let r = s.execute(id, &params);
+        assert!(!unlicensed(&r), "{id}: {r:?}");
+    }
+    assert_eq!(s.doc().unwrap().model.len(), model);
+    let text = s.doc().unwrap().model.iter().find_map(|e| match &e.kind {
+        EntityKind::Text(t) => Some(t.value.clone()),
+        _ => None,
+    });
+    assert_eq!(text.as_deref(), Some("ROOM A"), "FIND without replace leaves text alone");
+}
+
+#[test]
+fn deny_blocks_content_forms_of_mixed_commands() {
+    let mut s = denied();
+    for (id, params) in [
+        ("find", json!({"find": "A", "replace": "B"})),
+        ("dataextraction", json!({"at": [0, 0]})),
+        ("dataextraction", Value::Null),
+        ("eattext", json!({"at": [0, 0]})),
+        ("parameters", json!({"name": "d1", "value": 2})),
+        ("parameters", json!({"delete": "d1"})),
+    ] {
+        let r = s.execute(id, &params);
+        assert!(unlicensed(&r), "{id} {params}: {r:?}");
+    }
+    let r = s.cmdline("DATAEXTRACTION");
+    assert!(matches!(r, Err(EngineError::Unlicensed(_))), "typed DATAEXTRACTION may insert a table: {r:?}");
+}
+
+#[test]
+fn deny_blocks_loading_dropped_lisp() {
+    let mut s = lisp_session();
+    s.cmdline("LINE").unwrap();
+    s.set_edit_policy(Box::new(Deny));
+    let approved = "(princ \"approved\")";
+    assert!(cadcraft_engine::lisp::trust::approve(&cadcraft_engine::lisp::trust::source_sha(approved)));
+    for text in ["(princ \"unreviewed\")", approved] {
+        let r = s.lisp_load_interactive("dropped.lsp", text);
+        assert!(matches!(r, Err(EngineError::Unlicensed(_))), "{text}: {r:?}");
+        assert!(s.running.as_ref().is_some_and(|r| r.id == "line"), "the refused load must not cancel LINE");
+    }
+}
+
+/// Commands without an undo step are usually inquiries; each one that is still gated must be
+/// reviewed here, so a new inquiry command cannot fail closed unnoticed.
+#[test]
+fn gated_noundo_commands_are_reviewed() {
+    // Each edits through its own path: block editor sessions, LISP, hatch dialog picks, and a
+    // placeholder that will attach content.
+    const GATED: &[&str] = &["hatchpick", "bedit", "bsave", "bsaveas", "bclose", "attach", "appload", "lisp"];
+    let unreviewed: Vec<&str> =
+        command_specs().iter().filter(|c| !c.undoable && !is_view_only(c, &Value::Null) && !GATED.contains(&c.id)).map(|c| c.id).collect();
+    assert!(unreviewed.is_empty(), "gated commands without undo, review them for the view-only list: {unreviewed:?}");
 }
