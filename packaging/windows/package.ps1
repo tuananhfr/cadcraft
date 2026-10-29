@@ -129,7 +129,18 @@ Compress-Archive -Path $Portable -DestinationPath $Zip
 # here; .github/workflows/windows-arm64.yml installs and runs it on ARM64 instead.
 $HostArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
 if ($Arch -ne 'arm64' -or $HostArch -eq 'arm64') {
-  Invoke-Native 'cadcraft --version' { & (Join-Path $Stage 'cadcraft.exe') --version }
+  # The exe is GUI-subsystem: `&` neither waits for it nor shows its output, so run it with a
+  # redirected stdout (inherited even by GUI processes) and check exit code and text.
+  $VersionOut = Join-Path ([IO.Path]::GetTempPath()) "cadcraft-version-$PID.txt"
+  try {
+    $p = Start-Process -FilePath (Join-Path $Stage 'cadcraft.exe') -ArgumentList '--version' `
+      -Wait -PassThru -NoNewWindow -RedirectStandardOutput $VersionOut
+    $text = if (Test-Path $VersionOut) { (Get-Content -Raw $VersionOut).Trim() } else { '' }
+    if ($p.ExitCode -ne 0 -or $text -notmatch '^cadcraft \d+\.\d+\.\d+') {
+      throw "cadcraft --version failed (exit $($p.ExitCode)): '$text'"
+    }
+    Write-Output "ok cadcraft --version: $text"
+  } finally { Remove-Item -Force -ErrorAction SilentlyContinue $VersionOut }
 } else {
   Write-Output "skipping cadcraft --version: an $Arch build doesn't run on this $HostArch machine"
 }
