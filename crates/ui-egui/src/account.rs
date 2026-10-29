@@ -19,14 +19,22 @@ pub struct AccountSummary {
     pub notice: Option<String>,
     /// Active organisation's display name; `None` is the personal context.
     pub org: Option<String>,
+    /// Organisations the user may choose; PI licenses through an organisation only.
+    pub orgs: Vec<OrgChoice>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OrgChoice {
+    pub id: String,
+    pub name: String,
 }
 
 pub trait AccountHost {
     fn summary(&self) -> AccountSummary;
     fn sign_in(&self);
     fn sign_out(&self);
-    /// The licence is personal-only; hosts that can leave an organisation context override this.
-    fn switch_to_personal(&self) {}
+    /// Enter organisation `org_id`; hosts without organisations keep the default.
+    fn choose_org(&self, _org_id: &str) {}
 }
 
 #[derive(Default)]
@@ -63,8 +71,8 @@ pub fn poll(app: &mut CadApp) {
     app.account.posted_notice = notice;
 }
 
-pub fn switch_to_personal(host: &Rc<dyn AccountHost>) {
-    host.switch_to_personal();
+pub fn choose_org(host: &Rc<dyn AccountHost>, org_id: &str) {
+    host.choose_org(org_id);
 }
 
 pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
@@ -80,8 +88,14 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         };
         if let Some(org) = &summary.org {
             ui.label(crate::tf!("Organisation: {org}", org = org));
-            if ui.button(crate::tl!("Switch to personal account")).clicked() {
-                switch_to_personal(&host);
+        }
+        if summary.signed_in && !summary.orgs.is_empty() {
+            ui.label(crate::tl!("Choose organisation"));
+            for choice in &summary.orgs {
+                let active = summary.org.as_deref() == Some(choice.name.as_str());
+                if ui.selectable_label(active, choice.name.as_str()).clicked() && !active {
+                    choose_org(&host, &choice.id);
+                }
             }
         }
         ui.label(crate::tf!("Plan: {plan}", plan = summary.plan));
@@ -101,7 +115,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::{Cell, RefCell};
+    use std::cell::RefCell;
     use std::rc::Rc;
 
     use cadcraft_engine::Session;
@@ -114,7 +128,7 @@ mod tests {
     #[derive(Default)]
     struct Fake {
         summary: RefCell<AccountSummary>,
-        switched: Cell<u32>,
+        chosen: RefCell<Vec<String>>,
     }
 
     impl AccountHost for Fake {
@@ -123,8 +137,8 @@ mod tests {
         }
         fn sign_in(&self) {}
         fn sign_out(&self) {}
-        fn switch_to_personal(&self) {
-            self.switched.set(self.switched.get() + 1);
+        fn choose_org(&self, org_id: &str) {
+            self.chosen.borrow_mut().push(org_id.to_string());
         }
     }
 
@@ -177,12 +191,12 @@ mod tests {
     }
 
     #[test]
-    fn account_switch_to_personal_calls_host() {
+    fn account_choose_org_calls_host() {
         let fake = Rc::new(Fake::default());
-        fake.summary.borrow_mut().org = Some("Acme".into());
+        fake.summary.borrow_mut().orgs = vec![super::OrgChoice { id: "org-a".into(), name: "Acme".into() }];
         let app = app_with(&fake);
         let host = app.services.account.clone().unwrap();
-        super::switch_to_personal(&host);
-        assert_eq!(fake.switched.get(), 1);
+        super::choose_org(&host, "org-a");
+        assert_eq!(*fake.chosen.borrow(), ["org-a"]);
     }
 }

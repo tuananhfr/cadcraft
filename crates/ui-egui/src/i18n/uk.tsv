@@ -3927,7 +3927,7 @@ echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are no
 	Not signed in	Вхід не виконано
 	Signed in as {user}	Ви увійшли як {user}
 	Organisation: {org}	Організація: {org}
-	Switch to personal account	Перейти на особистий обліковий запис
+	Choose organisation	Виберіть організацію
 	Plan: {plan}	План: {plan}
 	Offline until {date}	Офлайн до {date}
 	Sign out	Вийти

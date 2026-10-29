@@ -175,6 +175,14 @@ fn cmd_ci() -> Result<(), String> {
                 run(c, "cargo test --workspace")
             }),
         ),
+        (
+            "test-licensing",
+            Box::new(|| {
+                let mut c = cargo();
+                c.args(["test", "-p", "cadcraft", "--features", "licensing"]);
+                run(c, "cargo test -p cadcraft --features licensing")
+            }),
+        ),
         ("assets", Box::new(|| assets::run(&root()))),
         ("layers", Box::new(cmd_layers)),
         ("wasm", Box::new(cmd_wasm)),

@@ -4472,8 +4472,16 @@ echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are no
 	Not signed in	Chưa đăng nhập
 	Signed in as {user}	Đã đăng nhập: {user}
 	Organisation: {org}	Tổ chức: {org}
-	Switch to personal account	Chuyển sang tài khoản cá nhân
+	Choose organisation	Chọn tổ chức
 	Plan: {plan}	Gói: {plan}
 	Offline until {date}	Dùng ngoại tuyến đến {date}
 	Sign out	Đăng xuất
 	Sign in to PI ID	Đăng nhập PI ID
+# Licence gate of the desktop app (apps/cadcraft/src/licence).
+	Sign in to PI ID to use the Pro edition	Đăng nhập PI ID để dùng bản Pro
+	Choose your organisation in PI ID	Chọn tổ chức khi đăng nhập PI ID
+	Connect to the internet to renew	Kết nối mạng để gia hạn
+	This account has no UbotCAD desktop plan	Tài khoản chưa có gói dùng UbotCAD desktop
+	This PI ID account does not belong to any organisation	Tài khoản PI ID chưa thuộc tổ chức nào
+	View only	Chỉ xem
+	Your UbotCAD licence expires in {days} days	Giấy phép UbotCAD hết hạn sau {days} ngày

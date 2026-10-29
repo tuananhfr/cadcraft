@@ -18,6 +18,8 @@ mod control_server;
 mod desktop_theme;
 #[cfg(any(target_os = "windows", test))]
 mod graphics;
+#[cfg(all(feature = "licensing", not(target_arch = "wasm32")))]
+mod licence;
 mod logging;
 #[cfg(target_os = "macos")]
 mod native_menu;
@@ -248,6 +250,7 @@ fn services() -> Services {
         })),
         // Saved xref paths are followed on disk.
         pick_xref_file: None,
+        account: None,
     }
 }
 
@@ -440,6 +443,11 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             let mut app = CadApp::new(Session::empty(), services());
+            #[cfg(all(feature = "licensing", not(target_arch = "wasm32")))]
+            {
+                let ctx = cc.egui_ctx.clone();
+                licence::install(&mut app, move || ctx.request_repaint());
+            }
             app.system_languages = std::env::var("CADCRAFT_LOCALE").map(|s| vec![s]).unwrap_or_else(|_| sys_locale::get_locales().collect());
             if let Some(store) = cadcraft_engine::sheetplan::queue::DirJobStore::settings_default() {
                 app.job_pump = cadcraft_ui_egui::ubplot::worker::JobPump::new(store.root().to_path_buf());
