@@ -700,8 +700,9 @@ pub fn tree(app: &CadApp) -> Vec<(String, Vec<Entry>)> {
         }
     }
     for (id, label, menu, sc) in UI_COMMANDS {
-        if !menu.is_empty() {
-            add(menu, label, id, *sc, *id != crate::account::COMMAND || crate::account::enabled(app));
+        // Only a host with a sign-in has an Account item; the web and ungated builds match upstream.
+        if !menu.is_empty() && (*id != crate::account::COMMAND || crate::account::enabled(app)) {
+            add(menu, label, id, *sc, true);
         }
     }
     if let Some((_, window)) = out.iter_mut().find(|(m, _)| m == "Window") {

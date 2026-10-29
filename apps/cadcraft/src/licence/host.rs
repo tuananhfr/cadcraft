@@ -7,7 +7,7 @@ use cadcraft_ui_egui::account::{AccountHost, AccountSummary, OrgChoice};
 use cadcraft_ui_egui::i18n;
 use erpcons_account::{Account, LicenceState, MembershipStatus, Status};
 
-use super::policy::CAD_USE;
+use super::policy::{CAD_USE, denial_in};
 use super::worker::Request;
 use super::{Notice, Shared};
 
@@ -28,7 +28,7 @@ impl Host {
 impl AccountHost for Host {
     fn summary(&self) -> AccountSummary {
         let notice = *self.shared.notice.lock().unwrap_or_else(PoisonError::into_inner);
-        summary(self.account.status(), notice)
+        summary(self.account.status(), notice, |feature| self.account.allowed(feature))
     }
 
     fn sign_in(&self) {
@@ -46,14 +46,22 @@ impl AccountHost for Host {
     fn choose_org(&self, org_id: &str) {
         self.send(Request::ChooseOrg(org_id.to_owned()));
     }
+
+    fn retry(&self) {
+        self.send(Request::Retry);
+    }
 }
 
 /// Built from cached state only. The plan reads the lease rather than `allowed()`, which would
-/// ask the worker for a refresh every minute while the dialog polls it.
-fn summary(status: Status, notice: Option<Notice>) -> AccountSummary {
+/// ask the worker for a refresh every minute while the dialog polls it; the refusal asks
+/// `allowed` only while the lease lists the feature, where it answers from the lease.
+fn summary(status: Status, notice: Option<Notice>, allowed: impl FnOnce(&str) -> bool) -> AccountSummary {
     let view_only = i18n::t("View only").to_owned();
+    let denial = denial_in(&status, allowed);
+    let refused = denial.map(|d| i18n::t(d.reason()).to_owned());
+    let can_retry = denial.is_some_and(|d| d.retry_offered());
     let Status::SignedIn(signed_in) = status else {
-        return AccountSummary { plan: view_only, notice: notice.map(Notice::text), ..AccountSummary::default() };
+        return AccountSummary { plan: view_only, notice: notice.map(Notice::text), refused, ..AccountSummary::default() };
     };
     let orgs: Vec<OrgChoice> = signed_in
         .orgs
@@ -78,19 +86,25 @@ fn summary(status: Status, notice: Option<Notice>) -> AccountSummary {
         org,
         active_org_id: signed_in.active_org,
         orgs,
+        refused,
+        can_retry,
     }
 }
 
 const NO_ORG: &str = "This PI ID account does not belong to any organisation";
 pub(super) const SIGN_IN_FAILED: &str = "Could not complete PI ID sign-in. Try again";
 pub(super) const BROWSER_FAILED: &str = "Could not open the web browser";
+pub(super) const CHECKING: &str = "Checking your UbotCAD licence with PI ID…";
+const EXPIRES_IN_A_DAY: &str = "Your UbotCAD licence expires in 1 day";
 
 impl Notice {
     fn text(self) -> String {
         match self {
+            Notice::Expiry { days: 1 } => i18n::t(EXPIRES_IN_A_DAY).to_owned(),
             Notice::Expiry { days } => i18n::format("Your UbotCAD licence expires in {days} days", &[("days", days.to_string())]),
             Notice::SignInFailed => i18n::t(SIGN_IN_FAILED).to_owned(),
             Notice::BrowserFailed => i18n::t(BROWSER_FAILED).to_owned(),
+            Notice::Checking => i18n::t(CHECKING).to_owned(),
         }
     }
 }
@@ -114,6 +128,7 @@ mod tests {
     use erpcons_account::{LicenceState, Membership, MembershipStatus, SignedIn, Status, User};
 
     use super::{NO_ORG, summary, utc_date};
+    use crate::licence::Notice;
 
     fn signed_in(orgs: Vec<Membership>, active_org: Option<&str>) -> Status {
         Status::SignedIn(Box::new(SignedIn {
@@ -136,15 +151,39 @@ mod tests {
     #[test]
     fn summary_offers_active_orgs_and_flags_users_without_one() {
         let orgs = vec![member("a", MembershipStatus::Active), member("b", MembershipStatus::Suspended)];
-        let s = summary(signed_in(orgs, Some("b")), None);
+        let s = summary(signed_in(orgs, Some("b")), None, |_| true);
         assert_eq!(s.orgs.iter().map(|o| o.id.as_str()).collect::<Vec<_>>(), ["a"]);
         assert_eq!(s.org.as_deref(), Some("Org b"));
         assert_eq!(s.active_org_id.as_deref(), Some("b"));
         assert_eq!(s.notice, None);
-        let s = summary(signed_in(vec![member("b", MembershipStatus::Suspended)], None), None);
+        let s = summary(signed_in(vec![member("b", MembershipStatus::Suspended)], None), None, |_| true);
         assert!(s.orgs.is_empty());
         assert_eq!(s.notice.as_deref(), Some(NO_ORG));
-        assert_eq!(summary(Status::Guest, None).notice, None);
+        assert_eq!(summary(Status::Guest, None, |_| true).notice, None);
+    }
+
+    #[test]
+    fn summary_gives_the_refusal_and_offers_retry_where_it_can_help() {
+        use crate::licence::policy::{CHOOSE_ORG, DEVICE_CAP, NOT_ACTIVATED, SIGN_IN};
+        let guest = summary(Status::Guest, None, |_| true);
+        assert_eq!((guest.refused.as_deref(), guest.can_retry), (Some(SIGN_IN), false));
+        let no_org = summary(signed_in(vec![member("a", MembershipStatus::Active)], None), None, |_| true);
+        assert_eq!((no_org.refused.as_deref(), no_org.can_retry), (Some(CHOOSE_ORG), true));
+        let not_activated = summary(signed_in(vec![member("a", MembershipStatus::Active)], Some("a")), None, |_| true);
+        assert_eq!((not_activated.refused.as_deref(), not_activated.can_retry), (Some(NOT_ACTIVATED), true));
+        let mut capped = signed_in(vec![member("a", MembershipStatus::Active)], Some("a"));
+        if let Status::SignedIn(s) = &mut capped {
+            s.licence = LicenceState::DeviceCapReached;
+        }
+        let capped = summary(capped, Some(Notice::Checking), |_| true);
+        assert_eq!((capped.refused.as_deref(), capped.can_retry), (Some(DEVICE_CAP), true));
+        assert_eq!(capped.notice.as_deref(), Some(super::CHECKING));
+    }
+
+    #[test]
+    fn expiry_notice_reads_one_day_in_the_singular() {
+        assert_eq!(Notice::Expiry { days: 1 }.text(), super::EXPIRES_IN_A_DAY);
+        assert_eq!(Notice::Expiry { days: 3 }.text(), "Your UbotCAD licence expires in 3 days");
     }
 
     #[test]

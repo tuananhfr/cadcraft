@@ -4477,17 +4477,21 @@ echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are no
 	Offline until {date}	Dùng ngoại tuyến đến {date}
 	Sign out	Đăng xuất
 	Sign in to PI ID	Đăng nhập PI ID
+	Retry	Thử lại
 # Licence gate of the desktop app (apps/cadcraft/src/licence).
 	Sign in to PI ID to use the Pro edition	Đăng nhập PI ID để dùng bản Pro
 	Choose your organisation in PI ID	Chọn tổ chức khi đăng nhập PI ID
 	Connect to the internet to renew	Kết nối mạng để gia hạn
+	Could not renew your UbotCAD licence; UbotCAD keeps retrying	Chưa gia hạn được giấy phép UbotCAD; UbotCAD sẽ tự thử lại
 	This account has no UbotCAD desktop plan	Tài khoản chưa có gói dùng UbotCAD desktop
 	This PI ID account does not belong to any organisation	Tài khoản PI ID chưa thuộc tổ chức nào
 	View only	Chỉ xem
 	Your UbotCAD licence expires in {days} days	Giấy phép UbotCAD hết hạn sau {days} ngày
+	Your UbotCAD licence expires in 1 day	Giấy phép UbotCAD hết hạn sau 1 ngày
 	This device was removed from your PI ID account. Sign in again to use the Pro edition	Máy này đã bị gỡ khỏi tài khoản PI ID. Đăng nhập lại để dùng bản Pro
-	Device limit reached for your PI ID plan. Remove another device in PI ID, then retry	Đã đạt số máy tối đa của gói PI ID. Gỡ một máy khác trong PI ID rồi thử lại
+	Device limit reached for your PI ID plan. Remove a device in PI ID, then press Retry in Help > Account	Đã đạt số máy tối đa của gói PI ID. Gỡ một máy trong PI ID rồi bấm Thử lại ở Trợ giúp > Tài khoản
 	This device is not activated for the Pro edition yet	Máy này chưa được kích hoạt bản Pro
 	PI ID licensing is unavailable on this machine; edits are disabled	Không dùng được giấy phép PI ID trên máy này; tạm khoá chỉnh sửa
 	Could not complete PI ID sign-in. Try again	Không hoàn tất được đăng nhập PI ID. Thử lại
 	Could not open the web browser	Không mở được trình duyệt
+	Checking your UbotCAD licence with PI ID…	Đang kiểm tra giấy phép UbotCAD với PI ID…

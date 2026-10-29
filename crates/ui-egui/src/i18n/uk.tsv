@@ -3932,3 +3932,4 @@ echo	nested xref "{name}" not loaded: {saved}: the xrefs of a picked file are no
 	Offline until {date}	Офлайн до {date}
 	Sign out	Вийти
 	Sign in to PI ID	Увійти в PI ID
+	Retry	Повторити

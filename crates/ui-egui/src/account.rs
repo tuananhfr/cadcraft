@@ -23,6 +23,10 @@ pub struct AccountSummary {
     pub active_org_id: Option<String>,
     /// Organisations the user may choose; PI licenses through an organisation only.
     pub orgs: Vec<OrgChoice>,
+    /// Why drawing edits are refused now; `None` when they are allowed.
+    pub refused: Option<String>,
+    /// Whether [`AccountHost::retry`] may lift the refusal.
+    pub can_retry: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -37,6 +41,8 @@ pub trait AccountHost {
     fn sign_out(&self);
     /// Enter organisation `org_id`; hosts without organisations keep the default.
     fn choose_org(&self, _org_id: &str) {}
+    /// Check the licence again now, after the user fixed what [`AccountSummary::refused`] named.
+    fn retry(&self) {}
 }
 
 #[derive(Default)]
@@ -63,7 +69,8 @@ pub fn route(app: &mut CadApp, id: &str, _params: &Value) -> Option<Result<Value
 /// Forward the host's notice to the status line once per distinct content.
 pub fn poll(app: &mut CadApp) {
     let Some(host) = app.services.account.clone() else { return };
-    let notice = host.summary().notice;
+    // Runs from `logic`, outside the draw's language scope, and hosts translate their notices.
+    let notice = crate::i18n::with_language(app.language(), || host.summary().notice);
     if notice == app.account.posted_notice {
         return;
     }
@@ -104,14 +111,26 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         if let Some(until) = &summary.offline_until {
             ui.label(crate::tf!("Offline until {date}", date = until));
         }
-        ui.separator();
-        if summary.signed_in {
-            if ui.button(crate::tl!("Sign out")).clicked() {
-                host.sign_out();
-            }
-        } else if ui.button(crate::tl!("Sign in to PI ID")).clicked() {
-            host.sign_in();
+        // The status line shows these for a few seconds only; here they stay while they apply.
+        if let Some(reason) = &summary.refused {
+            ui.colored_label(crate::theme::Tokens::get().warn, reason.as_str());
         }
+        if let Some(notice) = &summary.notice {
+            ui.label(notice.as_str());
+        }
+        ui.separator();
+        ui.horizontal(|ui| {
+            if summary.signed_in {
+                if ui.button(crate::tl!("Sign out")).clicked() {
+                    host.sign_out();
+                }
+            } else if ui.button(crate::tl!("Sign in to PI ID")).clicked() {
+                host.sign_in();
+            }
+            if summary.can_retry && ui.button(crate::tl!("Retry")).clicked() {
+                host.retry();
+            }
+        });
     });
 }
 
@@ -161,7 +180,7 @@ mod tests {
     #[test]
     fn account_command_hidden_without_host() {
         let mut app = CadApp::new(Session::empty(), Services::default());
-        assert_eq!(account_enabled(&app), Some(false));
+        assert_eq!(account_enabled(&app), None, "the web and ungated builds have no Account item");
         assert!(app.run("ui.account", Value::Null).is_err());
         assert_eq!(app.ui.dialog, None);
     }
@@ -190,6 +209,26 @@ mod tests {
         fake.summary.borrow_mut().notice = Some("Signed out".into());
         super::poll(&mut app);
         assert_eq!(app.status.as_ref().map(|s| s.0.as_str()), Some("Signed out"));
+    }
+
+    /// A host that translates its notice when asked, as the desktop host does.
+    struct Translating;
+
+    impl AccountHost for Translating {
+        fn summary(&self) -> AccountSummary {
+            AccountSummary { notice: Some(crate::i18n::t("Sign out").to_owned()), ..AccountSummary::default() }
+        }
+        fn sign_in(&self) {}
+        fn sign_out(&self) {}
+    }
+
+    #[test]
+    fn account_notice_is_translated_into_the_interface_language() {
+        let host: Rc<dyn AccountHost> = Rc::new(Translating);
+        let mut app = CadApp::new(Session::empty(), Services { account: Some(host), ..Services::default() });
+        app.ui.interface_language = crate::i18n::Preference::parse("vi").unwrap();
+        super::poll(&mut app);
+        assert_eq!(app.status.as_ref().map(|s| s.0.as_str()), Some("Đăng xuất"));
     }
 
     #[test]

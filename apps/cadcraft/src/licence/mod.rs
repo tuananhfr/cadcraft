@@ -9,6 +9,7 @@ mod policy;
 mod worker;
 
 use std::rc::Rc;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
 
@@ -26,6 +27,8 @@ type Opener = Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>;
 #[derive(Default)]
 struct Shared {
     notice: Mutex<Option<Notice>>,
+    /// An edit was refused for a reason a sync may lift; the worker syncs when its schedule allows.
+    resync_wanted: AtomicBool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,6 +36,7 @@ enum Notice {
     Expiry { days: u32 },
     SignInFailed,
     BrowserFailed,
+    Checking,
 }
 
 pub struct LicenceService {
@@ -50,9 +54,13 @@ impl LicenceService {
     }
 
     pub(crate) fn start_with(account: Arc<Account>, open_browser: Opener, wake: impl Fn() + Send + 'static) -> Self {
+        Self::start_timed(account, open_browser, wake, worker::Timing::default())
+    }
+
+    fn start_timed(account: Arc<Account>, open_browser: Opener, wake: impl Fn() + Send + 'static, timing: worker::Timing) -> Self {
         let (requests, received) = channel();
         let shared = Arc::new(Shared::default());
-        let worker = worker::Worker { account: account.clone(), shared: shared.clone(), open_browser, wake: Box::new(wake) };
+        let worker = worker::Worker { account: account.clone(), shared: shared.clone(), open_browser, wake: Box::new(wake), timing };
         if let Err(error) = worker::spawn(worker, received) {
             // The cached lease still decides; only sign-in and renewal are unavailable.
             log::error!("licence worker did not start: {error}");
@@ -61,7 +69,7 @@ impl LicenceService {
     }
 
     pub fn policy(&self) -> Box<dyn EditPolicy> {
-        Box::new(LeasePolicy(self.account.clone()))
+        Box::new(LeasePolicy { account: self.account.clone(), shared: self.shared.clone(), requests: self.requests.clone() })
     }
 
     pub fn host(&self) -> Rc<dyn AccountHost> {

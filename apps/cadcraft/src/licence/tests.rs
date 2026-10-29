@@ -1,13 +1,14 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use erpcons_account::{Account, Clock, Config, LicenceState, MemorySecretStore, PinnedKey, Product, Status};
 use pi_mock::{FREE_UBOTCAD, Fault, ORG_A, ORG_B, Scenario, Server, Tenant};
 
 use super::LicenceService;
-use super::host::{BROWSER_FAILED, SIGN_IN_FAILED};
-use super::policy::{CHOOSE_ORG, DEVICE_CAP, NO_PLAN, NOT_ACTIVATED, REVOKED, SIGN_IN};
+use super::host::{BROWSER_FAILED, CHECKING, SIGN_IN_FAILED};
+use super::policy::{CHOOSE_ORG, DEVICE_CAP, Denial, NO_PLAN, NOT_ACTIVATED, REVOKED, SIGN_IN, denial_in};
+use super::worker::Timing;
 
 const T0: i64 = 1_792_828_800;
 const USE: &str = "ubotbuild.cad-use";
@@ -67,6 +68,19 @@ impl Env {
     fn service_with(&self, open_browser: super::Opener) -> (LicenceService, Arc<Account>) {
         let account = self.account();
         (LicenceService::start_with(account.clone(), open_browser, || {}), account)
+    }
+
+    /// A service whose worker polls and resyncs within milliseconds; also counts its wake-ups,
+    /// the first of which follows the start-up sync.
+    fn fast_service(&self) -> (LicenceService, Arc<Account>, Arc<AtomicUsize>) {
+        let account = self.account();
+        let wakes = Arc::new(AtomicUsize::new(0));
+        let counter = wakes.clone();
+        let timing = Timing { poll: Duration::from_millis(20), resync_min: Duration::from_millis(20), resync_max: Duration::from_millis(50) };
+        let wake = move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+        };
+        (LicenceService::start_timed(account.clone(), Arc::new(browser), wake, timing), account, wakes)
     }
 
     /// Moves client wall clock, client monotonic clock and platform time together.
@@ -214,6 +228,61 @@ fn no_lease_denies_even_with_online_entitlements() {
 }
 
 #[test]
+fn refused_edit_syncs_again_without_waiting_for_the_periodic_refresh() {
+    let env = Env::new(Scenario { faults: vec![Fault::problem("POST", "/api/v1/id/devices/activate", 422, "")], ..org_scenario() });
+    prepare_org_session(&env);
+    let (service, account, wakes) = env.fast_service();
+    wait_for("the start-up sync", || wakes.load(Ordering::SeqCst) > 0);
+    assert_eq!(licence(&account), Some(LicenceState::NotActivated));
+    assert!(service.host().summary().can_retry);
+    // PI recovered; nothing asks for a refresh except the refused edit itself.
+    env.server.clear_faults();
+    assert_eq!(service.policy().check(), Err(NOT_ACTIVATED.to_string()));
+    wait_for("the resync to activate this device", || service.policy().check().is_ok());
+}
+
+#[test]
+fn retry_lifts_the_device_cap_once_a_device_is_removed() {
+    let env = Env::new(Scenario { tenants: vec![Tenant::new("ten_cad", ORG_A, "ubotbuild", &FREE_UBOTCAD).device_cap(0)], ..Default::default() });
+    prepare_org_session(&env);
+    let (service, account, wakes) = env.fast_service();
+    wait_for("the start-up sync", || wakes.load(Ordering::SeqCst) > 0);
+    assert_eq!(service.policy().check(), Err(DEVICE_CAP.to_string()));
+    let summary = service.host().summary();
+    assert_eq!((summary.refused.as_deref(), summary.can_retry), (Some(DEVICE_CAP), true));
+    // The user removed a device in PI ID: a plain sync keeps the block (lease.md §6), Retry lifts it.
+    env.server.update_scenario(|s| s.tenants[0].device_cap = 2);
+    let _ = account.refresh();
+    assert_eq!(licence(&account), Some(LicenceState::DeviceCapReached));
+    service.host().retry();
+    wait_for("the retried activation", || service.policy().check().is_ok());
+    wait_for("the checking notice to clear", || service.host().summary().notice.as_deref() != Some(CHECKING));
+}
+
+#[test]
+fn expired_lease_reason_depends_on_being_online() {
+    use erpcons_account::SignedIn;
+    let status = |online: bool| {
+        Status::SignedIn(Box::new(SignedIn {
+            user: None,
+            orgs: Vec::new(),
+            active_org: Some(ORG_A.into()),
+            licence: LicenceState::Inactive { lease_id: "l".into(), expires_at: T0 },
+            licences: Default::default(),
+            warning: None,
+            online,
+            session_only: false,
+            reauth_required: false,
+        }))
+    };
+    assert_eq!(denial_in(&status(false), |_| true), Some(Denial::RenewOffline));
+    assert_eq!(denial_in(&status(true), |_| true), Some(Denial::RenewFailed));
+    assert!(Denial::RenewFailed.sync_may_lift() && Denial::RenewOffline.sync_may_lift());
+    assert!(!Denial::DeviceCap.sync_may_lift() && Denial::DeviceCap.retry_offered());
+    assert!(!Denial::Revoked.retry_offered() && !Denial::SignIn.retry_offered() && !Denial::SessionOnly.retry_offered());
+}
+
+#[test]
 fn failed_sign_in_shows_a_notice() {
     let env = Env::new(org_scenario());
     let (service, _) = env.service_with(Arc::new(|_: &str| Err("no browser".to_owned())));
@@ -273,11 +342,16 @@ fn reasons_have_vietnamese_translations() {
         (RENEW_ONLINE, "Kết nối mạng để gia hạn"),
         (NO_PLAN, "Tài khoản chưa có gói dùng UbotCAD desktop"),
         (REVOKED, "Máy này đã bị gỡ khỏi tài khoản PI ID. Đăng nhập lại để dùng bản Pro"),
-        (DEVICE_CAP, "Đã đạt số máy tối đa của gói PI ID. Gỡ một máy khác trong PI ID rồi thử lại"),
+        (DEVICE_CAP, "Đã đạt số máy tối đa của gói PI ID. Gỡ một máy trong PI ID rồi bấm Thử lại ở Trợ giúp > Tài khoản"),
         (NOT_ACTIVATED, "Máy này chưa được kích hoạt bản Pro"),
         (super::policy::UNAVAILABLE, "Không dùng được giấy phép PI ID trên máy này; tạm khoá chỉnh sửa"),
         (SIGN_IN_FAILED, "Không hoàn tất được đăng nhập PI ID. Thử lại"),
         (BROWSER_FAILED, "Không mở được trình duyệt"),
+        (super::policy::RENEW_FAILED, "Chưa gia hạn được giấy phép UbotCAD; UbotCAD sẽ tự thử lại"),
+        (CHECKING, "Đang kiểm tra giấy phép UbotCAD với PI ID…"),
+        ("Your UbotCAD licence expires in 1 day", "Giấy phép UbotCAD hết hạn sau 1 ngày"),
+        ("Your UbotCAD licence expires in {days} days", "Giấy phép UbotCAD hết hạn sau {days} ngày"),
+        ("Retry", "Thử lại"),
     ] {
         assert_eq!(tr("vi", reason), vi);
     }
