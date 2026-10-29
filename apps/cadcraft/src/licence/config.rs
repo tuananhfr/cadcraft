@@ -34,8 +34,8 @@ pub fn pi_config(client_version: &str) -> Option<Config> {
 
 pub(super) fn config_for(issuer: &str, client_version: &str) -> Config {
     let mut config = Config::new(issuer, Product::UbotBuild, client_version);
-    // Leases come from pi-mock's licensing endpoints until PI serves UbotCAD (ADR 0011); the
-    // feature stays off in releases until then.
+    // Leases come from PI's device protocol (ADR 0012); the feature stays off in releases until
+    // PI is deployed with it.
     config.offline_licensing = true;
     config
 }

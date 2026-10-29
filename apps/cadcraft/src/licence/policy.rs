@@ -1,4 +1,4 @@
-//! The edit gate: drawing edits need `ubotbuild.cad.use` in an active lease of this device.
+//! The edit gate: drawing edits need `ubotbuild.cad-use` in an active lease of this device.
 
 use std::sync::Arc;
 
@@ -6,7 +6,7 @@ use cadcraft_engine::EditPolicy;
 use erpcons_account::{Account, LicenceState, Status};
 
 /// Also the form the lease lists it in (`LicenceState::Active::features`).
-pub const CAD_USE: &str = "ubotbuild.cad.use";
+pub const CAD_USE: &str = "ubotbuild.cad-use";
 
 // English i18n keys: the command line and status bar look engine messages up in the catalogs
 // (`ui-egui/src/i18n/vi.tsv`) when they display them.
@@ -46,6 +46,7 @@ pub fn denial(account: &Account) -> Option<&'static str> {
     match &signed_in.licence {
         LicenceState::DeviceRevoked => Some(REVOKED),
         LicenceState::DeviceCapReached => Some(DEVICE_CAP),
+        LicenceState::NotEntitled => Some(NO_PLAN),
         LicenceState::NotActivated | LicenceState::SessionOnly => Some(NOT_ACTIVATED),
         LicenceState::Inactive { .. } if !signed_in.online => Some(RENEW_ONLINE),
         LicenceState::Inactive { .. } => Some(NO_PLAN),

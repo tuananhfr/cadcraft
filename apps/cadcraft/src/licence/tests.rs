@@ -3,14 +3,14 @@ use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use erpcons_account::{Account, Clock, Config, LicenceState, MemorySecretStore, PinnedKey, Product, Status};
-use pi_mock::{DEFAULT_USER, Entitlement, Fault, ORG_A, ORG_B, Scenario, Server};
+use pi_mock::{FREE_UBOTCAD, Fault, ORG_A, ORG_B, Scenario, Server, Tenant};
 
 use super::LicenceService;
 use super::host::{BROWSER_FAILED, SIGN_IN_FAILED};
 use super::policy::{CHOOSE_ORG, DEVICE_CAP, NO_PLAN, NOT_ACTIVATED, REVOKED, SIGN_IN};
 
 const T0: i64 = 1_792_828_800;
-const USE: &str = "ubotbuild.cad.use";
+const USE: &str = "ubotbuild.cad-use";
 
 struct TestClock {
     unix: AtomicI64,
@@ -106,9 +106,9 @@ fn in_org(account: &Account, org: &str) -> bool {
     matches!(account.status(), Status::SignedIn(s) if s.active_org.as_deref() == Some(org))
 }
 
-/// `ubotbuild.cad.use` granted to the default user in organisation A only.
+/// `ubotbuild.cad-use` granted to organisation A only.
 fn org_scenario() -> Scenario {
-    Scenario { entitlements: vec![Entitlement::new("ent_cad", DEFAULT_USER, Some(ORG_A), USE)], ..Scenario::default() }
+    Scenario { tenants: vec![Tenant::new("ten_cad", ORG_A, "ubotbuild", &FREE_UBOTCAD)], ..Default::default() }
 }
 
 /// What an earlier run of the app left behind: signed in, in organisation A, with its lease.
@@ -170,7 +170,6 @@ fn revoked_device_denies_after_refresh() {
     let device = account.diagnostics().device_id.unwrap();
     assert!(env.server.revoke_device(&device));
     env.advance(13 * 3600);
-    // In an organisation context the library records the revocation without returning an error.
     let _ = account.refresh();
     assert_eq!(licence(&account), Some(LicenceState::DeviceRevoked));
     // A later refresh, as the worker runs one, makes online entitlements fresh again.
@@ -181,8 +180,20 @@ fn revoked_device_denies_after_refresh() {
 }
 
 #[test]
+fn not_entitled_denies_with_no_plan() {
+    let env = Env::new(org_scenario());
+    let account = env.account();
+    account.sign_in(browser).unwrap();
+    account.select_org(Some(ORG_B), browser).unwrap();
+    let (service, account) = (LicenceService::start_with(account.clone(), Arc::new(browser), || {}), account);
+    let _ = account.refresh();
+    assert_eq!(licence(&account), Some(LicenceState::NotEntitled));
+    assert_eq!(service.policy().check(), Err(NO_PLAN.to_string()));
+}
+
+#[test]
 fn device_cap_denies_even_with_online_entitlements() {
-    let env = Env::new(Scenario { max_devices: 0, ..org_scenario() });
+    let env = Env::new(Scenario { tenants: vec![Tenant::new("ten_cad", ORG_A, "ubotbuild", &FREE_UBOTCAD).device_cap(0)], ..Default::default() });
     prepare_org_session(&env);
     let (service, account) = env.service();
     let _ = account.refresh();
@@ -193,7 +204,7 @@ fn device_cap_denies_even_with_online_entitlements() {
 
 #[test]
 fn no_lease_denies_even_with_online_entitlements() {
-    let env = Env::new(Scenario { faults: vec![Fault::problem("POST", "/v1/devices/activate", 422, "")], ..org_scenario() });
+    let env = Env::new(Scenario { faults: vec![Fault::problem("POST", "/api/v1/id/devices/activate", 422, "")], ..org_scenario() });
     prepare_org_session(&env);
     let (service, account) = env.service();
     let _ = account.refresh();
@@ -225,11 +236,10 @@ fn platform_down_keeps_cached_lease() {
         ("GET", "/.well-known/openid-configuration"),
         ("POST", "/id/token"),
         ("GET", "/api/v1/id/me"),
-        ("GET", "/v1/me/entitlements"),
-        ("GET", "/v1/products/ubotbuild/feature-catalog"),
-        ("POST", "/v1/devices/challenges"),
-        ("POST", "/v1/devices/activate"),
-        ("POST", "/v1/licenses/refresh"),
+        ("GET", "/api/v1/id/me/entitlements"),
+        ("GET", "/api/v1/id/devices/challenge"),
+        ("POST", "/api/v1/id/devices/activate"),
+        ("POST", "/api/v1/id/licenses/refresh"),
     ] {
         env.server.add_fault(Fault::delay(method, path, Duration::from_secs(5)));
     }
