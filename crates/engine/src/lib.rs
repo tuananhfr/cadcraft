@@ -1003,6 +1003,8 @@ impl Session {
             }
         }
         lisp::trust::check_command(self, spec.id, &Value::Null)?;
+        // Before cancel(): a refused command must not abort the one already running.
+        self.gate(spec, &Value::Null)?;
         let nested = transparent && spec.transparent && self.running.is_some() && spec.interactive.is_some();
         // Ctrl+Z / U / UNDO while a command's prompt offers its own Undo keyword (LINE, PLINE…)
         // takes back the last segment and keeps the command running, as the keyword does.
@@ -1014,7 +1016,6 @@ impl Session {
             self.cancel();
         }
         (spec.enabled)(self).map_err(|m| EngineError::Disabled(spec.id.into(), m))?;
-        self.gate(spec, &Value::Null)?;
         if let Some(why) = cmd::blocks::bedit::refused_in_editor(self, spec.id) {
             return Err(EngineError::Disabled(spec.id.into(), why));
         }

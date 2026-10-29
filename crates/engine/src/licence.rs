@@ -71,3 +71,17 @@ impl Session {
         if is_view_only(spec, params) { Ok(()) } else { self.check_edit() }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::VIEW_ONLY_IDS;
+    use crate::find_command;
+
+    #[test]
+    fn view_only_ids_exist_in_registry() {
+        // A typo would otherwise fail closed without notice.
+        for id in VIEW_ONLY_IDS {
+            assert!(find_command(id).is_some_and(|s| s.id == *id), "`{id}` is on the view-only list but is not a command");
+        }
+    }
+}

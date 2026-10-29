@@ -45,6 +45,7 @@ fn vports_factory(s: &Session) -> Result<Box<dyn Interactive>> {
         return Ok(m);
     }
     let mview = find_command("mview").and_then(|c| c.interactive).ok_or_else(|| EngineError::UnknownCommand("mview".into()))?;
+    s.check_edit()?;
     mview(s)
 }
 
@@ -261,6 +262,7 @@ fn run_vports(s: &mut Session, p: &Value) -> Result<Value> {
             o.remove("option");
             o.insert("count".into(), json!(count));
         }
+        s.check_edit()?;
         return (mview.run)(s, &p);
     }
     let (tiles, current) = live(s.state()?, s.viewport_px);

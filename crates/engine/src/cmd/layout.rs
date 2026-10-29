@@ -48,23 +48,23 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("vports", "New Viewports...", run_mview)
             .menu(&["View", "Viewports", "New Viewports..."])
             .params("{count?: 1-4, arrangement?, p1?, p2?, layout?} (typed in the Model tab: tiled viewports; their JSON form is -vports)")
-            .interactive(|s| Ok(super::view::model_vports(s, None).unwrap_or_else(|| Box::new(MviewM::new(1, true))))),
+            .interactive(|s| super::view::model_vports(s, None).map_or_else(|| mview_machine(s, 1, true), Ok)),
         CommandSpec::new("vports.1", "1 Viewport", |s, p| run_mview_n(s, p, 1))
             .menu(&["View", "Viewports", "1 Viewport"])
             .params("{p1?, p2?, layout?}")
-            .interactive(|s| Ok(super::view::model_vports(s, Some(1)).unwrap_or_else(|| Box::new(MviewM::new(1, false))))),
+            .interactive(|s| super::view::model_vports(s, Some(1)).map_or_else(|| mview_machine(s, 1, false), Ok)),
         CommandSpec::new("vports.2", "2 Viewports", |s, p| run_mview_n(s, p, 2))
             .menu(&["View", "Viewports", "2 Viewports"])
             .params("{p1?, p2?, arrangement?: vertical|horizontal, layout?}")
-            .interactive(|s| Ok(super::view::model_vports(s, Some(2)).unwrap_or_else(|| Box::new(MviewM::new(2, false))))),
+            .interactive(|s| super::view::model_vports(s, Some(2)).map_or_else(|| mview_machine(s, 2, false), Ok)),
         CommandSpec::new("vports.3", "3 Viewports", |s, p| run_mview_n(s, p, 3))
             .menu(&["View", "Viewports", "3 Viewports"])
             .params("{p1?, p2?, arrangement?: right|left|above|below|vertical|horizontal, layout?}")
-            .interactive(|s| Ok(super::view::model_vports(s, Some(3)).unwrap_or_else(|| Box::new(MviewM::new(3, false))))),
+            .interactive(|s| super::view::model_vports(s, Some(3)).map_or_else(|| mview_machine(s, 3, false), Ok)),
         CommandSpec::new("vports.4", "4 Viewports", |s, p| run_mview_n(s, p, 4))
             .menu(&["View", "Viewports", "4 Viewports"])
             .params("{p1?, p2?, layout?}")
-            .interactive(|s| Ok(super::view::model_vports(s, Some(4)).unwrap_or_else(|| Box::new(MviewM::new(4, false))))),
+            .interactive(|s| super::view::model_vports(s, Some(4)).map_or_else(|| mview_machine(s, 4, false), Ok)),
         CommandSpec::new("viewport.set", "Viewport Properties", run_viewport_set).params(
             "{handle? (default: selected viewports), scale?: paper units per model unit | \"1:50\", viewHeight?, center?: [x,y], locked?, freeze?: [layer], thaw?: [layer], colors?: {layer: color | null}}",
         ),
@@ -444,11 +444,19 @@ fn add_viewports(s: &mut Session, space: &Space, rect: Bounds2, count: usize, ar
     Ok(out)
 }
 
+/// The layout-viewport prompts behind the view-only VPORTS ids; they create content, so the policy applies.
+pub(super) fn mview_machine(s: &Session, count: usize, first: bool) -> Result<Box<dyn Interactive>> {
+    s.check_edit()?;
+    Ok(Box::new(MviewM::new(count, first)))
+}
+
 fn mview(s: &mut Session, p: &Value, count: usize, cmd: &str) -> Result<Value> {
     if cmd == "vports" && s.layout_space() == Space::Model && p.get("layout").is_none() {
         // View > Viewports > n in the Model tab: tiled viewports.
         return super::view::tile_model(s, p, count);
     }
+    // The viewport-creating forms of the view-only VPORTS ids still add content.
+    s.check_edit()?;
     let space = target_layout(s, cmd, p)?;
     let Space::Paper(name) = &space else { return Err(bad(cmd, "not a layout")) };
     let rect = match (point_param(p, "p1"), point_param(p, "p2")) {
