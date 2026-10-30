@@ -36,11 +36,11 @@ zbus = { version = "=5.19.0", default-features = false, features = ["async-io", 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rfd = { workspace = true }
 sys-locale = "0.3"
-erpcons-account = { git = "https://github.com/tuananhfr/erpcons-account", tag = "v0.4.1", optional = true }
+erpcons-account = { git = "https://github.com/tuananhfr/erpcons-account", tag = "v0.4.2", optional = true }
 open = { version = "5.4", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-pi-mock = { git = "https://github.com/tuananhfr/erpcons-account", tag = "v0.4.1" }
+pi-mock = { git = "https://github.com/tuananhfr/erpcons-account", tag = "v0.4.2" }
 tempfile = "3"
 # The "system browser" of the licence tests; already in the graph through erpcons-account.
 ureq = { version = "3.4", default-features = false }

@@ -27,6 +27,7 @@ This branch (`tuananhfr`) is UbotCAD, the UbotBuild build of [CADCraft](https://
   - shape/unifont readers and drawing-codepage glyph lookup, including legacy `%%c`/`%%d`/`%%p` symbol slots; added files feed the existing font selection/rendering path;
   - bigfont is unsupported; six known files are rejected as truncated. Output has not been black-box compared with AutoCAD, and Vietnamese precomposed letters are not decomposed under cp1258.
 - Desktop builds are UbotCAD (names, settings directory, icon and a new UpgradeCode); `ubotcad-desktop.yml` builds unsigned Windows installers and releases them on `ubotcad-v*` tags. The app and web pages call themselves UbotCAD in every UI language; file formats, plotter names, fonts and MCP keep CADCraft identifiers. The macOS icns is not updated.
+- Since 0.10.0 the released Windows installers are built with the `licensing` feature: drawing and editing need a PI ID sign-in and a device lease from production PI (`https://pi-platform.tekshot.vn`, lease key `lease-2026-10` pinned in erpcons-account 0.4.2); opening, viewing, saving and exporting stay free. The web build has no licence gate.
 
 ## V2.2/V3.1 GĐ0
 

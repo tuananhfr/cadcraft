@@ -2,8 +2,8 @@
 
 use erpcons_account::{Config, Product};
 
-/// Production PI issuer; `None` until PI hosts the UbotCAD client.
-pub const PI_ISSUER: Option<&str> = None;
+/// Production PI issuer, exactly as its OIDC discovery reports it (`iss` must match).
+pub const PI_ISSUER: Option<&str> = Some("https://pi-platform.tekshot.vn");
 
 // A release that cannot verify a lease would lock every user out of editing.
 #[cfg(all(feature = "licensing", not(debug_assertions)))]
@@ -34,8 +34,7 @@ pub fn pi_config(client_version: &str) -> Option<Config> {
 
 pub(super) fn config_for(issuer: &str, client_version: &str) -> Config {
     let mut config = Config::new(issuer, Product::UbotBuild, client_version);
-    // Leases come from PI's device protocol (ADR 0012); the feature stays off in releases until
-    // PI is deployed with it.
+    // Leases come from PI's device protocol (ADR 0012).
     config.offline_licensing = true;
     config
 }

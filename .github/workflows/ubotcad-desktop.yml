@@ -62,7 +62,7 @@ jobs:
           wix extension add -g WixToolset.UI.wixext/5.0.2
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package unsigned Windows installers
-        run: pwsh packaging/windows/package.ps1 -Arch x64
+        run: pwsh packaging/windows/package.ps1 -Arch x64 -Licensing
       - name: Collect Windows installers
         shell: pwsh
         run: |
