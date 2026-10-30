@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use cadcraft_geom::{Arc, Bounds2, EPS, Polyline, Vec2, bulge_to_arc};
+use cadcraft_geom::{Arc, Bounds2, EPS, Polyline, Vec2, bulge_to_arc, loop_bounds};
 
 use crate::{Drawing, Entity, EntityKind, LwPolyline, Prim};
 
@@ -199,6 +199,9 @@ fn bounds_in<'a>(d: &'a Drawing, e: &Entity, depth: usize, blocks: &mut HashMap<
             Bounds2::from_points([o, o + u, o + v, o + u + v])
         }
         EntityKind::LwPolyline(p) => lwpolyline_bounds(p),
+        // Not through prims(): that copies every loop into segments, which dominated hover picks
+        // over blocks with large solid fills.
+        EntityKind::Hatch(h) => h.loops.iter().fold(Bounds2::EMPTY, |b, l| b.union(&loop_bounds(&l.vertices))),
         kind => {
             let mut b = Bounds2::EMPTY;
             for p in kind.prims() {
@@ -295,6 +298,38 @@ mod tests {
 
     fn bounds(kind: EntityKind) -> Bounds2 {
         entity_bounds(&Drawing::default(), &Entity::new(crate::Handle(1), kind), 0)
+    }
+
+    #[test]
+    fn hatch_extents_follow_its_loops() {
+        use crate::{Hatch, HatchLoop};
+        use cadcraft_geom::{PolyVertex, loop_bounds};
+        let v = |x, y, bulge| PolyVertex { bulge, ..PolyVertex::new(Vec2::new(x, y)) };
+        let outer = vec![v(0.0, 0.0, 0.0), v(10.0, 0.0, 0.7), v(10.0, 6.0, 0.0), v(0.0, 6.0, -0.4)];
+        let island = vec![v(3.0, 2.0, 1.0), v(5.0, 2.0, 1.0)];
+        let hatch = EntityKind::Hatch(Hatch {
+            pattern: "SOLID".into(),
+            solid: true,
+            loops: [&outer, &island].map(|l| HatchLoop { vertices: l.clone(), outer: false, sources: Vec::new() }).into(),
+            scale: 1.0,
+            angle: 0.0,
+            associative: false,
+            style: 0,
+            elevation: 0.0,
+            gradient: None,
+            origin: Vec2::ZERO,
+            background: None,
+            pattern_lines: Vec::new(),
+        });
+        let from_prims = hatch.prims().iter().fold(Bounds2::EMPTY, |b, p| match p {
+            Prim::Seg(s) => b.union(&s.bounds()),
+            _ => b,
+        });
+        let b = bounds(hatch);
+        assert_eq!(b, loop_bounds(&outer).union(&loop_bounds(&island)));
+        assert_eq!(b, from_prims);
+        // The bulge on the right edge bows past x = 10.
+        assert!(b.max.x > 10.0);
     }
 
     #[test]

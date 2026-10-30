@@ -579,6 +579,8 @@ fn sheet(d: &Drawing, space: &Space, o: &PdfOptions, links_to: &[(Handle, String
         view: None,
         skip_viewport: None,
         cancel: o.cancel.clone(),
+        near: None,
+        fill_loops: false,
     };
     let media_pt = sheet.size * (unit_mm * PT_PER_MM);
     let user_unit = (media_pt.x.max(media_pt.y) / 14400.0).ceil().max(1.0);

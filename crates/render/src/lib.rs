@@ -103,6 +103,9 @@ pub struct DisplayList {
     /// Plots: solid hatch fills as their boundary loops, by primitive in drawing order, for
     /// output that fills paths instead of the primitive's triangles (see [`FillPath`]).
     pub fill_paths: Vec<FillPath>,
+    /// Builds with [`Options::fill_loops`]: each solid hatch fill as its boundary loops (world
+    /// coordinates, even-odd), in place of its triangles.
+    pub hit_fills: Vec<Vec<Vec<Vec2>>>,
 }
 
 /// A glyph of plotted text: the font glyph and, in world coordinates, where it sits. It is
@@ -327,6 +330,12 @@ pub struct Options {
     /// rebuild the view no longer needs). A cancelled build returns a partial list, which the
     /// caller must discard; see [`Options::cancelled`].
     pub cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    /// Picks: block contents (at any depth) whose bounds miss this box (world units of the space
+    /// being built) are not built, so the cursor over a large block builds only what is under it.
+    pub near: Option<Bounds2>,
+    /// Picks: solid hatch fills go to [`DisplayList::hit_fills`] as loops instead of being
+    /// triangulated, which can cost far more than the pick itself.
+    pub fill_loops: bool,
 }
 
 impl Options {
@@ -355,6 +364,8 @@ impl Default for Options {
             skip_viewport: None,
             transparency: false,
             cancel: None,
+            near: None,
+            fill_loops: false,
         }
     }
 }
@@ -1642,6 +1653,21 @@ fn sub_ctx<'a>(ctx: &Ctx<'a>, e: &Entity, m: Mat3) -> Ctx<'a> {
     }
 }
 
+/// Whether block entity `be`, drawn through `ctx`, can touch the [`Options::near`] box. Entities
+/// without finite extents are kept.
+fn near_enough(near: Option<Bounds2>, ctx: &Ctx, be: &Entity) -> bool {
+    let Some(near) = near else { return true };
+    if matches!(be.kind, EntityKind::XLine(_) | EntityKind::Ray(_)) {
+        return true;
+    }
+    let own = cadcraft_doc::entity_bounds(ctx.d, be, ctx.depth);
+    if own.is_empty() {
+        return true;
+    }
+    let world = Bounds2::from_points(own.corners().iter().map(|p| ctx.xf.apply(*p)));
+    world.is_empty() || world.intersects(&near)
+}
+
 fn insert(b: &mut Builder, ctx: &Ctx, e: &Entity, ins: &cadcraft_doc::Insert, rgb: Ink) {
     if ctx.depth >= cadcraft_doc::MAX_BLOCK_DEPTH {
         return;
@@ -1659,7 +1685,7 @@ fn insert(b: &mut Builder, ctx: &Ctx, e: &Entity, ins: &cadcraft_doc::Insert, rg
                 let sub = Ctx { block_pstyle: b.named, block_transparency: b.transparency, ..sub_ctx(ctx, e, m) };
                 for be in blk.entities.iter() {
                     // Constant/visible attribute definitions inside blocks are not drawn; attribs are.
-                    if matches!(be.kind, EntityKind::AttDef(_)) {
+                    if matches!(be.kind, EntityKind::AttDef(_)) || !near_enough(b.opts.near, &sub, be) {
                         continue;
                     }
                     if !b.expand() {

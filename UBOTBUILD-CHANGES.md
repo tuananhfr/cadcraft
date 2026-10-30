@@ -331,3 +331,11 @@ Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded 
 - `cadcraft-cli convert`/`--save`/`--export` print the same lists and refuse to replace the opened file with a lossy copy.
 - About names acadrust (MPL-2.0, used unmodified) with links to its source and the licence (MPL-2.0 §3.2(a)).
 - Tests: DWG saves are byte-identical across saves, versions, a reopen and UI language/theme/workspace changes (QA-032).
+
+2026-10-29 · Hovering over block references no longer stalls (UbotCAD V5.2-C, lag on Ryzen 5 2600 + GT 730).
+
+- Picking under the cursor (rollover highlight and single-click pick) builds only the block contents within the pick box (`render::Options::near`) and takes solid hatch fills as their boundary loops (`Options::fill_loops`, `DisplayList::hit_fills`) instead of triangulating them.
+- Hatch extents (ZOOM Extents, the spatial index, window selection, picks) come from the boundary loops directly (`geom::loop_bounds`, the same value as before bit for bit) instead of copying every loop into segments: 0.47 to 0.04 ms for a 3000-point hatch.
+- Native release, 15 title blocks with 7 solid hatches of 3000 points each (`engine/tests/pick_insert.rs`, ignored timing tests): 0.5 / 1.0 ms per pick away from / on a hatch in a drawing past the spatial-index threshold; 4-8 ms in a drawing too small to index, where every pick measures all 15 blocks.
+- Web build in Chrome, moving the mouse over those title blocks for 4 s (machine loaded by other builds): main thread busy 85% → 40% and long tasks 6 → 0 at normal CPU speed; at 4x CPU throttling, long tasks 33 (up to 176 ms) → 2-14 (up to 55-105 ms) and pointer moves handled 40 → 85-120. The long tasks left also happen over blank canvas: they are redraw cost, not picking.
+- A point inside a solid hatch of a block now picks the block, and a point in that hatch's island doesn't, as for a hatch outside a block. Trim/extend, hatch boundaries and other callers of `hit_polylines`/`entity_distance` are unchanged.

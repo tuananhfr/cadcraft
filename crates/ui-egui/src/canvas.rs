@@ -316,6 +316,8 @@ fn ensure_list(app: &mut CadApp, xf: &Xf, views: &[(Bounds2, f64)], ctx: &egui::
         transparency: app.session.settings.transparency_display,
         skip_viewport: split,
         cancel: None,
+        near: None,
+        fill_loops: false,
     };
     if view_only {
         let t = Tokens::get();
@@ -478,6 +480,8 @@ fn ensure_vp_content(app: &mut CadApp, xf_paper: &Xf, ctx: &egui::Context) -> Op
             skip_viewport: None,
             transparency,
             cancel: None,
+            near: None,
+            fill_loops: false,
         };
         c.list = cadcraft_render::viewport_content(&st.doc, &st.space, h, area, &opts);
         c.key = Some(key);

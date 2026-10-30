@@ -108,6 +108,27 @@ pub fn entity_distance(d: &Drawing, e: &Entity, p: Vec2, tol: f64) -> f64 {
     best
 }
 
+/// [`entity_distance`] for picking under the cursor, which runs on every pointer move: a block
+/// reference builds only its contents within `aperture` of `p`, and its solid hatches count as
+/// their filled area without being triangulated. `b` is the bounds of `e`.
+fn pick_distance(d: &Drawing, e: &Entity, b: Bounds2, p: Vec2, aperture: f64) -> f64 {
+    let tol = aperture / 4.0;
+    if !matches!(e.kind, EntityKind::Insert(_) | EntityKind::Dimension(_) | EntityKind::MLeader(_)) {
+        return entity_distance(d, e, p, tol);
+    }
+    if b.is_empty() {
+        return f64::INFINITY;
+    }
+    let c = b.corners();
+    let near = Bounds2::new(p, p).expand(aperture);
+    let opts = cadcraft_render::Options { tolerance: tol, text: false, near: Some(near), fill_loops: true, ..Default::default() };
+    let list = cadcraft_render::build_entities(d, std::iter::once(e), &opts);
+    let outline = dist_to_polyline(&[c[0], c[1], c[2], c[3], c[0]], p);
+    let best = list.prims.iter().map(|prim| dist_to_polyline(list.points(prim), p)).fold(outline, f64::min);
+    let in_fill = list.hit_fills.iter().any(|loops| loops.iter().filter(|l| point_in_polygon(l, p)).count() % 2 == 1);
+    if in_fill || in_text(d, e, p) { 0.0 } else { best }
+}
+
 /// Whether `p` is on the text of a dimension or multileader: inside the box around its words,
 /// turned with the text, as plain text is hit anywhere inside its box. Their other geometry is
 /// hit along its lines, so without this the cursor found the object only between the letters'
@@ -194,11 +215,11 @@ pub(crate) fn pick_with(d: &Drawing, space: &Space, ix: &Option<std::sync::Arc<S
         if !selectable(d, e) {
             continue;
         }
-        let infinite = is_infinite(e);
-        if !infinite && !bounds_of(d, e, known).expand(aperture).intersects(&probe) {
+        let b = if is_infinite(e) { Bounds2::EMPTY } else { bounds_of(d, e, known) };
+        if !is_infinite(e) && !b.expand(aperture).intersects(&probe) {
             continue;
         }
-        let dist = entity_distance(d, e, p, aperture / 4.0);
+        let dist = pick_distance(d, e, b, p, aperture);
         if dist <= aperture && best.is_none_or(|(bd, _)| dist < bd - 1e-12) {
             best = Some((dist, e.handle));
             if dist == 0.0 {
