@@ -189,7 +189,7 @@ fn revoked_device_denies_after_refresh() {
     // A later refresh, as the worker runs one, makes online entitlements fresh again.
     env.advance(11 * 60);
     let _ = account.refresh();
-    assert!(account.allowed(USE), "online entitlements alone would still grant");
+    assert!(!account.allowed(USE), "erpcons-account 0.4.1 denies pro here despite online entitlements");
     assert_eq!(service.policy().check(), Err(REVOKED.to_string()));
 }
 
@@ -212,7 +212,7 @@ fn device_cap_denies_even_with_online_entitlements() {
     let (service, account) = env.service();
     let _ = account.refresh();
     assert_eq!(licence(&account), Some(LicenceState::DeviceCapReached));
-    assert!(account.allowed(USE), "online entitlements alone would still grant");
+    assert!(!account.allowed(USE), "erpcons-account 0.4.1 denies pro here despite online entitlements");
     assert_eq!(service.policy().check(), Err(DEVICE_CAP.to_string()));
 }
 
@@ -223,7 +223,7 @@ fn no_lease_denies_even_with_online_entitlements() {
     let (service, account) = env.service();
     let _ = account.refresh();
     assert_eq!(licence(&account), Some(LicenceState::NotActivated));
-    assert!(account.allowed(USE), "online entitlements alone would still grant");
+    assert!(!account.allowed(USE), "erpcons-account 0.4.1 denies pro here despite online entitlements");
     assert_eq!(service.policy().check(), Err(NOT_ACTIVATED.to_string()));
 }
 

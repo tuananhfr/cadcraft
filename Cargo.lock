@@ -1560,8 +1560,8 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "erpcons-account"
-version = "0.4.0"
-source = "git+https://github.com/tuananhfr/erpcons-account?tag=v0.4.0#52b645b722cec4b9c768abe2b20f7a05e47f0a2a"
+version = "0.4.1"
+source = "git+https://github.com/tuananhfr/erpcons-account?tag=v0.4.1#54e16fa22f08714723dedcd868a776b26346e72a"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -3329,8 +3329,8 @@ dependencies = [
 
 [[package]]
 name = "pi-mock"
-version = "0.4.0"
-source = "git+https://github.com/tuananhfr/erpcons-account?tag=v0.4.0#52b645b722cec4b9c768abe2b20f7a05e47f0a2a"
+version = "0.4.1"
+source = "git+https://github.com/tuananhfr/erpcons-account?tag=v0.4.1#54e16fa22f08714723dedcd868a776b26346e72a"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -4310,7 +4310,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.5",
  "windows-sys 0.61.2",
