@@ -32,7 +32,9 @@ pub(super) fn draw(b: &mut Builder, ctx: &Ctx, e: &Entity, h: &Hatch, rgb: Ink, 
     let px = if stretch > 1e-12 { b.opts.min_dash / 2.0 / stretch } else { 0.0 };
     let dense = b.opts.fill && reads_solid(ctx.d, h, px);
     if h.solid || h.pattern.eq_ignore_ascii_case("SOLID") || h.gradient.is_some() || dense {
-        if b.opts.fill {
+        if b.opts.fill && b.opts.fill_loops {
+            b.list.hit_fills.push(loops.iter().map(|l| l.iter().map(|p| ctx.xf.apply(*p)).collect()).collect());
+        } else if b.opts.fill {
             let tris = fill::triangulate_evenodd(&loops);
             match &h.gradient {
                 Some(g) => gradient(b, ctx, g, layer_color, &tris),

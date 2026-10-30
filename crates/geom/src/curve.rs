@@ -552,6 +552,25 @@ impl Polyline {
     }
 }
 
+/// Bounds of the closed loop through `vertices`: the union of the bounds of
+/// `Polyline { vertices, closed: true }.segments()`, bit for bit, without allocating.
+pub fn loop_bounds(vertices: &[PolyVertex]) -> Bounds2 {
+    let n = vertices.len();
+    let mut b = Bounds2::EMPTY;
+    for (i, v) in vertices.iter().enumerate() {
+        let w = &vertices[(i + 1) % n];
+        if v.p.near(w.p, EPS) && v.bulge.abs() < 1e-12 {
+            continue;
+        }
+        let s = match bulge_to_arc(v.p, w.p, v.bulge) {
+            Some((arc, _)) => arc.bounds(),
+            None => Bounds2::new(v.p, w.p),
+        };
+        b = b.union(&s);
+    }
+    b
+}
+
 /// Signed polygon area (CCW positive).
 pub fn shoelace(pts: &[Vec2]) -> f64 {
     let n = pts.len();

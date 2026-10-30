@@ -292,3 +292,11 @@ Web `4ea3c75` QA and Windows `d490620` smoke supplement the Linux gate recorded 
 ### Quick Plot: why Publish is disabled
 
 - The reason now shows as a line next to Publish instead of only in a tooltip. Unapproved warnings read "Approve or exclude the warnings under Exceptions to publish" (vi "Chấp nhận hoặc loại trừ các cảnh báo ở mục Ngoại lệ để xuất bản"); the other reasons are "No sheets to publish" and "Fix or exclude blocked sheets before publishing a merged PDF".
+
+2026-10-29 · Hovering over block references no longer stalls (UbotCAD V5.2-C, lag on Ryzen 5 2600 + GT 730).
+
+- Picking under the cursor (rollover highlight and single-click pick) builds only the block contents within the pick box (`render::Options::near`) and takes solid hatch fills as their boundary loops (`Options::fill_loops`, `DisplayList::hit_fills`) instead of triangulating them.
+- Hatch extents (ZOOM Extents, the spatial index, window selection, picks) come from the boundary loops directly (`geom::loop_bounds`, the same value as before bit for bit) instead of copying every loop into segments: 0.47 to 0.04 ms for a 3000-point hatch.
+- Native release, 15 title blocks with 7 solid hatches of 3000 points each (`engine/tests/pick_insert.rs`, ignored timing tests): 0.5 / 1.0 ms per pick away from / on a hatch in a drawing past the spatial-index threshold; 4-8 ms in a drawing too small to index, where every pick measures all 15 blocks.
+- Web build in Chrome, moving the mouse over those title blocks for 4 s (machine loaded by other builds): main thread busy 85% → 40% and long tasks 6 → 0 at normal CPU speed; at 4x CPU throttling, long tasks 33 (up to 176 ms) → 2-14 (up to 55-105 ms) and pointer moves handled 40 → 85-120. The long tasks left also happen over blank canvas: they are redraw cost, not picking.
+- A point inside a solid hatch of a block now picks the block, and a point in that hatch's island doesn't, as for a hatch outside a block. Trim/extend, hatch boundaries and other callers of `hit_polylines`/`entity_distance` are unchanged.

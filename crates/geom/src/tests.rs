@@ -321,3 +321,53 @@ fn long_secant_keeps_both_intersections() {
     assert!(hits[0].0.near(Vec2::new(-2.0, 0.0), 1e-8), "{hits:?}");
     assert!(hits[1].0.near(Vec2::new(2.0, 0.0), 1e-8), "{hits:?}");
 }
+
+/// The bounds of a closed loop as the union of its segments' bounds (what hatch extents used).
+fn segments_bounds(vertices: &[PolyVertex]) -> Bounds2 {
+    Polyline { vertices: vertices.to_vec(), closed: true }.segments().iter().fold(Bounds2::EMPTY, |b, s| b.union(&s.bounds()))
+}
+
+fn bits(b: Bounds2) -> [u64; 4] {
+    [b.min.x.to_bits(), b.min.y.to_bits(), b.max.x.to_bits(), b.max.y.to_bits()]
+}
+
+fn bulged(pts: &[(f64, f64, f64)]) -> Vec<PolyVertex> {
+    pts.iter().map(|&(x, y, bulge)| PolyVertex { bulge, ..PolyVertex::new(Vec2::new(x, y)) }).collect()
+}
+
+#[test]
+fn loop_bounds_matches_the_union_of_its_segments() {
+    let cases: Vec<Vec<PolyVertex>> = vec![
+        bulged(&[(0.0, 0.0, 0.0), (10.0, 0.0, 0.0), (10.0, 10.0, 0.0), (0.0, 10.0, 0.0)]),
+        bulged(&[(0.0, 0.0, 0.4), (10.0, 0.0, -0.7), (10.0, 10.0, 1.0), (0.0, 10.0, 1e-13)]),
+        // Arcs crossing 0, 90, 180 and 270 degrees.
+        bulged(&[(1.0, -1.0, 0.5), (1.0, 1.0, 0.5), (-1.0, 1.0, 0.5), (-1.0, -1.0, 0.5)]),
+        bulged(&[(0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (5.0, 0.0, 0.3), (5.0, 5.0, 0.0)]),
+        bulged(&[(3.0, 4.0, 0.0)]),
+        bulged(&[(3.0, 4.0, 0.9)]),
+        Vec::new(),
+        bulged(&[(0.0, 0.0, 0.0), (f64::NAN, 1.0, 0.0), (2.0, 2.0, 0.2)]),
+    ];
+    for v in &cases {
+        assert_eq!(bits(loop_bounds(v)), bits(segments_bounds(v)), "{v:?}");
+    }
+}
+
+#[test]
+fn loop_bounds_matches_segments_on_random_loops() {
+    let mut seed = 0x2545_f491_4f6c_dd1d_u64;
+    let mut next = move || {
+        seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        (seed >> 11) as f64 / (1u64 << 53) as f64
+    };
+    for _ in 0..500 {
+        let n = 3 + (next() * 38.0) as usize;
+        let v: Vec<PolyVertex> = (0..n)
+            .map(|_| {
+                let bulge = if next() < 1.0 / 3.0 { next() * 4.0 - 2.0 } else { 0.0 };
+                PolyVertex { bulge, ..PolyVertex::new(Vec2::new(next() * 2e6 - 1e6, next() * 2e6 - 1e6)) }
+            })
+            .collect();
+        assert_eq!(bits(loop_bounds(&v)), bits(segments_bounds(&v)), "{v:?}");
+    }
+}
